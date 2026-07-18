@@ -33,13 +33,13 @@ jobs:
           test "$(sha256sum ctf/goliath_public/solver.py.gz.b64 | awk '{print $1}')" = \
             "bd2c9896efb40ea2c2a483ecf29cc7d7b8c50b18e7e97177eaa54b444df980e5"
           test "$(sha256sum ctf/goliath_public/runner.py.gz.b64 | awk '{print $1}')" = \
-            "716650ed45bf4ffb2e6de106fd9ce87b7fa204ab479972afff7cad4904e49efe"
+            "48ef5f4a0dfb28e8ef8cdbf97c3b287f254b30334fa6e6ae779b3faed0e28690"
           test "$(sha256sum ctf/goliath_public/result_public.pem | awk '{print $1}')" = \
             "6b211a8d72361a169d7b1349357586fe7e2fb3dd76b50091fcc25f616318ab63"
           test "$(sha256sum "$RUNNER_TEMP/solve.py" | awk '{print $1}')" = \
             "43d4fe52e9695fd0e1ba3fa4a195b4dd8679d9d4dd25d07a73c16d1443175152"
           test "$(sha256sum "$RUNNER_TEMP/runner.py" | awk '{print $1}')" = \
-            "3e1bef85bcf80dff2696067474c7cda9190373fc6d1eb52463ec4f25ea639a05"
+            "7bad33849c22c8b9ce0680ac05fb7160bc3eecfa4d9f97b442b36e82255d046c"
 
           python3 -m py_compile "$RUNNER_TEMP/solve.py" "$RUNNER_TEMP/runner.py"
           openssl pkey -pubin -in ctf/goliath_public/result_public.pem -noout
@@ -90,6 +90,7 @@ jobs:
               "solver.validate_vmfuncref",
               "reply.get(\"status\") == \"ok\"",
               "solver.Goliath.upload = upload",
+              "wake.close()  # body intentionally never read",
           ]
           if any(marker not in solver for marker in solver_markers):
               raise SystemExit("supplied solver safety marker missing")
