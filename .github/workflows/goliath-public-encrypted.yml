@@ -1,15 +1,17 @@
 name: Goliath encrypted CTF solver
 
 on:
-  push:
-    branches:
-      - agent/goliath-public-encrypted-20260719
+  pull_request:
+    branches: [main]
+    paths:
+      - ctf/goliath_public/**
+      - .github/workflows/goliath-public-encrypted.yml
 
 permissions:
   contents: read
 
 concurrency:
-  group: goliath-public-encrypted
+  group: goliath-public-encrypted-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
