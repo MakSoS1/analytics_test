@@ -1,0 +1,35 @@
+name: Goliath runner parts audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/goliath-runner-parts-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reassemble and audit runner parts
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="ctf/goliath_public/parts-audit-out"
+          rm -rf "$out"
+          mkdir -p "$out"
+          cat ctf/goliath_public/runner.parts/part0{0,1,2,3,4,5,6,7} \
+            | base64 -d | gzip -d > "$RUNNER_TEMP/runner.py"
+          sha256sum "$RUNNER_TEMP/runner.py" > "$out/sha256.txt"
+          python3 -m py_compile "$RUNNER_TEMP/runner.py"
+          test "$(sha256sum "$RUNNER_TEMP/runner.py" | awk '{print $1}')" = \
+            "1a83aadedc20d74672e43f139854ea5c0163fa446e5ccd1c1d3eb0fe4c7ef3f6"
+          echo ok > "$out/status.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goliath-runner-parts-audit-${{ github.run_id }}
+          path: ctf/goliath_public/parts-audit-out/
+          retention-days: 1
