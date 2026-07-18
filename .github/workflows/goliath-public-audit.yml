@@ -1,0 +1,79 @@
+name: Goliath runner offline audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/goliath-public-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit packed runner without network
+        shell: bash
+        run: |
+          set -u -o pipefail
+          out="ctf/goliath_public/audit-out"
+          rm -rf "$out"
+          mkdir -p "$out"
+          report="$out/audit.txt"
+
+          echo "packed_solver_sha=$(sha256sum ctf/goliath_public/solver.py.gz.b64 | awk '{print $1}')" >> "$report"
+          echo "packed_runner_sha=$(sha256sum ctf/goliath_public/runner.py.gz.b64 | awk '{print $1}')" >> "$report"
+          echo "public_key_sha=$(sha256sum ctf/goliath_public/result_public.pem | awk '{print $1}')" >> "$report"
+
+          if base64 -d ctf/goliath_public/solver.py.gz.b64 | gzip -d > "$RUNNER_TEMP/solve.py"; then
+            echo "solver_unpack=ok" >> "$report"
+            echo "solver_sha=$(sha256sum "$RUNNER_TEMP/solve.py" | awk '{print $1}')" >> "$report"
+          else
+            echo "solver_unpack=failed" >> "$report"
+          fi
+
+          if base64 -d ctf/goliath_public/runner.py.gz.b64 | gzip -d > "$RUNNER_TEMP/runner.py"; then
+            echo "runner_unpack=ok" >> "$report"
+            echo "runner_sha=$(sha256sum "$RUNNER_TEMP/runner.py" | awk '{print $1}')" >> "$report"
+            python3 - "$RUNNER_TEMP/runner.py" >> "$report" <<'PY'
+          import ast, hashlib, json, pathlib, re, sys
+          p = pathlib.Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          markers = [
+              'solver.validate_vmfuncref',
+              'reply.get("status") == "ok"',
+              'wake.close()  # body intentionally never read',
+              'anchor_a = g.ptr(raw - 0xB0)',
+              'anchor_b = g.ptr(raw - 0x80)',
+              'wasmtime_a = anchor_a - 0x16C11A8',
+              'wasmtime_b = anchor_b - 0x16AD160',
+              'g.read_exact_abs(wasmtime_a, 4) == b"\\x7fELF"',
+          ]
+          result = {
+              'utf8': True,
+              'ast_parse': True,
+              'urls': sorted(set(re.findall(r'https?://[^\s"\']+', text))),
+              'obsolete_jit_path': 'find_elf_base(g, array_call' in text,
+              'markers': {m: m in text for m in markers},
+          }
+          try:
+              ast.parse(text)
+          except Exception as exc:
+              result['ast_parse'] = False
+              result['ast_error'] = type(exc).__name__ + ': ' + str(exc)
+          print(json.dumps(result, sort_keys=True))
+          PY
+          else
+            echo "runner_unpack=failed" >> "$report"
+          fi
+
+      - name: Upload offline audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: goliath-offline-audit-${{ github.run_id }}
+          path: ctf/goliath_public/audit-out/audit.txt
+          retention-days: 1
+          if-no-files-found: error
