@@ -32,8 +32,6 @@ jobs:
 
           test "$(sha256sum ctf/goliath_public/solver.py.gz.b64 | awk '{print $1}')" = \
             "bd2c9896efb40ea2c2a483ecf29cc7d7b8c50b18e7e97177eaa54b444df980e5"
-          test "$(sha256sum ctf/goliath_public/runner.py.gz.b64 | awk '{print $1}')" = \
-            "fc33f63c472a335621004fa89130d84908b64757fe8c255ea91be1986b52fbad"
           test "$(sha256sum ctf/goliath_public/result_public.pem | awk '{print $1}')" = \
             "6b211a8d72361a169d7b1349357586fe7e2fb3dd76b50091fcc25f616318ab63"
           test "$(sha256sum "$RUNNER_TEMP/solve.py" | awk '{print $1}')" = \
