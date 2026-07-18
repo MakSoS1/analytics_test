@@ -1,0 +1,166 @@
+name: Goliath encrypted CTF solver v2
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ctf/goliath_public/**
+      - .github/workflows/goliath-public-encrypted-v2.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goliath-public-encrypted-v2-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  solve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out isolated branch
+        uses: actions/checkout@v4
+
+      - name: Restore and audit exact inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d ctf/goliath_public/solver.py.gz.b64 | gzip -d > "$RUNNER_TEMP/solve.py"
+          base64 -d ctf/goliath_public/runner.py.gz.b64 | gzip -d > "$RUNNER_TEMP/runner.py"
+
+          test "$(sha256sum ctf/goliath_public/solver.py.gz.b64 | awk '{print $1}')" = \
+            "bd2c9896efb40ea2c2a483ecf29cc7d7b8c50b18e7e97177eaa54b444df980e5"
+          test "$(sha256sum ctf/goliath_public/runner.py.gz.b64 | awk '{print $1}')" = \
+            "fc33f63c472a335621004fa89130d84908b64757fe8c255ea91be1986b52fbad"
+          test "$(sha256sum ctf/goliath_public/result_public.pem | awk '{print $1}')" = \
+            "6b211a8d72361a169d7b1349357586fe7e2fb3dd76b50091fcc25f616318ab63"
+          test "$(sha256sum "$RUNNER_TEMP/solve.py" | awk '{print $1}')" = \
+            "43d4fe52e9695fd0e1ba3fa4a195b4dd8679d9d4dd25d07a73c16d1443175152"
+          test "$(sha256sum "$RUNNER_TEMP/runner.py" | awk '{print $1}')" = \
+            "1a83aadedc20d74672e43f139854ea5c0163fa446e5ccd1c1d3eb0fe4c7ef3f6"
+
+          python3 -m py_compile "$RUNNER_TEMP/solve.py" "$RUNNER_TEMP/runner.py"
+          openssl pkey -pubin -in ctf/goliath_public/result_public.pem -noout
+
+          python3 - "$RUNNER_TEMP/solve.py" "$RUNNER_TEMP/runner.py" <<'PY'
+          import ast
+          import pathlib
+          import re
+          import sys
+
+          solver = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+          runner = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+          old_url = "https://goliath-htjehaaf.avitoctf.ru"
+          new_url = "https://goliath-srv-htjehaaf.avitoctf.ru"
+
+          def urls(text: str) -> set[str]:
+              return set(re.findall(r"https?://[^\s\"']+", text))
+
+          if urls(solver) != {old_url}:
+              raise SystemExit("unexpected URL in supplied solver")
+          if urls(runner) != {new_url} or old_url in runner:
+              raise SystemExit("unexpected URL in active runner")
+
+          for name, text in (("solver", solver), ("runner", runner)):
+              imported = set()
+              for node in ast.walk(ast.parse(text)):
+                  if isinstance(node, ast.Import):
+                      imported.update(alias.name.split(".")[0] for alias in node.names)
+                  elif isinstance(node, ast.ImportFrom) and node.module:
+                      imported.add(node.module.split(".")[0])
+              forbidden = {"subprocess", "os"} & imported
+              if forbidden:
+                  raise SystemExit(f"{name}: forbidden imports: {sorted(forbidden)}")
+
+          required = [
+              "solver.validate_vmfuncref",
+              "reply.get(\"status\") == \"ok\"",
+              "wake.close()  # body intentionally never read",
+              "anchor_a = g.ptr(raw - 0xB0)",
+              "anchor_b = g.ptr(raw - 0x80)",
+              "wasmtime_a = anchor_a - 0x16C11A8",
+              "wasmtime_b = anchor_b - 0x16AD160",
+              "g.read_exact_abs(wasmtime_a, 4) == b\"\\x7fELF\"",
+          ]
+          if any(marker not in runner for marker in required):
+              raise SystemExit("active runner safety marker missing")
+          if "find_elf_base(g, array_call" in runner:
+              raise SystemExit("obsolete JIT-ELF path remains active")
+          PY
+
+      - name: Install isolated dependency
+        shell: bash
+        run: python3 -m pip install --disable-pip-version-check --quiet requests
+
+      - name: Run solver and encrypt result
+        id: solve
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="ctf/goliath_public/out-v2"
+          raw="$RUNNER_TEMP/goliath-v2.raw.log"
+          plain="$RUNNER_TEMP/flag-v2.txt"
+          rm -rf "$out"
+          mkdir -p "$out"
+
+          set +e
+          timeout 1900s python3 -u "$RUNNER_TEMP/runner.py" "$RUNNER_TEMP/solve.py" \
+            > "$raw" 2>&1
+          solver_rc=$?
+          set -e
+
+          python3 - "$raw" "$out/diagnostic-sanitized.txt" "$solver_rc" <<'PY'
+          import pathlib
+          import re
+          import sys
+          text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+          text = re.sub(r"avito\{[^}\r\n]{0,500}\}", "avito{REDACTED}", text)
+          text = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", text)
+          pathlib.Path(sys.argv[2]).write_text(
+              f"solver_rc={sys.argv[3]}\n" + text[-70000:] + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          python3 - "$raw" "$plain" <<'PY'
+          import pathlib
+          import re
+          import sys
+          text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+          flags = re.findall(r"(?m)^avito\{[^}\r\n]{1,300}\}$", text)
+          if flags:
+              pathlib.Path(sys.argv[2]).write_text(flags[-1] + "\n", encoding="utf-8")
+          PY
+
+          if [[ -s "$plain" ]]; then
+            openssl pkeyutl -encrypt -pubin \
+              -inkey ctf/goliath_public/result_public.pem \
+              -pkeyopt rsa_padding_mode:oaep \
+              -pkeyopt rsa_oaep_md:sha256 \
+              -in "$plain" \
+              -out "$out/flag.enc"
+            echo "encrypted flag recovered" > "$out/status.txt"
+            echo "result=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag not recovered" > "$out/status.txt"
+            echo "result=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+          rm -f "$plain" "$raw"
+
+      - name: Upload encrypted one-day result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: goliath-encrypted-v2-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ctf/goliath_public/out-v2/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9
+
+      - name: Mark unsuccessful run
+        if: steps.solve.outputs.result != 'success'
+        shell: bash
+        run: exit 1
