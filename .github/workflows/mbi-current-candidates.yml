@@ -10,86 +10,74 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - name: Install dependencies
-        run: python -m pip install --disable-pip-version-check requests beautifulsoup4
-      - name: Inspect public admissions endpoints
+        run: python -m pip install --disable-pip-version-check requests
+      - name: Query current public admissions data
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p out
           python - <<'PY'
-          import json, re
+          import json, time
           from concurrent.futures import ThreadPoolExecutor, as_completed
           from pathlib import Path
           from urllib.parse import urljoin
           import requests
-          from bs4 import BeautifulSoup
-
-          out = Path('out')
-          headers={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36','Accept-Language':'ru-RU,ru;q=0.9'}
-          def get(u, timeout=12):
-              return requests.get(u,headers=headers,timeout=timeout,allow_redirects=True)
-
-          base='https://www.postupashkin.ru/priem-2026/moi-shansy'
-          r=get(base,20)
-          print('PAGE',r.status_code,len(r.content),r.url)
-          out.joinpath('page.html').write_bytes(r.content)
-          soup=BeautifulSoup(r.text,'html.parser')
-          print('FORMS')
-          for form in soup.find_all('form'):
-              print({'action':form.get('action'),'method':form.get('method'),'html':str(form)[:3000]})
-          assets=[]
-          for tag in soup.find_all(['script','link']):
-              u=tag.get('src') or tag.get('href')
-              if u:
-                  u=urljoin(r.url,u)
-                  if 'postupashkin.ru' in u and u not in assets:
-                      assets.append(u)
-          print('ASSETS',len(assets),assets)
-          findings=[]
-          pats=[r'/api/[^\"\'\s<]+',r'moi-shansy',r'entrant',r'applicant',r'abitur',r'candidate',r'code',r'fetch\(',r'axios',r'XMLHttpRequest',r'action=',r'csrf',r'payment']
-          def fetch_asset(item):
-              i,u=item
-              q=get(u,15)
-              return i,u,q.status_code,q.text
-          with ThreadPoolExecutor(max_workers=12) as ex:
-              futs=[ex.submit(fetch_asset,x) for x in enumerate(assets[:100])]
-              for fut in as_completed(futs):
-                  try:
-                      i,u,status,txt=fut.result()
-                      out.joinpath(f'asset_{i:03d}.txt').write_text(txt,encoding='utf-8',errors='ignore')
-                      for pat in pats:
-                          for m in re.finditer(pat,txt,re.I):
-                              findings.append({'asset':u,'status':status,'pattern':pat,'context':txt[max(0,m.start()-260):m.end()+520]})
-                  except Exception as e:
-                      findings.append({'error':repr(e)})
-          out.joinpath('findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
-          print('FINDINGS')
-          print(json.dumps(findings[:300],ensure_ascii=False,indent=2))
 
           ids=['1289499','967331','1795612','2052971','1760018','1444663','1263789','1252789','1826110','1421079','1609688']
-          patterns=[base+'?code={}',base+'?applicant={}',base+'?entrant={}',base+'?number={}']
-          jobs=[(ident,p.format(ident)) for ident in ids for p in patterns]
-          def probe(x):
-              ident,u=x
-              q=get(u,10)
-              return {'id':ident,'url':u,'status':q.status_code,'final':q.url,'length':len(q.content),'contains':ident in q.text,'sample':q.text[:300]}
-          probes=[]
-          with ThreadPoolExecutor(max_workers=20) as ex:
-              futs=[ex.submit(probe,x) for x in jobs]
+          headers={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36','Accept-Language':'ru-RU,ru;q=0.9','Accept':'application/json,text/plain,*/*'}
+          base='https://www.postupashkin.ru'
+
+          def query(app):
+              s=requests.Session(); s.headers.update(headers)
+              # Establish normal public-site cookies first.
+              s.get(base+'/priem-2026/moi-shansy?app='+app,timeout=30)
+              history=[]
+              url=base+'/priem-2026/forecast?app='+app
+              data=None
+              for attempt in range(7):
+                  r=s.get(url,timeout=60,headers={'Cache-Control':'no-cache'})
+                  rec={'attempt':attempt+1,'status':r.status_code,'url':r.url,'content_type':r.headers.get('content-type',''),'text':r.text[:3000]}
+                  try:
+                      d=r.json(); rec['json']=d
+                  except Exception:
+                      d=None
+                  history.append(rec)
+                  if isinstance(d,dict) and d.get('poll_file'):
+                      purl=urljoin(base,d['poll_file'])
+                      try:
+                          pr=s.get(purl,timeout=30,headers={'Cache-Control':'no-cache'})
+                          prec={'poll_status':pr.status_code,'poll_url':pr.url,'poll_text':pr.text[:3000]}
+                          try: pd=pr.json(); prec['poll_json']=pd
+                          except Exception: pd=None
+                          history.append(prec)
+                          if isinstance(pd,dict) and pd.get('positions'):
+                              data=pd; break
+                      except Exception as e:
+                          history.append({'poll_error':repr(e)})
+                  if isinstance(d,dict) and d.get('positions'):
+                      data=d; break
+                  if not (isinstance(d,dict) and d.get('pending')):
+                      data=d; break
+                  time.sleep(min(25,max(4,int(d.get('retry_in') or 5))*(attempt+1)))
+              return {'app':app,'data':data,'history':history,'cookies':s.cookies.get_dict()}
+
+          results={}
+          with ThreadPoolExecutor(max_workers=3) as ex:
+              futs={ex.submit(query,i):i for i in ids}
               for fut in as_completed(futs):
-                  try: probes.append(fut.result())
-                  except Exception as e: probes.append({'error':repr(e)})
-          out.joinpath('probes.json').write_text(json.dumps(probes,ensure_ascii=False,indent=2),encoding='utf-8')
-          print('PROBES')
-          print(json.dumps(probes,ensure_ascii=False,indent=2))
+                  i=futs[fut]
+                  try: results[i]=fut.result()
+                  except Exception as e: results[i]={'app':i,'error':repr(e)}
+                  print('DONE',i,json.dumps(results[i].get('data'),ensure_ascii=False)[:1500])
+          Path('out/forecasts.json').write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding='utf-8')
           PY
-      - name: Upload inspection
+      - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mbi-current-inspection
+          name: mbi-current-forecasts
           path: out/
           retention-days: 1
