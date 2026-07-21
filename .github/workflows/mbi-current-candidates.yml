@@ -10,41 +10,55 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 5
     steps:
-      - name: Query raw public forecasts
+      - name: Poll public forecast results
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p out
           python - <<'PY'
-          import json
+          import json, time
           from concurrent.futures import ThreadPoolExecutor, as_completed
           from pathlib import Path
           import requests
-          ids=['1289499','967331','1795612','2052971','1760018','1444663','1263789','1252789','1826110','1421079','1609688']
+          polls={
+          '1289499':'/fc/f0ca6a71660cf944a9da7df682ec1adc6.json',
+          '967331':'/fc/f1521723f71c2e086282b41d7a29df190.json',
+          '1795612':'/fc/f98df1ba9901c87f0e06b5edcaf7b5b19.json',
+          '2052971':'/fc/f7fee9d8d21ef8b0549f8c256b7369a67.json',
+          '1760018':'/fc/f26814266a8440f9a98782ac3cc002703.json',
+          '1263789':'/fc/f0dd4c3eb63dfbed72c77adc4a562ddb6.json',
+          '1826110':'/fc/fded0e6bffda1c8b97920b26ba7f653f2.json',
+          '1609688':'/fc/f5f3c98bad53a366dd90131fc8c32d892.json'}
           h={'User-Agent':'Mozilla/5.0','Accept':'application/json,text/plain,*/*','Cache-Control':'no-cache'}
-          def one(app):
-              s=requests.Session(); s.headers.update(h)
-              s.get('https://www.postupashkin.ru/priem-2026/moi-shansy?app='+app,timeout=20)
-              r=s.get('https://www.postupashkin.ru/priem-2026/forecast?app='+app,timeout=70)
-              try: data=r.json()
-              except Exception: data={'raw':r.text[:10000]}
-              return {'status':r.status_code,'url':r.url,'data':data,'cookies':s.cookies.get_dict()}
+          def one(item):
+              app,path=item
+              u='https://www.postupashkin.ru'+path
+              hist=[]
+              for n in range(5):
+                  r=requests.get(u,headers=h,timeout=30)
+                  try:d=r.json()
+                  except Exception:d={'raw':r.text[:10000]}
+                  hist.append({'status':r.status_code,'data':d})
+                  if isinstance(d,dict) and d.get('positions'):
+                      return {'app':app,'url':u,'data':d,'history':hist}
+                  time.sleep(12)
+              return {'app':app,'url':u,'data':hist[-1]['data'],'history':hist}
           out={}
-          with ThreadPoolExecutor(max_workers=11) as ex:
-              fs={ex.submit(one,i):i for i in ids}
+          with ThreadPoolExecutor(max_workers=8) as ex:
+              fs={ex.submit(one,x):x[0] for x in polls.items()}
               for f in as_completed(fs):
                   i=fs[f]
-                  try: out[i]=f.result()
-                  except Exception as e: out[i]={'error':repr(e)}
-                  print(i, json.dumps(out[i],ensure_ascii=False)[:3000])
-          Path('out/raw-forecasts.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+                  try:out[i]=f.result()
+                  except Exception as e:out[i]={'error':repr(e)}
+                  print(i,json.dumps(out[i].get('data'),ensure_ascii=False)[:3000])
+          Path('out/polled-forecasts.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
           PY
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mbi-current-raw-forecasts
+          name: mbi-current-polled-forecasts
           path: out/
           retention-days: 1
