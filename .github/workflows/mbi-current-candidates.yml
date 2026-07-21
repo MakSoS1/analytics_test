@@ -10,40 +10,46 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 6
     steps:
-      - name: Read cached public forecasts
+      - name: Wait for public forecast results
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p out
           python - <<'PY'
-          import json
+          import json, time
           from concurrent.futures import ThreadPoolExecutor, as_completed
           from pathlib import Path
           import requests
-          ids=['1289499','967331','1795612','2052971','1760018','1444663','1263789','1252789','1826110','1421079','1609688']
+          ids=['1289499','967331','1795612','2052971','1760018','1263789','1826110','1609688']
           h={'User-Agent':'Mozilla/5.0','Accept':'application/json,text/plain,*/*','Cache-Control':'no-cache'}
           def one(app):
-              u='https://www.postupashkin.ru/priem-2026/forecast?app='+app
-              r=requests.get(u,headers=h,timeout=60)
-              try:d=r.json()
-              except Exception:d={'raw':r.text[:10000]}
-              return {'status':r.status_code,'url':r.url,'data':d}
+              s=requests.Session(); s.headers.update(h)
+              hist=[]
+              for n in range(7):
+                  r=s.get('https://www.postupashkin.ru/priem-2026/forecast?app='+app,timeout=60)
+                  try:d=r.json()
+                  except Exception:d={'raw':r.text[:10000]}
+                  hist.append({'status':r.status_code,'data':d})
+                  if isinstance(d,dict) and d.get('positions'):
+                      return {'app':app,'data':d,'history':hist}
+                  time.sleep(25)
+              return {'app':app,'data':hist[-1]['data'],'history':hist}
           out={}
-          with ThreadPoolExecutor(max_workers=11) as ex:
+          with ThreadPoolExecutor(max_workers=8) as ex:
               fs={ex.submit(one,i):i for i in ids}
               for f in as_completed(fs):
                   i=fs[f]
                   try:out[i]=f.result()
                   except Exception as e:out[i]={'error':repr(e)}
-                  print(i,json.dumps(out[i],ensure_ascii=False)[:3000])
-          Path('out/cached-forecasts.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+                  print('DONE',i,json.dumps(out[i].get('data'),ensure_ascii=False)[:3000])
+          Path('out/waited-forecasts.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
           PY
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mbi-current-cached-forecasts
+          name: mbi-current-waited-forecasts
           path: out/
           retention-days: 1
