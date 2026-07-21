@@ -10,74 +10,41 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 4
     steps:
-      - name: Install dependencies
-        run: python -m pip install --disable-pip-version-check requests
-      - name: Query current public admissions data
+      - name: Query raw public forecasts
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p out
           python - <<'PY'
-          import json, time
+          import json
           from concurrent.futures import ThreadPoolExecutor, as_completed
           from pathlib import Path
-          from urllib.parse import urljoin
           import requests
-
           ids=['1289499','967331','1795612','2052971','1760018','1444663','1263789','1252789','1826110','1421079','1609688']
-          headers={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36','Accept-Language':'ru-RU,ru;q=0.9','Accept':'application/json,text/plain,*/*'}
-          base='https://www.postupashkin.ru'
-
-          def query(app):
-              s=requests.Session(); s.headers.update(headers)
-              # Establish normal public-site cookies first.
-              s.get(base+'/priem-2026/moi-shansy?app='+app,timeout=30)
-              history=[]
-              url=base+'/priem-2026/forecast?app='+app
-              data=None
-              for attempt in range(7):
-                  r=s.get(url,timeout=60,headers={'Cache-Control':'no-cache'})
-                  rec={'attempt':attempt+1,'status':r.status_code,'url':r.url,'content_type':r.headers.get('content-type',''),'text':r.text[:3000]}
-                  try:
-                      d=r.json(); rec['json']=d
-                  except Exception:
-                      d=None
-                  history.append(rec)
-                  if isinstance(d,dict) and d.get('poll_file'):
-                      purl=urljoin(base,d['poll_file'])
-                      try:
-                          pr=s.get(purl,timeout=30,headers={'Cache-Control':'no-cache'})
-                          prec={'poll_status':pr.status_code,'poll_url':pr.url,'poll_text':pr.text[:3000]}
-                          try: pd=pr.json(); prec['poll_json']=pd
-                          except Exception: pd=None
-                          history.append(prec)
-                          if isinstance(pd,dict) and pd.get('positions'):
-                              data=pd; break
-                      except Exception as e:
-                          history.append({'poll_error':repr(e)})
-                  if isinstance(d,dict) and d.get('positions'):
-                      data=d; break
-                  if not (isinstance(d,dict) and d.get('pending')):
-                      data=d; break
-                  time.sleep(min(25,max(4,int(d.get('retry_in') or 5))*(attempt+1)))
-              return {'app':app,'data':data,'history':history,'cookies':s.cookies.get_dict()}
-
-          results={}
-          with ThreadPoolExecutor(max_workers=3) as ex:
-              futs={ex.submit(query,i):i for i in ids}
-              for fut in as_completed(futs):
-                  i=futs[fut]
-                  try: results[i]=fut.result()
-                  except Exception as e: results[i]={'app':i,'error':repr(e)}
-                  print('DONE',i,json.dumps(results[i].get('data'),ensure_ascii=False)[:1500])
-          Path('out/forecasts.json').write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding='utf-8')
+          h={'User-Agent':'Mozilla/5.0','Accept':'application/json,text/plain,*/*','Cache-Control':'no-cache'}
+          def one(app):
+              s=requests.Session(); s.headers.update(h)
+              s.get('https://www.postupashkin.ru/priem-2026/moi-shansy?app='+app,timeout=20)
+              r=s.get('https://www.postupashkin.ru/priem-2026/forecast?app='+app,timeout=70)
+              try: data=r.json()
+              except Exception: data={'raw':r.text[:10000]}
+              return {'status':r.status_code,'url':r.url,'data':data,'cookies':s.cookies.get_dict()}
+          out={}
+          with ThreadPoolExecutor(max_workers=11) as ex:
+              fs={ex.submit(one,i):i for i in ids}
+              for f in as_completed(fs):
+                  i=fs[f]
+                  try: out[i]=f.result()
+                  except Exception as e: out[i]={'error':repr(e)}
+                  print(i, json.dumps(out[i],ensure_ascii=False)[:3000])
+          Path('out/raw-forecasts.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
           PY
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mbi-current-forecasts
+          name: mbi-current-raw-forecasts
           path: out/
           retention-days: 1
