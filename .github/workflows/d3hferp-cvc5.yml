@@ -37,15 +37,29 @@ jobs:
           python -m pip install --disable-pip-version-check --no-cache-dir cvc5
 
       - name: Solve and verify block 0
+        id: solve
         shell: bash
         env:
           BLOCK: "0"
           RESULT_PATH: ctf/d3hferp/result-cvc5.txt
         run: |
-          set -euo pipefail
-          python ctf/d3hferp/solve_cvc5.py
+          set +e
+          python ctf/d3hferp/solve_cvc5.py > ctf/d3hferp/cvc5-diagnostic.log 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Upload short diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3hferp-cvc5-diagnostic
+          path: ctf/d3hferp/cvc5-diagnostic.log
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Encrypt result before artifact upload
+        if: steps.solve.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -58,6 +72,7 @@ jobs:
           rm -f result-cvc5.txt
 
       - name: Upload encrypted result
+        if: steps.solve.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: d3hferp-block-0-cvc5-encrypted
