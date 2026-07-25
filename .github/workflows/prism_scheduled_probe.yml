@@ -1,6 +1,10 @@
 name: prism-scheduled-encrypted-probe
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "prism_trigger/**"
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -83,7 +87,7 @@ jobs:
           base64 -w0 prism_scheduled_result/keyiv.enc > prism_scheduled_result/keyiv.enc.b64
           rm -rf prism_scheduled_result/raw prism_scheduled_result/public.pem prism_scheduled_result/transcript.tar.gz prism_scheduled_result/transcript.enc prism_scheduled_result/key.bin prism_scheduled_result/iv.bin prism_scheduled_result/keyiv.bin prism_scheduled_result/keyiv.enc
 
-      - name: Commit encrypted output and disable recurrence
+      - name: Commit encrypted output
         shell: bash
         run: |
           set -euo pipefail
