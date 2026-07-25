@@ -11,27 +11,225 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
 
-      - name: Install ncat
+      - name: Install build and network tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ncat
+          sudo apt-get install -y -qq ncat libssl-dev
 
-      - name: Capture only raw service output
+      - name: Build PoW solver
         shell: bash
         run: |
-          set +e
+          cat > /tmp/pow_solver.c <<'EOF'
+          #include <openssl/sha.h>
+          #include <pthread.h>
+          #include <stdatomic.h>
+          #include <stdint.h>
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <unistd.h>
+
+          static const char *prefix;
+          static int nthreads;
+          static atomic_int found = 0;
+          static unsigned long long answer = 0;
+
+          static void *worker(void *arg) {
+              unsigned long long i = (unsigned long long)(uintptr_t)arg;
+              SHA256_CTX base;
+              SHA256_Init(&base);
+              SHA256_Update(&base, prefix, strlen(prefix));
+              char suffix[32];
+              unsigned char digest[SHA256_DIGEST_LENGTH];
+              while (!atomic_load_explicit(&found, memory_order_relaxed)) {
+                  int n = snprintf(suffix, sizeof(suffix), "%llu", i);
+                  SHA256_CTX ctx = base;
+                  SHA256_Update(&ctx, suffix, (size_t)n);
+                  SHA256_Final(digest, &ctx);
+                  if (digest[0] == 0 && digest[1] == 0 && digest[2] == 0 && (digest[3] & 0xC0) == 0) {
+                      int expected = 0;
+                      if (atomic_compare_exchange_strong(&found, &expected, 1)) answer = i;
+                      break;
+                  }
+                  i += (unsigned long long)nthreads;
+              }
+              return NULL;
+          }
+
+          int main(int argc, char **argv) {
+              if (argc != 2) return 2;
+              prefix = argv[1];
+              nthreads = (int)sysconf(_SC_NPROCESSORS_ONLN);
+              if (nthreads < 1) nthreads = 1;
+              pthread_t *threads = calloc((size_t)nthreads, sizeof(*threads));
+              for (int i = 0; i < nthreads; i++) pthread_create(&threads[i], NULL, worker, (void *)(uintptr_t)i);
+              for (int i = 0; i < nthreads; i++) pthread_join(threads[i], NULL);
+              free(threads);
+              printf("%llu\n", answer);
+              return 0;
+          }
+          EOF
+          gcc -O3 -pthread /tmp/pow_solver.c -lcrypto -o /tmp/pow_solver
+
+      - name: Run one labeled probing round
+        shell: bash
+        run: |
           rm -rf proxyport_encrypted
           mkdir -p proxyport_encrypted/raw
-          printf '\n' | timeout 20s ncat --ssl rsgnw4zbmevuj3ax3yti2es6o4m.cloud.d3c.tf 443 > proxyport_encrypted/raw/interactive.txt 2>&1
-          echo "exit_code=$?" >> proxyport_encrypted/raw/interactive.txt
-          printf '\n' | timeout 20s ncat --ssl r7htyblntpq7lws4trd4zngje2a.cloud.d3c.tf 443 > proxyport_encrypted/raw/forward.txt 2>&1
-          echo "exit_code=$?" >> proxyport_encrypted/raw/forward.txt
+          cat > /tmp/probe.py <<'PY'
+          import re
+          import select
+          import socket
+          import ssl
+          import subprocess
+          import time
+          import traceback
+
+          INTERACTIVE = "rsgnw4zbmevuj3ax3yti2es6o4m.cloud.d3c.tf"
+          FORWARD = "r7htyblntpq7lws4trd4zngje2a.cloud.d3c.tf"
+          PORT = 443
+          log_lines = []
+
+          def log(msg):
+              line = f"[{time.monotonic():.6f}] {msg}"
+              print(line, flush=True)
+              log_lines.append(line)
+
+          def connect_tls(host, timeout=8.0):
+              start = time.monotonic()
+              raw = socket.create_connection((host, PORT), timeout=timeout)
+              raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+              ctx = ssl.create_default_context()
+              s = ctx.wrap_socket(raw, server_hostname=host)
+              s.setblocking(False)
+              return s, time.monotonic() - start
+
+          def recv_for(s, seconds, limit=1_000_000):
+              end = time.monotonic() + seconds
+              data = bytearray()
+              events = []
+              while time.monotonic() < end and len(data) < limit:
+                  left = max(0.0, end - time.monotonic())
+                  r, _, _ = select.select([s], [], [], min(0.2, left))
+                  if not r:
+                      continue
+                  try:
+                      chunk = s.recv(min(65536, limit - len(data)))
+                      if not chunk:
+                          events.append((time.monotonic(), "EOF"))
+                          break
+                      data.extend(chunk)
+                      events.append((time.monotonic(), f"recv:{len(chunk)}"))
+                  except (ssl.SSLWantReadError, BlockingIOError):
+                      continue
+                  except Exception as exc:
+                      events.append((time.monotonic(), f"recv_error:{type(exc).__name__}:{exc}"))
+                      break
+              return bytes(data), events
+
+          def send_all_nb(s, payload, timeout=3.0):
+              view = memoryview(payload)
+              end = time.monotonic() + timeout
+              sent = 0
+              err = None
+              while view and time.monotonic() < end:
+                  _, w, _ = select.select([], [s], [], 0.2)
+                  if not w:
+                      continue
+                  try:
+                      n = s.send(view)
+                      sent += n
+                      view = view[n:]
+                  except (ssl.SSLWantWriteError, BlockingIOError):
+                      continue
+                  except Exception as exc:
+                      err = f"{type(exc).__name__}:{exc}"
+                      break
+              return sent, err
+
+          def probe(index, payload=b"", pre_read=0.0, post_read=1.5, half_close=False, linger_rst=False):
+              result = {"index": index, "payload_len": len(payload), "half_close": half_close, "linger_rst": linger_rst}
+              s = None
+              try:
+                  s, ct = connect_tls(FORWARD)
+                  result["connect_tls_s"] = ct
+                  if pre_read:
+                      d0, e0 = recv_for(s, pre_read)
+                      result["pre_data_hex"] = d0.hex()
+                      result["pre_events"] = e0
+                  if payload:
+                      sent, err = send_all_nb(s, payload)
+                      result["sent"] = sent
+                      result["send_error"] = err
+                  if half_close:
+                      try:
+                          s.shutdown(socket.SHUT_WR)
+                          result["shutdown_wr"] = "ok"
+                      except Exception as exc:
+                          result["shutdown_wr"] = f"{type(exc).__name__}:{exc}"
+                  d1, e1 = recv_for(s, post_read)
+                  result["post_data_hex"] = d1.hex()
+                  result["post_data_repr"] = repr(d1[:500])
+                  result["post_events"] = e1
+                  if linger_rst:
+                      try:
+                          import struct
+                          s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                      except Exception as exc:
+                          result["linger_error"] = f"{type(exc).__name__}:{exc}"
+              except Exception as exc:
+                  result["exception"] = f"{type(exc).__name__}:{exc}"
+              finally:
+                  if s is not None:
+                      try:
+                          s.close()
+                      except Exception:
+                          pass
+              log(f"PROBE {result!r}")
+
+          try:
+              inter, ct = connect_tls(INTERACTIVE)
+              log(f"interactive connect_tls_s={ct:.6f}")
+              banner, ev = recv_for(inter, 5.0)
+              log(f"BANNER {banner!r} events={ev!r}")
+              m = re.search(rb"prefix:\s*([0-9a-fA-F]+)", banner)
+              if not m:
+                  raise RuntimeError("PoW prefix not found")
+              prefix = m.group(1).decode()
+              t0 = time.monotonic()
+              suffix = subprocess.check_output(["/tmp/pow_solver", prefix], text=True, timeout=240).strip()
+              log(f"POW prefix={prefix} suffix={suffix} solve_s={time.monotonic()-t0:.3f}")
+              inter.setblocking(True)
+              inter.sendall(f"pow {suffix}\n".encode())
+              inter.setblocking(False)
+              auth, ev = recv_for(inter, 4.0)
+              log(f"AFTER_POW {auth!r} events={ev!r}")
+
+              probe(1, pre_read=1.0, post_read=1.0)
+              probe(2, payload=b"hello\n", post_read=2.0)
+              probe(3, payload=b"A" * 262144, post_read=2.0)
+              probe(4, payload=b"half-close-test\n", half_close=True, post_read=3.0)
+              probe(5, payload=b"GET / HTTP/1.0\r\nHost: test\r\n\r\n", post_read=2.0, linger_rst=True)
+
+              inter.setblocking(True)
+              inter.sendall(b"answer gost\n")
+              inter.setblocking(False)
+              verdict, ev = recv_for(inter, 5.0)
+              log(f"VERDICT_AFTER_GOST {verdict!r} events={ev!r}")
+              inter.close()
+          except Exception:
+              log("FATAL " + traceback.format_exc())
+
+          with open("proxyport_encrypted/raw/session.txt", "w", encoding="utf-8") as f:
+              f.write("\n".join(log_lines) + "\n")
+          PY
+          timeout 420s python3 /tmp/probe.py
 
       - name: Encrypt transcript before commit
         shell: bash
@@ -65,5 +263,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add proxyport_encrypted/transcript.enc.b64 proxyport_encrypted/keyiv.enc.b64
-          git commit -m "Add encrypted proxyport transcript" || exit 0
+          git commit -m "Update encrypted proxyport transcript" || exit 0
           git push
