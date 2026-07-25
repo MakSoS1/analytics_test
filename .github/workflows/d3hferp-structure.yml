@@ -1,0 +1,88 @@
+name: D3HFERP encrypted structure recovery
+
+on:
+  push:
+    branches:
+      - agent/d3hferp-solver-20260725
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover-structure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: [0, 1, 2, 3, 4, 5]
+    steps:
+      - name: Check out temporary branch
+        uses: actions/checkout@v4
+
+      - name: Restore challenge archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          base64 -d archive.b64 > archive.zip
+          unzip -q -o archive.zip
+          test -f D3HFERP/pubkey.txt
+
+      - name: Recover hidden subspaces with Sage
+        id: recover
+        shell: bash
+        env:
+          CHART: ${{ matrix.chart }}
+          RESULT_PATH: /work/structure.txt
+        run: |
+          set +e
+          docker pull sagemath/sagemath:latest > /dev/null
+          docker run --rm \
+            -e CHART="$CHART" \
+            -e RESULT_PATH=/work/structure.txt \
+            -v "$PWD/ctf/d3hferp:/work" \
+            -w /work \
+            sagemath/sagemath:latest \
+            sage recover_structure.sage \
+            > "ctf/d3hferp/structure-${CHART}.log" 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Upload diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3hferp-structure-${{ matrix.chart }}-diagnostic
+          path: ctf/d3hferp/structure-${{ matrix.chart }}.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Encrypt recovered pair
+        if: steps.recover.outcome == 'success'
+        shell: bash
+        env:
+          CHART: ${{ matrix.chart }}
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          openssl pkeyutl -encrypt \
+            -pubin -inkey result_public.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -in structure.txt -out "structure-${CHART}.enc"
+          rm -f structure.txt
+
+      - name: Upload encrypted structure
+        if: steps.recover.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3hferp-structure-${{ matrix.chart }}-encrypted
+          path: ctf/d3hferp/structure-${{ matrix.chart }}.enc
+          if-no-files-found: error
+          retention-days: 1
