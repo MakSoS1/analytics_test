@@ -1,0 +1,1 @@
+trigger registered encrypted diagnostics workflow for PRISM
