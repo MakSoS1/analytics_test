@@ -1,0 +1,88 @@
+name: D3HFERP CP-SAT structure recovery
+
+on:
+  push:
+    branches:
+      - agent/d3hferp-solver-20260725
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover-structure-cpsat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: [0, 1, 2, 3, 4, 5]
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+
+      - name: Restore challenge archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          base64 -d archive.b64 > archive.zip
+          unzip -q -o archive.zip
+
+      - name: Install OR-Tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-cache-dir ortools
+
+      - name: Recover hidden forms with CP-SAT
+        id: recover
+        shell: bash
+        env:
+          CHART: ${{ matrix.chart }}
+          RESULT_PATH: ctf/d3hferp/structure-cpsat.txt
+          TIME_LIMIT: "7200"
+          WORKERS: "4"
+        run: |
+          set +e
+          python ctf/d3hferp/recover_structure_cpsat.py \
+            > "ctf/d3hferp/cpsat-${CHART}.log" 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Upload CP-SAT diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3hferp-cpsat-${{ matrix.chart }}-diagnostic
+          path: ctf/d3hferp/cpsat-${{ matrix.chart }}.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Encrypt recovered pair
+        if: steps.recover.outcome == 'success'
+        shell: bash
+        env:
+          CHART: ${{ matrix.chart }}
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          openssl pkeyutl -encrypt \
+            -pubin -inkey result_public.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -in structure-cpsat.txt -out "structure-cpsat-${CHART}.enc"
+          rm -f structure-cpsat.txt
+
+      - name: Upload encrypted CP-SAT result
+        if: steps.recover.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3hferp-cpsat-${{ matrix.chart }}-encrypted
+          path: ctf/d3hferp/structure-cpsat-${{ matrix.chart }}.enc
+          if-no-files-found: error
+          retention-days: 1
