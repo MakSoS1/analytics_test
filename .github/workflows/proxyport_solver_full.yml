@@ -1,0 +1,153 @@
+name: proxyport-solver-full
+
+on:
+  push:
+    paths:
+      - ".github/workflows/proxyport_solver_full.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Build PoW solver
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libssl-dev
+          cat > /tmp/pow.c <<'EOF'
+          #include <openssl/sha.h>
+          #include <pthread.h>
+          #include <stdatomic.h>
+          #include <stdint.h>
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <unistd.h>
+          static const char *p; static int nt; static atomic_int done=0; static unsigned long long ans;
+          static void *w(void *a){ unsigned long long i=(uintptr_t)a; SHA256_CTX b; SHA256_Init(&b); SHA256_Update(&b,p,strlen(p)); char s[32]; unsigned char d[32];
+            while(!atomic_load(&done)){ int n=snprintf(s,sizeof(s),"%llu",i); SHA256_CTX c=b; SHA256_Update(&c,s,n); SHA256_Final(d,&c);
+              if(!d[0]&&!d[1]&&!d[2]&&!(d[3]&0xc0)){int e=0;if(atomic_compare_exchange_strong(&done,&e,1))ans=i;break;} i+=nt;} return 0; }
+          int main(int c,char**v){if(c!=2)return 2;p=v[1];nt=sysconf(_SC_NPROCESSORS_ONLN);if(nt<1)nt=1;pthread_t*t=calloc(nt,sizeof(*t));for(int i=0;i<nt;i++)pthread_create(&t[i],0,w,(void*)(uintptr_t)i);for(int i=0;i<nt;i++)pthread_join(t[i],0);printf("%llu\n",ans);}
+          EOF
+          gcc -O3 -pthread /tmp/pow.c -lcrypto -o /tmp/pow
+
+      - name: Run synchronized solver
+        shell: bash
+        run: |
+          rm -rf proxyport_solution_full
+          mkdir -p proxyport_solution_full/raw
+          cat > /tmp/solve.py <<'PY'
+          import re, socket, ssl, subprocess, time, traceback
+          I="rsgnw4zbmevuj3ax3yti2es6o4m.cloud.d3c.tf"
+          F="r7htyblntpq7lws4trd4zngje2a.cloud.d3c.tf"
+          logs=[]
+          def log(x):
+              z=f"[{time.monotonic():.6f}] {x}"; print(z,flush=True); logs.append(z)
+          def conn(host, timeout=12):
+              raw=socket.create_connection((host,443),timeout=timeout)
+              raw.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,1)
+              s=ssl.create_default_context().wrap_socket(raw,server_hostname=host)
+              s.settimeout(timeout); return s
+          def read_until_line(f, predicate, limit=100):
+              got=[]
+              for _ in range(limit):
+                  line=f.readline()
+                  if not line: return got, None
+                  got.append(line)
+                  if predicate(line): return got, line
+              return got, None
+          def probe(rnd):
+              s=conn(F,3)
+              try:
+                  s.sendall(b"GET / HTTP/1.1\r\nHost: probe\r\nConnection: close\r\n\r\n")
+                  out=bytearray()
+                  while len(out)<16384:
+                      try: b=s.recv(8192)
+                      except socket.timeout: break
+                      if not b: break
+                      out.extend(b)
+                  data=bytes(out)
+                  log(f"PROBE round={rnd} len={len(data)} data={data!r}")
+                  return data
+              finally:
+                  s.close()
+          try:
+              s=conn(I,15); f=s.makefile("rwb",buffering=0)
+              lines,hit=read_until_line(f,lambda x:b"submit: pow" in x)
+              banner=b"".join(lines); log(f"BANNER {banner!r}")
+              m=re.search(rb"prefix:\s*([0-9a-fA-F]+)",banner)
+              if not m: raise RuntimeError("no prefix")
+              prefix=m.group(1).decode(); t=time.monotonic()
+              suffix=subprocess.check_output(["/tmp/pow",prefix],text=True,timeout=300).strip()
+              log(f"POW prefix={prefix} suffix={suffix} seconds={time.monotonic()-t:.3f}")
+              f.write(f"pow {suffix}\n".encode())
+              lines,hit=read_until_line(f,lambda x:b"submit `answer" in x)
+              log(f"PROMPT1 {b''.join(lines)!r}")
+              if hit is None: raise RuntimeError("no first prompt")
+              for rnd in range(1,21):
+                  data=probe(rnd)
+                  answer="gost" if b"caddy" in data.lower() else "frp"
+                  log(f"ANSWER round={rnd} value={answer}")
+                  f.write(f"answer {answer}\n".encode())
+                  lines,hit=read_until_line(f,lambda x:(b"recorded" in x or b"flag" in x.lower() or b"wrong" in x.lower() or b"timed out" in x.lower()))
+                  blob=b"".join(lines); log(f"ACK round={rnd} {blob!r}")
+                  if hit is None or b"wrong" in blob.lower() or b"timed out" in blob.lower(): break
+                  if rnd<20:
+                      lines,hit=read_until_line(f,lambda x:b"submit `answer" in x)
+                      log(f"PROMPT round={rnd+1} {b''.join(lines)!r}")
+                      if hit is None: break
+              s.settimeout(8)
+              rest=[]
+              try:
+                  while True:
+                      line=f.readline()
+                      if not line: break
+                      rest.append(line)
+              except Exception as e:
+                  rest.append(f"READ_END {type(e).__name__}:{e}".encode())
+              log(f"FINAL {b''.join(rest)!r}")
+              f.close(); s.close()
+          except Exception:
+              log("FATAL "+traceback.format_exc())
+          open("proxyport_solution_full/raw/session.txt","w").write("\n".join(logs)+"\n")
+          PY
+          timeout 540s python3 /tmp/solve.py
+
+      - name: Encrypt result
+        run: |
+          cat > proxyport_solution_full/public.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1EcNw1wCF/68hhizkEAW
+          8CLSMGdggdbKip//N49VWh99dlz49+tPSQuyoKGSV3+982Mi3zcFV0i0ARYXDVjR
+          2djQfHhRI8IyXksbGmUqofqmt5bpNeztW4wKZCPP9VmiNgw0DTWwHWVmohBt25fP
+          MvB3NfXyp5PRtBg0txVnxciVAIkiSvF76ZewhZ/Qe7rZ9X0ZCryjd3sOarErqJMg
+          dIcCLIziooDkCmqG0KWxIJmEVqiSyQ7ZAvFNFDYahygZzHIpBc+zkFgM7gzeoLeY
+          CAh9VAVM1GVqLm0fs/Wi8gWruVzlYy4b2dBmeSDVOuLgi0q+lrqezuf0uTCaKRC8
+          ewIDAQAB
+          -----END PUBLIC KEY-----
+          EOF
+          tar -C proxyport_solution_full/raw -czf proxyport_solution_full/result.tar.gz .
+          openssl rand -out proxyport_solution_full/key.bin 32
+          openssl rand -out proxyport_solution_full/iv.bin 16
+          K=$(xxd -p -c 256 proxyport_solution_full/key.bin); V=$(xxd -p -c 256 proxyport_solution_full/iv.bin)
+          openssl enc -aes-256-cbc -K "$K" -iv "$V" -in proxyport_solution_full/result.tar.gz -out proxyport_solution_full/result.enc
+          cat proxyport_solution_full/key.bin proxyport_solution_full/iv.bin > proxyport_solution_full/keyiv.bin
+          openssl pkeyutl -encrypt -pubin -inkey proxyport_solution_full/public.pem -pkeyopt rsa_padding_mode:oaep -in proxyport_solution_full/keyiv.bin -out proxyport_solution_full/keyiv.enc
+          base64 -w0 proxyport_solution_full/result.enc > proxyport_solution_full/result.enc.b64
+          base64 -w0 proxyport_solution_full/keyiv.enc > proxyport_solution_full/keyiv.enc.b64
+          rm -rf proxyport_solution_full/raw proxyport_solution_full/public.pem proxyport_solution_full/result.tar.gz proxyport_solution_full/result.enc proxyport_solution_full/key.bin proxyport_solution_full/iv.bin proxyport_solution_full/keyiv.bin proxyport_solution_full/keyiv.enc
+
+      - name: Commit encrypted result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proxyport_solution_full/result.enc.b64 proxyport_solution_full/keyiv.enc.b64
+          git commit -m "Add encrypted full proxyport result" || exit 0
+          git push
