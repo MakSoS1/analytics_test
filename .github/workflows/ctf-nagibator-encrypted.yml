@@ -1,0 +1,97 @@
+name: Encrypted Diagnostics
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  encrypted-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout temporary branch
+        uses: actions/checkout@v4
+
+      - name: Capture untrusted PRISM banner
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf prism-plaintext prism-encrypted
+          mkdir -p prism-plaintext prism-encrypted
+          python3 - <<'PY'
+          import socket, ssl, time
+          host = 'rwp2xfbj6nbit7iujybvt5ubdpu.cloud.d3c.tf'
+          out = bytearray()
+          meta = []
+          try:
+              raw = socket.create_connection((host, 443), timeout=12)
+              ctx = ssl.create_default_context()
+              sock = ctx.wrap_socket(raw, server_hostname=host)
+              sock.settimeout(0.5)
+              end = time.monotonic() + 8.0
+              sent = False
+              last = time.monotonic()
+              while time.monotonic() < end:
+                  try:
+                      data = sock.recv(65536)
+                      if not data:
+                          meta.append('eof')
+                          break
+                      out += data
+                      last = time.monotonic()
+                  except socket.timeout:
+                      if not sent and time.monotonic() - last >= 1.5:
+                          sock.sendall(b'\n')
+                          sent = True
+                          meta.append('sent_blank_line')
+              try: sock.close()
+              except Exception: pass
+          except Exception as exc:
+              meta.append(type(exc).__name__ + ': ' + str(exc))
+          open('prism-plaintext/banner.bin', 'wb').write(out)
+          open('prism-plaintext/meta.txt', 'w', encoding='utf-8').write('\n'.join(meta) + '\n')
+          PY
+
+      - name: Encrypt all results before artifact upload
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/prism-public.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAtJ+YjwzF2hhM3IszVeea
+          HhtKRvHBzrZ+tfji3qRnpGQOOj/wLEP0OoiLjwg9KtJZumqGvgj63/eym/1NoLWk
+          3LShUkvoITy+rk5C7Vdb3IQVyZfJHFBiMgFLvEJC9/yuoPuArARsDRP34vPcmS6x
+          gaEgWK/NPBsAqEviQnq6H3aMuhT2CvD9KSJflrTAJxiWN0x8sbW1URNRyNR8ZSSm
+          6HuQ6U1McCsfIFUSqk5Dpa43c/Z7i5DncRSHyYRkPq4QV/Pk6HNnjoq7PEmrj/NW
+          rmyMnB/0GVZbQe3aG9Ym0Ke6PjPQnsHmmVIUf+YQ0l4+l038s6WLlIhllTYip2qa
+          zfChJS/bDVjNYvSHydX8q9KpCQsc+H8qan7Jd7JL+jJtwLKOO1UeQt7Glphjzd6Q
+          oUrhWkUzl+yC0sU0O6odWAdF0wJ4bLu2uc+aZujQ4ZYVQ8x8Zo06y1yZMvu4PJWW
+          uplZCEiJ+25c7q+r+sy2CamuPA7pifg1y7LQSt0PG72RAgMBAAE=
+          -----END PUBLIC KEY-----
+          EOF
+          tar -czf /tmp/prism-result.tar.gz prism-plaintext
+          openssl rand -out /tmp/prism-key.bin 32
+          openssl rand -out /tmp/prism-iv.bin 16
+          KEY_HEX="$(xxd -p -c 256 /tmp/prism-key.bin)"
+          IV_HEX="$(xxd -p -c 256 /tmp/prism-iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in /tmp/prism-result.tar.gz -out prism-encrypted/result.tar.gz.enc
+          cat /tmp/prism-key.bin /tmp/prism-iv.bin > /tmp/prism-keyiv.bin
+          openssl pkeyutl -encrypt -pubin -inkey /tmp/prism-public.pem -pkeyopt rsa_padding_mode:oaep -in /tmp/prism-keyiv.bin -out prism-encrypted/keyiv.enc
+          printf '%s\n' '{"encrypted":true,"cipher":"AES-256-CBC","key_wrap":"RSA-OAEP"}' > prism-encrypted/manifest.json
+          sha256sum prism-encrypted/result.tar.gz.enc prism-encrypted/keyiv.enc > prism-encrypted/SHA256SUMS
+          rm -rf prism-plaintext /tmp/prism-result.tar.gz /tmp/prism-key.bin /tmp/prism-iv.bin /tmp/prism-keyiv.bin /tmp/prism-public.pem
+
+      - name: Upload ciphertext only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-encrypted-${{ github.run_id }}
+          path: prism-encrypted/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
