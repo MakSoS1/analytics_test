@@ -1,0 +1,69 @@
+name: proxyport-encrypted-probe
+
+on:
+  push:
+    paths:
+      - ".github/workflows/proxyport_encrypted_probe.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Install ncat
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ncat
+
+      - name: Capture only raw service output
+        shell: bash
+        run: |
+          set +e
+          rm -rf proxyport_encrypted
+          mkdir -p proxyport_encrypted/raw
+          printf '\n' | timeout 20s ncat --ssl rsgnw4zbmevuj3ax3yti2es6o4m.cloud.d3c.tf 443 > proxyport_encrypted/raw/interactive.txt 2>&1
+          echo "exit_code=$?" >> proxyport_encrypted/raw/interactive.txt
+          printf '\n' | timeout 20s ncat --ssl r7htyblntpq7lws4trd4zngje2a.cloud.d3c.tf 443 > proxyport_encrypted/raw/forward.txt 2>&1
+          echo "exit_code=$?" >> proxyport_encrypted/raw/forward.txt
+
+      - name: Encrypt transcript before commit
+        shell: bash
+        run: |
+          cat > proxyport_encrypted/public.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1EcNw1wCF/68hhizkEAW
+          8CLSMGdggdbKip//N49VWh99dlz49+tPSQuyoKGSV3+982Mi3zcFV0i0ARYXDVjR
+          2djQfHhRI8IyXksbGmUqofqmt5bpNeztW4wKZCPP9VmiNgw0DTWwHWVmohBt25fP
+          MvB3NfXyp5PRtBg0txVnxciVAIkiSvF76ZewhZ/Qe7rZ9X0ZCryjd3sOarErqJMg
+          dIcCLIziooDkCmqG0KWxIJmEVqiSyQ7ZAvFNFDYahygZzHIpBc+zkFgM7gzeoLeY
+          CAh9VAVM1GVqLm0fs/Wi8gWruVzlYy4b2dBmeSDVOuLgi0q+lrqezuf0uTCaKRC8
+          ewIDAQAB
+          -----END PUBLIC KEY-----
+          EOF
+          tar -C proxyport_encrypted/raw -czf proxyport_encrypted/transcript.tar.gz .
+          openssl rand -out proxyport_encrypted/key.bin 32
+          openssl rand -out proxyport_encrypted/iv.bin 16
+          KEY_HEX="$(xxd -p -c 256 proxyport_encrypted/key.bin)"
+          IV_HEX="$(xxd -p -c 256 proxyport_encrypted/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in proxyport_encrypted/transcript.tar.gz -out proxyport_encrypted/transcript.enc
+          cat proxyport_encrypted/key.bin proxyport_encrypted/iv.bin > proxyport_encrypted/keyiv.bin
+          openssl pkeyutl -encrypt -pubin -inkey proxyport_encrypted/public.pem -pkeyopt rsa_padding_mode:oaep -in proxyport_encrypted/keyiv.bin -out proxyport_encrypted/keyiv.enc
+          base64 -w0 proxyport_encrypted/transcript.enc > proxyport_encrypted/transcript.enc.b64
+          base64 -w0 proxyport_encrypted/keyiv.enc > proxyport_encrypted/keyiv.enc.b64
+          rm -rf proxyport_encrypted/raw proxyport_encrypted/public.pem proxyport_encrypted/transcript.tar.gz proxyport_encrypted/transcript.enc proxyport_encrypted/key.bin proxyport_encrypted/iv.bin proxyport_encrypted/keyiv.bin proxyport_encrypted/keyiv.enc
+
+      - name: Commit encrypted output
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proxyport_encrypted/transcript.enc.b64 proxyport_encrypted/keyiv.enc.b64
+          git commit -m "Add encrypted proxyport transcript" || exit 0
+          git push
