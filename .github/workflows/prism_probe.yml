@@ -2,8 +2,7 @@ name: prism-encrypted-probe
 
 on:
   push:
-    paths:
-      - ".github/workflows/prism_probe.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
