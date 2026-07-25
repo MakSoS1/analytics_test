@@ -1,0 +1,303 @@
+name: proxyport-halfclose-probe
+
+on:
+  push:
+    paths:
+      - ".github/workflows/proxyport_halfclose_probe.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Build PoW solver
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libssl-dev
+          cat > /tmp/pow.c <<'EOF'
+          #include <openssl/sha.h>
+          #include <pthread.h>
+          #include <stdatomic.h>
+          #include <stdint.h>
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <unistd.h>
+          static const char *p; static int nt; static atomic_int done=0; static unsigned long long ans;
+          static void *w(void *a){unsigned long long i=(uintptr_t)a;SHA256_CTX b;SHA256_Init(&b);SHA256_Update(&b,p,strlen(p));char s[32];unsigned char d[32];while(!atomic_load(&done)){int n=snprintf(s,sizeof(s),"%llu",i);SHA256_CTX c=b;SHA256_Update(&c,s,n);SHA256_Final(d,&c);if(!d[0]&&!d[1]&&!d[2]&&!(d[3]&0xc0)){int e=0;if(atomic_compare_exchange_strong(&done,&e,1))ans=i;break;}i+=nt;}return 0;}
+          int main(int c,char**v){if(c!=2)return 2;p=v[1];nt=sysconf(_SC_NPROCESSORS_ONLN);if(nt<1)nt=1;pthread_t*t=calloc(nt,sizeof(*t));for(int i=0;i<nt;i++)pthread_create(&t[i],0,w,(void*)(uintptr_t)i);for(int i=0;i<nt;i++)pthread_join(t[i],0);printf("%llu\n",ans);}
+          EOF
+          gcc -O3 -pthread /tmp/pow.c -lcrypto -o /tmp/pow
+
+      - name: Collect half-close fingerprints
+        shell: bash
+        run: |
+          rm -rf proxyport_halfclose_result
+          mkdir -p proxyport_halfclose_result/raw
+          cat > /tmp/probe.py <<'PY'
+          import re, socket, ssl, subprocess, time, traceback
+
+          INTERACTIVE = "rsgnw4zbmevuj3ax3yti2es6o4m.cloud.d3c.tf"
+          FORWARD = "r7htyblntpq7lws4trd4zngje2a.cloud.d3c.tf"
+          logs = []
+
+          def log(msg):
+              logs.append(f"[{time.monotonic():.6f}] {msg}")
+
+          def tls_conn(host, timeout=10):
+              raw = socket.create_connection((host, 443), timeout=timeout)
+              raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+              s = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+              s.settimeout(timeout)
+              return s
+
+          def read_until_line(f, pred, limit=100):
+              got = []
+              for _ in range(limit):
+                  line = f.readline()
+                  if not line:
+                      return got, None
+                  got.append(line)
+                  if pred(line):
+                      return got, line
+              return got, None
+
+          def normal_probe(round_no):
+              t0 = time.monotonic()
+              s = tls_conn(FORWARD, 3)
+              try:
+                  s.sendall(b"GET / HTTP/1.1\r\nHost: probe\r\nConnection: close\r\n\r\n")
+                  out = bytearray()
+                  while len(out) < 16384:
+                      try:
+                          b = s.recv(8192)
+                      except socket.timeout:
+                          break
+                      if not b:
+                          break
+                      out.extend(b)
+                  return {"kind":"normal", "dt":time.monotonic()-t0, "len":len(out), "head":bytes(out[:80]).hex()}
+              finally:
+                  s.close()
+
+          class BioTLS:
+              def __init__(self, host, timeout=3):
+                  self.raw = socket.create_connection((host, 443), timeout=timeout)
+                  self.raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                  self.raw.settimeout(timeout)
+                  self.inbio = ssl.MemoryBIO()
+                  self.outbio = ssl.MemoryBIO()
+                  self.obj = ssl.create_default_context().wrap_bio(self.inbio, self.outbio, server_side=False, server_hostname=host)
+                  self._handshake()
+
+              def _flush(self):
+                  total = 0
+                  while True:
+                      data = self.outbio.read()
+                      if not data:
+                          break
+                      self.raw.sendall(data)
+                      total += len(data)
+                  return total
+
+              def _recv_into_bio(self):
+                  data = self.raw.recv(65536)
+                  if data:
+                      self.inbio.write(data)
+                  else:
+                      self.inbio.write_eof()
+                  return data
+
+              def _handshake(self):
+                  while True:
+                      try:
+                          self.obj.do_handshake()
+                          self._flush()
+                          return
+                      except ssl.SSLWantReadError:
+                          self._flush()
+                          if not self._recv_into_bio():
+                              raise EOFError("EOF during TLS handshake")
+                      except ssl.SSLWantWriteError:
+                          self._flush()
+
+              def write(self, payload):
+                  view = memoryview(payload)
+                  while view:
+                      try:
+                          n = self.obj.write(view)
+                          view = view[n:]
+                          self._flush()
+                      except ssl.SSLWantWriteError:
+                          self._flush()
+                      except ssl.SSLWantReadError:
+                          self._flush()
+                          self._recv_into_bio()
+
+              def send_close_notify(self):
+                  status = "done"
+                  try:
+                      self.obj.unwrap()
+                  except ssl.SSLWantReadError:
+                      status = "want_read"
+                  except ssl.SSLWantWriteError:
+                      status = "want_write"
+                  self._flush()
+                  return status
+
+              def read_remaining(self, timeout=1.2):
+                  self.raw.settimeout(timeout)
+                  out = bytearray()
+                  events = []
+                  deadline = time.monotonic() + timeout
+                  while time.monotonic() < deadline and len(out) < 16384:
+                      try:
+                          chunk = self.obj.read(8192)
+                          if chunk:
+                              out.extend(chunk)
+                              events.append(f"app:{len(chunk)}")
+                              continue
+                          events.append("app_eof")
+                          break
+                      except ssl.SSLWantReadError:
+                          try:
+                              wire = self.raw.recv(65536)
+                          except socket.timeout:
+                              events.append("tcp_timeout")
+                              break
+                          if wire:
+                              self.inbio.write(wire)
+                              events.append(f"wire:{len(wire)}")
+                          else:
+                              try:
+                                  self.inbio.write_eof()
+                              except Exception:
+                                  pass
+                              events.append("tcp_eof")
+                              try:
+                                  while True:
+                                      chunk = self.obj.read(8192)
+                                      if not chunk:
+                                          break
+                                      out.extend(chunk)
+                              except Exception as exc:
+                                  events.append(f"after_eof:{type(exc).__name__}")
+                              break
+                      except ssl.SSLZeroReturnError:
+                          events.append("close_notify")
+                          break
+                      except ssl.SSLEOFError:
+                          events.append("ssl_eof")
+                          break
+                      except Exception as exc:
+                          events.append(f"error:{type(exc).__name__}:{exc}")
+                          break
+                  return bytes(out), events
+
+              def close(self):
+                  try:
+                      self.raw.close()
+                  except Exception:
+                      pass
+
+          def half_probe(round_no, kind, payload, graceful):
+              t0 = time.monotonic()
+              c = BioTLS(FORWARD, 3)
+              result = {"kind":kind}
+              try:
+                  c.write(payload)
+                  if graceful:
+                      result["unwrap"] = c.send_close_notify()
+                  c.raw.shutdown(socket.SHUT_WR)
+                  data, events = c.read_remaining(1.2)
+                  result.update(dt=time.monotonic()-t0, len=len(data), head=data[:80].hex(), events=events)
+                  return result
+              except Exception as exc:
+                  result.update(dt=time.monotonic()-t0, error=f"{type(exc).__name__}:{exc}")
+                  return result
+              finally:
+                  c.close()
+
+          try:
+              s = tls_conn(INTERACTIVE, 15)
+              f = s.makefile("rwb", buffering=0)
+              lines, hit = read_until_line(f, lambda x: b"submit: pow" in x)
+              banner = b"".join(lines)
+              m = re.search(rb"prefix:\s*([0-9a-fA-F]+)", banner)
+              if not m:
+                  raise RuntimeError("PoW prefix not found")
+              prefix = m.group(1).decode()
+              suffix = subprocess.check_output(["/tmp/pow", prefix], text=True, timeout=300).strip()
+              f.write(f"pow {suffix}\n".encode())
+              lines, hit = read_until_line(f, lambda x: b"submit `answer" in x)
+              if hit is None:
+                  raise RuntimeError("first prompt not received")
+
+              for rnd in range(1, 21):
+                  results = []
+                  results.append(normal_probe(rnd))
+                  results.append(half_probe(rnd, "graceful_get", b"GET / HTTP/1.1\r\nHost: probe\r\nConnection: close\r\n\r\n", True))
+                  results.append(half_probe(rnd, "abrupt_get", b"GET / HTTP/1.1\r\nHost: probe\r\nConnection: close\r\n\r\n", False))
+                  results.append(half_probe(rnd, "graceful_short_post", b"POST / HTTP/1.1\r\nHost: probe\r\nContent-Length: 10\r\nConnection: close\r\n\r\nabc", True))
+                  log(f"ROUND {rnd} RESULTS {results!r}")
+                  f.write(b"answer gost\n")
+                  lines, hit = read_until_line(f, lambda x: b"recorded" in x or b"wrong" in x.lower() or b"timed out" in x.lower())
+                  log(f"ROUND {rnd} ACK {b''.join(lines)!r}")
+                  if hit is None or b"wrong" in b"".join(lines).lower() or b"timed out" in b"".join(lines).lower():
+                      break
+                  if rnd < 20:
+                      lines, hit = read_until_line(f, lambda x: b"submit `answer" in x)
+                      if hit is None:
+                          break
+              try:
+                  s.settimeout(3)
+                  log(f"FINAL {f.read()!r}")
+              except Exception as exc:
+                  log(f"FINAL_READ {type(exc).__name__}:{exc}")
+              f.close(); s.close()
+          except Exception:
+              log("FATAL " + traceback.format_exc())
+
+          with open("proxyport_halfclose_result/raw/session.txt", "w", encoding="utf-8") as out:
+              out.write("\n".join(logs) + "\n")
+          PY
+          timeout 660s python3 /tmp/probe.py >/dev/null 2>&1
+
+      - name: Encrypt transcript
+        run: |
+          cat > proxyport_halfclose_result/public.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1EcNw1wCF/68hhizkEAW
+          8CLSMGdggdbKip//N49VWh99dlz49+tPSQuyoKGSV3+982Mi3zcFV0i0ARYXDVjR
+          2djQfHhRI8IyXksbGmUqofqmt5bpNeztW4wKZCPP9VmiNgw0DTWwHWVmohBt25fP
+          MvB3NfXyp5PRtBg0txVnxciVAIkiSvF76ZewhZ/Qe7rZ9X0ZCryjd3sOarErqJMg
+          dIcCLIziooDkCmqG0KWxIJmEVqiSyQ7ZAvFNFDYahygZzHIpBc+zkFgM7gzeoLeY
+          CAh9VAVM1GVqLm0fs/Wi8gWruVzlYy4b2dBmeSDVOuLgi0q+lrqezuf0uTCaKRC8
+          ewIDAQAB
+          -----END PUBLIC KEY-----
+          EOF
+          tar -C proxyport_halfclose_result/raw -czf proxyport_halfclose_result/result.tar.gz .
+          openssl rand -out proxyport_halfclose_result/key.bin 32
+          openssl rand -out proxyport_halfclose_result/iv.bin 16
+          K=$(xxd -p -c 256 proxyport_halfclose_result/key.bin); V=$(xxd -p -c 256 proxyport_halfclose_result/iv.bin)
+          openssl enc -aes-256-cbc -K "$K" -iv "$V" -in proxyport_halfclose_result/result.tar.gz -out proxyport_halfclose_result/result.enc
+          cat proxyport_halfclose_result/key.bin proxyport_halfclose_result/iv.bin > proxyport_halfclose_result/keyiv.bin
+          openssl pkeyutl -encrypt -pubin -inkey proxyport_halfclose_result/public.pem -pkeyopt rsa_padding_mode:oaep -in proxyport_halfclose_result/keyiv.bin -out proxyport_halfclose_result/keyiv.enc
+          base64 -w0 proxyport_halfclose_result/result.enc > proxyport_halfclose_result/result.enc.b64
+          base64 -w0 proxyport_halfclose_result/keyiv.enc > proxyport_halfclose_result/keyiv.enc.b64
+          rm -rf proxyport_halfclose_result/raw proxyport_halfclose_result/public.pem proxyport_halfclose_result/result.tar.gz proxyport_halfclose_result/result.enc proxyport_halfclose_result/key.bin proxyport_halfclose_result/iv.bin proxyport_halfclose_result/keyiv.bin proxyport_halfclose_result/keyiv.enc
+
+      - name: Commit encrypted transcript
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proxyport_halfclose_result/result.enc.b64 proxyport_halfclose_result/keyiv.enc.b64
+          git commit -m "Add encrypted proxyport half-close transcript" || exit 0
+          git push
