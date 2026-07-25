@@ -1,0 +1,1 @@
+trigger synchronized encrypted PRISM artifact probe
