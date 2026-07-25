@@ -1,0 +1,66 @@
+name: D3HFERP cvc5 encrypted solve
+
+on:
+  push:
+    branches:
+      - agent/d3hferp-solver-20260725
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  solve-block-zero-cvc5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out temporary branch
+        uses: actions/checkout@v4
+
+      - name: Restore challenge archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          base64 -d archive.b64 > archive.zip
+          unzip -q -o archive.zip
+          test -f D3HFERP/pubkey.txt
+          test -f D3HFERP/ciphertext.txt
+
+      - name: Install cvc5 Python bindings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-cache-dir cvc5
+
+      - name: Solve and verify block 0
+        shell: bash
+        env:
+          BLOCK: "0"
+          RESULT_PATH: ctf/d3hferp/result-cvc5.txt
+        run: |
+          set -euo pipefail
+          python ctf/d3hferp/solve_cvc5.py
+
+      - name: Encrypt result before artifact upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          openssl pkeyutl -encrypt \
+            -pubin -inkey result_public.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -in result-cvc5.txt -out result-cvc5.enc
+          rm -f result-cvc5.txt
+
+      - name: Upload encrypted result
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3hferp-block-0-cvc5-encrypted
+          path: ctf/d3hferp/result-cvc5.enc
+          if-no-files-found: error
+          retention-days: 1
