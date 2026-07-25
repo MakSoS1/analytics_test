@@ -96,7 +96,11 @@ for a in range(p_forms):
         v = vector(R, vectors[b])
         eqs.extend(list(forms[a] * v))
 
-eqs.extend(g**3 - g for g in R.gens())
+# Only the 40 coordinates of the two oil vectors need field equations.
+# Once those are in GF(3), each selected form is recovered by a linear system,
+# so its 66 free coefficients automatically lie in GF(3) as well.
+y_variables = [variable for row in y for variable in row]
+eqs.extend(variable**3 - variable for variable in y_variables)
 I = R.ideal(eqs)
 
 print(
