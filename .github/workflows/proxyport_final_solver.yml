@@ -1,0 +1,487 @@
+name: proxyport-final-solver
+
+on:
+  push:
+    paths:
+      - ".github/workflows/proxyport_final_solver.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Build PoW solver
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libssl-dev
+          cat > /tmp/pow.c <<'EOF'
+          #include <openssl/sha.h>
+          #include <pthread.h>
+          #include <stdatomic.h>
+          #include <stdint.h>
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <unistd.h>
+
+          static const char *prefix;
+          static int nthreads;
+          static atomic_int found = 0;
+          static unsigned long long answer = 0;
+
+          static void *worker(void *arg) {
+              unsigned long long i = (unsigned long long)(uintptr_t)arg;
+              SHA256_CTX base;
+              SHA256_Init(&base);
+              SHA256_Update(&base, prefix, strlen(prefix));
+              char suffix[32];
+              unsigned char digest[SHA256_DIGEST_LENGTH];
+
+              while (!atomic_load_explicit(&found, memory_order_relaxed)) {
+                  int n = snprintf(suffix, sizeof(suffix), "%llu", i);
+                  SHA256_CTX ctx = base;
+                  SHA256_Update(&ctx, suffix, (size_t)n);
+                  SHA256_Final(digest, &ctx);
+                  if (digest[0] == 0 && digest[1] == 0 && digest[2] == 0 && (digest[3] & 0xC0) == 0) {
+                      int expected = 0;
+                      if (atomic_compare_exchange_strong(&found, &expected, 1)) {
+                          answer = i;
+                      }
+                      break;
+                  }
+                  i += (unsigned long long)nthreads;
+              }
+              return NULL;
+          }
+
+          int main(int argc, char **argv) {
+              if (argc != 2) return 2;
+              prefix = argv[1];
+              nthreads = (int)sysconf(_SC_NPROCESSORS_ONLN);
+              if (nthreads < 1) nthreads = 1;
+
+              pthread_t *threads = calloc((size_t)nthreads, sizeof(*threads));
+              if (!threads) return 3;
+              for (int i = 0; i < nthreads; i++) {
+                  if (pthread_create(&threads[i], NULL, worker, (void *)(uintptr_t)i) != 0) return 4;
+              }
+              for (int i = 0; i < nthreads; i++) pthread_join(threads[i], NULL);
+              free(threads);
+              printf("%llu\n", answer);
+              return 0;
+          }
+          EOF
+          gcc -O3 -pthread /tmp/pow.c -lcrypto -o /tmp/pow
+
+      - name: Run final solver
+        shell: bash
+        run: |
+          rm -rf proxyport_final_result
+          mkdir -p proxyport_final_result/raw
+          cat > /tmp/final_solver.py <<'PY'
+          import re
+          import socket
+          import ssl
+          import subprocess
+          import time
+          import traceback
+
+          INTERACTIVE_HOST = "rsgnw4zbmevuj3ax3yti2es6o4m.cloud.d3c.tf"
+          FORWARD_HOST = "r7htyblntpq7lws4trd4zngje2a.cloud.d3c.tf"
+          PORT = 443
+          FLAG_RE = re.compile(rb"[A-Za-z0-9_\-]*\{[^}\r\n]+\}")
+          all_logs = []
+
+          def log(message):
+              all_logs.append(f"[{time.monotonic():.6f}] {message}")
+
+          def tls_connect(host, timeout=15.0):
+              raw = socket.create_connection((host, PORT), timeout=timeout)
+              raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+              context = ssl.create_default_context()
+              wrapped = context.wrap_socket(raw, server_hostname=host)
+              wrapped.settimeout(timeout)
+              return wrapped
+
+          def read_until_line(file_obj, predicate, limit=200):
+              lines = []
+              for _ in range(limit):
+                  line = file_obj.readline()
+                  if not line:
+                      return lines, None
+                  lines.append(line)
+                  if predicate(line):
+                      return lines, line
+              return lines, None
+
+          class HalfCloseTLS:
+              def __init__(self, host, timeout=4.0):
+                  self.raw = socket.create_connection((host, PORT), timeout=timeout)
+                  self.raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                  self.raw.settimeout(timeout)
+                  self.incoming = ssl.MemoryBIO()
+                  self.outgoing = ssl.MemoryBIO()
+                  context = ssl.create_default_context()
+                  self.tls = context.wrap_bio(
+                      self.incoming,
+                      self.outgoing,
+                      server_side=False,
+                      server_hostname=host,
+                  )
+                  self._handshake()
+
+              def _flush_tls_output(self):
+                  while True:
+                      encrypted = self.outgoing.read()
+                      if not encrypted:
+                          return
+                      self.raw.sendall(encrypted)
+
+              def _receive_tls_input(self):
+                  encrypted = self.raw.recv(65536)
+                  if encrypted:
+                      self.incoming.write(encrypted)
+                  else:
+                      self.incoming.write_eof()
+                  return encrypted
+
+              def _handshake(self):
+                  while True:
+                      try:
+                          self.tls.do_handshake()
+                          self._flush_tls_output()
+                          return
+                      except ssl.SSLWantReadError:
+                          self._flush_tls_output()
+                          if not self._receive_tls_input():
+                              raise EOFError("EOF during TLS handshake")
+                      except ssl.SSLWantWriteError:
+                          self._flush_tls_output()
+
+              def write(self, payload):
+                  remaining = memoryview(payload)
+                  while remaining:
+                      try:
+                          written = self.tls.write(remaining)
+                          remaining = remaining[written:]
+                          self._flush_tls_output()
+                      except ssl.SSLWantWriteError:
+                          self._flush_tls_output()
+                      except ssl.SSLWantReadError:
+                          self._flush_tls_output()
+                          self._receive_tls_input()
+
+              def send_close_notify(self):
+                  try:
+                      self.tls.unwrap()
+                  except (ssl.SSLWantReadError, ssl.SSLWantWriteError):
+                      pass
+                  self._flush_tls_output()
+
+              def read_application_data(self, timeout=1.4):
+                  self.raw.settimeout(timeout)
+                  application = bytearray()
+                  events = []
+                  deadline = time.monotonic() + timeout
+
+                  while time.monotonic() < deadline and len(application) < 65536:
+                      try:
+                          plain = self.tls.read(16384)
+                          if plain:
+                              application.extend(plain)
+                              events.append(f"app:{len(plain)}")
+                              continue
+                          events.append("app_eof")
+                          break
+                      except ssl.SSLWantReadError:
+                          try:
+                              encrypted = self.raw.recv(65536)
+                          except socket.timeout:
+                              events.append("tcp_timeout")
+                              break
+
+                          if encrypted:
+                              self.incoming.write(encrypted)
+                              events.append(f"wire:{len(encrypted)}")
+                          else:
+                              try:
+                                  self.incoming.write_eof()
+                              except Exception:
+                                  pass
+                              events.append("tcp_eof")
+                              try:
+                                  while True:
+                                      plain = self.tls.read(16384)
+                                      if not plain:
+                                          break
+                                      application.extend(plain)
+                              except Exception as exc:
+                                  events.append(f"after_eof:{type(exc).__name__}")
+                              break
+                      except ssl.SSLZeroReturnError:
+                          events.append("close_notify")
+                          break
+                      except ssl.SSLEOFError:
+                          events.append("ssl_eof")
+                          break
+                      except Exception as exc:
+                          events.append(f"error:{type(exc).__name__}:{exc}")
+                          break
+
+                  return bytes(application), events
+
+              def close(self):
+                  try:
+                      self.raw.close()
+                  except Exception:
+                      pass
+
+          def half_close_probe(session_number, round_number):
+              started = time.monotonic()
+              connection = HalfCloseTLS(FORWARD_HOST, timeout=4.0)
+              try:
+                  request = (
+                      b"GET / HTTP/1.1\r\n"
+                      b"Host: probe\r\n"
+                      b"Connection: close\r\n"
+                      b"\r\n"
+                  )
+                  connection.write(request)
+                  connection.send_close_notify()
+                  connection.raw.shutdown(socket.SHUT_WR)
+                  data, events = connection.read_application_data(timeout=1.4)
+                  elapsed = time.monotonic() - started
+                  log(
+                      f"session={session_number} round={round_number} "
+                      f"probe_len={len(data)} elapsed={elapsed:.6f} "
+                      f"events={events!r} head={data[:96]!r}"
+                  )
+                  return len(data) > 0
+              finally:
+                  connection.close()
+
+          def solve_session(session_number, invert_mapping):
+              interactive = None
+              file_obj = None
+              transcript = bytearray()
+              answers = []
+
+              try:
+                  interactive = tls_connect(INTERACTIVE_HOST, timeout=20.0)
+                  file_obj = interactive.makefile("rwb", buffering=0)
+
+                  lines, marker = read_until_line(file_obj, lambda line: b"submit: pow" in line)
+                  banner = b"".join(lines)
+                  transcript.extend(banner)
+                  match = re.search(rb"prefix:\s*([0-9a-fA-F]+)", banner)
+                  if not match:
+                      raise RuntimeError("PoW prefix not found")
+
+                  prefix = match.group(1).decode("ascii")
+                  pow_started = time.monotonic()
+                  suffix = subprocess.check_output(
+                      ["/tmp/pow", prefix],
+                      text=True,
+                      timeout=360,
+                  ).strip()
+                  log(
+                      f"session={session_number} pow_prefix={prefix} "
+                      f"pow_suffix={suffix} solve_seconds={time.monotonic() - pow_started:.3f}"
+                  )
+                  file_obj.write(f"pow {suffix}\n".encode("ascii"))
+
+                  lines, marker = read_until_line(
+                      file_obj,
+                      lambda line: b"submit `answer gost` or `answer frp`" in line,
+                  )
+                  prompt = b"".join(lines)
+                  transcript.extend(prompt)
+                  if marker is None:
+                      raise RuntimeError(f"First round prompt not received: {prompt!r}")
+
+                  for round_number in range(1, 21):
+                      has_response = half_close_probe(session_number, round_number)
+                      if not invert_mapping:
+                          answer = "frp" if has_response else "gost"
+                      else:
+                          answer = "gost" if has_response else "frp"
+                      answers.append(answer)
+                      log(
+                          f"session={session_number} round={round_number} "
+                          f"has_response={has_response} invert={invert_mapping} answer={answer}"
+                      )
+                      file_obj.write(f"answer {answer}\n".encode("ascii"))
+
+                      lines, marker = read_until_line(
+                          file_obj,
+                          lambda line: (
+                              b"recorded" in line.lower()
+                              or b"incorrect" in line.lower()
+                              or b"wrong" in line.lower()
+                              or b"timed out" in line.lower()
+                              or FLAG_RE.search(line) is not None
+                          ),
+                      )
+                      acknowledgement = b"".join(lines)
+                      transcript.extend(acknowledgement)
+                      log(
+                          f"session={session_number} round={round_number} "
+                          f"ack={acknowledgement!r}"
+                      )
+
+                      if marker is None:
+                          break
+                      lowered = acknowledgement.lower()
+                      if b"incorrect" in lowered or b"wrong" in lowered or b"timed out" in lowered:
+                          break
+                      if FLAG_RE.search(acknowledgement):
+                          return True, bytes(transcript), answers
+
+                      if round_number < 20:
+                          lines, marker = read_until_line(
+                              file_obj,
+                              lambda line: b"submit `answer gost` or `answer frp`" in line,
+                          )
+                          next_prompt = b"".join(lines)
+                          transcript.extend(next_prompt)
+                          if marker is None:
+                              break
+
+                  interactive.settimeout(12.0)
+                  final_lines = []
+                  try:
+                      while True:
+                          line = file_obj.readline()
+                          if not line:
+                              break
+                          final_lines.append(line)
+                          if FLAG_RE.search(line):
+                              break
+                          lowered = line.lower()
+                          if b"incorrect" in lowered or b"wrong" in lowered or b"timed out" in lowered:
+                              break
+                  except (socket.timeout, TimeoutError, OSError) as exc:
+                      final_lines.append(f"<read_end {type(exc).__name__}:{exc}>\n".encode())
+
+                  final_data = b"".join(final_lines)
+                  transcript.extend(final_data)
+                  flag_found = FLAG_RE.search(bytes(transcript)) is not None
+                  log(
+                      f"session={session_number} complete invert={invert_mapping} "
+                      f"answers={answers!r} final={final_data!r} flag_found={flag_found}"
+                  )
+                  return flag_found, bytes(transcript), answers
+
+              except Exception:
+                  error = traceback.format_exc()
+                  log(f"session={session_number} fatal={error}")
+                  transcript.extend(error.encode("utf-8", errors="replace"))
+                  return False, bytes(transcript), answers
+              finally:
+                  if file_obj is not None:
+                      try:
+                          file_obj.close()
+                      except Exception:
+                          pass
+                  if interactive is not None:
+                      try:
+                          interactive.close()
+                      except Exception:
+                          pass
+
+          transcripts = []
+          success, transcript, answers = solve_session(1, invert_mapping=False)
+          transcripts.append(
+              b"===== SESSION 1: zero-response=gost =====\n"
+              + transcript
+              + b"\nANSWERS="
+              + repr(answers).encode()
+              + b"\n"
+          )
+
+          if not success:
+              success, transcript, answers = solve_session(2, invert_mapping=True)
+              transcripts.append(
+                  b"===== SESSION 2: zero-response=frp =====\n"
+                  + transcript
+                  + b"\nANSWERS="
+                  + repr(answers).encode()
+                  + b"\n"
+              )
+
+          combined = b"\n".join(transcripts)
+          flag_match = FLAG_RE.search(combined)
+          status = "success" if flag_match else "failed"
+          log(f"overall_status={status} flag_present={flag_match is not None}")
+
+          with open("proxyport_final_result/raw/session.bin", "wb") as output:
+              output.write(combined)
+          with open("proxyport_final_result/raw/debug.txt", "w", encoding="utf-8") as output:
+              output.write("\n".join(all_logs) + "\n")
+          with open("proxyport_final_result/raw/status.txt", "w", encoding="utf-8") as output:
+              output.write(f"status={status}\n")
+          PY
+          timeout 840s python3 /tmp/final_solver.py >/dev/null 2>&1
+
+      - name: Encrypt result before commit
+        shell: bash
+        run: |
+          cat > proxyport_final_result/public.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1EcNw1wCF/68hhizkEAW
+          8CLSMGdggdbKip//N49VWh99dlz49+tPSQuyoKGSV3+982Mi3zcFV0i0ARYXDVjR
+          2djQfHhRI8IyXksbGmUqofqmt5bpNeztW4wKZCPP9VmiNgw0DTWwHWVmohBt25fP
+          MvB3NfXyp5PRtBg0txVnxciVAIkiSvF76ZewhZ/Qe7rZ9X0ZCryjd3sOarErqJMg
+          dIcCLIziooDkCmqG0KWxIJmEVqiSyQ7ZAvFNFDYahygZzHIpBc+zkFgM7gzeoLeY
+          CAh9VAVM1GVqLm0fs/Wi8gWruVzlYy4b2dBmeSDVOuLgi0q+lrqezuf0uTCaKRC8
+          ewIDAQAB
+          -----END PUBLIC KEY-----
+          EOF
+
+          tar -C proxyport_final_result/raw -czf proxyport_final_result/result.tar.gz .
+          openssl rand -out proxyport_final_result/key.bin 32
+          openssl rand -out proxyport_final_result/iv.bin 16
+          KEY_HEX="$(xxd -p -c 256 proxyport_final_result/key.bin)"
+          IV_HEX="$(xxd -p -c 256 proxyport_final_result/iv.bin)"
+          openssl enc -aes-256-cbc \
+            -K "$KEY_HEX" \
+            -iv "$IV_HEX" \
+            -in proxyport_final_result/result.tar.gz \
+            -out proxyport_final_result/result.enc
+          cat proxyport_final_result/key.bin proxyport_final_result/iv.bin > proxyport_final_result/keyiv.bin
+          openssl pkeyutl -encrypt \
+            -pubin \
+            -inkey proxyport_final_result/public.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -in proxyport_final_result/keyiv.bin \
+            -out proxyport_final_result/keyiv.enc
+          base64 -w0 proxyport_final_result/result.enc > proxyport_final_result/result.enc.b64
+          base64 -w0 proxyport_final_result/keyiv.enc > proxyport_final_result/keyiv.enc.b64
+          rm -rf \
+            proxyport_final_result/raw \
+            proxyport_final_result/public.pem \
+            proxyport_final_result/result.tar.gz \
+            proxyport_final_result/result.enc \
+            proxyport_final_result/key.bin \
+            proxyport_final_result/iv.bin \
+            proxyport_final_result/keyiv.bin \
+            proxyport_final_result/keyiv.enc
+
+      - name: Commit encrypted result
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            proxyport_final_result/result.enc.b64 \
+            proxyport_final_result/keyiv.enc.b64
+          git commit -m "Add encrypted final proxyport result" || exit 0
+          git push
