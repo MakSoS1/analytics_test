@@ -28,19 +28,16 @@ for k in range(m):
             M[j, i] = F(values[t])
             t += 1
     P.append(M)
-    pos += 2  # linear and constant terms are irrelevant to the Hessian attack
+    pos += 2
 assert pos == len(lines)
 
-rng = random.Random(0xD3F3_2026 + CHART)
+rng = random.Random(int(0xD3F3_2026 + CHART))
 fixed_coeff = sorted(rng.sample(range(m), 20))
 fixed_input = sorted(rng.sample(range(n), 11))
 free_coeff = [k for k in range(m) if k not in fixed_coeff]
 free_input = [i for i in range(n) if i not in fixed_input]
 assert len(free_coeff) == 33 and len(free_input) == 20
 
-# Two forms and two common kernel vectors are enough.  On a valid chart,
-# projection of the hidden 20-space/11-space onto the fixed coordinates is
-# invertible, so prescribing e0 and e1 selects unique planted vectors.
 p_forms = 2
 t_vectors = 2
 names = []
@@ -78,7 +75,6 @@ for b in range(t_vectors):
         current[i] = y[b][u]
     vectors.append(current)
 
-# Precompute each selected public combination as a polynomial matrix.
 forms = []
 for a in range(p_forms):
     M = matrix(R, n, n)
@@ -100,7 +96,6 @@ for a in range(p_forms):
         v = vector(R, vectors[b])
         eqs.extend(list(forms[a] * v))
 
-# Restrict every unknown to GF(3), making the ideal finite and radical.
 eqs.extend(g**3 - g for g in R.gens())
 I = R.ideal(eqs)
 
@@ -166,13 +161,11 @@ if oil.dimension() != 11:
 if any(M.rank() > 20 for M in recovered_forms):
     raise RuntimeError("candidate form has rank above 20")
 
-# Verify that the complete coefficient space annihilating the recovered oil
-# has the expected hidden dimension 20.
-O = oil.basis_matrix().transpose()  # 31 x 11
+O = oil.basis_matrix().transpose()
 restriction = matrix(F, n * 11, m)
 for k in range(m):
     column = P[k] * O
-    restriction.set_column(k, vector(F, list(column)))
+    restriction.set_column(k, vector(F, column.list()))
 hidden_forms = restriction.right_kernel()
 if hidden_forms.dimension() != 20:
     raise RuntimeError(
