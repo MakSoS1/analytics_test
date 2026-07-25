@@ -1,12 +1,6 @@
 name: D3HFERP cvc5 encrypted solve
 
 on:
-  push:
-    branches:
-      - agent/d3hferp-solver-20260725
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
