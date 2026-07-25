@@ -17,10 +17,10 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Install build and network tools
+      - name: Install build tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ncat libssl-dev
+          sudo apt-get install -y -qq libssl-dev
 
       - name: Build PoW solver
         shell: bash
@@ -77,7 +77,7 @@ jobs:
           EOF
           gcc -O3 -pthread /tmp/pow_solver.c -lcrypto -o /tmp/pow_solver
 
-      - name: Run one labeled probing round
+      - name: Collect labeled samples quickly
         shell: bash
         run: |
           rm -rf proxyport_encrypted
@@ -94,140 +94,98 @@ jobs:
           INTERACTIVE = "rsgnw4zbmevuj3ax3yti2es6o4m.cloud.d3c.tf"
           FORWARD = "r7htyblntpq7lws4trd4zngje2a.cloud.d3c.tf"
           PORT = 443
-          log_lines = []
+          logs = []
 
           def log(msg):
               line = f"[{time.monotonic():.6f}] {msg}"
               print(line, flush=True)
-              log_lines.append(line)
+              logs.append(line)
 
-          def connect_tls(host, timeout=8.0):
-              start = time.monotonic()
+          def tls_connect(host, timeout=4.0):
+              t0 = time.monotonic()
               raw = socket.create_connection((host, PORT), timeout=timeout)
               raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
               ctx = ssl.create_default_context()
               s = ctx.wrap_socket(raw, server_hostname=host)
               s.setblocking(False)
-              return s, time.monotonic() - start
+              return s, time.monotonic() - t0
 
-          def recv_for(s, seconds, limit=1_000_000):
-              end = time.monotonic() + seconds
-              data = bytearray()
-              events = []
-              while time.monotonic() < end and len(data) < limit:
-                  left = max(0.0, end - time.monotonic())
-                  r, _, _ = select.select([s], [], [], min(0.2, left))
+          def recv_until(s, marker=None, timeout=3.0, limit=65536):
+              end = time.monotonic() + timeout
+              out = bytearray()
+              eof = False
+              while time.monotonic() < end and len(out) < limit:
+                  if marker is not None and marker in out:
+                      break
+                  r, _, _ = select.select([s], [], [], min(0.1, max(0.0, end-time.monotonic())))
                   if not r:
                       continue
                   try:
-                      chunk = s.recv(min(65536, limit - len(data)))
-                      if not chunk:
-                          events.append((time.monotonic(), "EOF"))
+                      b = s.recv(min(8192, limit-len(out)))
+                      if not b:
+                          eof = True
                           break
-                      data.extend(chunk)
-                      events.append((time.monotonic(), f"recv:{len(chunk)}"))
+                      out.extend(b)
                   except (ssl.SSLWantReadError, BlockingIOError):
                       continue
-                  except Exception as exc:
-                      events.append((time.monotonic(), f"recv_error:{type(exc).__name__}:{exc}"))
-                      break
-              return bytes(data), events
+              return bytes(out), eof
 
-          def send_all_nb(s, payload, timeout=3.0):
-              view = memoryview(payload)
-              end = time.monotonic() + timeout
-              sent = 0
-              err = None
-              while view and time.monotonic() < end:
-                  _, w, _ = select.select([], [s], [], 0.2)
-                  if not w:
-                      continue
-                  try:
-                      n = s.send(view)
-                      sent += n
-                      view = view[n:]
-                  except (ssl.SSLWantWriteError, BlockingIOError):
-                      continue
-                  except Exception as exc:
-                      err = f"{type(exc).__name__}:{exc}"
-                      break
-              return sent, err
+          def send_blocking(s, data):
+              s.setblocking(True)
+              s.sendall(data)
+              s.setblocking(False)
 
-          def probe(index, payload=b"", pre_read=0.0, post_read=1.5, half_close=False, linger_rst=False):
-              result = {"index": index, "payload_len": len(payload), "half_close": half_close, "linger_rst": linger_rst}
+          def http_probe(round_no, attempt):
               s = None
               try:
-                  s, ct = connect_tls(FORWARD)
-                  result["connect_tls_s"] = ct
-                  if pre_read:
-                      d0, e0 = recv_for(s, pre_read)
-                      result["pre_data_hex"] = d0.hex()
-                      result["pre_events"] = e0
-                  if payload:
-                      sent, err = send_all_nb(s, payload)
-                      result["sent"] = sent
-                      result["send_error"] = err
-                  if half_close:
-                      try:
-                          s.shutdown(socket.SHUT_WR)
-                          result["shutdown_wr"] = "ok"
-                      except Exception as exc:
-                          result["shutdown_wr"] = f"{type(exc).__name__}:{exc}"
-                  d1, e1 = recv_for(s, post_read)
-                  result["post_data_hex"] = d1.hex()
-                  result["post_data_repr"] = repr(d1[:500])
-                  result["post_events"] = e1
-                  if linger_rst:
-                      try:
-                          import struct
-                          s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
-                      except Exception as exc:
-                          result["linger_error"] = f"{type(exc).__name__}:{exc}"
+                  s, ct = tls_connect(FORWARD)
+                  req = b"GET / HTTP/1.1\r\nHost: probe\r\nConnection: close\r\n\r\n"
+                  send_blocking(s, req)
+                  t0 = time.monotonic()
+                  data, eof = recv_until(s, timeout=0.9, limit=16384)
+                  dt = time.monotonic() - t0
+                  log(f"SAMPLE round={round_no} attempt={attempt} connect={ct:.6f} recv={dt:.6f} eof={eof} len={len(data)} repr={data!r}")
               except Exception as exc:
-                  result["exception"] = f"{type(exc).__name__}:{exc}"
+                  log(f"SAMPLE round={round_no} attempt={attempt} error={type(exc).__name__}:{exc}")
               finally:
                   if s is not None:
-                      try:
-                          s.close()
-                      except Exception:
-                          pass
-              log(f"PROBE {result!r}")
+                      try: s.close()
+                      except Exception: pass
 
           try:
-              inter, ct = connect_tls(INTERACTIVE)
-              log(f"interactive connect_tls_s={ct:.6f}")
-              banner, ev = recv_for(inter, 5.0)
-              log(f"BANNER {banner!r} events={ev!r}")
+              inter, ct = tls_connect(INTERACTIVE)
+              log(f"interactive_connect={ct:.6f}")
+              banner, _ = recv_until(inter, marker=b"submit: pow <suffix>", timeout=4.0)
+              log(f"BANNER {banner!r}")
               m = re.search(rb"prefix:\s*([0-9a-fA-F]+)", banner)
               if not m:
-                  raise RuntimeError("PoW prefix not found")
+                  raise RuntimeError("prefix not found")
               prefix = m.group(1).decode()
               t0 = time.monotonic()
               suffix = subprocess.check_output(["/tmp/pow_solver", prefix], text=True, timeout=240).strip()
-              log(f"POW prefix={prefix} suffix={suffix} solve_s={time.monotonic()-t0:.3f}")
-              inter.setblocking(True)
-              inter.sendall(f"pow {suffix}\n".encode())
-              inter.setblocking(False)
-              auth, ev = recv_for(inter, 4.0)
-              log(f"AFTER_POW {auth!r} events={ev!r}")
+              log(f"POW prefix={prefix} suffix={suffix} solve={time.monotonic()-t0:.3f}")
+              send_blocking(inter, f"pow {suffix}\n".encode())
 
-              probe(1, pre_read=1.0, post_read=1.0)
-              probe(2, payload=b"hello\n", post_read=2.0)
-              probe(3, payload=b"A" * 262144, post_read=2.0)
-              probe(4, payload=b"half-close-test\n", half_close=True, post_read=3.0)
-              probe(5, payload=b"GET / HTTP/1.0\r\nHost: test\r\n\r\n", post_read=2.0, linger_rst=True)
+              pending, eof = recv_until(inter, marker=b"submit `answer gost` or `answer frp`", timeout=5.0)
+              log(f"AFTER_POW {pending!r} eof={eof}")
 
-              inter.setblocking(True)
-              inter.sendall(b"answer gost\n")
-              inter.setblocking(False)
-              verdict, ev = recv_for(inter, 5.0)
-              log(f"VERDICT_AFTER_GOST {verdict!r} events={ev!r}")
-              inter.close()
+              for rnd in range(1, 21):
+                  if b"round timed out" in pending or b"wrong" in pending.lower() or b"incorrect" in pending.lower() or eof:
+                      break
+                  http_probe(rnd, 1)
+                  http_probe(rnd, 2)
+                  send_blocking(inter, b"answer gost\n")
+                  pending, eof = recv_until(inter, marker=b"submit `answer gost` or `answer frp`", timeout=2.0)
+                  log(f"ANSWER round={rnd} guessed=gost response={pending!r} eof={eof}")
+                  if b"wrong" in pending.lower() or b"incorrect" in pending.lower() or b"round timed out" in pending or eof:
+                      break
+              try: inter.close()
+              except Exception: pass
           except Exception:
               log("FATAL " + traceback.format_exc())
 
           with open("proxyport_encrypted/raw/session.txt", "w", encoding="utf-8") as f:
-              f.write("\n".join(log_lines) + "\n")
+              f.write("\n".join(logs) + "\n")
           PY
           timeout 420s python3 /tmp/probe.py
 
