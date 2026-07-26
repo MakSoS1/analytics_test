@@ -1,0 +1,106 @@
+name: D3HFERP algebra backend test
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d3hferp-algebra-test
+  cancel-in-progress: true
+
+jobs:
+  cvc5-control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore challenge
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          base64 -d archive.b64 > archive.zip
+          unzip -q -o archive.zip
+      - name: Install cvc5
+        run: python3 -m pip install --disable-pip-version-check --no-cache-dir cvc5
+      - name: Solve native finite-field system
+        shell: bash
+        env:
+          BLOCK: "6"
+          ZERO_FROM: "16"
+          TIME_LIMIT_MS: "900000"
+          RESULT_PATH: ctf/d3hferp/cvc5-result.txt
+        run: |
+          set -euo pipefail
+          python3 -u ctf/d3hferp/solve_cvc5_final.py > ctf/d3hferp/cvc5.log 2>&1
+      - name: Encrypt result
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          openssl pkeyutl -encrypt -pubin -inkey final_public.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -in cvc5-result.txt -out cvc5-result.enc
+          rm -f cvc5-result.txt
+      - name: Upload cvc5 output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3hferp-cvc5-control-${{ github.run_id }}
+          path: |
+            ctf/d3hferp/cvc5.log
+            ctf/d3hferp/cvc5-result.enc
+          if-no-files-found: warn
+          retention-days: 1
+
+  msolve-control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore challenge
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          base64 -d archive.b64 > archive.zip
+          unzip -q -o archive.zip
+      - name: Solve with Sage msolve
+        shell: bash
+        env:
+          BLOCK: "6"
+          ACTIVE_N: "16"
+        run: |
+          set -euo pipefail
+          docker pull sagemath/sagemath:latest > /dev/null
+          docker run --rm \
+            -e BLOCK=6 -e ACTIVE_N=16 -e RESULT_PATH=/work/msolve-result.txt \
+            -v "$PWD/ctf/d3hferp:/work" -w /work \
+            sagemath/sagemath:latest \
+            sage solve_msolve_final.sage > ctf/d3hferp/msolve.log 2>&1
+      - name: Encrypt result
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          openssl pkeyutl -encrypt -pubin -inkey final_public.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -in msolve-result.txt -out msolve-result.enc
+          rm -f msolve-result.txt
+      - name: Upload msolve output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3hferp-msolve-control-${{ github.run_id }}
+          path: |
+            ctf/d3hferp/msolve.log
+            ctf/d3hferp/msolve-result.enc
+          if-no-files-found: warn
+          retention-days: 1
