@@ -37,8 +37,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base64 -d ctf_mnn/touch_model_zero.mnn.gz.b64 | gzip -d > ctf_mnn/touch_model.mnn
-          test "$(stat -c%s ctf_mnn/touch_model.mnn)" = "80209"
+          base64 -d ctf_mnn/touch_model_zero.mnn.gz.b64 | gzip -d > ctf_mnn/touch_model.wrapped
+          test "$(stat -c%s ctf_mnn/touch_model.wrapped)" = "80209"
+          tail -c +10 ctf_mnn/touch_model.wrapped > ctf_mnn/touch_model.mnn
+          test "$(stat -c%s ctf_mnn/touch_model.mnn)" = "80200"
           set +e
           python ctf_mnn/recover.py > ctf_mnn/console.txt 2>&1
           python_status=$?
