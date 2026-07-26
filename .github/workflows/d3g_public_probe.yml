@@ -1,0 +1,86 @@
+name: d3g-public-probe
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TARGET_BASE: http://192.168.152.1:8788
+  TARGET_ROUTE: /api/9098CA549A475E62
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Run isolated probes
+        shell: bash
+        run: |
+          set +e
+          umask 077
+          mkdir -p raw package
+
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuWOeiBDtAWI/8duml1G+
+          cZv1ZZT2l59Y1qM68y+xuxe9YZrhLUrIiZeritfVf2LRgrdIqMU1jxozQ8/evdMs
+          3ZknI5gRIzVSuSb87WoPXUumQITP+FIx+Fg24AzWu967K89SEHzJ+1joPugaN2hj
+          axT6WBqePJKNS6RjsGbxWle7MRr4JzYNl6vjFKsk3uVzFaC5uQz8hnzDs4TJKlxL
+          sQ/lQ7zr2nBUy/A4l80WxVrqtu+fL7ajpD7oQP51JWNSKhmlizwUmU8yEfZ6Etfh
+          dko2XYExuqzb9S18oyWB2vU5yT5aIgdx9QudSAMzmT9hndCMfONkpJvANmWCF+6H
+          7QIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+
+          probe() {
+            name="$1"; method="$2"; url="$3"; data="$4"
+            if [ -n "$data" ]; then
+              printf '%s' "$data" > "raw/${name}.request"
+              curl --silent --show-error --connect-timeout 7 --max-time 20 \
+                -X "$method" -H 'Content-Type: application/json' -H 'Accept: application/json' \
+                --data-binary @"raw/${name}.request" \
+                -D "raw/${name}.headers" -o "raw/${name}.body" \
+                -w '%{http_code}\n%{remote_ip}\n%{remote_port}\n%{content_type}\n' \
+                "$url" > "raw/${name}.meta" 2> "raw/${name}.error"
+            else
+              curl --silent --show-error --connect-timeout 7 --max-time 20 \
+                -X "$method" -H 'Accept: application/json' \
+                -D "raw/${name}.headers" -o "raw/${name}.body" \
+                -w '%{http_code}\n%{remote_ip}\n%{remote_port}\n%{content_type}\n' \
+                "$url" > "raw/${name}.meta" 2> "raw/${name}.error"
+            fi
+            printf '%s' "$?" > "raw/${name}.exit"
+          }
+
+          probe root_get GET "$TARGET_BASE/" ''
+          probe route_options OPTIONS "$TARGET_BASE$TARGET_ROUTE" ''
+          probe route_empty POST "$TARGET_BASE$TARGET_ROUTE" '{}'
+          probe route_known POST "$TARGET_BASE$TARGET_ROUTE" '{"version":50462976,"session":"07060504","transcript":"0B0A0908","winner":724183336,"humanMoves":[[1,1],[4,5],[1,4],[1,9]],"aiMoves":[[2,2],[2,3],[2,4],[2,5]],"hiddenClaim":"27262524","stateGen":791555372,"vmxTrace":"33323130","vmxRolling":"3F3E3D3C3B3A3938","vmxEvents":1128415552,"vmxLast":"47464544","proof":"D543A43A","domain":"D3FA4E01","selector":"533227F4","telemetry":"73727170","epoch":1195787588,"route":"9098CA549A475E62","markerFold":"4F4E4D4C","oldMoveFold":"53525150","cryptoFold":"57565554","registryFold":"5F5E5D5C","descriptorFold":"63626160","shadowFold":"67666564"}'
+
+          tar -C raw -czf package/payload.tar.gz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(xxd -p -c 256 package/aes.key)"
+          IV_HEX="$(xxd -p -c 256 package/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" \
+            -in package/payload.tar.gz -out package/payload.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -in package/aes.key -out package/key.enc
+          rm -rf raw package/aes.key package/public.pem package/payload.tar.gz
+
+      - name: Upload encrypted result
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3g-public-probe-encrypted
+          path: |
+            package/payload.enc
+            package/key.enc
+            package/iv.bin
+          retention-days: 1
+          if-no-files-found: error
