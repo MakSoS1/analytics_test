@@ -40,11 +40,15 @@ jobs:
           base64 -d ctf_mnn/touch_model_zero.mnn.gz.b64 | gzip -d > ctf_mnn/touch_model.mnn
           test "$(stat -c%s ctf_mnn/touch_model.mnn)" = "80209"
           set +e
-          python ctf_mnn/recover.py >/dev/null 2>&1
+          python ctf_mnn/recover.py > ctf_mnn/console.txt 2>&1
           python_status=$?
           set -e
-          test -s ctf_mnn/result.txt
+          if [ ! -s ctf_mnn/result.txt ]; then
+            echo "ERROR=result_not_created" > ctf_mnn/result.txt
+          fi
           echo "PYTHON_STATUS=$python_status" >> ctf_mnn/result.txt
+          echo "--- MNN CONSOLE ---" >> ctf_mnn/result.txt
+          cat ctf_mnn/console.txt >> ctf_mnn/result.txt
 
       - name: Store private-to-account result artifact
         if: always()
