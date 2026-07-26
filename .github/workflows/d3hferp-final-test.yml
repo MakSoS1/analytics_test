@@ -1,0 +1,73 @@
+name: D3HFERP final exact solver test
+
+on:
+  push:
+    branches:
+      - agent/d3hferp-final-20260726
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d3hferp-final-test
+  cancel-in-progress: true
+
+jobs:
+  solve-control-block:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out isolated branch
+        uses: actions/checkout@v4
+
+      - name: Restore exact uploaded challenge
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          base64 -d archive.b64 > archive.zip
+          unzip -q -o archive.zip
+          test -f D3HFERP/pubkey.txt
+          test -f D3HFERP/ciphertext.txt
+
+      - name: Install native SAT backends
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-cache-dir python-sat
+
+      - name: Solve and verify control block
+        id: solve
+        shell: bash
+        env:
+          BLOCK: "6"
+          ZERO_FROM: "16"
+          RESULT_PATH: ctf/d3hferp/control-result.txt
+        run: |
+          set -euo pipefail
+          python3 -u ctf/d3hferp/solve_pysat.py \
+            > ctf/d3hferp/control-diagnostic.log 2>&1
+
+      - name: Encrypt verified result
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ctf/d3hferp
+          openssl pkeyutl -encrypt \
+            -pubin -inkey final_public.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -in control-result.txt -out control-result.enc
+          rm -f control-result.txt
+
+      - name: Upload encrypted result and diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3hferp-final-control-${{ github.run_id }}
+          path: |
+            ctf/d3hferp/control-result.enc
+            ctf/d3hferp/control-diagnostic.log
+          if-no-files-found: warn
+          retention-days: 1
