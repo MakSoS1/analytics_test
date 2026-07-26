@@ -1,9 +1,6 @@
 name: D3HFERP final exact solver test
 
 on:
-  push:
-    branches:
-      - agent/d3hferp-final-20260726
   pull_request:
     branches:
       - main
@@ -18,7 +15,7 @@ concurrency:
 
 jobs:
   solve-control-block:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Check out isolated branch
