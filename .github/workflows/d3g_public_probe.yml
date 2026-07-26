@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   TARGET_BASE: http://192.168.152.1:8788
@@ -16,14 +16,21 @@ env:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 5
     steps:
-      - name: Run isolated probes
+      - name: Check out main for encrypted result commit
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Run isolated probes and encrypt output
         shell: bash
         run: |
           set +e
           umask 077
-          mkdir -p raw package
+          rm -rf raw package d3g_probe_result
+          mkdir -p raw package d3g_probe_result
 
           cat > package/public.pem <<'PEM'
           -----BEGIN PUBLIC KEY-----
@@ -72,15 +79,18 @@ jobs:
           openssl pkeyutl -encrypt -pubin -inkey package/public.pem \
             -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
             -in package/aes.key -out package/key.enc
-          rm -rf raw package/aes.key package/public.pem package/payload.tar.gz
+          base64 -w0 package/payload.enc > d3g_probe_result/payload.enc.b64
+          base64 -w0 package/key.enc > d3g_probe_result/key.enc.b64
+          base64 -w0 package/iv.bin > d3g_probe_result/iv.bin.b64
+          sha256sum package/payload.enc package/key.enc package/iv.bin > d3g_probe_result/SHA256SUMS
+          rm -rf raw package
 
-      - name: Upload encrypted result
-        uses: actions/upload-artifact@v4
-        with:
-          name: d3g-public-probe-encrypted
-          path: |
-            package/payload.enc
-            package/key.enc
-            package/iv.bin
-          retention-days: 1
-          if-no-files-found: error
+      - name: Commit ciphertext only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add d3g_probe_result/
+          git commit -m "Add encrypted D3G probe result" || exit 0
+          git push origin HEAD:main
