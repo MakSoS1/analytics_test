@@ -39,10 +39,15 @@ jobs:
           set -euo pipefail
           base64 -d ctf_mnn/touch_model_zero.mnn.gz.b64 | gzip -d > ctf_mnn/touch_model.mnn
           test "$(stat -c%s ctf_mnn/touch_model.mnn)" = "80209"
+          set +e
           python ctf_mnn/recover.py >/dev/null 2>&1
+          python_status=$?
+          set -e
           test -s ctf_mnn/result.txt
+          echo "PYTHON_STATUS=$python_status" >> ctf_mnn/result.txt
 
       - name: Store private-to-account result artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: callback-result
