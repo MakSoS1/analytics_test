@@ -1,0 +1,41 @@
+name: Temporary MBI check 20260730
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch official MBI lists
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python - <<'PY'
+          import requests, json, re
+          from bs4 import BeautifulSoup
+          urls={
+            'budget':'https://inet.ibi.spb.ru/raspisan/ks/cb2026.php?c=bak-o-b',
+            'submitted':'https://inet.ibi.spb.ru/raspisan/ks/ab.php?a=spec-eb-o'
+          }
+          result={}
+          for k,u in urls.items():
+              try:
+                  r=requests.get(u,headers={'User-Agent':'Mozilla/5.0'},timeout=30)
+                  open(f'out/{k}.html','wb').write(r.content)
+                  text=BeautifulSoup(r.text,'html.parser').get_text(' ',strip=True)
+                  result[k]={'status':r.status_code,'length':len(r.content),'contains_target':'1609688' in text,'context':text[max(0,text.find('1609688')-1200):text.find('1609688')+1200] if '1609688' in text else text[:1000]}
+              except Exception as e:
+                  result[k]={'error':repr(e)}
+          open('out/result.json','w',encoding='utf-8').write(json.dumps(result,ensure_ascii=False,indent=2))
+          print(json.dumps(result,ensure_ascii=False,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mbi-check-20260730
+          path: out/
+          retention-days: 1
