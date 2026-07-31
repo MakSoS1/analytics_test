@@ -1,6 +1,8 @@
 name: Temporary CTF geolocation
 
 on:
+  push:
+    branches: [ctf-geolocate-20260731]
   pull_request:
     branches: [main]
     paths:
@@ -13,44 +15,57 @@ permissions:
 jobs:
   investigate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Decode and validate image
+      - name: Reassemble and validate image
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p results
-          tr -d '\r\n ' < ctf/geolocate/image.b64 | base64 -d > results/input.jpg
+          cat ctf/geolocate/bin/00 ctf/geolocate/bin/01 ctf/geolocate/bin/02 ctf/geolocate/bin/03 ctf/geolocate/bin/04 > results/input.jpg
           file results/input.jpg | tee results/file.txt
           identify results/input.jpg | tee results/identify.txt
           sha256sum results/input.jpg | tee results/sha256.txt
+          test "$(sha256sum results/input.jpg | cut -d' ' -f1)" = "bc7808f44d152bbd32b2422394f085854c66a547635f16cf2640628f29cfbf85"
 
-      - name: Google reverse image searches
+      - name: Reverse-image search probes
         shell: bash
         run: |
           set -euo pipefail
-          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36'
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36'
+
           curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
             -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
             -F 'image_content=' \
             'https://www.google.com/searchbyimage/upload' \
             -D results/google.headers -o results/google.html || true
+
           curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
             -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
             -F 'image_content=' \
             'https://lens.google.com/v3/upload' \
             -D results/lens.headers -o results/lens.html || true
-          grep -Eoi 'https?[^"<> ]+' results/google.html results/lens.html 2>/dev/null | head -200 > results/extracted_urls.txt || true
-          grep -Eio '.{0,120}(Canberra|Australia|street|road|suburb|similar|visual match).{0,180}' results/google.html results/lens.html 2>/dev/null | head -200 > results/snippets.txt || true
 
-      - name: Query OpenStreetMap candidates
+          curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
+            -F 'upfile=@results/input.jpg;type=image/jpeg' \
+            'https://yandex.com/images/search?rpt=imageview&format=json&request=%7B%22blocks%22%3A%5B%7B%22block%22%3A%22b-page_type_search-by-image__link%22%7D%5D%7D' \
+            -D results/yandex.headers -o results/yandex.json || true
+
+          grep -Eoi 'https?[^"<> ]+' results/google.html results/lens.html results/yandex.json 2>/dev/null \
+            | sed 's/\\u0026/\&/g; s/\\u003d/=/g; s/\\u002f/\//g' \
+            | head -1000 > results/extracted_urls.txt || true
+          grep -Eio '.{0,160}(Canberra|Australia|street|road|suburb|similar|visual match|exact match|location).{0,240}' \
+            results/google.html results/lens.html results/yandex.json 2>/dev/null \
+            | head -500 > results/snippets.txt || true
+
+      - name: Query Canberra traffic-calming candidates
         shell: bash
         run: |
           set -euo pipefail
           cat > results/query.overpass <<'EOF'
-          [out:json][timeout:120];
+          [out:json][timeout:180];
           (
             node["traffic_calming"](-35.38,149.05,-35.20,149.20);
             way["traffic_calming"](-35.38,149.05,-35.20,149.20);
@@ -61,21 +76,38 @@ jobs:
             --data-urlencode 'data@results/query.overpass' \
             'https://overpass-api.de/api/interpreter' \
             -o results/traffic_calming.json || true
+
           python3 - <<'PY'
-          import json
+          import json, time, urllib.parse, urllib.request
           from pathlib import Path
-          p=Path('results/traffic_calming.json')
+
+          source = Path('results/traffic_calming.json')
           try:
-              d=json.loads(p.read_text())
-          except Exception as e:
-              Path('results/traffic_summary.txt').write_text(f'parse error: {e}\n')
-          else:
-              rows=[]
-              for x in d.get('elements',[]):
-                  lat=x.get('lat') or x.get('center',{}).get('lat')
-                  lon=x.get('lon') or x.get('center',{}).get('lon')
-                  rows.append((lat,lon,x.get('type'),x.get('id'),x.get('tags',{})))
-              Path('results/traffic_summary.txt').write_text('\n'.join(map(str,rows)))
+              data = json.loads(source.read_text())
+          except Exception as exc:
+              Path('results/traffic_summary.json').write_text(json.dumps({'error': str(exc)}))
+              raise SystemExit
+
+          rows = []
+          for item in data.get('elements', []):
+              lat = item.get('lat') or item.get('center', {}).get('lat')
+              lon = item.get('lon') or item.get('center', {}).get('lon')
+              if lat is None or lon is None:
+                  continue
+              row = {
+                  'lat': lat,
+                  'lon': lon,
+                  'osm_type': item.get('type'),
+                  'osm_id': item.get('id'),
+                  'tags': item.get('tags', {}),
+              }
+              rows.append(row)
+
+          Path('results/traffic_summary.json').write_text(json.dumps(rows, indent=2))
+          Path('results/candidate_coordinates.txt').write_text(
+              '\n'.join(f"{r['lat']:.7f},{r['lon']:.7f}\t{r['tags']}" for r in rows)
+          )
+          print(f'candidate count: {len(rows)}')
           PY
 
       - name: Upload investigation results
