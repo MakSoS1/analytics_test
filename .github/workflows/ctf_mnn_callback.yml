@@ -1,0 +1,62 @@
+name: isolated-mnn-callback
+
+on:
+  push:
+    branches:
+      - agent/ctf-mnn-tag-20260726
+    paths:
+      - .github/workflows/ctf_mnn_callback.yml
+      - ctf_mnn/recover.py
+      - ctf_mnn/touch_model_zero.mnn.gz.b64
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/ctf_mnn_callback.yml
+      - ctf_mnn/recover.py
+      - ctf_mnn/touch_model_zero.mnn.gz.b64
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install exact MNN runtime
+        run: python -m pip install --disable-pip-version-check --no-input MNN==3.6.0 numpy
+
+      - name: Reconstruct model and recover callback tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d ctf_mnn/touch_model_zero.mnn.gz.b64 | gzip -d > ctf_mnn/touch_model.wrapped
+          test "$(stat -c%s ctf_mnn/touch_model.wrapped)" = "80209"
+          tail -c +10 ctf_mnn/touch_model.wrapped > ctf_mnn/touch_model.mnn
+          test "$(stat -c%s ctf_mnn/touch_model.mnn)" = "80200"
+          set +e
+          python ctf_mnn/recover.py > ctf_mnn/console.txt 2>&1
+          python_status=$?
+          set -e
+          if [ ! -s ctf_mnn/result.txt ]; then
+            echo "ERROR=result_not_created" > ctf_mnn/result.txt
+          fi
+          echo "PYTHON_STATUS=$python_status" >> ctf_mnn/result.txt
+          echo "--- MNN CONSOLE ---" >> ctf_mnn/result.txt
+          cat ctf_mnn/console.txt >> ctf_mnn/result.txt
+
+      - name: Store private-to-account result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: callback-result
+          path: ctf_mnn/result.txt
+          retention-days: 1
+          if-no-files-found: error
