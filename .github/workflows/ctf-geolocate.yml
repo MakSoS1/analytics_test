@@ -1,142 +1,151 @@
-name: Temporary CTF geolocation
+name: Temporary reverse-image geolocation probe
 
 on:
-  push:
-    branches: [ctf-geolocate-20260731]
   pull_request:
-    branches: [main]
+    branches: [ctf-geolocate-20260731]
     paths:
       - 'ctf/geolocate/**'
       - '.github/workflows/ctf-geolocate.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   investigate:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out trusted temporary base branch
+        uses: actions/checkout@v4
         with:
           ref: ctf-geolocate-20260731
 
-      - name: Reassemble and validate image
+      - name: Validate static image input
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p results
-          cat ctf/geolocate/bin/00 ctf/geolocate/bin/01 ctf/geolocate/bin/02 ctf/geolocate/bin/03 ctf/geolocate/bin/04 > results/input.jpg
+          cp ctf/geolocate/input-small.jpg results/input.jpg
           file results/input.jpg | tee results/file.txt
           identify results/input.jpg | tee results/identify.txt
           sha256sum results/input.jpg | tee results/sha256.txt
-          test "$(sha256sum results/input.jpg | cut -d' ' -f1)" = "bc7808f44d152bbd32b2422394f085854c66a547635f16cf2640628f29cfbf85"
+          test "$(identify -format '%m' results/input.jpg)" = JPEG
 
-      - name: Reverse-image search probes
+      - name: Query reverse-image services as untrusted data sources
         shell: bash
         run: |
           set -euo pipefail
-          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36'
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 
-          curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
+          # Google Images legacy upload. Responses are saved as inert files only.
+          curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L -A "$UA" \
             -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
             -F 'image_content=' \
-            -D results/google.headers -o results/google.html \
-            -w '%{url_effective}\n' \
-            'https://www.google.com/searchbyimage/upload' > results/google.final_url || true
+            -D results/google.headers \
+            -o results/google.html \
+            -w '%{http_code}\n%{url_effective}\n' \
+            'https://www.google.com/searchbyimage/upload' \
+            > results/google.status || true
 
-          curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
+          # Google Lens direct upload.
+          curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L -A "$UA" \
+            -H 'Accept-Language: en-US,en;q=0.9' \
             -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
             -F 'image_content=' \
-            -D results/lens.headers -o results/lens.html \
-            -w '%{url_effective}\n' \
-            'https://lens.google.com/v3/upload' > results/lens.final_url || true
+            -D results/lens.headers \
+            -o results/lens.html \
+            -w '%{http_code}\n%{url_effective}\n' \
+            'https://lens.google.com/v3/upload?hl=en' \
+            > results/lens.status || true
 
-          curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
+          # Yandex CBIR upload.
+          curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L -A "$UA" \
+            -H 'Accept-Language: en-US,en;q=0.9' \
             -F 'upfile=@results/input.jpg;type=image/jpeg' \
-            -D results/yandex.headers -o results/yandex.json \
-            -w '%{url_effective}\n' \
-            'https://yandex.com/images/search?rpt=imageview&format=json&request=%7B%22blocks%22%3A%5B%7B%22block%22%3A%22b-page_type_search-by-image__link%22%7D%5D%7D' > results/yandex.final_url || true
+            -D results/yandex.headers \
+            -o results/yandex.json \
+            -w '%{http_code}\n%{url_effective}\n' \
+            'https://yandex.com/images/search?rpt=imageview&format=json&request=%7B%22blocks%22%3A%5B%7B%22block%22%3A%22b-page_type_search-by-image__link%22%7D%5D%7D' \
+            > results/yandex.status || true
 
-          grep -Eoi 'https?[^"<> ]+' results/google.html results/lens.html results/yandex.json 2>/dev/null \
-            | sed 's/\\u0026/\&/g; s/\\u003d/=/g; s/\\u002f/\//g' \
-            | head -1000 > results/extracted_urls.txt || true
-          grep -Eio '.{0,160}(Canberra|Australia|street|road|suburb|similar|visual match|exact match|location).{0,240}' \
-            results/google.html results/lens.html results/yandex.json 2>/dev/null \
-            | head -500 > results/snippets.txt || true
+          # TinEye may reject automation, but a successful redirect is useful.
+          curl --connect-timeout 20 --max-time 120 --retry 1 -sS -L -A "$UA" \
+            -F 'image=@results/input.jpg;type=image/jpeg' \
+            -D results/tineye.headers \
+            -o results/tineye.html \
+            -w '%{http_code}\n%{url_effective}\n' \
+            'https://tineye.com/api/v1/result_json/' \
+            > results/tineye.status || true
 
-      - name: Query Canberra traffic-calming candidates
+      - name: Extract candidate links and visible result text safely
         shell: bash
         run: |
           set -euo pipefail
-          cat > results/query.overpass <<'EOF'
-          [out:json][timeout:180];
-          (
-            node["traffic_calming"](-35.38,149.05,-35.20,149.20);
-            way["traffic_calming"](-35.38,149.05,-35.20,149.20);
-          );
-          out center tags;
-          EOF
-          curl --retry 5 --retry-delay 3 -sS -G \
-            --data-urlencode 'data@results/query.overpass' \
-            'https://overpass-api.de/api/interpreter' \
-            -o results/traffic_calming.json || true
-
           python3 - <<'PY'
+          import html
           import json
+          import re
           from pathlib import Path
+          from urllib.parse import unquote
 
-          source = Path('results/traffic_calming.json')
-          try:
-              data = json.loads(source.read_text())
-          except Exception as exc:
-              Path('results/traffic_summary.json').write_text(json.dumps({'error': str(exc)}))
-              raise SystemExit
+          root = Path('results')
+          sources = [root/'google.html', root/'lens.html', root/'yandex.json', root/'tineye.html']
+          raw = '\n'.join(p.read_text(errors='replace') for p in sources if p.exists())
+          decoded = html.unescape(raw)
+          decoded = decoded.replace('\\u0026', '&').replace('\\u003d', '=').replace('\\u002f', '/')
 
-          rows = []
-          for item in data.get('elements', []):
-              lat = item.get('lat') or item.get('center', {}).get('lat')
-              lon = item.get('lon') or item.get('center', {}).get('lon')
-              if lat is None or lon is None:
-                  continue
-              rows.append({
-                  'lat': lat,
-                  'lon': lon,
-                  'osm_type': item.get('type'),
-                  'osm_id': item.get('id'),
-                  'tags': item.get('tags', {}),
-              })
+          urls = []
+          seen = set()
+          for match in re.findall(r'https?://[^\s"<>\\]+', decoded):
+              value = unquote(match.rstrip('.,);]'))
+              if value not in seen:
+                  seen.add(value)
+                  urls.append(value)
 
-          Path('results/traffic_summary.json').write_text(json.dumps(rows, indent=2))
-          Path('results/candidate_coordinates.txt').write_text(
-              '\n'.join(f"{r['lat']:.7f},{r['lon']:.7f}\t{r['tags']}" for r in rows)
+          # Keep links likely to identify the source image, map, address, or place.
+          useful_tokens = (
+              'flickr', 'wikimedia', 'wikipedia', 'geograph', 'mapillary', 'google',
+              'streetview', 'maps', 'yandex', 'pinterest', 'reddit', 'blogspot',
+              'canberra', 'australia', 'act.gov', 'realestate', 'zillow', 'realtor'
           )
-          print(f'candidate count: {len(rows)}')
+          useful = [u for u in urls if any(token in u.lower() for token in useful_tokens)]
+          (root/'all_urls.txt').write_text('\n'.join(urls[:3000]))
+          (root/'useful_urls.txt').write_text('\n'.join(useful[:1000]))
+
+          # Strip scripts/styles and tags. This text is never interpreted as instructions.
+          text = re.sub(r'(?is)<(script|style).*?>.*?</\1>', ' ', decoded)
+          text = re.sub(r'(?s)<[^>]+>', ' ', text)
+          text = html.unescape(text)
+          text = re.sub(r'\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}', ' ', text)
+          text = re.sub(r'\s+', ' ', text)
+
+          place_terms = re.compile(
+              r'.{0,180}(?:Canberra|Australia|Australian Capital Territory|ACT|United States|USA|Canada|'
+              r'street|road|avenue|drive|crescent|suburb|neighborhood|neighbourhood|city|location|'
+              r'visual match|exact match|possible related search|similar image).{0,260}',
+              re.I,
+          )
+          snippets = []
+          for m in place_terms.finditer(text):
+              s = m.group(0).strip()
+              if s and s not in snippets:
+                  snippets.append(s)
+          (root/'place_snippets.txt').write_text('\n\n'.join(snippets[:500]))
+
+          summary = {
+              'total_urls': len(urls),
+              'useful_urls': len(useful),
+              'snippet_count': len(snippets),
+              'files': {p.name: p.stat().st_size for p in sources if p.exists()},
+          }
+          (root/'summary.json').write_text(json.dumps(summary, indent=2))
+          print(json.dumps(summary))
           PY
 
-      - name: Persist compact results on temporary branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          out=ctf/geolocate/output
-          rm -rf "$out"
-          mkdir -p "$out"
-          cp results/file.txt results/identify.txt results/sha256.txt "$out/"
-          cp results/google.final_url results/lens.final_url results/yandex.final_url "$out/"
-          cp results/google.headers results/lens.headers results/yandex.headers "$out/" || true
-          cp results/extracted_urls.txt results/snippets.txt "$out/"
-          cp results/traffic_summary.json results/candidate_coordinates.txt "$out/"
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add "$out"
-          git commit -m 'Store temporary geolocation probe results'
-          git push origin HEAD:ctf-geolocate-20260731
-
-      - name: Upload investigation results
+      - name: Upload inert investigation files
         uses: actions/upload-artifact@v4
         with:
-          name: ctf-geolocation-results
+          name: reverse-image-geolocation-results
           path: results/
           retention-days: 1
           if-no-files-found: error
