@@ -1,1 +1,2 @@
 Run trusted Google Lens and Bing visual-search probes on the supplied static CTF image.
+Retry: render the Lens results in headless Chrome and save inert output.
