@@ -34,20 +34,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p inputs results
-          cat ctf/geolocate/bin/00 ctf/geolocate/bin/01 ctf/geolocate/bin/02 ctf/geolocate/bin/03 ctf/geolocate/bin/04 > inputs/full.jpg
-          cp ctf/geolocate/input-small.jpg inputs/small.jpg
+          cp ctf/geolocate/input-small.jpg inputs/source.jpg
           python3 - <<'PY'
           from PIL import Image, ImageEnhance, ImageOps
-          from pathlib import Path
-          for source in (Path('inputs/full.jpg'), Path('inputs/small.jpg')):
-              img=Image.open(source).convert('RGB')
-              stem=source.stem
-              img.save(f'inputs/{stem}_rgb.jpg',quality=95)
-              ImageOps.autocontrast(img).save(f'inputs/{stem}_autocontrast.jpg',quality=95)
-              ImageEnhance.Brightness(img).enhance(1.15).save(f'inputs/{stem}_bright.jpg',quality=95)
-              w,h=img.size
-              img.crop((int(w*0.04),int(h*0.04),int(w*0.96),int(h*0.96))).save(f'inputs/{stem}_crop.jpg',quality=95)
-              print(source, img.size)
+          img=Image.open('inputs/source.jpg').convert('RGB')
+          img.save('inputs/source_rgb.jpg',quality=95)
+          ImageOps.autocontrast(img).save('inputs/source_autocontrast.jpg',quality=95)
+          ImageEnhance.Brightness(img).enhance(1.15).save('inputs/source_bright.jpg',quality=95)
+          ImageEnhance.Contrast(img).enhance(1.15).save('inputs/source_contrast.jpg',quality=95)
+          w,h=img.size
+          img.crop((int(w*0.03),int(h*0.03),int(w*0.97),int(h*0.97))).save('inputs/source_crop.jpg',quality=95)
+          img.resize((640,480)).save('inputs/source_upscaled.jpg',quality=95)
+          print('source size',img.size)
           PY
 
       - name: Run independent coordinate predictions
@@ -65,19 +63,21 @@ jobs:
           rows={}
           for path in sorted(Path('inputs').glob('*.jpg')):
               try:
-                  gps,probs=model.predict(str(path),top_k=20)
+                  gps,probs=model.predict(str(path),top_k=30)
                   items=[]
                   for (lat,lon),prob in zip(gps,probs):
                       items.append({'lat':float(lat),'lon':float(lon),'probability':float(prob)})
                   rows[path.name]=items
-                  print(path.name,items[:5])
+                  print(path.name,items[:10])
               except Exception as exc:
                   rows[path.name]={'error':repr(exc)}
+                  print(path.name,'ERROR',repr(exc))
           Path('results/geoclip_predictions.json').write_text(json.dumps(rows,indent=2))
 
           counts={}; weighted={}
           for values in rows.values():
-              if not isinstance(values,list): continue
+              if not isinstance(values,list):
+                  continue
               for rank,item in enumerate(values):
                   key=(round(item['lat']),round(item['lon']))
                   counts[key]=counts.get(key,0)+1
@@ -85,7 +85,7 @@ jobs:
           consensus=[{'lat_bin':k[0],'lon_bin':k[1],'count':counts[k],'weighted_score':weighted[k]} for k in counts]
           consensus.sort(key=lambda x:(x['count'],x['weighted_score']),reverse=True)
           Path('results/geoclip_consensus.json').write_text(json.dumps(consensus,indent=2))
-          print('CONSENSUS',consensus[:30])
+          print('CONSENSUS',consensus[:40])
           PY
 
       - name: Upload predictions
