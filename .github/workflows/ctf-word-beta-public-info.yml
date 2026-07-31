@@ -1,9 +1,6 @@
 name: CTF word beta public info
 
 on:
-  push:
-    branches:
-      - ctf-word-beta-info-20260731
   pull_request:
     branches:
       - ctf-word-beta-info-20260731
@@ -17,63 +14,105 @@ env:
 jobs:
   fetch-public-info:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
-      - name: Fetch public site assets as inert data
+      - name: Recursively fetch public application modules as inert data
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p public-info/assets
-          curl --location --compressed --max-time 30 \
-            --user-agent 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)' \
-            --dump-header public-info/home.headers \
-            --output public-info/home.html \
-            "$TARGET_ORIGIN/" || true
-
           python3 - <<'PY'
+          import collections
           import html
           import pathlib
           import re
           import urllib.parse
           import urllib.request
+          import urllib.error
 
-          root = pathlib.Path('public-info')
-          page = (root / 'home.html').read_text('utf-8', errors='replace') if (root / 'home.html').exists() else ''
           origin = 'https://bushbash.cssa.club/'
-          urls = set()
-          for value in re.findall(r'''(?:src|href)=["']([^"']+)["']''', page):
-              value = html.unescape(value)
-              absolute = urllib.parse.urljoin(origin, value)
-              if absolute.startswith(origin) and ('.js' in absolute or absolute.endswith('.json')):
-                  urls.add(absolute)
-          (root / 'asset-urls.txt').write_text('\n'.join(sorted(urls)), encoding='utf-8')
-
+          root = pathlib.Path('public-info')
           opener = urllib.request.build_opener()
           opener.addheaders = [('User-Agent', 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)')]
-          for index, url in enumerate(sorted(urls)):
+
+          def fetch(url):
+              req = urllib.request.Request(url, headers={'Accept-Encoding': 'identity'})
+              with opener.open(req, timeout=25) as response:
+                  return response.read(), dict(response.headers), response.status
+
+          try:
+              home, headers, status = fetch(origin)
+          except Exception as exc:
+              home, headers, status = b'', {}, 0
+              (root / 'home.error').write_text(repr(exc), encoding='utf-8')
+          (root / 'home.html').write_bytes(home)
+          (root / 'home.headers').write_text(f'status={status}\n' + '\n'.join(f'{k}: {v}' for k, v in headers.items()), encoding='utf-8')
+
+          text = home.decode('utf-8', errors='replace')
+          queue = collections.deque()
+          for value in re.findall(r'''(?:src|href)=["']([^"']+)["']''', text):
+              absolute = urllib.parse.urljoin(origin, html.unescape(value))
+              if absolute.startswith(origin) and '.js' in absolute:
+                  queue.append(absolute)
+
+          seen = set()
+          records = []
+          max_assets = 300
+          while queue and len(seen) < max_assets:
+              url = queue.popleft()
+              if url in seen or not url.startswith(origin):
+                  continue
+              seen.add(url)
+              index = len(records)
               try:
-                  with opener.open(url, timeout=20) as response:
-                      data = response.read()
-                  (root / 'assets' / f'{index:03d}.bin').write_bytes(data)
+                  data, response_headers, response_status = fetch(url)
+                  filename = root / 'assets' / f'{index:03d}.bin'
+                  filename.write_bytes(data)
                   (root / 'assets' / f'{index:03d}.url').write_text(url, encoding='utf-8')
+                  records.append((index, url, response_status, len(data), ''))
+                  module = data.decode('utf-8', errors='replace')
+                  candidates = re.findall(r'''["']([^"']+?\.js(?:\?[^"']*)?)["']''', module)
+                  for candidate in candidates:
+                      absolute = urllib.parse.urljoin(url, html.unescape(candidate))
+                      if absolute.startswith(origin) and absolute not in seen:
+                          queue.append(absolute)
               except Exception as exc:
                   (root / 'assets' / f'{index:03d}.error').write_text(repr(exc), encoding='utf-8')
+                  (root / 'assets' / f'{index:03d}.url').write_text(url, encoding='utf-8')
+                  records.append((index, url, 0, 0, repr(exc)))
+
+          (root / 'asset-index.tsv').write_text(
+              '\n'.join(f'{i}\t{status}\t{size}\t{url}\t{error}' for i, url, status, size, error in records),
+              encoding='utf-8'
+          )
+
+          patterns = [
+              re.compile(r'https?://[^"\' <>)]+' , re.I),
+              re.compile(r'[^"\']*(?:/challenges|hint|api_base|api-base|VITE_API|say the word|beta)[^"\']*', re.I),
+          ]
+          hits = []
+          for path in sorted((root / 'assets').glob('*.bin')):
+              module = path.read_text('utf-8', errors='replace')
+              for pattern in patterns:
+                  for match in pattern.findall(module):
+                      if 0 < len(match) <= 1000:
+                          hits.append(f'{path.name}\t{match}')
+          (root / 'candidate-strings.txt').write_text('\n'.join(sorted(set(hits))), encoding='utf-8')
           PY
 
           {
-            printf '%s\n' '=== response headers ==='
+            printf '%s\n' '=== home response ==='
             cat public-info/home.headers 2>/dev/null || true
-            printf '%s\n' '=== extracted asset URLs ==='
-            cat public-info/asset-urls.txt 2>/dev/null || true
-            printf '%s\n' '=== candidate public endpoints/strings ==='
-            grep -RaoE 'https?://[^"'"'"' <>)]+' public-info 2>/dev/null | sort -u | head -n 300 || true
-            grep -RaiE 'VITE_API_BASE_URL|/challenges|hint|say the word|beta' public-info/assets 2>/dev/null | head -n 300 || true
+            printf '%s\n' '=== fetched modules ==='
+            cat public-info/asset-index.tsv 2>/dev/null || true
+            printf '%s\n' '=== candidate public strings ==='
+            cat public-info/candidate-strings.txt 2>/dev/null || true
           } > public-info/summary.txt
 
       - name: Upload public response data
         uses: actions/upload-artifact@v4
         with:
-          name: ctf-word-beta-public-info
+          name: ctf-word-beta-public-info-recursive
           path: public-info
           if-no-files-found: error
           retention-days: 1
