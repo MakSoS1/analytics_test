@@ -13,19 +13,19 @@ permissions:
 jobs:
   investigate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check out trusted temporary base branch
         uses: actions/checkout@v4
         with:
           ref: ctf-geolocate-20260731
 
-      - name: Validate static image input
+      - name: Reassemble and validate static image
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p results
-          cp ctf/geolocate/input-small.jpg results/input.jpg
+          cat ctf/geolocate/bin/00 ctf/geolocate/bin/01 ctf/geolocate/bin/02 ctf/geolocate/bin/03 ctf/geolocate/bin/04 > results/input.jpg
           file results/input.jpg | tee results/file.txt
           sha256sum results/input.jpg | tee results/sha256.txt
           python3 - <<'PY' | tee results/image_info.txt
@@ -33,74 +33,72 @@ jobs:
           data = Path('results/input.jpg').read_bytes()
           if not (data.startswith(b'\xff\xd8') and data.endswith(b'\xff\xd9')):
               raise SystemExit('invalid JPEG markers')
-          i = 2
-          width = height = None
-          while i + 9 < len(data):
-              if data[i] != 0xFF:
-                  i += 1
-                  continue
-              marker = data[i + 1]
-              i += 2
-              if marker in (0xD8, 0xD9) or 0xD0 <= marker <= 0xD7:
-                  continue
-              if i + 2 > len(data):
-                  break
-              length = int.from_bytes(data[i:i+2], 'big')
-              if length < 2 or i + length > len(data):
-                  break
-              if marker in {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}:
-                  height = int.from_bytes(data[i+3:i+5], 'big')
-                  width = int.from_bytes(data[i+5:i+7], 'big')
-                  break
-              i += length
-          if not width or not height:
-              raise SystemExit('JPEG dimensions not found')
-          print(f'JPEG {width}x{height}, {len(data)} bytes')
+          print(f'JPEG, {len(data)} bytes')
           PY
 
-      - name: Query reverse-image services as untrusted data sources
+      - name: Upload image to Yandex CBIR
         shell: bash
         run: |
           set -euo pipefail
           UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
-
-          curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L -A "$UA" \
-            -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
-            -F 'image_content=' \
-            -D results/google.headers \
-            -o results/google.html \
-            -w '%{http_code}\n%{url_effective}\n' \
-            'https://www.google.com/searchbyimage/upload' \
-            > results/google.status || true
-
-          curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L -A "$UA" \
-            -H 'Accept-Language: en-US,en;q=0.9' \
-            -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
-            -F 'image_content=' \
-            -D results/lens.headers \
-            -o results/lens.html \
-            -w '%{http_code}\n%{url_effective}\n' \
-            'https://lens.google.com/v3/upload?hl=en' \
-            > results/lens.status || true
-
-          curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L -A "$UA" \
-            -H 'Accept-Language: en-US,en;q=0.9' \
+          curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L \
+            -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' \
+            -c results/yandex.cookies -b results/yandex.cookies \
             -F 'upfile=@results/input.jpg;type=image/jpeg' \
-            -D results/yandex.headers \
-            -o results/yandex.json \
+            -D results/yandex_upload.headers \
+            -o results/yandex_upload.json \
             -w '%{http_code}\n%{url_effective}\n' \
             'https://yandex.com/images/search?rpt=imageview&format=json&request=%7B%22blocks%22%3A%5B%7B%22block%22%3A%22b-page_type_search-by-image__link%22%7D%5D%7D' \
-            > results/yandex.status || true
+            > results/yandex_upload.status
 
-          curl --connect-timeout 20 --max-time 120 --retry 1 -sS -L -A "$UA" \
-            -F 'image=@results/input.jpg;type=image/jpeg' \
-            -D results/tineye.headers \
-            -o results/tineye.html \
-            -w '%{http_code}\n%{url_effective}\n' \
-            'https://tineye.com/api/v1/result_json/' \
-            > results/tineye.status || true
+      - name: Fetch all plausible Yandex result URLs as inert HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.parse import quote, urlencode
 
-      - name: Extract candidate links and visible result text safely
+          data = json.loads(Path('results/yandex_upload.json').read_text())
+          params = data['blocks'][0]['params']
+          image_url = params.get('originalImageUrl')
+          cbir_id = params.get('cbirId')
+          if not image_url or not cbir_id:
+              raise SystemExit('Yandex upload did not return CBIR identifiers')
+
+          combos = [
+              {'rpt': 'imageview', 'cbir_id': cbir_id, 'cbir_page': 'similar'},
+              {'rpt': 'imageview', 'cbir_id': cbir_id, 'cbir_page': 'similar', 'url': image_url},
+              {'rpt': 'imageview', 'url': image_url},
+              {'rpt': 'imageview', 'cbir_id': cbir_id, 'url': image_url},
+              {'rpt': 'imageview', 'cbir_id': cbir_id, 'cbir_page': 'similar', 'family': '0', 'pornowhitelist': '1', 'ipnd': '1'},
+          ]
+          lines = []
+          for domain in ('https://yandex.com/images/search', 'https://yandex.ru/images/search'):
+              for index, query in enumerate(combos):
+                  lines.append(f'{domain}?{urlencode(query)}')
+          Path('results/yandex_result_urls.txt').write_text('\n'.join(lines) + '\n')
+          Path('results/yandex_identifiers.json').write_text(json.dumps({
+              'originalImageUrl': image_url,
+              'cbirId': cbir_id,
+          }, indent=2))
+          PY
+
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+          n=0
+          while IFS= read -r url; do
+            n=$((n+1))
+            curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L \
+              -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' \
+              -c results/yandex.cookies -b results/yandex.cookies \
+              -D "results/yandex_result_${n}.headers" \
+              -o "results/yandex_result_${n}.html" \
+              -w '%{http_code}\n%{url_effective}\n' \
+              "$url" > "results/yandex_result_${n}.status" || true
+          done < results/yandex_result_urls.txt
+
+      - name: Extract result metadata without executing remote content
         shell: bash
         run: |
           set -euo pipefail
@@ -112,61 +110,71 @@ jobs:
           from urllib.parse import unquote
 
           root = Path('results')
-          sources = [root/'google.html', root/'lens.html', root/'yandex.json', root/'tineye.html']
-          raw = '\n'.join(p.read_text(errors='replace') for p in sources if p.exists())
+          pages = sorted(root.glob('yandex_result_*.html'))
+          raw = '\n'.join(p.read_text(errors='replace') for p in pages)
           decoded = html.unescape(raw)
           decoded = decoded.replace('\\u0026', '&').replace('\\u003d', '=').replace('\\u002f', '/')
 
-          urls = []
-          seen = set()
-          for match in re.findall(r'https?://[^\s"<>\\]+', decoded):
-              value = unquote(match.rstrip('.,);]'))
+          # Extract every absolute URL, then remove Yandex's own static assets.
+          urls, seen = [], set()
+          for value in re.findall(r'https?://[^\s"<>\\]+', decoded):
+              value = unquote(value.rstrip('.,);]}'))
               if value not in seen:
                   seen.add(value)
                   urls.append(value)
+          external = [u for u in urls if not re.search(r'(^|\.)yandex\.|(^|\.)yastatic\.|avatars\.mds\.', u, re.I)]
+          root.joinpath('yandex_all_urls.txt').write_text('\n'.join(urls[:10000]))
+          root.joinpath('yandex_external_urls.txt').write_text('\n'.join(external[:5000]))
 
-          useful_tokens = (
-              'flickr', 'wikimedia', 'wikipedia', 'geograph', 'mapillary', 'google',
-              'streetview', 'maps', 'yandex', 'pinterest', 'reddit', 'blogspot',
-              'canberra', 'australia', 'act.gov', 'realestate', 'zillow', 'realtor'
-          )
-          useful = [u for u in urls if any(token in u.lower() for token in useful_tokens)]
-          (root/'all_urls.txt').write_text('\n'.join(urls[:3000]))
-          (root/'useful_urls.txt').write_text('\n'.join(useful[:1000]))
+          # Yandex commonly embeds JSON objects under data-bem / serp-item.
+          candidates = []
+          patterns = [
+              r'data-bem=(?:"|\')(.+?)(?:"|\')(?=\s|>)',
+              r'\{[^{}]{0,4000}"serp-item"[^{}]{0,12000}\}',
+              r'\{[^{}]{0,4000}"snippet"[^{}]{0,12000}\}',
+          ]
+          for pattern in patterns:
+              for match in re.finditer(pattern, decoded, re.I | re.S):
+                  text = html.unescape(match.group(1) if match.lastindex else match.group(0))
+                  if any(key in text for key in ('serp-item', 'snippet', 'origUrl', 'greenUrl', 'title')):
+                      candidates.append(text[:20000])
+          root.joinpath('yandex_embedded_candidates.txt').write_text('\n\n---ITEM---\n\n'.join(candidates[:1000]))
 
+          # Make a readable, non-executable text projection.
           text = re.sub(r'(?is)<(script|style).*?>.*?</\1>', ' ', decoded)
           text = re.sub(r'(?s)<[^>]+>', ' ', text)
           text = html.unescape(text)
-          text = re.sub(r'\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}', ' ', text)
           text = re.sub(r'\s+', ' ', text)
-
-          place_terms = re.compile(
-              r'.{0,180}(?:Canberra|Australia|Australian Capital Territory|ACT|United States|USA|Canada|'
-              r'street|road|avenue|drive|crescent|suburb|neighborhood|neighbourhood|city|location|'
-              r'visual match|exact match|possible related search|similar image).{0,260}',
+          tokens = re.compile(
+              r'.{0,220}(?:exact matches?|similar images?|sites containing|source|domain|title|address|'
+              r'street|road|avenue|drive|lane|court|crescent|city|suburb|neighbou?rhood|'
+              r'United States|USA|Canada|Australia|Canberra|Virginia|Maryland|Ohio|Michigan|'
+              r'Pennsylvania|New Jersey|Illinois|Indiana|Minnesota|Wisconsin).{0,360}',
               re.I,
           )
           snippets = []
-          for m in place_terms.finditer(text):
-              s = m.group(0).strip()
-              if s and s not in snippets:
-                  snippets.append(s)
-          (root/'place_snippets.txt').write_text('\n\n'.join(snippets[:500]))
+          for m in tokens.finditer(text):
+              value = m.group(0).strip()
+              if value and value not in snippets:
+                  snippets.append(value)
+          root.joinpath('yandex_readable_snippets.txt').write_text('\n\n'.join(snippets[:1000]))
 
           summary = {
-              'total_urls': len(urls),
-              'useful_urls': len(useful),
+              'page_count': len(pages),
+              'page_sizes': {p.name: p.stat().st_size for p in pages},
+              'all_url_count': len(urls),
+              'external_url_count': len(external),
+              'embedded_candidate_count': len(candidates),
               'snippet_count': len(snippets),
-              'files': {p.name: p.stat().st_size for p in sources if p.exists()},
           }
-          (root/'summary.json').write_text(json.dumps(summary, indent=2))
+          root.joinpath('summary.json').write_text(json.dumps(summary, indent=2))
           print(json.dumps(summary))
           PY
 
       - name: Upload inert investigation files
         uses: actions/upload-artifact@v4
         with:
-          name: reverse-image-geolocation-results
+          name: yandex-cbir-geolocation-results
           path: results/
           retention-days: 1
           if-no-files-found: error
