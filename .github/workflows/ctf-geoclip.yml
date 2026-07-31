@@ -27,7 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install --quiet --upgrade pip
-          python3 -m pip install --quiet geoclip pillow
+          python3 -m pip install --quiet geoclip pillow 'transformers==4.44.2'
 
       - name: Prepare image variants
         shell: bash
