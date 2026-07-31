@@ -1,0 +1,1 @@
+Run the isolated public metadata fetch for the Minecraft naming puzzle.
