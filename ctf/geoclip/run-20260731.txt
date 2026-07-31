@@ -1,2 +1,3 @@
 Run trusted GeoCLIP inference on the supplied static CTF image.
 Retry after dependency-order fix.
+Run with the validated source image only.
