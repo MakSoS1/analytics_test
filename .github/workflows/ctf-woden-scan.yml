@@ -1,0 +1,196 @@
+name: Temporary Woden historical panorama scan
+
+on:
+  pull_request:
+    branches: [ctf-geolocate-20260731]
+    paths:
+      - 'ctf/woden-scan/**'
+      - '.github/workflows/ctf-woden-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ctf-geolocate-20260731
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet streetview pillow py360convert numpy requests torch torchvision 'transformers==4.44.2'
+
+      - name: Scan Pearce and surrounding Woden suburbs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results/contact
+          python3 - <<'PY'
+          import io, json, math, time
+          from pathlib import Path
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+
+          import numpy as np
+          import py360convert
+          import requests
+          import torch
+          from PIL import Image, ImageDraw, ImageFont
+          from streetview import search_panoramas
+          from transformers import CLIPModel, CLIPProcessor
+
+          # The previous challenge ended at Sacred Heart Primary School in Pearce.
+          # These overlapping boxes cover plausible onward routes and nearby residential streets.
+          areas = {
+              'Pearce_Torrens': (-35.3720, 149.0870, 0.040, 0.046),
+              'Mawson_Farrer': (-35.3870, 149.1050, 0.046, 0.050),
+              'Chifley_Phillip': (-35.3490, 149.0890, 0.038, 0.048),
+              'Curtin_Hughes': (-35.3290, 149.0930, 0.038, 0.050),
+              'Lyons_Weston': (-35.3370, 149.0610, 0.040, 0.050),
+          }
+
+          def haversine(a,b,c,d):
+              p1,p2=map(math.radians,(a,c)); dp=math.radians(c-a); dl=math.radians(d-b)
+              x=math.sin(dp/2)**2+math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+              return 12742000*math.asin(math.sqrt(x))
+
+          raw={}; search_errors=[]
+          for area,(clat,clon,lat_span,lon_span) in areas.items():
+              lats=np.arange(clat-lat_span/2,clat+lat_span/2+0.0001,0.0032)
+              lons=np.arange(clon-lon_span/2,clon+lon_span/2+0.0001,0.0034)
+              for qi,(lat,lon) in enumerate((float(a),float(b)) for a in lats for b in lons):
+                  try:
+                      found=search_panoramas(lat=lat,lon=lon)
+                  except Exception as exc:
+                      search_errors.append({'area':area,'lat':lat,'lon':lon,'error':repr(exc)})
+                      continue
+                  for pano in found:
+                      distance=haversine(lat,lon,float(pano.lat),float(pano.lon))
+                      if distance > 600: continue
+                      row={
+                          'area':area,'pano_id':pano.pano_id,'lat':float(pano.lat),'lon':float(pano.lon),
+                          'date':pano.date,'heading_meta':float(pano.heading),'query_distance_m':distance,
+                      }
+                      old=raw.get(pano.pano_id)
+                      if old is None or distance < old['query_distance_m']:
+                          raw[pano.pano_id]=row
+                  if qi % 35 == 0:
+                      print(area,qi,'unique',len(raw),flush=True)
+                  time.sleep(0.05)
+
+          # Deduplicate route points while preserving old/leafless imagery and a modern control.
+          groups={}
+          for row in raw.values():
+              key=(round(row['lat'],5),round(row['lon'],5))
+              groups.setdefault(key,[]).append(row)
+          selected=[]
+          for rows in groups.values():
+              rows.sort(key=lambda r:((int(r['date'][:4]) if r['date'] else 9999),r['date'] or ''))
+              picks=[rows[0],rows[-1]]
+              winter=[r for r in rows if r['date'] and len(r['date'].split('-'))>1 and int(r['date'].split('-')[1]) in (5,6,7,8)]
+              early=[r for r in rows if r['date'] and int(r['date'][:4])<=2012]
+              if winter: picks.append(winter[0])
+              if len(early)>1: picks.append(early[-1])
+              seen=set()
+              for row in picks:
+                  if row['pano_id'] not in seen:
+                      selected.append(row); seen.add(row['pano_id'])
+          selected.sort(key=lambda r:((int(r['date'][:4]) if r['date'] else 9999),r['lat'],r['lon']))
+          if len(selected)>900:
+              # Balanced cap by broad area label.
+              balanced=[]
+              for area in areas:
+                  balanced.extend([r for r in selected if r['area']==area][:180])
+              selected=balanced
+          Path('results/search_errors.json').write_text(json.dumps(search_errors,indent=2))
+          Path('results/candidates.json').write_text(json.dumps(selected,indent=2))
+          print('raw',len(raw),'groups',len(groups),'selected',len(selected),flush=True)
+
+          session=requests.Session()
+          session.headers.update({'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36','Referer':'https://www.google.com/maps/'})
+          def fetch(row):
+              panorama=Image.new('RGB',(1024,512)); pano_id=row['pano_id']
+              for x in range(2):
+                  response=session.get('https://streetviewpixels-pa.googleapis.com/v1/tile',params={
+                      'cb_client':'maps_sv.tactile','panoid':pano_id,'x':x,'y':0,'zoom':1,'nbt':1,'fover':2,
+                  },timeout=25)
+                  if response.status_code != 200 or not response.content.startswith(b'\xff\xd8'):
+                      raise RuntimeError(f'tile status={response.status_code}')
+                  panorama.paste(Image.open(io.BytesIO(response.content)).convert('RGB'),(x*512,0))
+              return row,panorama
+
+          downloaded=[]; failures=[]
+          with ThreadPoolExecutor(max_workers=7) as executor:
+              futures={executor.submit(fetch,row):row for row in selected}
+              for i,future in enumerate(as_completed(futures)):
+                  try: downloaded.append(future.result())
+                  except Exception as exc: failures.append({**futures[future],'error':repr(exc)})
+                  if i % 75 == 0:
+                      print('download',i,'ok',len(downloaded),'failed',len(failures),flush=True)
+          Path('results/failures.json').write_text(json.dumps(failures,indent=2))
+
+          images=[]; metadata=[]
+          for meta,panorama in downloaded:
+              equi=np.asarray(panorama)
+              for heading in range(0,360,36):
+                  for pitch in (0,-8):
+                      projected=py360convert.e2p(equi,fov_deg=(80,60),u_deg=heading,v_deg=pitch,out_hw=(252,336),mode='bilinear')
+                      images.append(Image.fromarray(np.uint8(np.clip(projected,0,255))))
+                      metadata.append({**meta,'view_heading':heading,'view_pitch':pitch})
+          print('downloaded',len(downloaded),'views',len(images),flush=True)
+
+          target=Image.open('ctf/geolocate/input-small.jpg').convert('RGB')
+          model=CLIPModel.from_pretrained('openai/clip-vit-base-patch32'); model.eval()
+          processor=CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')
+          with torch.no_grad():
+              target_feature=model.get_image_features(**processor(images=[target],return_tensors='pt'))
+              target_feature=target_feature/target_feature.norm(dim=-1,keepdim=True)
+          scores=[]
+          for start in range(0,len(images),48):
+              with torch.no_grad():
+                  features=model.get_image_features(**processor(images=images[start:start+48],return_tensors='pt'))
+                  features=features/features.norm(dim=-1,keepdim=True)
+              scores.extend((features@target_feature.T).squeeze(1).tolist())
+              if start % 960 == 0: print('embed',start,'/',len(images),flush=True)
+
+          rows=[{**metadata[i],'clip_score':float(scores[i]),'image_index':i} for i in range(len(images))]
+          rows.sort(key=lambda row:row['clip_score'],reverse=True)
+          Path('results/ranking.json').write_text(json.dumps(rows,indent=2))
+          diverse=[]; seen=set()
+          for row in rows:
+              if row['pano_id'] in seen: continue
+              seen.add(row['pano_id']); diverse.append(row)
+              if len(diverse)>=500: break
+          Path('results/diverse_ranking.json').write_text(json.dumps(diverse,indent=2))
+
+          font=ImageFont.load_default()
+          for page in range((min(500,len(diverse))+19)//20):
+              sheet=Image.new('RGB',(1800,1200),'white'); draw=ImageDraw.Draw(sheet)
+              for j,row in enumerate(diverse[page*20:(page+1)*20]):
+                  image=images[row['image_index']].copy(); image.thumbnail((350,245))
+                  x=(j%5)*360; y=(j//5)*300; sheet.paste(image,(x,y))
+                  text=(f"#{page*20+j+1} {row['area']} {row['date'] or '?'}\n"
+                        f"{row['lat']:.5f},{row['lon']:.5f} h={row['view_heading']} p={row['view_pitch']}\n"
+                        f"CLIP={row['clip_score']:.4f}")
+                  draw.multiline_text((x+2,y+248),text,fill='black',font=font,spacing=2)
+              sheet.save(f'results/contact/top_{page+1:02d}.jpg',quality=91)
+          print('TOP',json.dumps(diverse[:40]),flush=True)
+          PY
+
+      - name: Upload shortlist
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: woden-historical-scan
+          path: |
+            results/*.json
+            results/contact/
+          retention-days: 1
+          if-no-files-found: error
