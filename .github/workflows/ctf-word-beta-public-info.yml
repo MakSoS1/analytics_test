@@ -1,0 +1,76 @@
+name: CTF word beta public info
+
+on:
+  push:
+    branches:
+      - ctf-word-beta-info-20260731
+
+permissions:
+  contents: read
+
+env:
+  TARGET_ORIGIN: https://bushbash.cssa.club
+
+jobs:
+  fetch-public-info:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch public site assets as inert data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public-info/assets
+          curl --location --compressed --max-time 30 \
+            --user-agent 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)' \
+            --dump-header public-info/home.headers \
+            --output public-info/home.html \
+            "$TARGET_ORIGIN/" || true
+
+          python3 - <<'PY'
+          import html
+          import pathlib
+          import re
+          import urllib.parse
+          import urllib.request
+
+          root = pathlib.Path('public-info')
+          page = (root / 'home.html').read_text('utf-8', errors='replace') if (root / 'home.html').exists() else ''
+          origin = 'https://bushbash.cssa.club/'
+          urls = set()
+          for value in re.findall(r'''(?:src|href)=["']([^"']+)["']''', page):
+              value = html.unescape(value)
+              absolute = urllib.parse.urljoin(origin, value)
+              if absolute.startswith(origin) and ('.js' in absolute or absolute.endswith('.json')):
+                  urls.add(absolute)
+          (root / 'asset-urls.txt').write_text('\n'.join(sorted(urls)), encoding='utf-8')
+
+          opener = urllib.request.build_opener()
+          opener.addheaders = [('User-Agent', 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)')]
+          for index, url in enumerate(sorted(urls)):
+              try:
+                  with opener.open(url, timeout=20) as response:
+                      data = response.read()
+                  (root / 'assets' / f'{index:03d}.bin').write_bytes(data)
+                  (root / 'assets' / f'{index:03d}.url').write_text(url, encoding='utf-8')
+              except Exception as exc:
+                  (root / 'assets' / f'{index:03d}.error').write_text(repr(exc), encoding='utf-8')
+          PY
+
+          {
+            printf '%s\n' '=== response headers ==='
+            cat public-info/home.headers 2>/dev/null || true
+            printf '%s\n' '=== extracted asset URLs ==='
+            cat public-info/asset-urls.txt 2>/dev/null || true
+            printf '%s\n' '=== candidate public endpoints/strings ==='
+            grep -RaoE 'https?://[^"'"'"' <>)]+' public-info 2>/dev/null | sort -u | head -n 300 || true
+            grep -RaiE 'VITE_API_BASE_URL|/challenges|hint|say the word|beta' public-info/assets 2>/dev/null | head -n 300 || true
+          } > public-info/summary.txt
+
+      - name: Upload public response data
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctf-word-beta-public-info
+          path: public-info
+          if-no-files-found: error
+          retention-days: 1
