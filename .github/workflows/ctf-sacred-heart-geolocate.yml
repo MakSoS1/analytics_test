@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - ctf-sacred-heart-geolocate
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
