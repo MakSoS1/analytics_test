@@ -1,1 +1,1 @@
-Run the targeted isolated public metadata fetch for the Minecraft naming puzzle.
+Run the public challenge metadata fetch for the Minecraft naming puzzle.
