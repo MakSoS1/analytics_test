@@ -24,6 +24,7 @@ jobs:
           CENTER_LON: "149.0844"
         run: |
           set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet pillow
           python3 - <<'PY'
           import io
           import json
