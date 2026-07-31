@@ -16,54 +16,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Fetch raw public challenge metadata as inert data
+      - name: Fetch public challenge 25 details as inert data
         shell: bash
         run: |
           set -u
           mkdir -p public-info
-
           curl --location --compressed --max-time 30 \
             --user-agent 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)' \
-            --dump-header public-info/challenges.headers \
-            --output public-info/challenges.json \
-            "$TARGET_ORIGIN/api/challenges" || true
+            --dump-header public-info/detail.headers \
+            --output public-info/detail.json \
+            "$TARGET_ORIGIN/api/challenges/25" || true
 
           python3 - <<'PY'
           import json
           import pathlib
-
           root = pathlib.Path('public-info')
-          raw = (root / 'challenges.json').read_text('utf-8', errors='replace') if (root / 'challenges.json').exists() else ''
+          raw = (root / 'detail.json').read_text('utf-8', errors='replace') if (root / 'detail.json').exists() else ''
           try:
               payload = json.loads(raw)
-              pretty = json.dumps(payload, indent=2, ensure_ascii=False)
-              shape = {'top_type': type(payload).__name__}
-              if isinstance(payload, dict):
-                  shape['top_keys'] = list(payload.keys())
-                  for key, value in payload.items():
-                      shape[f'{key}_type'] = type(value).__name__
-                      if isinstance(value, dict):
-                          shape[f'{key}_keys'] = list(value.keys())
-              (root / 'pretty.json').write_text(pretty, encoding='utf-8')
-              (root / 'shape.json').write_text(json.dumps(shape, indent=2), encoding='utf-8')
+              (root / 'pretty.json').write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding='utf-8')
           except Exception as exc:
               (root / 'parse-error.txt').write_text(repr(exc), encoding='utf-8')
           PY
 
           {
             echo '=== headers ==='
-            cat public-info/challenges.headers 2>/dev/null || true
-            echo '=== response shape ==='
-            cat public-info/shape.json 2>/dev/null || true
-            echo '=== raw/pretty public JSON ==='
-            cat public-info/pretty.json 2>/dev/null || cat public-info/challenges.json 2>/dev/null || true
+            cat public-info/detail.headers 2>/dev/null || true
+            echo '=== public challenge detail ==='
+            cat public-info/pretty.json 2>/dev/null || cat public-info/detail.json 2>/dev/null || true
           } > public-info/summary.txt
 
       - name: Upload public response data
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ctf-word-beta-public-challenge-raw
+          name: ctf-word-beta-public-detail
           path: public-info
           if-no-files-found: error
           retention-days: 1
