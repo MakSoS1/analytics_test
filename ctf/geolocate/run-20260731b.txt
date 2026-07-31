@@ -1,3 +1,4 @@
 Trigger the isolated reverse-image geolocation workflow for the supplied static CTF image.
 Retry: dependency-free JPEG validation.
 Run: follow Yandex CBIR result pages as inert data.
+Retry: use the validated 192x144 source image.
