@@ -10,14 +10,17 @@ on:
       - '.github/workflows/ctf-geolocate.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   investigate:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ctf-geolocate-20260731
 
       - name: Reassemble and validate image
         shell: bash
@@ -39,19 +42,22 @@ jobs:
           curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
             -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
             -F 'image_content=' \
-            'https://www.google.com/searchbyimage/upload' \
-            -D results/google.headers -o results/google.html || true
+            -D results/google.headers -o results/google.html \
+            -w '%{url_effective}\n' \
+            'https://www.google.com/searchbyimage/upload' > results/google.final_url || true
 
           curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
             -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
             -F 'image_content=' \
-            'https://lens.google.com/v3/upload' \
-            -D results/lens.headers -o results/lens.html || true
+            -D results/lens.headers -o results/lens.html \
+            -w '%{url_effective}\n' \
+            'https://lens.google.com/v3/upload' > results/lens.final_url || true
 
           curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
             -F 'upfile=@results/input.jpg;type=image/jpeg' \
-            'https://yandex.com/images/search?rpt=imageview&format=json&request=%7B%22blocks%22%3A%5B%7B%22block%22%3A%22b-page_type_search-by-image__link%22%7D%5D%7D' \
-            -D results/yandex.headers -o results/yandex.json || true
+            -D results/yandex.headers -o results/yandex.json \
+            -w '%{url_effective}\n' \
+            'https://yandex.com/images/search?rpt=imageview&format=json&request=%7B%22blocks%22%3A%5B%7B%22block%22%3A%22b-page_type_search-by-image__link%22%7D%5D%7D' > results/yandex.final_url || true
 
           grep -Eoi 'https?[^"<> ]+' results/google.html results/lens.html results/yandex.json 2>/dev/null \
             | sed 's/\\u0026/\&/g; s/\\u003d/=/g; s/\\u002f/\//g' \
@@ -78,7 +84,7 @@ jobs:
             -o results/traffic_calming.json || true
 
           python3 - <<'PY'
-          import json, time, urllib.parse, urllib.request
+          import json
           from pathlib import Path
 
           source = Path('results/traffic_calming.json')
@@ -94,14 +100,13 @@ jobs:
               lon = item.get('lon') or item.get('center', {}).get('lon')
               if lat is None or lon is None:
                   continue
-              row = {
+              rows.append({
                   'lat': lat,
                   'lon': lon,
                   'osm_type': item.get('type'),
                   'osm_id': item.get('id'),
                   'tags': item.get('tags', {}),
-              }
-              rows.append(row)
+              })
 
           Path('results/traffic_summary.json').write_text(json.dumps(rows, indent=2))
           Path('results/candidate_coordinates.txt').write_text(
@@ -109,6 +114,24 @@ jobs:
           )
           print(f'candidate count: {len(rows)}')
           PY
+
+      - name: Persist compact results on temporary branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=ctf/geolocate/output
+          rm -rf "$out"
+          mkdir -p "$out"
+          cp results/file.txt results/identify.txt results/sha256.txt "$out/"
+          cp results/google.final_url results/lens.final_url results/yandex.final_url "$out/"
+          cp results/google.headers results/lens.headers results/yandex.headers "$out/" || true
+          cp results/extracted_urls.txt results/snippets.txt "$out/"
+          cp results/traffic_summary.json results/candidate_coordinates.txt "$out/"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$out"
+          git commit -m 'Store temporary geolocation probe results'
+          git push origin HEAD:ctf-geolocate-20260731
 
       - name: Upload investigation results
         uses: actions/upload-artifact@v4
