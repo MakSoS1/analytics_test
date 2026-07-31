@@ -1,0 +1,206 @@
+name: Temporary Street View candidate matcher
+
+on:
+  pull_request:
+    branches: [ctf-geolocate-20260731]
+    paths:
+      - 'ctf/streetmatch/**'
+      - '.github/workflows/ctf-streetmatch.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  match:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out trusted temporary base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ctf-geolocate-20260731
+
+      - name: Install matching dependencies
+        shell: bash
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet streetview pillow py360convert numpy torch torchvision 'transformers==4.44.2'
+
+      - name: Search, download, project and rank candidate panoramas
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results/panos results/views results/contact
+          python3 - <<'PY'
+          import json, math, os, time
+          from pathlib import Path
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+
+          import numpy as np
+          import py360convert
+          import torch
+          from PIL import Image, ImageDraw, ImageFont
+          from streetview import search_panoramas, get_panorama
+          from transformers import CLIPModel, CLIPProcessor
+
+          target_path=Path('ctf/geolocate/input-small.jpg')
+          # Highest GeoCLIP hypotheses, plus the strongest Canberra cluster for control.
+          queries=[
+            ('Armidale_A',-30.5145435,151.6647644),
+            ('Armidale_B',-30.5166664,151.6666718),
+            ('Armidale_C',-30.4827137,151.6465149),
+            ('Young',-34.3130989,148.2931061),
+            ('Bathurst',-33.4073105,149.5638428),
+            ('Orange',-33.2737122,149.0868683),
+            ('Goulburn_A',-34.6874275,149.6667480),
+            ('Goulburn_B',-34.7546577,149.7181702),
+            ('Canberra_A',-35.3146858,149.1324310),
+            ('Canberra_B',-35.3081474,149.1244965),
+            ('Canberra_C',-35.3327370,149.1543121),
+            ('Canberra_D',-35.3151436,149.1412048),
+          ]
+
+          def haversine(a,b,c,d):
+            r=6371000.0
+            p1,p2=math.radians(a),math.radians(c)
+            dp=math.radians(c-a); dl=math.radians(d-b)
+            x=math.sin(dp/2)**2+math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+            return 2*r*math.asin(math.sqrt(x))
+
+          selected={}
+          search_log=[]
+          for label,lat,lon in queries:
+            try:
+              panos=search_panoramas(lat=lat,lon=lon)
+            except Exception as exc:
+              search_log.append({'query':label,'error':repr(exc)})
+              continue
+            rows=[]
+            for p in panos:
+              row={
+                'pano_id':p.pano_id,'lat':float(p.lat),'lon':float(p.lon),
+                'heading':float(p.heading),'pitch':float(p.pitch),'roll':float(p.roll),
+                'date':p.date,'query':label,'query_lat':lat,'query_lon':lon,
+                'distance_m':haversine(lat,lon,float(p.lat),float(p.lon)),
+              }
+              rows.append(row)
+            rows.sort(key=lambda x:(x['distance_m'], x['date'] or '9999'))
+            # Keep nearby current and historical panoramas rather than many duplicates.
+            kept=[]; seen_locations=[]
+            for row in rows:
+              key=(round(row['lat'],5),round(row['lon'],5),row['date'])
+              if key in seen_locations: continue
+              seen_locations.append(key)
+              kept.append(row)
+              if len(kept)>=8: break
+            search_log.append({'query':label,'count':len(panos),'kept':kept})
+            for row in kept:
+              selected.setdefault(row['pano_id'],row)
+            time.sleep(0.35)
+
+          Path('results/search_results.json').write_text(json.dumps(search_log,indent=2))
+          candidates=list(selected.values())
+          Path('results/candidates.json').write_text(json.dumps(candidates,indent=2))
+          print('unique candidate panoramas',len(candidates))
+
+          def download(row):
+            pid=row['pano_id']
+            out=Path('results/panos')/(pid.replace('/','_')+'.jpg')
+            if not out.exists():
+              img=get_panorama(pid,zoom=2,multi_threaded=False,max_retries=3)
+              img.save(out,quality=88)
+            return pid,str(out)
+
+          downloaded={}; failures=[]
+          with ThreadPoolExecutor(max_workers=4) as ex:
+            jobs={ex.submit(download,row):row for row in candidates}
+            for fut in as_completed(jobs):
+              row=jobs[fut]
+              try:
+                pid,path=fut.result(); downloaded[pid]=path
+              except Exception as exc:
+                failures.append({'pano_id':row['pano_id'],'error':repr(exc)})
+          Path('results/download_failures.json').write_text(json.dumps(failures,indent=2))
+          print('downloaded',len(downloaded),'failures',len(failures))
+
+          # Build 8 ordinary perspective views per panorama.
+          view_rows=[]
+          for row in candidates:
+            pid=row['pano_id']
+            path=downloaded.get(pid)
+            if not path: continue
+            e=np.asarray(Image.open(path).convert('RGB'))
+            for heading in range(0,360,45):
+              arr=py360convert.e2p(e,fov_deg=(78,62),u_deg=heading,v_deg=0,out_hw=(336,448),mode='bilinear')
+              im=Image.fromarray(np.uint8(np.clip(arr,0,255)))
+              name=f"{len(view_rows):05d}.jpg"
+              out=Path('results/views')/name
+              im.save(out,quality=88)
+              view_rows.append({**row,'view_file':name,'view_heading':heading})
+          Path('results/view_metadata.json').write_text(json.dumps(view_rows,indent=2))
+          print('views',len(view_rows))
+
+          # Rank broad visual similarity with CLIP in batches.
+          model=CLIPModel.from_pretrained('openai/clip-vit-base-patch32')
+          proc=CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')
+          model.eval()
+          with torch.no_grad():
+            target=Image.open(target_path).convert('RGB')
+            ti=proc(images=[target],return_tensors='pt')
+            target_feat=model.get_image_features(**ti)
+            target_feat=target_feat/target_feat.norm(dim=-1,keepdim=True)
+
+          scores=[]
+          batch_size=32
+          for start in range(0,len(view_rows),batch_size):
+            batch=view_rows[start:start+batch_size]
+            images=[Image.open(Path('results/views')/r['view_file']).convert('RGB') for r in batch]
+            with torch.no_grad():
+              inp=proc(images=images,return_tensors='pt')
+              feat=model.get_image_features(**inp)
+              feat=feat/feat.norm(dim=-1,keepdim=True)
+              sim=(feat@target_feat.T).squeeze(1).cpu().tolist()
+            for row,score in zip(batch,sim):
+              scores.append({**row,'clip_score':float(score)})
+          scores.sort(key=lambda x:x['clip_score'],reverse=True)
+          Path('results/ranking.json').write_text(json.dumps(scores,indent=2))
+
+          # Contact sheets for manual structural comparison. Remote content is imagery only.
+          font=ImageFont.load_default()
+          for page in range((min(len(scores),160)+19)//20):
+            subset=scores[page*20:(page+1)*20]
+            sheet=Image.new('RGB',(5*360,4*300),'white')
+            draw=ImageDraw.Draw(sheet)
+            for idx,row in enumerate(subset):
+              im=Image.open(Path('results/views')/row['view_file']).convert('RGB')
+              im.thumbnail((350,245))
+              x=(idx%5)*360; y=(idx//5)*300
+              sheet.paste(im,(x,y))
+              label=f"#{page*20+idx+1} {row['query']} {row['date'] or '?'}\n{row['lat']:.5f},{row['lon']:.5f} h={row['view_heading']} s={row['clip_score']:.3f}"
+              draw.multiline_text((x+3,y+248),label,fill='black',font=font,spacing=2)
+            sheet.save(Path('results/contact')/f'top_{page+1:02d}.jpg',quality=91)
+
+          # Best score per panorama and per query, useful for narrowing regions.
+          best_pano={}; best_query={}
+          for row in scores:
+            best_pano.setdefault(row['pano_id'],row)
+            best_query.setdefault(row['query'],row)
+          Path('results/best_per_panorama.json').write_text(json.dumps(list(best_pano.values()),indent=2))
+          Path('results/best_per_query.json').write_text(json.dumps(list(best_query.values()),indent=2))
+          print('TOP',json.dumps(scores[:20]))
+          print('BEST QUERY',json.dumps(list(best_query.values())))
+          PY
+
+      - name: Upload ranked candidates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: streetview-candidate-matches
+          path: |
+            results/*.json
+            results/contact/
+          retention-days: 1
+          if-no-files-found: error
