@@ -16,41 +16,66 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Fetch targeted public application modules as inert data
+      - name: Fetch public challenge metadata as inert data
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p public-info
-          urls=(
-            "$TARGET_ORIGIN/_app/immutable/chunks/index.svelte.B3fu_cno.js"
-            "$TARGET_ORIGIN/_app/immutable/nodes/30.B2rEhVGm.js"
-            "$TARGET_ORIGIN/_app/immutable/chunks/auth.svelte.-AnqlxAT.js"
-            "$TARGET_ORIGIN/_app/immutable/chunks/entry.DtQAtgh9.js"
-            "$TARGET_ORIGIN/challenges"
-          )
-          : > public-info/index.tsv
-          i=0
-          for url in "${urls[@]}"; do
-            body="public-info/$(printf '%02d' "$i").body"
-            headers="public-info/$(printf '%02d' "$i").headers"
-            status=$(curl --location --compressed --max-time 30 \
-              --user-agent 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)' \
-              --dump-header "$headers" --output "$body" --write-out '%{http_code}' \
-              "$url" || true)
-            printf '%s\t%s\t%s\n' "$i" "$status" "$url" >> public-info/index.tsv
-            i=$((i+1))
-          done
+
+          curl --location --compressed --max-time 30 \
+            --user-agent 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)' \
+            --dump-header public-info/challenges.headers \
+            --output public-info/challenges.json \
+            "$TARGET_ORIGIN/api/challenges"
+
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import subprocess
+
+          root = pathlib.Path('public-info')
+          payload = json.loads((root / 'challenges.json').read_text('utf-8'))
+          data = payload.get('data', payload)
+          entries = data.get('entries', data) if isinstance(data, dict) else data
+          if not isinstance(entries, list):
+              raise SystemExit(f'Unexpected challenge list shape: {type(entries).__name__}')
+
+          matches = []
+          for entry in entries:
+              title = str(entry.get('title', ''))
+              slug = str(entry.get('slug', ''))
+              if 'say the word on beta' in title.lower() or 'word' in slug.lower() and 'beta' in slug.lower():
+                  matches.append(entry)
+
+          (root / 'matches.json').write_text(json.dumps(matches, indent=2, ensure_ascii=False), encoding='utf-8')
+          for index, entry in enumerate(matches):
+              challenge_id = entry.get('id')
+              if challenge_id is None:
+                  continue
+              subprocess.run([
+                  'curl', '--location', '--compressed', '--max-time', '30',
+                  '--user-agent', 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)',
+                  '--dump-header', str(root / f'detail-{index}.headers'),
+                  '--output', str(root / f'detail-{index}.json'),
+                  f'https://bushbash.cssa.club/api/challenges/{challenge_id}',
+              ], check=True)
+          PY
+
           {
-            echo '=== requests ==='
-            cat public-info/index.tsv
-            echo '=== candidate strings ==='
-            grep -RaoEi 'https?://[^"'"'"' <>)]*|[^"'"'"']*(api_base|vite_api|/challenges|hint|say the word|beta)[^"'"'"']*' public-info/*.body 2>/dev/null | sort -u | head -n 2000 || true
+            echo '=== matching list entry ==='
+            cat public-info/matches.json
+            echo '=== public challenge details ==='
+            for f in public-info/detail-*.json; do
+              [ -e "$f" ] || continue
+              cat "$f"
+              echo
+            done
           } > public-info/summary.txt
 
       - name: Upload public response data
         uses: actions/upload-artifact@v4
         with:
-          name: ctf-word-beta-public-info-targeted
+          name: ctf-word-beta-public-challenge
           path: public-info
           if-no-files-found: error
           retention-days: 1
