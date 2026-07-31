@@ -14,105 +14,43 @@ env:
 jobs:
   fetch-public-info:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    timeout-minutes: 4
     steps:
-      - name: Recursively fetch public application modules as inert data
+      - name: Fetch targeted public application modules as inert data
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p public-info/assets
-          python3 - <<'PY'
-          import collections
-          import html
-          import pathlib
-          import re
-          import urllib.parse
-          import urllib.request
-          import urllib.error
-
-          origin = 'https://bushbash.cssa.club/'
-          root = pathlib.Path('public-info')
-          opener = urllib.request.build_opener()
-          opener.addheaders = [('User-Agent', 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)')]
-
-          def fetch(url):
-              req = urllib.request.Request(url, headers={'Accept-Encoding': 'identity'})
-              with opener.open(req, timeout=25) as response:
-                  return response.read(), dict(response.headers), response.status
-
-          try:
-              home, headers, status = fetch(origin)
-          except Exception as exc:
-              home, headers, status = b'', {}, 0
-              (root / 'home.error').write_text(repr(exc), encoding='utf-8')
-          (root / 'home.html').write_bytes(home)
-          (root / 'home.headers').write_text(f'status={status}\n' + '\n'.join(f'{k}: {v}' for k, v in headers.items()), encoding='utf-8')
-
-          text = home.decode('utf-8', errors='replace')
-          queue = collections.deque()
-          for value in re.findall(r'''(?:src|href)=["']([^"']+)["']''', text):
-              absolute = urllib.parse.urljoin(origin, html.unescape(value))
-              if absolute.startswith(origin) and '.js' in absolute:
-                  queue.append(absolute)
-
-          seen = set()
-          records = []
-          max_assets = 300
-          while queue and len(seen) < max_assets:
-              url = queue.popleft()
-              if url in seen or not url.startswith(origin):
-                  continue
-              seen.add(url)
-              index = len(records)
-              try:
-                  data, response_headers, response_status = fetch(url)
-                  filename = root / 'assets' / f'{index:03d}.bin'
-                  filename.write_bytes(data)
-                  (root / 'assets' / f'{index:03d}.url').write_text(url, encoding='utf-8')
-                  records.append((index, url, response_status, len(data), ''))
-                  module = data.decode('utf-8', errors='replace')
-                  candidates = re.findall(r'''["']([^"']+?\.js(?:\?[^"']*)?)["']''', module)
-                  for candidate in candidates:
-                      absolute = urllib.parse.urljoin(url, html.unescape(candidate))
-                      if absolute.startswith(origin) and absolute not in seen:
-                          queue.append(absolute)
-              except Exception as exc:
-                  (root / 'assets' / f'{index:03d}.error').write_text(repr(exc), encoding='utf-8')
-                  (root / 'assets' / f'{index:03d}.url').write_text(url, encoding='utf-8')
-                  records.append((index, url, 0, 0, repr(exc)))
-
-          (root / 'asset-index.tsv').write_text(
-              '\n'.join(f'{i}\t{status}\t{size}\t{url}\t{error}' for i, url, status, size, error in records),
-              encoding='utf-8'
+          mkdir -p public-info
+          urls=(
+            "$TARGET_ORIGIN/_app/immutable/chunks/index.svelte.B3fu_cno.js"
+            "$TARGET_ORIGIN/_app/immutable/nodes/30.B2rEhVGm.js"
+            "$TARGET_ORIGIN/_app/immutable/chunks/auth.svelte.-AnqlxAT.js"
+            "$TARGET_ORIGIN/_app/immutable/chunks/entry.DtQAtgh9.js"
+            "$TARGET_ORIGIN/challenges"
           )
-
-          patterns = [
-              re.compile(r'https?://[^"\' <>)]+' , re.I),
-              re.compile(r'[^"\']*(?:/challenges|hint|api_base|api-base|VITE_API|say the word|beta)[^"\']*', re.I),
-          ]
-          hits = []
-          for path in sorted((root / 'assets').glob('*.bin')):
-              module = path.read_text('utf-8', errors='replace')
-              for pattern in patterns:
-                  for match in pattern.findall(module):
-                      if 0 < len(match) <= 1000:
-                          hits.append(f'{path.name}\t{match}')
-          (root / 'candidate-strings.txt').write_text('\n'.join(sorted(set(hits))), encoding='utf-8')
-          PY
-
+          : > public-info/index.tsv
+          i=0
+          for url in "${urls[@]}"; do
+            body="public-info/$(printf '%02d' "$i").body"
+            headers="public-info/$(printf '%02d' "$i").headers"
+            status=$(curl --location --compressed --max-time 30 \
+              --user-agent 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)' \
+              --dump-header "$headers" --output "$body" --write-out '%{http_code}' \
+              "$url" || true)
+            printf '%s\t%s\t%s\n' "$i" "$status" "$url" >> public-info/index.tsv
+            i=$((i+1))
+          done
           {
-            printf '%s\n' '=== home response ==='
-            cat public-info/home.headers 2>/dev/null || true
-            printf '%s\n' '=== fetched modules ==='
-            cat public-info/asset-index.tsv 2>/dev/null || true
-            printf '%s\n' '=== candidate public strings ==='
-            cat public-info/candidate-strings.txt 2>/dev/null || true
+            echo '=== requests ==='
+            cat public-info/index.tsv
+            echo '=== candidate strings ==='
+            grep -RaoEi 'https?://[^"'"'"' <>)]*|[^"'"'"']*(api_base|vite_api|/challenges|hint|say the word|beta)[^"'"'"']*' public-info/*.body 2>/dev/null | sort -u | head -n 2000 || true
           } > public-info/summary.txt
 
       - name: Upload public response data
         uses: actions/upload-artifact@v4
         with:
-          name: ctf-word-beta-public-info-recursive
+          name: ctf-word-beta-public-info-targeted
           path: public-info
           if-no-files-found: error
           retention-days: 1
