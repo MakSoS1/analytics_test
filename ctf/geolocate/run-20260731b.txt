@@ -1,0 +1,1 @@
+Trigger the isolated reverse-image geolocation workflow for the supplied static CTF image.
