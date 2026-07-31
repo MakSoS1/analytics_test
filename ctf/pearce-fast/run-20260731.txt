@@ -1,0 +1,1 @@
+Run the trusted compact panorama matcher around Pearce and Torrens.
