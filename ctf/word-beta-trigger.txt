@@ -1,1 +1,1 @@
-Run the recursive isolated public metadata fetch for the Minecraft naming puzzle.
+Run the targeted isolated public metadata fetch for the Minecraft naming puzzle.
