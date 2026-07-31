@@ -1,0 +1,1 @@
+Run the trusted dense coordinate scoring over the leading Australian candidate cities.
