@@ -1,0 +1,87 @@
+name: Temporary CTF geolocation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ctf/geolocate/**'
+      - '.github/workflows/ctf-geolocate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decode and validate image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results
+          tr -d '\r\n ' < ctf/geolocate/image.b64 | base64 -d > results/input.jpg
+          file results/input.jpg | tee results/file.txt
+          identify results/input.jpg | tee results/identify.txt
+          sha256sum results/input.jpg | tee results/sha256.txt
+
+      - name: Google reverse image searches
+        shell: bash
+        run: |
+          set -euo pipefail
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36'
+          curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
+            -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
+            -F 'image_content=' \
+            'https://www.google.com/searchbyimage/upload' \
+            -D results/google.headers -o results/google.html || true
+          curl --retry 3 --retry-delay 2 -sS -L -A "$UA" \
+            -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
+            -F 'image_content=' \
+            'https://lens.google.com/v3/upload' \
+            -D results/lens.headers -o results/lens.html || true
+          grep -Eoi 'https?[^"<> ]+' results/google.html results/lens.html 2>/dev/null | head -200 > results/extracted_urls.txt || true
+          grep -Eio '.{0,120}(Canberra|Australia|street|road|suburb|similar|visual match).{0,180}' results/google.html results/lens.html 2>/dev/null | head -200 > results/snippets.txt || true
+
+      - name: Query OpenStreetMap candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > results/query.overpass <<'EOF'
+          [out:json][timeout:120];
+          (
+            node["traffic_calming"](-35.38,149.05,-35.20,149.20);
+            way["traffic_calming"](-35.38,149.05,-35.20,149.20);
+          );
+          out center tags;
+          EOF
+          curl --retry 5 --retry-delay 3 -sS -G \
+            --data-urlencode 'data@results/query.overpass' \
+            'https://overpass-api.de/api/interpreter' \
+            -o results/traffic_calming.json || true
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('results/traffic_calming.json')
+          try:
+              d=json.loads(p.read_text())
+          except Exception as e:
+              Path('results/traffic_summary.txt').write_text(f'parse error: {e}\n')
+          else:
+              rows=[]
+              for x in d.get('elements',[]):
+                  lat=x.get('lat') or x.get('center',{}).get('lat')
+                  lon=x.get('lon') or x.get('center',{}).get('lon')
+                  rows.append((lat,lon,x.get('type'),x.get('id'),x.get('tags',{})))
+              Path('results/traffic_summary.txt').write_text('\n'.join(map(str,rows)))
+          PY
+
+      - name: Upload investigation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctf-geolocation-results
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
