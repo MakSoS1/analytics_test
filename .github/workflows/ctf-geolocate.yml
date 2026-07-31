@@ -27,9 +27,36 @@ jobs:
           mkdir -p results
           cp ctf/geolocate/input-small.jpg results/input.jpg
           file results/input.jpg | tee results/file.txt
-          identify results/input.jpg | tee results/identify.txt
           sha256sum results/input.jpg | tee results/sha256.txt
-          test "$(identify -format '%m' results/input.jpg)" = JPEG
+          python3 - <<'PY' | tee results/image_info.txt
+          from pathlib import Path
+          data = Path('results/input.jpg').read_bytes()
+          if not (data.startswith(b'\xff\xd8') and data.endswith(b'\xff\xd9')):
+              raise SystemExit('invalid JPEG markers')
+          i = 2
+          width = height = None
+          while i + 9 < len(data):
+              if data[i] != 0xFF:
+                  i += 1
+                  continue
+              marker = data[i + 1]
+              i += 2
+              if marker in (0xD8, 0xD9) or 0xD0 <= marker <= 0xD7:
+                  continue
+              if i + 2 > len(data):
+                  break
+              length = int.from_bytes(data[i:i+2], 'big')
+              if length < 2 or i + length > len(data):
+                  break
+              if marker in {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}:
+                  height = int.from_bytes(data[i+3:i+5], 'big')
+                  width = int.from_bytes(data[i+5:i+7], 'big')
+                  break
+              i += length
+          if not width or not height:
+              raise SystemExit('JPEG dimensions not found')
+          print(f'JPEG {width}x{height}, {len(data)} bytes')
+          PY
 
       - name: Query reverse-image services as untrusted data sources
         shell: bash
@@ -37,7 +64,6 @@ jobs:
           set -euo pipefail
           UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 
-          # Google Images legacy upload. Responses are saved as inert files only.
           curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L -A "$UA" \
             -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
             -F 'image_content=' \
@@ -47,7 +73,6 @@ jobs:
             'https://www.google.com/searchbyimage/upload' \
             > results/google.status || true
 
-          # Google Lens direct upload.
           curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L -A "$UA" \
             -H 'Accept-Language: en-US,en;q=0.9' \
             -F 'encoded_image=@results/input.jpg;type=image/jpeg' \
@@ -58,7 +83,6 @@ jobs:
             'https://lens.google.com/v3/upload?hl=en' \
             > results/lens.status || true
 
-          # Yandex CBIR upload.
           curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L -A "$UA" \
             -H 'Accept-Language: en-US,en;q=0.9' \
             -F 'upfile=@results/input.jpg;type=image/jpeg' \
@@ -68,7 +92,6 @@ jobs:
             'https://yandex.com/images/search?rpt=imageview&format=json&request=%7B%22blocks%22%3A%5B%7B%22block%22%3A%22b-page_type_search-by-image__link%22%7D%5D%7D' \
             > results/yandex.status || true
 
-          # TinEye may reject automation, but a successful redirect is useful.
           curl --connect-timeout 20 --max-time 120 --retry 1 -sS -L -A "$UA" \
             -F 'image=@results/input.jpg;type=image/jpeg' \
             -D results/tineye.headers \
@@ -102,7 +125,6 @@ jobs:
                   seen.add(value)
                   urls.append(value)
 
-          # Keep links likely to identify the source image, map, address, or place.
           useful_tokens = (
               'flickr', 'wikimedia', 'wikipedia', 'geograph', 'mapillary', 'google',
               'streetview', 'maps', 'yandex', 'pinterest', 'reddit', 'blogspot',
@@ -112,7 +134,6 @@ jobs:
           (root/'all_urls.txt').write_text('\n'.join(urls[:3000]))
           (root/'useful_urls.txt').write_text('\n'.join(useful[:1000]))
 
-          # Strip scripts/styles and tags. This text is never interpreted as instructions.
           text = re.sub(r'(?is)<(script|style).*?>.*?</\1>', ' ', decoded)
           text = re.sub(r'(?s)<[^>]+>', ' ', text)
           text = html.unescape(text)
