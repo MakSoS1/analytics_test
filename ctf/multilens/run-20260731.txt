@@ -1,0 +1,1 @@
+Run trusted Google Lens and Bing visual-search probes on the supplied static CTF image.
