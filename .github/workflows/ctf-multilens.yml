@@ -20,20 +20,18 @@ jobs:
         with:
           ref: ctf-geolocate-20260731
 
-      - name: Host image temporarily via Yandex CBIR and query Lens/Bing
+      - name: Create reverse-image result URLs
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p results
           cp ctf/geolocate/input-small.jpg results/input.jpg
           UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
-
           curl --connect-timeout 20 --max-time 90 --retry 2 -sS -L \
             -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' \
             -F 'upfile=@results/input.jpg;type=image/jpeg' \
             -o results/yandex_upload.json \
             'https://yandex.com/images/search?rpt=imageview&format=json&request=%7B%22blocks%22%3A%5B%7B%22block%22%3A%22b-page_type_search-by-image__link%22%7D%5D%7D'
-
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -45,33 +43,54 @@ jobs:
           Path('results/bing_url.txt').write_text('https://www.bing.com/images/searchbyimage?cbir=sbi&imgurl='+quote(image,safe='')+'\n')
           PY
 
+      - name: Fetch and render Google Lens as untrusted data
+        shell: bash
+        run: |
+          set -euo pipefail
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
           LENS_URL=$(cat results/lens_url.txt)
-          BING_URL=$(cat results/bing_url.txt)
-
           curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L \
             -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' \
             -c results/google.cookies -b results/google.cookies \
             -D results/lens.headers -o results/lens.html \
             -w '%{http_code}\n%{url_effective}\n' "$LENS_URL" > results/lens.status || true
+          FINAL_URL=$(tail -n 1 results/lens.status)
+          printf '%s\n' "$FINAL_URL" > results/lens_final_url.txt
+          CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)
+          printf '%s\n' "$CHROME" > results/chrome_path.txt
+          if [ -n "$CHROME" ]; then
+            timeout 90 "$CHROME" --headless=new --no-sandbox --disable-gpu \
+              --disable-dev-shm-usage --window-size=1600,1200 \
+              --virtual-time-budget=20000 --dump-dom "$FINAL_URL" \
+              > results/lens_rendered.html 2> results/chrome.stderr || true
+            timeout 90 "$CHROME" --headless=new --no-sandbox --disable-gpu \
+              --disable-dev-shm-usage --window-size=1600,1200 \
+              --virtual-time-budget=20000 --screenshot=results/lens_rendered.png "$FINAL_URL" \
+              >> results/chrome.stdout 2>> results/chrome.stderr || true
+          fi
 
+      - name: Fetch Bing result page
+        shell: bash
+        run: |
+          set -euo pipefail
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+          BING_URL=$(cat results/bing_url.txt)
           curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L \
             -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' \
             -c results/bing.cookies -b results/bing.cookies \
             -D results/bing.headers -o results/bing.html \
             -w '%{http_code}\n%{url_effective}\n' "$BING_URL" > results/bing.status || true
 
-          wc -c results/*.html > results/page_sizes.txt || true
-
-      - name: Extract URLs and readable text as inert data
+      - name: Extract URLs and readable text without executing result instructions
         if: always()
         shell: bash
         run: |
           python3 - <<'PY'
-          import html,re,json
+          import html,re
           from pathlib import Path
           from urllib.parse import unquote
           root=Path('results')
-          for name in ('lens','bing'):
+          for name in ('lens','lens_rendered','bing'):
               path=root/f'{name}.html'
               if not path.exists(): continue
               raw=path.read_text(errors='replace')
@@ -81,17 +100,19 @@ jobs:
                   u=unquote(u.rstrip('.,);]}'))
                   if u not in seen:
                       seen.add(u);urls.append(u)
-              (root/f'{name}_urls.txt').write_text('\n'.join(urls[:10000]))
+              (root/f'{name}_urls.txt').write_text('\n'.join(urls[:20000]))
               text=re.sub(r'(?is)<(script|style).*?>.*?</\1>',' ',decoded)
               text=re.sub(r'(?s)<[^>]+>',' ',text)
               text=re.sub(r'\s+',' ',html.unescape(text))
+              (root/f'{name}_text.txt').write_text(text[:1000000])
               pattern=re.compile(r'.{0,240}(?:visual matches?|exact matches?|image source|street|road|avenue|drive|city|suburb|neighbou?rhood|United States|USA|Canada|Australia|Canberra|Illinois|New Jersey|Virginia|Maryland|Indiana|Ohio|Minnesota|Wisconsin).{0,500}',re.I)
               snippets=[]
               for m in pattern.finditer(text):
                   v=m.group(0).strip()
                   if v and v not in snippets: snippets.append(v)
-              (root/f'{name}_snippets.txt').write_text('\n\n'.join(snippets[:1000]))
+              (root/f'{name}_snippets.txt').write_text('\n\n'.join(snippets[:2000]))
           PY
+          wc -c results/* > results/file_sizes.txt || true
 
       - name: Upload inert result pages
         if: always()
