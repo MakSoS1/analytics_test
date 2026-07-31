@@ -20,6 +20,15 @@ jobs:
         with:
           ref: ctf-geolocate-20260731
 
+      - name: Install GeoCLIP
+        shell: bash
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet geoclip pillow
+
       - name: Prepare image variants
         shell: bash
         run: |
@@ -37,19 +46,9 @@ jobs:
               ImageOps.autocontrast(img).save(f'inputs/{stem}_autocontrast.jpg',quality=95)
               ImageEnhance.Brightness(img).enhance(1.15).save(f'inputs/{stem}_bright.jpg',quality=95)
               w,h=img.size
-              crop=img.crop((int(w*0.04),int(h*0.04),int(w*0.96),int(h*0.96)))
-              crop.save(f'inputs/{stem}_crop.jpg',quality=95)
+              img.crop((int(w*0.04),int(h*0.04),int(w*0.96),int(h*0.96))).save(f'inputs/{stem}_crop.jpg',quality=95)
               print(source, img.size)
           PY
-
-      - name: Install GeoCLIP
-        shell: bash
-        env:
-          PIP_DISABLE_PIP_VERSION_CHECK: '1'
-        run: |
-          set -euo pipefail
-          python3 -m pip install --quiet --upgrade pip
-          python3 -m pip install --quiet geoclip pillow
 
       - name: Run independent coordinate predictions
         shell: bash
@@ -71,14 +70,12 @@ jobs:
                   for (lat,lon),prob in zip(gps,probs):
                       items.append({'lat':float(lat),'lon':float(lon),'probability':float(prob)})
                   rows[path.name]=items
-                  print(path.name, items[:5])
+                  print(path.name,items[:5])
               except Exception as exc:
                   rows[path.name]={'error':repr(exc)}
           Path('results/geoclip_predictions.json').write_text(json.dumps(rows,indent=2))
 
-          # Cluster repeated predictions after rounding to one degree, making ensemble consensus visible.
-          counts={}
-          weighted={}
+          counts={}; weighted={}
           for values in rows.values():
               if not isinstance(values,list): continue
               for rank,item in enumerate(values):
