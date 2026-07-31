@@ -13,28 +13,24 @@ permissions:
 jobs:
   investigate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 12
     steps:
       - name: Check out trusted temporary base branch
         uses: actions/checkout@v4
         with:
           ref: ctf-geolocate-20260731
 
-      - name: Prepare validated static image
+      - name: Upload static image and collect raw Yandex CBIR pages
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p results
           cp ctf/geolocate/input-small.jpg results/input.jpg
-          file results/input.jpg | tee results/file.txt
-          sha256sum results/input.jpg | tee results/sha256.txt
-
-      - name: Upload image and fetch Yandex CBIR pages as inert data
-        shell: bash
-        run: |
-          set -euo pipefail
+          file results/input.jpg > results/file.txt
+          sha256sum results/input.jpg > results/sha256.txt
           UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
-          curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L \
+
+          curl --connect-timeout 20 --max-time 90 --retry 2 -sS -L \
             -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' \
             -c results/yandex.cookies -b results/yandex.cookies \
             -F 'upfile=@results/input.jpg;type=image/jpeg' \
@@ -47,29 +43,27 @@ jobs:
           import json
           from pathlib import Path
           from urllib.parse import urlencode
-
-          data = json.loads(Path('results/upload.json').read_text())
-          params = data['blocks'][0]['params']
-          image_url = params['originalImageUrl']
-          cbir_id = params['cbirId']
-          variants = [
-              {'rpt':'imageview','cbir_id':cbir_id,'cbir_page':'similar'},
-              {'rpt':'imageview','cbir_id':cbir_id,'cbir_page':'similar','url':image_url},
-              {'rpt':'imageview','url':image_url},
-              {'rpt':'imageview','cbir_id':cbir_id,'url':image_url},
-              {'rpt':'imageview','cbir_id':cbir_id,'cbir_page':'similar','family':'0','pornowhitelist':'1','ipnd':'1'},
+          data=json.loads(Path('results/upload.json').read_text())
+          p=data['blocks'][0]['params']
+          image=p['originalImageUrl']; cbir=p['cbirId']
+          variants=[
+            {'rpt':'imageview','cbir_id':cbir,'cbir_page':'similar'},
+            {'rpt':'imageview','cbir_id':cbir,'cbir_page':'similar','url':image},
+            {'rpt':'imageview','url':image},
+            {'rpt':'imageview','cbir_id':cbir,'url':image},
+            {'rpt':'imageview','cbir_id':cbir,'cbir_page':'similar','family':'0','pornowhitelist':'1','ipnd':'1'},
           ]
           urls=[]
           for host in ('https://yandex.com/images/search','https://yandex.ru/images/search'):
-              urls.extend(host+'?'+urlencode(query) for query in variants)
-          Path('results/identifiers.json').write_text(json.dumps({'originalImageUrl':image_url,'cbirId':cbir_id},indent=2))
+            urls += [host+'?'+urlencode(q) for q in variants]
+          Path('results/identifiers.json').write_text(json.dumps({'originalImageUrl':image,'cbirId':cbir},indent=2))
           Path('results/result_urls.txt').write_text('\n'.join(urls)+'\n')
           PY
 
           n=0
           while IFS= read -r url; do
             n=$((n+1))
-            curl --connect-timeout 20 --max-time 120 --retry 2 -sS -L \
+            curl --connect-timeout 20 --max-time 90 --retry 1 -sS -L \
               -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' \
               -c results/yandex.cookies -b results/yandex.cookies \
               -D "results/page_${n}.headers" -o "results/page_${n}.html" \
@@ -77,52 +71,13 @@ jobs:
               > "results/page_${n}.status" || true
           done < results/result_urls.txt
 
-      - name: Extract links and embedded result metadata safely
-        if: always()
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import html, json, re
-          from pathlib import Path
-          from urllib.parse import unquote
-          root=Path('results')
-          pages=sorted(root.glob('page_*.html'))
-          raw='\n'.join(p.read_text(errors='replace') for p in pages)
-          decoded=html.unescape(raw).replace('\\u0026','&').replace('\\u003d','=').replace('\\u002f','/')
+          wc -c results/page_*.html > results/page_sizes.txt || true
 
-          urls=[]; seen=set()
-          for item in re.findall(r'https?://[^\s"<>\\]+',decoded):
-              item=unquote(item.rstrip('.,);]}'))
-              if item not in seen:
-                  seen.add(item); urls.append(item)
-          external=[u for u in urls if not re.search(r'yandex\.|yastatic\.|avatars\.mds\.',u,re.I)]
-          (root/'all_urls.txt').write_text('\n'.join(urls[:10000]))
-          (root/'external_urls.txt').write_text('\n'.join(external[:5000]))
-
-          key_pattern=re.compile(r'.{0,700}(?:serp-item|origUrl|greenUrl|snippet|sites containing|similar images|exact matches?).{0,1800}',re.I|re.S)
-          candidates=[]
-          for match in key_pattern.finditer(decoded):
-              value=match.group(0)
-              if value not in candidates: candidates.append(value)
-          (root/'embedded_candidates.txt').write_text('\n\n---ITEM---\n\n'.join(candidates[:2000]))
-
-          text=re.sub(r'(?is)<(script|style).*?>.*?</\1>',' ',decoded)
-          text=re.sub(r'(?s)<[^>]+>',' ',text)
-          text=re.sub(r'\s+',' ',html.unescape(text))
-          place_pattern=re.compile(r'.{0,220}(?:street|road|avenue|drive|lane|court|crescent|city|suburb|neighbou?rhood|United States|USA|Canada|Australia|Canberra|Virginia|Maryland|Ohio|Michigan|Pennsylvania|New Jersey|Illinois|Indiana|Minnesota|Wisconsin).{0,420}',re.I)
-          snippets=[]
-          for match in place_pattern.finditer(text):
-              value=match.group(0).strip()
-              if value and value not in snippets: snippets.append(value)
-          (root/'readable_snippets.txt').write_text('\n\n'.join(snippets[:1000]))
-          (root/'summary.json').write_text(json.dumps({'pages':{p.name:p.stat().st_size for p in pages},'url_count':len(urls),'external_count':len(external),'candidate_count':len(candidates),'snippet_count':len(snippets)},indent=2))
-          PY
-
-      - name: Upload inert investigation files
+      - name: Upload raw pages as inert files
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yandex-cbir-geolocation-results
+          name: yandex-cbir-raw-pages
           path: results/
           retention-days: 1
           if-no-files-found: error
