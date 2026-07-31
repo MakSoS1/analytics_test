@@ -1,0 +1,135 @@
+name: ctf-sacred-heart-geolocate
+
+on:
+  push:
+    branches:
+      - ctf-sacred-heart-geolocate
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-map-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch and stitch public map imagery
+        shell: bash
+        env:
+          CENTER_LAT: "-35.3669"
+          CENTER_LON: "149.0844"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import io
+          import json
+          import math
+          import os
+          import pathlib
+          import urllib.parse
+          import urllib.request
+          from PIL import Image, ImageDraw
+
+          out = pathlib.Path("out")
+          out.mkdir(exist_ok=True)
+          lat = float(os.environ["CENTER_LAT"])
+          lon = float(os.environ["CENTER_LON"])
+
+          UA = "Mozilla/5.0 (compatible; educational-ctf-geolocation/1.0)"
+
+          def get(url: str, timeout: int = 30) -> bytes:
+              req = urllib.request.Request(url, headers={"User-Agent": UA})
+              with urllib.request.urlopen(req, timeout=timeout) as r:
+                  return r.read()
+
+          def latlon_to_tile(lat_deg: float, lon_deg: float, zoom: int):
+              lat_rad = math.radians(lat_deg)
+              n = 2.0 ** zoom
+              x = (lon_deg + 180.0) / 360.0 * n
+              y = (1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n
+              return x, y
+
+          def tile_to_lon(x: float, zoom: int) -> float:
+              return x / (2.0 ** zoom) * 360.0 - 180.0
+
+          def tile_to_lat(y: float, zoom: int) -> float:
+              n = math.pi - 2.0 * math.pi * y / (2.0 ** zoom)
+              return math.degrees(math.atan(math.sinh(n)))
+
+          def stitch(name: str, template: str, zoom: int, radius: int):
+              xf, yf = latlon_to_tile(lat, lon, zoom)
+              cx, cy = int(math.floor(xf)), int(math.floor(yf))
+              size = 2 * radius + 1
+              mosaic = Image.new("RGB", (256 * size, 256 * size))
+              failures = []
+              for row, ty in enumerate(range(cy - radius, cy + radius + 1)):
+                  for col, tx in enumerate(range(cx - radius, cx + radius + 1)):
+                      url = template.format(z=zoom, x=tx, y=ty)
+                      try:
+                          data = get(url)
+                          tile = Image.open(io.BytesIO(data)).convert("RGB")
+                          if tile.size != (256, 256):
+                              raise ValueError(f"unexpected tile size {tile.size}")
+                          mosaic.paste(tile, (col * 256, row * 256))
+                      except Exception as exc:
+                          failures.append({"x": tx, "y": ty, "error": repr(exc)})
+              px = (xf - (cx - radius)) * 256.0
+              py = (yf - (cy - radius)) * 256.0
+              draw = ImageDraw.Draw(mosaic)
+              draw.line((px - 12, py, px + 12, py), fill=(255, 0, 0), width=3)
+              draw.line((px, py - 12, px, py + 12), fill=(255, 0, 0), width=3)
+              mosaic.save(out / f"{name}_z{zoom}.png")
+              meta = {
+                  "source": template,
+                  "zoom": zoom,
+                  "radius_tiles": radius,
+                  "center": [lat, lon],
+                  "center_pixel": [px, py],
+                  "top_left": [tile_to_lat(cy - radius, zoom), tile_to_lon(cx - radius, zoom)],
+                  "bottom_right": [tile_to_lat(cy + radius + 1, zoom), tile_to_lon(cx + radius + 1, zoom)],
+                  "failures": failures,
+              }
+              (out / f"{name}_z{zoom}.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+          sources = {
+              "esri": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+              "osm": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+          }
+          for zoom, radius in ((19, 2), (20, 3)):
+              for name, template in sources.items():
+                  stitch(name, template, zoom, radius)
+
+          bbox = (lat - 0.003, lon - 0.0035, lat + 0.003, lon + 0.0035)
+          query = f'''[out:json][timeout:25];(
+            way["building"]({bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]});
+            relation["building"]({bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]});
+            nwr["amenity"="school"]({bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]});
+          );out geom;'''
+          overpass_url = "https://overpass-api.de/api/interpreter?" + urllib.parse.urlencode({"data": query})
+          try:
+              (out / "overpass.json").write_bytes(get(overpass_url, timeout=60))
+          except Exception as exc:
+              (out / "overpass_error.txt").write_text(repr(exc), encoding="utf-8")
+
+          cbk_url = "https://maps.google.com/cbk?" + urllib.parse.urlencode({"output": "json", "ll": f"{lat},{lon}"})
+          try:
+              (out / "streetview_nearest.json").write_bytes(get(cbk_url))
+          except Exception as exc:
+              (out / "streetview_error.txt").write_text(repr(exc), encoding="utf-8")
+
+          readme = {
+              "purpose": "Static public map imagery and building geometry for a geolocation CTF",
+              "center": [lat, lon],
+              "note": "Downloaded data is treated only as data; no remote text is executed.",
+          }
+          (out / "README.json").write_text(json.dumps(readme, indent=2), encoding="utf-8")
+          PY
+
+      - name: Upload map bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: sacred-heart-map-bundle
+          path: out/
+          retention-days: 1
+          if-no-files-found: error
