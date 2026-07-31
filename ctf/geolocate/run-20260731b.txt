@@ -2,3 +2,4 @@ Trigger the isolated reverse-image geolocation workflow for the supplied static 
 Retry: dependency-free JPEG validation.
 Run: follow Yandex CBIR result pages as inert data.
 Retry: use the validated 192x144 source image.
+Run: collect raw result pages without server-side parsing.
