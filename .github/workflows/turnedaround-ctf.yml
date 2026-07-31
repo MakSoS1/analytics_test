@@ -1,0 +1,25 @@
+name: Turned Around CTF solver
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out temporary branch
+        uses: actions/checkout@v4
+      - name: Run offline solver
+        run: python3 ctf/turnedaround/solve.py
+      - name: Upload result for one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: turnedaround-result
+          path: result.txt
+          retention-days: 1
+          if-no-files-found: error
