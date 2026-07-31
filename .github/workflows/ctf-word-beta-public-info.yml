@@ -16,66 +16,54 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Fetch public challenge metadata as inert data
+      - name: Fetch raw public challenge metadata as inert data
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           mkdir -p public-info
 
           curl --location --compressed --max-time 30 \
             --user-agent 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)' \
             --dump-header public-info/challenges.headers \
             --output public-info/challenges.json \
-            "$TARGET_ORIGIN/api/challenges"
+            "$TARGET_ORIGIN/api/challenges" || true
 
           python3 - <<'PY'
           import json
           import pathlib
-          import subprocess
 
           root = pathlib.Path('public-info')
-          payload = json.loads((root / 'challenges.json').read_text('utf-8'))
-          data = payload.get('data', payload)
-          entries = data.get('entries', data) if isinstance(data, dict) else data
-          if not isinstance(entries, list):
-              raise SystemExit(f'Unexpected challenge list shape: {type(entries).__name__}')
-
-          matches = []
-          for entry in entries:
-              title = str(entry.get('title', ''))
-              slug = str(entry.get('slug', ''))
-              if 'say the word on beta' in title.lower() or 'word' in slug.lower() and 'beta' in slug.lower():
-                  matches.append(entry)
-
-          (root / 'matches.json').write_text(json.dumps(matches, indent=2, ensure_ascii=False), encoding='utf-8')
-          for index, entry in enumerate(matches):
-              challenge_id = entry.get('id')
-              if challenge_id is None:
-                  continue
-              subprocess.run([
-                  'curl', '--location', '--compressed', '--max-time', '30',
-                  '--user-agent', 'Mozilla/5.0 (compatible; public-ctf-metadata-check/1.0)',
-                  '--dump-header', str(root / f'detail-{index}.headers'),
-                  '--output', str(root / f'detail-{index}.json'),
-                  f'https://bushbash.cssa.club/api/challenges/{challenge_id}',
-              ], check=True)
+          raw = (root / 'challenges.json').read_text('utf-8', errors='replace') if (root / 'challenges.json').exists() else ''
+          try:
+              payload = json.loads(raw)
+              pretty = json.dumps(payload, indent=2, ensure_ascii=False)
+              shape = {'top_type': type(payload).__name__}
+              if isinstance(payload, dict):
+                  shape['top_keys'] = list(payload.keys())
+                  for key, value in payload.items():
+                      shape[f'{key}_type'] = type(value).__name__
+                      if isinstance(value, dict):
+                          shape[f'{key}_keys'] = list(value.keys())
+              (root / 'pretty.json').write_text(pretty, encoding='utf-8')
+              (root / 'shape.json').write_text(json.dumps(shape, indent=2), encoding='utf-8')
+          except Exception as exc:
+              (root / 'parse-error.txt').write_text(repr(exc), encoding='utf-8')
           PY
 
           {
-            echo '=== matching list entry ==='
-            cat public-info/matches.json
-            echo '=== public challenge details ==='
-            for f in public-info/detail-*.json; do
-              [ -e "$f" ] || continue
-              cat "$f"
-              echo
-            done
+            echo '=== headers ==='
+            cat public-info/challenges.headers 2>/dev/null || true
+            echo '=== response shape ==='
+            cat public-info/shape.json 2>/dev/null || true
+            echo '=== raw/pretty public JSON ==='
+            cat public-info/pretty.json 2>/dev/null || cat public-info/challenges.json 2>/dev/null || true
           } > public-info/summary.txt
 
       - name: Upload public response data
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ctf-word-beta-public-challenge
+          name: ctf-word-beta-public-challenge-raw
           path: public-info
           if-no-files-found: error
           retention-days: 1
