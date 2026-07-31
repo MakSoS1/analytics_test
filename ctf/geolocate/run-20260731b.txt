@@ -1,1 +1,2 @@
 Trigger the isolated reverse-image geolocation workflow for the supplied static CTF image.
+Retry: dependency-free JPEG validation.
