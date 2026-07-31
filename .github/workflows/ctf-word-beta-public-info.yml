@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - ctf-word-beta-info-20260731
+  pull_request:
+    branches:
+      - ctf-word-beta-info-20260731
 
 permissions:
   contents: read
