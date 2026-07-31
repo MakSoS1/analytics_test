@@ -13,14 +13,14 @@ permissions:
 jobs:
   infer:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - name: Check out trusted temporary base branch
         uses: actions/checkout@v4
         with:
           ref: ctf-geolocate-20260731
 
-      - name: Install GeoCLIP
+      - name: Install compatible GeoCLIP
         shell: bash
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: '1'
@@ -29,66 +29,28 @@ jobs:
           python3 -m pip install --quiet --upgrade pip
           python3 -m pip install --quiet geoclip pillow 'transformers==4.44.2'
 
-      - name: Prepare image variants
+      - name: Run one coordinate prediction
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p inputs results
-          cp ctf/geolocate/input-small.jpg inputs/source.jpg
-          python3 - <<'PY'
-          from PIL import Image, ImageEnhance, ImageOps
-          img=Image.open('inputs/source.jpg').convert('RGB')
-          img.save('inputs/source_rgb.jpg',quality=95)
-          ImageOps.autocontrast(img).save('inputs/source_autocontrast.jpg',quality=95)
-          ImageEnhance.Brightness(img).enhance(1.15).save('inputs/source_bright.jpg',quality=95)
-          ImageEnhance.Contrast(img).enhance(1.15).save('inputs/source_contrast.jpg',quality=95)
-          w,h=img.size
-          img.crop((int(w*0.03),int(h*0.03),int(w*0.97),int(h*0.97))).save('inputs/source_crop.jpg',quality=95)
-          img.resize((640,480)).save('inputs/source_upscaled.jpg',quality=95)
-          print('source size',img.size)
-          PY
-
-      - name: Run independent coordinate predictions
-        shell: bash
-        run: |
-          set -euo pipefail
+          mkdir -p results
           python3 - <<'PY'
           import json
-          from pathlib import Path
           import torch
           from geoclip import GeoCLIP
 
           torch.manual_seed(0)
           model=GeoCLIP()
-          rows={}
-          for path in sorted(Path('inputs').glob('*.jpg')):
-              try:
-                  gps,probs=model.predict(str(path),top_k=30)
-                  items=[]
-                  for (lat,lon),prob in zip(gps,probs):
-                      items.append({'lat':float(lat),'lon':float(lon),'probability':float(prob)})
-                  rows[path.name]=items
-                  print(path.name,items[:10])
-              except Exception as exc:
-                  rows[path.name]={'error':repr(exc)}
-                  print(path.name,'ERROR',repr(exc))
-          Path('results/geoclip_predictions.json').write_text(json.dumps(rows,indent=2))
-
-          counts={}; weighted={}
-          for values in rows.values():
-              if not isinstance(values,list):
-                  continue
-              for rank,item in enumerate(values):
-                  key=(round(item['lat']),round(item['lon']))
-                  counts[key]=counts.get(key,0)+1
-                  weighted[key]=weighted.get(key,0.0)+item['probability']/(rank+1)
-          consensus=[{'lat_bin':k[0],'lon_bin':k[1],'count':counts[k],'weighted_score':weighted[k]} for k in counts]
-          consensus.sort(key=lambda x:(x['count'],x['weighted_score']),reverse=True)
-          Path('results/geoclip_consensus.json').write_text(json.dumps(consensus,indent=2))
-          print('CONSENSUS',consensus[:40])
+          gps,probs=model.predict('ctf/geolocate/input-small.jpg',top_k=100)
+          items=[]
+          for (lat,lon),prob in zip(gps,probs):
+              items.append({'lat':float(lat),'lon':float(lon),'probability':float(prob)})
+          with open('results/geoclip_predictions.json','w') as f:
+              json.dump(items,f,indent=2)
+          print(json.dumps(items[:30]))
           PY
 
-      - name: Upload predictions
+      - name: Upload prediction
         if: always()
         uses: actions/upload-artifact@v4
         with:
