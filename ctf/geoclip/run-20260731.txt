@@ -2,3 +2,4 @@ Run trusted GeoCLIP inference on the supplied static CTF image.
 Retry after dependency-order fix.
 Run with the validated source image only.
 Run with Transformers 4.44.2 compatibility pin.
+Run a single-image top-100 prediction.
