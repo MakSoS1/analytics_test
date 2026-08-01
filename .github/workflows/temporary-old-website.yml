@@ -1,0 +1,67 @@
+name: temporary-old-website
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - old_website_probe.py
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.head_ref == 'old-website-20260801'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install probe dependencies
+        run: python3 -m pip install --disable-pip-version-check --quiet requests beautifulsoup4
+
+      - name: Run bounded passive probe
+        run: python3 old_website_probe.py
+
+      - name: Encrypt result
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -f old-web-raw/result.json
+          rm -rf old-web-package old-web-result
+          mkdir -p old-web-package old-web-result
+          tar -C old-web-raw -czf old-web-package/result.tar.gz .
+          openssl rand 32 > old-web-package/aes.key
+          openssl rand 16 > old-web-package/iv.bin
+          KEY_HEX="$(xxd -p -c 256 old-web-package/aes.key)"
+          IV_HEX="$(xxd -p -c 256 old-web-package/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in old-web-package/result.tar.gz -out old-web-package/result.enc
+          cat > old-web-package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAwlsBcapk31kwk5C42oSc
+          6nwtY9bKdXbfYj17MLgXsM1mDSeuYBPcqH+jmM+YKYHYQEcds9T7j0XaNp/5cdQ7
+          63BjMbtNu5t1WMjwAkMH/6fZx3mmSG/rHUHclXaBjKWsXZ35XKHEYrv7HHc358lf
+          STjFBEofkjXFEdCYo+8vFgqysprjN4p+deVCXXAJXTcLWJl3rbn+nOZ4vcLjCShU
+          svY4if+6QLxVa3fglnZE14z8sntTxuSRghesxpLniEnmKAl+BozCvfdHZ4Twb65N
+          hAnLT+y6ogu94M0Wlu7g5VY3eQ7L43MwZZ9IbdD39GvEgU6XHcC87ILqncRwVD6J
+          FtRBGmRdvFSG/hDZpcCP5KWlKQW+5tj8ouB756zGM5C0iAV4dffWx85t6Mr6svQ+
+          A3MMff8k8g1C83utgBB5QfP7y/CwR2FBO8Q2dNVx8SLTyJewDvXYUiXiJQcCGmj5
+          j1S/xmeJwru0ciqY6O44bu1oRXiYaIZCAHd7Fs0CXy9rAgMBAAE=
+          -----END PUBLIC KEY-----
+          PEM
+          openssl pkeyutl -encrypt -pubin -inkey old-web-package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in old-web-package/aes.key -out old-web-package/key.enc
+          base64 -w0 old-web-package/result.enc > old-web-result/result.enc.b64
+          base64 -w0 old-web-package/key.enc > old-web-result/key.enc.b64
+          base64 -w0 old-web-package/iv.bin > old-web-result/iv.bin.b64
+          sha256sum old-web-package/result.enc old-web-package/key.enc old-web-package/iv.bin > old-web-result/SHA256SUMS
+          rm -rf old-web-raw old-web-package
+
+      - name: Upload encrypted result
+        uses: actions/upload-artifact@v4
+        with:
+          name: old-website-encrypted-result
+          path: old-web-result/
+          retention-days: 1
+          if-no-files-found: error
