@@ -1,0 +1,29 @@
+name: mystery-server-ii-probe
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run bounded protocol probe
+        run: python3 ctf/mystery_server_ii_probe.py
+
+      - name: Upload private-to-run result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mystery-server-ii-result
+          path: ctf-result/
+          retention-days: 1
+          if-no-files-found: error
