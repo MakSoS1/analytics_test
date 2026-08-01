@@ -21,7 +21,7 @@ OUTPUT_FILE = OUTPUT_DIR / "result.json"
 FLAG_RE = re.compile(r"bushbash\{[^\r\n\x00\}]{1,256}\}")
 
 # Contains only the two LoRA matrices from the supplied challenge archive.
-PATCH_FILE = Path("matrix_patch.b64")
+PATCH_GLOB = "matrix_patch.part*"
 
 
 class LoRAEmbedding(nn.Module):
@@ -47,7 +47,11 @@ class LoRAEmbedding(nn.Module):
 
 
 def load_patch() -> tuple[np.ndarray, np.ndarray]:
-    compressed = base64.b64decode(PATCH_FILE.read_text(encoding="ascii").strip())
+    parts = sorted(Path(".").glob(PATCH_GLOB))
+    if not parts:
+        raise RuntimeError("No LoRA patch parts found")
+    encoded = "".join(part.read_text(encoding="ascii").strip() for part in parts)
+    compressed = base64.b64decode(encoded)
     archive = np.load(io.BytesIO(zlib.decompress(compressed)))
     a = archive["A"].astype(np.float32, copy=False)
     b = archive["B"].astype(np.float32, copy=False)
