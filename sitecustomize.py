@@ -12,3 +12,5 @@ def _read_bytes_or_empty(path: Path) -> bytes:
 
 
 Path.read_bytes = _read_bytes_or_empty
+
+# The trusted workflow also patches the checked-out probe directly.
