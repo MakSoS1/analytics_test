@@ -1,0 +1,113 @@
+name: Applicant 1444663 public check
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/applicant-1444663-public-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-public-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect public admissions pages
+        shell: bash
+        run: |
+          python -m pip install --quiet requests beautifulsoup4
+          python - <<'PY'
+          import json
+          import re
+          from urllib.parse import urljoin
+          import requests
+          from bs4 import BeautifulSoup
+
+          CODE = "1444663"
+          BASE = "https://www.postupashkin.ru/priem-2026/moi-shansy"
+          session = requests.Session()
+          session.headers.update({
+              "User-Agent": "Mozilla/5.0 (public admissions list verification; no authentication)"
+          })
+
+          def get(url):
+              try:
+                  r = session.get(url, timeout=25, allow_redirects=True)
+                  print(f"GET {url} -> {r.status_code} {r.url} {r.headers.get('content-type','')} len={len(r.content)}")
+                  return r
+              except Exception as exc:
+                  print(f"GET {url} FAILED: {exc}")
+                  return None
+
+          root = get(BASE)
+          if root is None:
+              raise SystemExit(1)
+
+          soup = BeautifulSoup(root.text, "html.parser")
+          print("\nFORMS:")
+          for form in soup.find_all("form"):
+              print({
+                  "action": form.get("action"),
+                  "method": form.get("method"),
+                  "inputs": [(i.get("name"), i.get("type"), i.get("value")) for i in form.find_all("input")],
+              })
+
+          scripts = []
+          for tag in soup.find_all("script"):
+              src = tag.get("src")
+              if src:
+                  scripts.append(urljoin(BASE, src))
+          print(f"\nSCRIPT COUNT: {len(scripts)}")
+
+          endpoint_candidates = set()
+          for src in scripts:
+              r = get(src)
+              if r is None or r.status_code != 200:
+                  continue
+              text = r.text
+              low = text.lower()
+              if any(k in low for k in ["forecast", "moi-shansy", "applicant", "номер заявления"]):
+                  print(f"\nMATCHING SCRIPT: {src}")
+                  for keyword in ["forecast", "moi-shansy", "applicant", "application"]:
+                      pos = low.find(keyword)
+                      if pos >= 0:
+                          print(f"--- around {keyword} ---")
+                          print(text[max(0,pos-500):pos+1200])
+                  for m in re.finditer(r"[\"']([^\"']{1,300}(?:forecast|moi-shansy|applicant)[^\"']{0,300})[\"']", text, re.I):
+                      candidate = m.group(1).replace("\\/", "/")
+                      if candidate.startswith("/"):
+                          endpoint_candidates.add(urljoin(BASE, candidate))
+
+          explicit = [
+              f"{BASE}?app={CODE}",
+              f"{BASE}?applicant={CODE}",
+              f"{BASE}?code={CODE}",
+              f"https://www.postupashkin.ru/priem-2026/forecast?app={CODE}",
+              f"https://www.postupashkin.ru/priem-2026/moi-shansy/forecast?app={CODE}",
+              f"https://www.postupashkin.ru/api/priem-2026/forecast?app={CODE}",
+          ]
+
+          print("\nPUBLIC CANDIDATE RESPONSES:")
+          seen = set()
+          for url in explicit + sorted(endpoint_candidates):
+              if url in seen:
+                  continue
+              seen.add(url)
+              if "pay" in url.lower() or "restore" in url.lower() or "access" in url.lower():
+                  continue
+              if "{" in url or "}" in url or len(url) > 500:
+                  continue
+              r = get(url)
+              if r is None:
+                  continue
+              ctype = r.headers.get("content-type", "")
+              text = r.text
+              interesting = CODE in text or "универс" in text.lower() or "вуз" in text.lower() or "направлен" in text.lower()
+              if "json" in ctype.lower() or interesting:
+                  print(f"\n--- RESPONSE {r.url} ---")
+                  print(text[:8000])
+
+          print("\nDone. Only unauthenticated public GET requests were used; no paid-access or login endpoint was called.")
+          PY
