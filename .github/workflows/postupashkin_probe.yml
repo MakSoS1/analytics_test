@@ -11,24 +11,28 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Inspect public form and endpoints
+      - name: Inspect public applicant teasers
         run: |
           python -m pip install --quiet requests beautifulsoup4
           python - <<'PY'
-          from urllib.parse import urljoin
           import json
+          import re
           import requests
           from bs4 import BeautifulSoup
 
           BASE = 'https://www.postupashkin.ru'
           URL = BASE + '/priem-2026/moi-shansy'
-          CODE = '1289499'
+          CODES = [
+              '2021331','1289499','967331','1441782','2318977','1795612',
+              '2052971','1760018','2175231','1444663','1421079','1586063',
+              '2341290','1263789','1252789','1826110','1952637','1072404','1609688'
+          ]
 
           session = requests.Session()
           session.headers.update({
@@ -36,70 +40,60 @@ jobs:
               'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
           })
 
-          response = session.get(URL, timeout=30)
-          print('GET_STATUS', response.status_code)
-          print('GET_URL', response.url)
-          print('CONTENT_TYPE', response.headers.get('content-type'))
-          print('HTML_LENGTH', len(response.text))
+          # Discover only public endpoints referenced by the delivered page.
+          base = session.get(URL, timeout=30)
+          print('BASE', base.status_code, len(base.text))
+          scripts = '\n'.join(tag.get_text('\n', strip=False) for tag in BeautifulSoup(base.text, 'html.parser').find_all('script'))
+          patterns = [
+              r"fetch\(\s*['\"]([^'\"]+)",
+              r"['\"](/[^'\"]*(?:chance|shans|moi-shansy|applicant|entrant)[^'\"]*)['\"]",
+          ]
+          endpoints = []
+          for pattern in patterns:
+              endpoints.extend(re.findall(pattern, scripts, flags=re.I))
+          print('PUBLIC_ENDPOINT_REFERENCES', json.dumps(sorted(set(endpoints)), ensure_ascii=False))
 
-          soup = BeautifulSoup(response.text, 'html.parser')
-          print('TITLE', soup.title.get_text(' ', strip=True) if soup.title else '')
+          for code in CODES:
+              response = session.get(URL, params={'app': code}, timeout=30, allow_redirects=True)
+              soup = BeautifulSoup(response.text, 'html.parser')
+              text = ' '.join(soup.get_text(' ', strip=True).split())
+              print('\n=== APPLICANT', code, '===')
+              print('STATUS', response.status_code, 'URL', response.url, 'LEN', len(response.text), 'CODE_PRESENT', code in response.text)
+              print('TITLE', soup.title.get_text(' ', strip=True) if soup.title else '')
 
-          forms = soup.find_all('form')
-          print('FORM_COUNT', len(forms))
-          for index, form in enumerate(forms):
-              action = urljoin(response.url, form.get('action') or '')
-              method = (form.get('method') or 'get').lower()
-              print('FORM', index, 'METHOD', method, 'ACTION', action)
-              inputs = []
-              for tag in form.find_all(['input', 'button', 'select', 'textarea']):
-                  item = {
-                      'tag': tag.name,
-                      'type': tag.get('type'),
-                      'name': tag.get('name'),
-                      'value': tag.get('value'),
-                      'placeholder': tag.get('placeholder'),
-                      'text': tag.get_text(' ', strip=True)[:100],
-                  }
-                  inputs.append(item)
-              print('FORM_FIELDS', index, json.dumps(inputs, ensure_ascii=False))
+              # Print concise visible fragments around the applicant code and admission terminology.
+              positions = []
+              low = text.lower()
+              for needle in [code, 'ваши заявления', 'согласие', 'приоритет', 'шанс', 'вуз', 'бюджет']:
+                  start = 0
+                  while True:
+                      pos = low.find(needle.lower(), start)
+                      if pos < 0:
+                          break
+                      positions.append(pos)
+                      start = pos + max(1, len(needle))
+              merged = []
+              for pos in sorted(set(positions)):
+                  a, b = max(0, pos - 250), min(len(text), pos + 1000)
+                  if merged and a <= merged[-1][1] + 100:
+                      merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+                  else:
+                      merged.append((a, b))
+              for idx, (a, b) in enumerate(merged[:8]):
+                  print('VISIBLE_FRAGMENT', idx, text[a:b])
 
-              payload = {}
-              for tag in form.find_all(['input', 'select', 'textarea']):
-                  name = tag.get('name')
-                  if not name:
-                      continue
-                  value = tag.get('value') or ''
-                  searchable = ' '.join(filter(None, [name, tag.get('placeholder'), tag.get('id')])).lower()
-                  if any(token in searchable for token in ['code', 'applicant', 'entrant', 'number', 'nomer', 'statement', 'application', 'unique']):
-                      value = CODE
-                  payload[name] = value
-              if payload:
-                  try:
-                      if method == 'post':
-                          submitted = session.post(action, data=payload, timeout=30, allow_redirects=True)
-                      else:
-                          submitted = session.get(action, params=payload, timeout=30, allow_redirects=True)
-                      print('SUBMIT', index, submitted.status_code, submitted.url, 'LEN', len(submitted.text), 'CODE_PRESENT', CODE in submitted.text)
-                      print('SUBMIT_SNIPPET', index, BeautifulSoup(submitted.text, 'html.parser').get_text(' ', strip=True)[:1500])
-                  except Exception as exc:
-                      print('SUBMIT_ERROR', index, repr(exc))
+              # Extract public bootstrap/config objects embedded into the response without using access keys.
+              for marker in ['PAID_BOOTSTRAP', 'FREE_BOOTSTRAP', 'BOOTSTRAP', 'chanceData', 'CHANCE_DATA']:
+                  for match in re.finditer(r'\b' + re.escape(marker) + r'\s*=\s*([^;]+);', response.text):
+                      value = match.group(1).strip()
+                      print('EMBEDDED', marker, value[:12000])
 
-          print('SCRIPT_COUNT', len(soup.find_all('script')))
-          for script in soup.find_all('script'):
-              src = script.get('src')
-              text = script.get_text(' ', strip=True)
-              if src:
-                  print('SCRIPT_SRC', urljoin(response.url, src))
-              elif any(token in text.lower() for token in ['shans', 'chance', 'applicant', 'entrant', 'code', 'заявлен']):
-                  print('INLINE_SCRIPT', text[:4000])
-
-          for key in ['code', 'applicant', 'applicant_code', 'entrant', 'number', 'statement']:
-              try:
-                  test = session.get(URL, params={key: CODE}, timeout=30, allow_redirects=True)
-                  text = BeautifulSoup(test.text, 'html.parser').get_text(' ', strip=True)
-                  print('QUERY_TEST', key, test.status_code, test.url, 'LEN', len(test.text), 'CODE_PRESENT', CODE in test.text)
-                  print('QUERY_SNIPPET', key, text[:500])
-              except Exception as exc:
-                  print('QUERY_ERROR', key, repr(exc))
+              # Show all lines containing this code or public API paths, capped for log size.
+              relevant = []
+              for line in response.text.splitlines():
+                  stripped = line.strip()
+                  if code in stripped or re.search(r'fetch\(|/priem-2026/[^"\']+|above_committed|above_leaving|place_consent', stripped, re.I):
+                      relevant.append(stripped)
+              for idx, line in enumerate(relevant[:80]):
+                  print('HTML_LINE', idx, line[:5000])
           PY
