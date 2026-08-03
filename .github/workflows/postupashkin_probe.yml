@@ -1,0 +1,105 @@
+name: Postupashkin public-page probe
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/postupashkin_probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Inspect public form and endpoints
+        run: |
+          python -m pip install --quiet requests beautifulsoup4
+          python - <<'PY'
+          from urllib.parse import urljoin
+          import json
+          import requests
+          from bs4 import BeautifulSoup
+
+          BASE = 'https://www.postupashkin.ru'
+          URL = BASE + '/priem-2026/moi-shansy'
+          CODE = '1289499'
+
+          session = requests.Session()
+          session.headers.update({
+              'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36',
+              'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
+          })
+
+          response = session.get(URL, timeout=30)
+          print('GET_STATUS', response.status_code)
+          print('GET_URL', response.url)
+          print('CONTENT_TYPE', response.headers.get('content-type'))
+          print('HTML_LENGTH', len(response.text))
+
+          soup = BeautifulSoup(response.text, 'html.parser')
+          print('TITLE', soup.title.get_text(' ', strip=True) if soup.title else '')
+
+          forms = soup.find_all('form')
+          print('FORM_COUNT', len(forms))
+          for index, form in enumerate(forms):
+              action = urljoin(response.url, form.get('action') or '')
+              method = (form.get('method') or 'get').lower()
+              print('FORM', index, 'METHOD', method, 'ACTION', action)
+              inputs = []
+              for tag in form.find_all(['input', 'button', 'select', 'textarea']):
+                  item = {
+                      'tag': tag.name,
+                      'type': tag.get('type'),
+                      'name': tag.get('name'),
+                      'value': tag.get('value'),
+                      'placeholder': tag.get('placeholder'),
+                      'text': tag.get_text(' ', strip=True)[:100],
+                  }
+                  inputs.append(item)
+              print('FORM_FIELDS', index, json.dumps(inputs, ensure_ascii=False))
+
+              payload = {}
+              for tag in form.find_all(['input', 'select', 'textarea']):
+                  name = tag.get('name')
+                  if not name:
+                      continue
+                  value = tag.get('value') or ''
+                  searchable = ' '.join(filter(None, [name, tag.get('placeholder'), tag.get('id')])).lower()
+                  if any(token in searchable for token in ['code', 'applicant', 'entrant', 'number', 'nomer', 'statement', 'application', 'unique']):
+                      value = CODE
+                  payload[name] = value
+              if payload:
+                  try:
+                      if method == 'post':
+                          submitted = session.post(action, data=payload, timeout=30, allow_redirects=True)
+                      else:
+                          submitted = session.get(action, params=payload, timeout=30, allow_redirects=True)
+                      print('SUBMIT', index, submitted.status_code, submitted.url, 'LEN', len(submitted.text), 'CODE_PRESENT', CODE in submitted.text)
+                      print('SUBMIT_SNIPPET', index, BeautifulSoup(submitted.text, 'html.parser').get_text(' ', strip=True)[:1500])
+                  except Exception as exc:
+                      print('SUBMIT_ERROR', index, repr(exc))
+
+          print('SCRIPT_COUNT', len(soup.find_all('script')))
+          for script in soup.find_all('script'):
+              src = script.get('src')
+              text = script.get_text(' ', strip=True)
+              if src:
+                  print('SCRIPT_SRC', urljoin(response.url, src))
+              elif any(token in text.lower() for token in ['shans', 'chance', 'applicant', 'entrant', 'code', 'заявлен']):
+                  print('INLINE_SCRIPT', text[:4000])
+
+          for key in ['code', 'applicant', 'applicant_code', 'entrant', 'number', 'statement']:
+              try:
+                  test = session.get(URL, params={key: CODE}, timeout=30, allow_redirects=True)
+                  text = BeautifulSoup(test.text, 'html.parser').get_text(' ', strip=True)
+                  print('QUERY_TEST', key, test.status_code, test.url, 'LEN', len(test.text), 'CODE_PRESENT', CODE in test.text)
+                  print('QUERY_SNIPPET', key, text[:500])
+              except Exception as exc:
+                  print('QUERY_ERROR', key, repr(exc))
+          PY
