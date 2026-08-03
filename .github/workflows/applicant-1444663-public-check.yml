@@ -14,100 +14,55 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect public admissions pages
+      - name: Summarize public applicant positions
         shell: bash
         run: |
-          python -m pip install --quiet requests beautifulsoup4
           python - <<'PY'
           import json
-          import re
-          from urllib.parse import urljoin
-          import requests
-          from bs4 import BeautifulSoup
+          import urllib.request
 
-          CODE = "1444663"
-          BASE = "https://www.postupashkin.ru/priem-2026/moi-shansy"
-          session = requests.Session()
-          session.headers.update({
-              "User-Agent": "Mozilla/5.0 (public admissions list verification; no authentication)"
-          })
+          code = "1444663"
+          url = f"https://www.postupashkin.ru/priem-2026/forecast?app={code}"
+          req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 public admissions verification"})
+          with urllib.request.urlopen(req, timeout=30) as response:
+              data = json.load(response)
 
-          def get(url):
-              try:
-                  r = session.get(url, timeout=25, allow_redirects=True)
-                  print(f"GET {url} -> {r.status_code} {r.url} {r.headers.get('content-type','')} len={len(r.content)}")
-                  return r
-              except Exception as exc:
-                  print(f"GET {url} FAILED: {exc}")
-                  return None
+          positions = data.get("positions", [])
+          print(f"app={data.get('app')} found={data.get('found')} positions={len(positions)}")
+          print("TOP_LEVEL_KEYS", sorted(data.keys()))
+          for key, value in data.items():
+              if key != "positions" and value not in (None, [], {}, ""):
+                  print("TOP", key, json.dumps(value, ensure_ascii=False)[:4000])
 
-          root = get(BASE)
-          if root is None:
-              raise SystemExit(1)
+          print("\nPOSITIONS")
+          for i, p in enumerate(positions, 1):
+              row = {
+                  "n": i,
+                  "university": p.get("short_name"),
+                  "full_name": p.get("full_name"),
+                  "city": p.get("city"),
+                  "program": p.get("program_title") or p.get("dir_name"),
+                  "code": p.get("code"),
+                  "level": p.get("level_name"),
+                  "form": p.get("form_name"),
+                  "place_type": p.get("place_type_name"),
+                  "places": p.get("places"),
+                  "rating": p.get("rating"),
+                  "calculated_place": p.get("place"),
+                  "priority": p.get("priority"),
+                  "consent": p.get("consent"),
+                  "score": p.get("sum_show", p.get("sum_mark")),
+                  "achievements": p.get("ach"),
+                  "applicants": p.get("applicants_count"),
+                  "consents_in_group": p.get("consents_count"),
+                  "status_id": p.get("status_id"),
+                  "withdrawn": p.get("withdrawn"),
+                  "locked": p.get("locked"),
+                  "chance": p.get("chance"),
+                  "current_chance": p.get("current_chance"),
+                  "group_id": p.get("group_id"),
+              }
+              print(json.dumps(row, ensure_ascii=False, sort_keys=False))
 
-          soup = BeautifulSoup(root.text, "html.parser")
-          print("\nFORMS:")
-          for form in soup.find_all("form"):
-              print({
-                  "action": form.get("action"),
-                  "method": form.get("method"),
-                  "inputs": [(i.get("name"), i.get("type"), i.get("value")) for i in form.find_all("input")],
-              })
-
-          scripts = []
-          for tag in soup.find_all("script"):
-              src = tag.get("src")
-              if src:
-                  scripts.append(urljoin(BASE, src))
-          print(f"\nSCRIPT COUNT: {len(scripts)}")
-
-          endpoint_candidates = set()
-          for src in scripts:
-              r = get(src)
-              if r is None or r.status_code != 200:
-                  continue
-              text = r.text
-              low = text.lower()
-              if any(k in low for k in ["forecast", "moi-shansy", "applicant", "номер заявления"]):
-                  print(f"\nMATCHING SCRIPT: {src}")
-                  for keyword in ["forecast", "moi-shansy", "applicant", "application"]:
-                      pos = low.find(keyword)
-                      if pos >= 0:
-                          print(f"--- around {keyword} ---")
-                          print(text[max(0,pos-500):pos+1200])
-                  for m in re.finditer(r"[\"']([^\"']{1,300}(?:forecast|moi-shansy|applicant)[^\"']{0,300})[\"']", text, re.I):
-                      candidate = m.group(1).replace("\\/", "/")
-                      if candidate.startswith("/"):
-                          endpoint_candidates.add(urljoin(BASE, candidate))
-
-          explicit = [
-              f"{BASE}?app={CODE}",
-              f"{BASE}?applicant={CODE}",
-              f"{BASE}?code={CODE}",
-              f"https://www.postupashkin.ru/priem-2026/forecast?app={CODE}",
-              f"https://www.postupashkin.ru/priem-2026/moi-shansy/forecast?app={CODE}",
-              f"https://www.postupashkin.ru/api/priem-2026/forecast?app={CODE}",
-          ]
-
-          print("\nPUBLIC CANDIDATE RESPONSES:")
-          seen = set()
-          for url in explicit + sorted(endpoint_candidates):
-              if url in seen:
-                  continue
-              seen.add(url)
-              if "pay" in url.lower() or "restore" in url.lower() or "access" in url.lower():
-                  continue
-              if "{" in url or "}" in url or len(url) > 500:
-                  continue
-              r = get(url)
-              if r is None:
-                  continue
-              ctype = r.headers.get("content-type", "")
-              text = r.text
-              interesting = CODE in text or "универс" in text.lower() or "вуз" in text.lower() or "направлен" in text.lower()
-              if "json" in ctype.lower() or interesting:
-                  print(f"\n--- RESPONSE {r.url} ---")
-                  print(text[:8000])
-
-          print("\nDone. Only unauthenticated public GET requests were used; no paid-access or login endpoint was called.")
+          print("\nOnly the site's unauthenticated public forecast endpoint was read. No access token, login, email, payment or restore endpoint was used.")
           PY
