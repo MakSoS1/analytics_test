@@ -1,0 +1,74 @@
+name: Fetch public competitor forecasts
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch public forecast JSON for competitors
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p forecasts
+          python - <<'PY'
+          import json, time, requests
+          from pathlib import Path
+
+          ids = ['2021331','1441782','2052971','1760018','2175231','1444663','2341290','1952637']
+          s = requests.Session()
+          s.headers.update({'User-Agent':'Mozilla/5.0','Accept':'application/json'})
+          for app in ids:
+              url=f'https://www.postupashkin.ru/priem-2026/forecast?app={app}'
+              last=None
+              for attempt in range(8):
+                  r=s.get(url, timeout=90, cache_control='no-cache') if False else s.get(url, timeout=90, headers={'Cache-Control':'no-cache'})
+                  print(app, attempt, r.status_code, r.text[:200])
+                  r.raise_for_status()
+                  try:
+                      data=r.json()
+                  except Exception:
+                      data={'raw':r.text,'status_code':r.status_code}
+                  last=data
+                  if isinstance(data,dict) and not data.get('pending'):
+                      break
+                  time.sleep(8)
+              Path(f'forecasts/{app}.json').write_text(json.dumps(last,ensure_ascii=False,indent=2)+'\n','utf-8')
+          PY
+      - name: Produce compact summary
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          out=[]
+          for p in sorted(Path('forecasts').glob('*.json')):
+              d=json.loads(p.read_text('utf-8'))
+              row={'app':p.stem,'found':d.get('found'),'access':d.get('access'),'pending':d.get('pending'),'positions':[]}
+              for x in d.get('positions') or []:
+                  row['positions'].append({k:x.get(k) for k in [
+                      'short_name','full_name','code','dir_name','program_title','program_title_vuz',
+                      'place_type_name','form_name','score','priority','place','place_all','place_consent',
+                      'consent','consent_effective','consent_uni_id','consent_uni_name','consent_conflict',
+                      'higher_priority','higher_priority_pass','withdrawn','locked','places','places_analysis',
+                      'above_committed','above_total','above_leaving','source_ts','source_url','group_id','university_id'
+                  ]})
+              out.append(row)
+          Path('forecasts/summary.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n','utf-8')
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+      - name: Upload forecasts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: competitor-forecasts
+          path: forecasts
+          retention-days: 1
