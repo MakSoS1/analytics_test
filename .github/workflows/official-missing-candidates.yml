@@ -1,0 +1,92 @@
+name: Check remaining competitors on official sites
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install parser
+        run: python -m pip install --quiet requests beautifulsoup4
+      - name: Search official current lists
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p missing/raw
+          python - <<'PY'
+          import concurrent.futures,json,re
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+          UA='Mozilla/5.0 (X11; Linux x86_64) Chrome/138 Safari/537.36'
+          out={}
+
+          # СПбГУПТД uses the same official public report API as the visible ranking page.
+          base='https://priem.sutd.ru'; target='1952637'
+          try:
+            s=requests.Session();s.headers['User-Agent']=UA
+            specs=s.get(base+'/api/specialties/enroll/2026/1/0',timeout=90).json()['data']
+            tasks=[]
+            for x in specs:
+              for src in x.get('specialtySources',[]):
+                if src.get('sourceId')==1:
+                  tasks.append({'id':x['specialtyId'],'code':x.get('specialtyCode'),'name':x.get('specialtyName'),'note':x.get('specialtyNote'),'places':src.get('admissionNumber')})
+            def one(x):
+              ss=requests.Session();ss.headers.update({'User-Agent':UA,'Referer':base+f"/rating/{x['id']}#1"})
+              rec={**x}
+              try:
+                r=ss.get(base+f"/api/freports/list/{x['id']}/1/2",timeout=80)
+                m=re.search(r'reportId=([a-f0-9]+)',r.text,re.I)
+                if not m:return rec
+                rr=ss.post(base+f'/_fr/preview.getReport?reportId={m.group(1)}&renderBody=yes',timeout=100)
+                plain=' '.join(BeautifulSoup(rr.text,'html.parser').get_text(' ',strip=True).split())
+                if target in plain:
+                  sn=[]
+                  for z in re.finditer(target,plain):sn.append(plain[max(0,z.start()-900):z.start()+3000])
+                  rec['matches']=sn[:5]
+                  Path(f"missing/raw/sutd-{x['id']}.html").write_text(rr.text,'utf-8')
+              except Exception as e:rec['error']=repr(e)
+              return rec
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex: results=list(ex.map(one,tasks))
+            out['sutd_1952637']={'groups':len(tasks),'matches':[x for x in results if x.get('matches')],'errors':sum(1 for x in results if x.get('error'))}
+          except Exception as e:out['sutd_1952637']={'error':repr(e)}
+
+          # PGUPS current official preliminary allocation page.
+          try:
+            r=requests.get('https://priem.pgups.ru/index.php/monitoring/vo/applicants-distribution',headers={'User-Agent':UA},timeout=120,verify=False)
+            Path('missing/raw/pgups.html').write_bytes(r.content)
+            soup=BeautifulSoup(r.text,'html.parser');plain=' '.join(soup.get_text(' ',strip=True).split())
+            code='2341290';sn=[]
+            for z in re.finditer(code,plain):sn.append(plain[max(0,z.start()-1200):z.start()+4000])
+            out['pgups_2341290']={'status':r.status_code,'bytes':len(r.content),'contains':bool(sn),'matches':sn[:10],'title':soup.title.get_text(' ',strip=True) if soup.title else None}
+          except Exception as e:out['pgups_2341290']={'error':repr(e)}
+
+          # RGUTIS official full applicants list.
+          for url in ['https://sp.rguts.ru/view_list.php','https://sp.rguts.ru/ks_list.php']:
+            try:
+              r=requests.get(url,headers={'User-Agent':UA},timeout=150,verify=False)
+              name='rgutis-'+url.rsplit('/',1)[-1]
+              Path(f'missing/raw/{name}.html').write_bytes(r.content)
+              text=r.content.decode(r.encoding or 'utf-8','replace');plain=' '.join(BeautifulSoup(text,'html.parser').get_text(' ',strip=True).split())
+              code='2341290';sn=[]
+              for z in re.finditer(code,plain):sn.append(plain[max(0,z.start()-1200):z.start()+4000])
+              out[name]={'status':r.status_code,'bytes':len(r.content),'contains':bool(sn),'matches':sn[:10]}
+            except Exception as e:out['rgutis_'+url.rsplit('/',1)[-1]]={'error':repr(e)}
+          Path('missing/result.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),'utf-8')
+          print(json.dumps(out,ensure_ascii=False,indent=2)[:200000])
+          PY
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-missing-candidates
+          path: missing
+          retention-days: 2
