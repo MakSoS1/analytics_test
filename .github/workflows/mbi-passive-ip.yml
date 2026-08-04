@@ -1,0 +1,71 @@
+name: MBI passive IP discovery
+
+on:
+  push:
+    branches: [mbi-diagnostic-run]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Query passive sources and alternate hosts
+        shell: bash
+        run: |
+          set +e
+          mkdir -p passive-ip
+          OUT=passive-ip/report.txt
+          : > "$OUT"
+
+          query() {
+            local name="$1" url="$2" file="$3"
+            {
+              echo
+              echo "===== $name ====="
+              echo "$url"
+              curl -sS -L --connect-timeout 10 --max-time 35 -A 'Mozilla/5.0' -D "passive-ip/${file}.headers" "$url" -o "passive-ip/$file"
+              rc=$?
+              echo "curl_exit=$rc"
+              echo '--- headers ---'
+              cat "passive-ip/${file}.headers" 2>/dev/null
+              echo '--- body ---'
+              head -c 50000 "passive-ip/$file" 2>/dev/null
+              echo
+            } >> "$OUT" 2>&1
+          }
+
+          date -u >> "$OUT"
+          query 'urlscan inet host' 'https://urlscan.io/api/v1/search/?q=domain:inet.ibi.spb.ru' 'urlscan-inet.json'
+          query 'urlscan newinet host' 'https://urlscan.io/api/v1/search/?q=domain:newinet.ibi.spb.ru' 'urlscan-newinet.json'
+          query 'urlscan ibi.spb.ru zone' 'https://urlscan.io/api/v1/search/?q=domain:ibi.spb.ru' 'urlscan-zone.json'
+          query 'Mnemonic passive DNS inet' 'https://api.mnemonic.no/pdns/v3/inet.ibi.spb.ru' 'mnemonic-inet.json'
+          query 'Mnemonic passive DNS newinet' 'https://api.mnemonic.no/pdns/v3/newinet.ibi.spb.ru' 'mnemonic-newinet.json'
+          query 'BufferOver DNS zone' 'https://dns.bufferover.run/dns?q=.ibi.spb.ru' 'bufferover.json'
+          query 'BufferOver TLS zone' 'https://tls.bufferover.run/dns?q=.ibi.spb.ru' 'bufferover-tls.json'
+          query 'OTX hostname passive DNS' 'https://otx.alienvault.com/api/v1/indicators/hostname/inet.ibi.spb.ru/passive_dns' 'otx-hostname.json'
+          query 'Subdomain Center ibispb.ru' 'https://api.subdomain.center/?domain=ibispb.ru' 'subdomain-center-ibispb.json'
+          query 'Subdomain Center ibi.spb.ru' 'https://api.subdomain.center/?domain=ibi.spb.ru' 'subdomain-center-ibi.json'
+
+          {
+            echo
+            echo '===== public DNS for candidate hosts ====='
+            for h in inet.ibi.spb.ru newinet.ibi.spb.ru ibi.spb.ru www.ibi.spb.ru inet.ibispb.ru newinet.ibispb.ru; do
+              echo "--- $h ---"
+              dig @1.1.1.1 +time=5 +tries=1 +short A "$h"
+              dig @8.8.8.8 +time=5 +tries=1 +short A "$h"
+            done
+          } >> "$OUT" 2>&1
+      - name: Upload passive IP results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mbi-passive-ip
+          path: passive-ip
+          retention-days: 3
