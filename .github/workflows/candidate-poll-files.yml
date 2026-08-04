@@ -1,0 +1,57 @@
+name: Poll fresh competitor forecast files
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Poll public result files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p poll
+          python - <<'PY'
+          import json, time, requests
+          from pathlib import Path
+
+          jobs={
+            '1441782':('/fc/f35441b27849c1eaa6230c9702a593f8d.json',1785864356),
+            '1760018':('/fc/f26814266a8440f9a98782ac3cc002703.json',1785864294),
+            '1952637':('/fc/f851d464f2f1ea3734a11d113ddff8cbe.json',1785864409),
+          }
+          base='https://postup-static.storage.yandexcloud.net'
+          s=requests.Session(); s.headers.update({'User-Agent':'Mozilla/5.0','Accept':'application/json','Cache-Control':'no-cache'})
+          for app,(path,min_ts) in jobs.items():
+              last={}
+              for n in range(80):
+                  r=s.get(base+path,params={'t':int(time.time()*1000)},timeout=20)
+                  print(app,n,r.status_code,r.headers.get('Last-Modified'))
+                  if r.ok:
+                      try: last=r.json()
+                      except Exception: last={'raw':r.text}
+                      lm=r.headers.get('Last-Modified')
+                      last['_http_last_modified']=lm
+                      if isinstance(last,dict) and last.get('positions'):
+                          break
+                  if n in (0,10,30):
+                      nf=s.get(base+path+'.nofile',params={'t':int(time.time()*1000)},timeout=20)
+                      print(app,'nofile',nf.status_code,nf.text[:200])
+                  time.sleep(4)
+              Path(f'poll/{app}.json').write_text(json.dumps(last,ensure_ascii=False,indent=2)+'\n','utf-8')
+          PY
+      - name: Upload poll results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: competitor-poll-files
+          path: poll
+          retention-days: 1
