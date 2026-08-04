@@ -1,0 +1,101 @@
+name: MBI one-shot current check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mbi-one-shot-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and parse current official list
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          curl -fsS -4 --connect-timeout 10 --max-time 60 --retry 3 --retry-delay 2 \
+            --resolve inet.ibi.spb.ru:80:195.5.154.130 \
+            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36' \
+            -e 'https://ibispb.ru/abitur/bachelor/terms-and-conditions-of-admission/' \
+            'http://inet.ibi.spb.ru/raspisan/ks/cb2026.php?c=bak-o-b' \
+            -o output/MBI_очная_бюджет.html
+          python - <<'PY'
+          import html, json, re
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+
+          raw = Path('output/MBI_очная_бюджет.html').read_text(encoding='utf-8', errors='replace')
+          marker = '38.05.01 «Экономическая безопасность»'
+          start = raw.find(marker)
+          if start < 0:
+              raise SystemExit('Target program not found')
+          next_list = raw.find('Конкурсный список лиц, подавших документы', start + len(marker))
+          block = raw[start:next_list if next_list >= 0 else len(raw)]
+          date_match = re.search(r'на\s+(\d{2}\s+[^<]+?\s+\d{4}\s+года)', block, flags=re.I)
+          source_date = html.unescape(date_match.group(1)).strip() if date_match else None
+          m = re.search(r'<h3[^>]*>\s*Основные места\s*</h3>', block, flags=re.I | re.S)
+          if not m:
+              m = re.search(r'>\s*Основные места\s*<', block, flags=re.I | re.S)
+          if not m:
+              raise SystemExit('Main table heading not found')
+          ts = block.find('<table', m.end())
+          te = block.find('</table>', ts)
+          table = block[ts:te + len('</table>')]
+
+          def clean(v):
+              v = re.sub(r'<[^>]+>', '', v, flags=re.S)
+              return re.sub(r'\s+', ' ', html.unescape(v)).strip()
+
+          rows = []
+          for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', table, flags=re.I | re.S):
+              cells = [clean(c) for c in re.findall(r'<td[^>]*>(.*?)</td>', tr, flags=re.I | re.S)]
+              if len(cells) < 2 or not cells[0].isdigit():
+                  continue
+              note = cells[-1]
+              score = None
+              for c in reversed(cells[:-1]):
+                  if c.isdigit() and 100 <= int(c) <= 400:
+                      score = int(c)
+                      break
+              rows.append({
+                  'position': int(cells[0]),
+                  'id': cells[1],
+                  'score': score,
+                  'note': note,
+                  'consent': 'получено согласие на зачисление' in note.lower(),
+              })
+
+          idx = next(i for i, r in enumerate(rows) if r['id'] == '1609688')
+          own = rows[idx]
+          above = rows[:idx]
+          consents = [r for r in above if r['consent']]
+          result = {
+              'checked_at_msk': datetime.now(timezone(timedelta(hours=3))).strftime('%d.%m.%Y %H:%M:%S МСК'),
+              'source_date': source_date,
+              'general_position': own['position'],
+              'score': own['score'],
+              'own_consent': own['consent'],
+              'consents_above_count': len(consents),
+              'consent_rank': len(consents) + 1 if own['consent'] else None,
+              'consents_above': consents,
+              'without_consent_above': [r for r in above if not r['consent']],
+              'total_main_candidates': len(rows),
+          }
+          Path('output/result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(result, ensure_ascii=False, indent=2))
+          PY
+      - name: Upload one-shot result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mbi-one-shot-current
+          path: output
+          retention-days: 1
