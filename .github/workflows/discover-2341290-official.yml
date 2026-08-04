@@ -1,0 +1,54 @@
+name: Discover official list links for 2341290
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch group pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p discover234
+          python - <<'PY'
+          import json
+          from urllib.parse import urljoin
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+          pages={
+            'pgups':'https://www.postupashkin.ru/catalog/peterburgskiy-gu-putey-soobscheniya/priem-2026/list/186368',
+            'rgutis':'https://www.postupashkin.ru/catalog/rgutis/priem-2026/list/41916',
+            'lgu':'https://www.postupashkin.ru/catalog/lgu-im-a-s-pushkina/priem-2026/list/27969',
+          }
+          s=requests.Session();s.headers['User-Agent']='Mozilla/5.0'
+          out={}
+          for name,u in pages.items():
+            r=s.get(u,timeout=60);Path(f'discover234/{name}.html').write_bytes(r.content)
+            soup=BeautifulSoup(r.text,'html.parser')
+            links=[]
+            for a in soup.find_all('a',href=True):
+              links.append({'text':' '.join(a.get_text(' ',strip=True).split()),'href':urljoin(r.url,a['href']),'attrs':dict(a.attrs)})
+            scripts=[]
+            for sc in soup.find_all('script'):
+              if sc.get('src'):scripts.append(urljoin(r.url,sc['src']))
+              elif sc.string and any(x in sc.string.lower() for x in ['source','official','vuz','спис']):scripts.append(sc.string[:10000])
+            out[name]={'status':r.status_code,'url':r.url,'title':soup.title.get_text(' ',strip=True) if soup.title else None,'links':links,'scripts':scripts,'text':' '.join(soup.get_text(' ',strip=True).split())[:20000]}
+          Path('discover234/result.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),'utf-8')
+          print(json.dumps(out,ensure_ascii=False,indent=2)[:200000])
+          PY
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: discover-2341290-official
+          path: discover234
+          retention-days: 2
