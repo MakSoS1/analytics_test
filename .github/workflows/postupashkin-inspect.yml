@@ -1,0 +1,81 @@
+name: Inspect Postupashkin applicant search
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch page and inspect forms/scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p inspect/js
+          PAGE='https://www.postupashkin.ru/priem-2026/moi-shansy?vuz=itmo'
+          curl -fsSL --compressed -A 'Mozilla/5.0' "$PAGE" -o inspect/page.html
+          python - <<'PY'
+          from bs4 import BeautifulSoup
+          from urllib.parse import urljoin
+          from pathlib import Path
+          import json, requests, re
+
+          base='https://www.postupashkin.ru/priem-2026/moi-shansy?vuz=itmo'
+          text=Path('inspect/page.html').read_text('utf-8','replace')
+          soup=BeautifulSoup(text,'html.parser')
+          forms=[]
+          for f in soup.find_all('form'):
+              forms.append({
+                  'action': urljoin(base, f.get('action') or ''),
+                  'method': (f.get('method') or 'get').lower(),
+                  'inputs': [
+                      {'name': i.get('name'), 'type': i.get('type'), 'value': i.get('value'), 'placeholder': i.get('placeholder')}
+                      for i in f.find_all(['input','button','select','textarea'])
+                  ],
+                  'html': str(f)[:5000],
+              })
+          Path('inspect/forms.json').write_text(json.dumps(forms,ensure_ascii=False,indent=2),'utf-8')
+          scripts=[]
+          session=requests.Session(); session.headers['User-Agent']='Mozilla/5.0'
+          for idx,s in enumerate(soup.find_all('script')):
+              src=s.get('src')
+              if src:
+                  u=urljoin(base,src)
+                  scripts.append(u)
+                  try:
+                      r=session.get(u,timeout=30)
+                      Path(f'inspect/js/{idx:03d}.js').write_bytes(r.content)
+                  except Exception as e:
+                      Path(f'inspect/js/{idx:03d}.error.txt').write_text(repr(e))
+              elif s.string:
+                  Path(f'inspect/js/inline-{idx:03d}.js').write_text(s.string,'utf-8')
+          Path('inspect/scripts.txt').write_text('\n'.join(scripts),'utf-8')
+          needles=['moi-shansy','applicant','entrant','code','номер заявления','api/','fetch(','XMLHttpRequest','formData','restore','payment']
+          out=[]
+          for p in Path('inspect/js').glob('*'):
+              try: data=p.read_text('utf-8','replace')
+              except: continue
+              for n in needles:
+                  if n.lower() in data.lower():
+                      for m in re.finditer(re.escape(n),data,re.I):
+                          a=max(0,m.start()-500); b=min(len(data),m.end()+1200)
+                          out.append(f'===== {p} :: {n} =====\n{data[a:b]}\n')
+                          if len(out)>300: break
+                  if len(out)>300: break
+              if len(out)>300: break
+          Path('inspect/grep.txt').write_text('\n'.join(out),'utf-8')
+          print(json.dumps(forms,ensure_ascii=False,indent=2))
+          PY
+      - name: Upload inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: postupashkin-inspection
+          path: inspect
+          retention-days: 1
