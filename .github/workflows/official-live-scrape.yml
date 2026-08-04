@@ -1,0 +1,130 @@
+name: Live official admissions API checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install parser
+        run: python -m pip install --quiet requests beautifulsoup4
+      - name: Query official sites directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p live/raw
+          python - <<'PY'
+          from __future__ import annotations
+          import json,re
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/138 Safari/537.36'
+          out={}
+
+          def save(name,r):
+            Path(f'live/raw/{name}.bin').write_bytes(r.content)
+            return {'url':r.url,'status':r.status_code,'bytes':len(r.content),'content_type':r.headers.get('content-type'),'date':r.headers.get('date'),'last_modified':r.headers.get('last-modified')}
+
+          # Financial University: the official table accepts column names as GET filters.
+          s=requests.Session(); s.headers['User-Agent']=UA
+          for app in ['1441782','1952637']:
+            try:
+              r=s.get('https://www.fa.ru/spiski/listabit.php',params={'unique_code':app,'page_size':'100'},timeout=60)
+              rec=save(f'finu-{app}',r)
+              soup=BeautifulSoup(r.text,'html.parser')
+              rec['heading']=' '.join(soup.get_text(' ',strip=True).split())[:1000]
+              rec['updated']=next((x.strip() for x in soup.stripped_strings if x.strip().startswith('Обновлено:')),None)
+              rows=[]
+              for tr in soup.select('tbody tr'):
+                cells=[' '.join(td.get_text(' ',strip=True).split()) for td in tr.find_all('td')]
+                if app in cells: rows.append(cells)
+              rec['rows']=rows
+              out[f'finu_{app}']=rec
+            except Exception as e: out[f'finu_{app}']={'error':repr(e)}
+
+          # SPbPU: use its public JSON endpoints exactly as the official page does.
+          try:
+            s=requests.Session(); s.headers.update({'User-Agent':UA,'Referer':'https://my.spbstu.ru/home/abit/list-applicants/bachelor'})
+            root=s.get('https://my.spbstu.ru/home/abit/list-applicants/bachelor',timeout=60)
+            save('spbpu-root',root)
+            csrf=s.cookies.get('csrftoken')
+            h={'Content-Type':'application/json','X-CSRFToken':csrf or ''}
+            payload={'id_1':'2','id_2':'1','education_level':'bachelor'}
+            cr=s.post('https://my.spbstu.ru/home/get-code-list',headers=h,json=payload,timeout=60)
+            Path('live/raw/spbpu-codes.json').write_bytes(cr.content)
+            codes=cr.json().get('code_list',[])
+            rec={'root_status':root.status_code,'codes_status':cr.status_code,'csrf_present':bool(csrf),'matching_codes':[],'directions':[]}
+            selected=[x for x in codes if any(k in str(x.get('title','')).lower() for k in ['38.05.01','экономическая безопасность','38.03.01 экономика'])]
+            rec['matching_codes']=selected
+            for c in selected:
+              params={'filter_1':'2','filter_2':'1','filter_3':str(c['id']),'education_level':'bachelor'}
+              lr=s.get('https://my.spbstu.ru/home/get-abit-list',params=params,timeout=90)
+              Path(f"live/raw/spbpu-list-{c['id']}.json").write_bytes(lr.content)
+              data=lr.json()
+              matches=[]
+              for row in data.get('results',[]):
+                flat=' | '.join(re.sub('<[^>]+>',' ',str(v)) for v in row.values())
+                if '2021331' in flat or '2175231' in flat: matches.append({'raw':row,'flat':' '.join(flat.split())})
+              ir=s.post('https://my.spbstu.ru/home/get-direction-info',headers=h,json={'id_3':c['id'],'education_level':'bachelor','condition':'1'},timeout=60)
+              try: info=ir.json()
+              except: info={'raw':ir.text[:3000]}
+              rec['directions'].append({'code':c,'list_status':lr.status_code,'count':len(data.get('results',[])),'matches':matches,'direction_info':info})
+            out['spbpu']=rec
+          except Exception as e: out['spbpu']={'error':repr(e)}
+
+          # LGU Pushkin: live static official programme tables.
+          lgu_urls={
+            'management':'https://priem.lengu.ru/show_napr1.php?napr_name=000003413.html&pk=%D0%91%D0%B0%D0%BA%D0%B0%D0%BB%D0%B0%D0%B2%D1%80%D0%B8%D0%B0%D1%82+%D0%B8+%D1%81%D0%BF%D0%B5%D1%86%D0%B8%D0%B0%D0%BB%D0%B8%D1%82%D0%B5%D1%82',
+            'economics':'https://priem.lengu.ru/show_napr1.php?napr_name=000003403.html&pk=%D0%91%D0%B0%D0%BA%D0%B0%D0%B2%D1%80%D0%B8%D0%B0%D1%82+%D0%B8+%D1%81%D0%BF%D0%B5%D1%86%D0%B8%D0%B0%D0%BB%D0%B8%D1%82%D0%B5%D1%82',
+          }
+          for name,u in lgu_urls.items():
+            try:
+              r=requests.get(u,headers={'User-Agent':UA},timeout=60)
+              rec=save('lgu-'+name,r); soup=BeautifulSoup(r.text,'html.parser')
+              rec['title']=soup.title.get_text(' ',strip=True) if soup.title else None
+              rec['generated_text']=' '.join(soup.get_text(' ',strip=True).split())[:2000]
+              rows=[]
+              for tr in soup.find_all('tr'):
+                cells=[' '.join(x.get_text(' ',strip=True).split()) for x in tr.find_all(['th','td'])]
+                if '2052971' in cells: rows.append(cells)
+              rec['rows']=rows
+              rec['headers']=[[' '.join(x.get_text(' ',strip=True).split()) for x in tr.find_all(['th','td'])] for tr in soup.find_all('tr')[:5]]
+              out['lgu_'+name]=rec
+            except Exception as e: out['lgu_'+name]={'error':repr(e)}
+
+          # SPbSMTU live official table used by the university.
+          try:
+            u='https://www.abit.smtu.ru/viewrait/16/1/1/2/'
+            r=requests.get(u,headers={'User-Agent':UA},timeout=90)
+            rec=save('smtu-2175231',r); soup=BeautifulSoup(r.text,'html.parser')
+            rec['title']=soup.title.get_text(' ',strip=True) if soup.title else None
+            rec['page_text_start']=' '.join(soup.get_text(' ',strip=True).split())[:2500]
+            rec['headers']=[[' '.join(x.get_text(' ',strip=True).split()) for x in tr.find_all(['th','td'])] for tr in soup.find_all('tr')[:8]]
+            rec['rows']=[]
+            for tr in soup.find_all('tr'):
+              cells=[' '.join(x.get_text(' ',strip=True).split()) for x in tr.find_all(['th','td'])]
+              if '2175231' in cells: rec['rows'].append(cells)
+            out['smtu_2175231']=rec
+          except Exception as e: out['smtu_2175231']={'error':repr(e)}
+
+          Path('live/result.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),'utf-8')
+          Path('live/report.txt').write_text(json.dumps(out,ensure_ascii=False,indent=2),'utf-8')
+          print(json.dumps(out,ensure_ascii=False,indent=2)[:200000])
+          PY
+      - name: Upload live official results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-live-results
+          path: live
+          retention-days: 2
