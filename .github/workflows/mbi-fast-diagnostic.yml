@@ -13,7 +13,7 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
       - name: Probe endpoint
@@ -22,38 +22,73 @@ jobs:
           set +e
           mkdir -p artifacts-fast
           OUT=artifacts-fast/report.txt
-          URLS=(
-            'https://inet.ibi.spb.ru/raspisan/ks/cb2026.php?c=bak-o-b'
-            'http://inet.ibi.spb.ru/raspisan/ks/cb2026.php?c=bak-o-b'
-          )
+          HOST=inet.ibi.spb.ru
+          PATH_Q='/raspisan/ks/cb2026.php?c=bak-o-b'
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36'
+          REF='https://ibispb.ru/abitur/bachelor/terms-and-conditions-of-admission/'
+
           {
             date -u
-            echo '=== DNS ==='
-            getent ahosts inet.ibi.spb.ru
-            dig +short A inet.ibi.spb.ru
-            dig +short AAAA inet.ibi.spb.ru
+            echo '=== resolver config ==='
+            cat /etc/resolv.conf
+            echo '=== control DNS ==='
+            getent ahosts github.com
+            dig +time=3 +tries=1 +short A github.com
+            echo '=== system DNS for MBI ==='
+            getent ahosts "$HOST"
+            dig +time=3 +tries=1 "$HOST" A
+            dig +time=3 +tries=1 "$HOST" AAAA
+            echo '=== Cloudflare DNS ==='
+            dig @1.1.1.1 +time=5 +tries=1 "$HOST" A
+            dig @1.1.1.1 +time=5 +tries=1 "$HOST" AAAA
+            echo '=== Google DNS ==='
+            dig @8.8.8.8 +time=5 +tries=1 "$HOST" A
+            dig @8.8.8.8 +time=5 +tries=1 "$HOST" AAAA
           } > "$OUT" 2>&1
-          i=0
-          for url in "${URLS[@]}"; do
-            i=$((i+1))
+
+          IP=$(dig @1.1.1.1 +time=5 +tries=1 +short A "$HOST" 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+){3}$' | head -n1)
+          if [ -z "$IP" ]; then
+            IP=$(dig @8.8.8.8 +time=5 +tries=1 +short A "$HOST" 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+){3}$' | head -n1)
+          fi
+          echo "resolved_ip=$IP" >> "$OUT"
+
+          probe() {
+            local label="$1" url="$2" resolve_arg="$3"
+            local n="$4"
             {
               echo
-              echo "=== URL $i: $url ==="
-              curl -4 -k -L --connect-timeout 8 --max-time 20 \
-                -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36' \
-                -e 'https://ibispb.ru/abitur/bachelor/terms-and-conditions-of-admission/' \
-                -D "artifacts-fast/headers-$i.txt" \
-                -o "artifacts-fast/body-$i.bin" \
-                -w 'code=%{http_code}\nremote_ip=%{remote_ip}\ncontent_type=%{content_type}\nbytes=%{size_download}\nnamelookup=%{time_namelookup}\nconnect=%{time_connect}\nappconnect=%{time_appconnect}\nstarttransfer=%{time_starttransfer}\ntotal=%{time_total}\nexit=%{exitcode}\neffective=%{url_effective}\n' \
-                "$url"
+              echo "=== $label ==="
+              if [ -n "$resolve_arg" ]; then
+                curl -4 -k -L --connect-timeout 8 --max-time 25 \
+                  --resolve "$resolve_arg" -A "$UA" -e "$REF" \
+                  -D "artifacts-fast/headers-$n.txt" -o "artifacts-fast/body-$n.bin" \
+                  -w 'code=%{http_code}\nremote_ip=%{remote_ip}\ncontent_type=%{content_type}\nbytes=%{size_download}\nnamelookup=%{time_namelookup}\nconnect=%{time_connect}\nappconnect=%{time_appconnect}\nstarttransfer=%{time_starttransfer}\ntotal=%{time_total}\nexit=%{exitcode}\neffective=%{url_effective}\n' "$url"
+              else
+                curl -4 -k -L --connect-timeout 8 --max-time 25 \
+                  -A "$UA" -e "$REF" \
+                  -D "artifacts-fast/headers-$n.txt" -o "artifacts-fast/body-$n.bin" \
+                  -w 'code=%{http_code}\nremote_ip=%{remote_ip}\ncontent_type=%{content_type}\nbytes=%{size_download}\nnamelookup=%{time_namelookup}\nconnect=%{time_connect}\nappconnect=%{time_appconnect}\nstarttransfer=%{time_starttransfer}\ntotal=%{time_total}\nexit=%{exitcode}\neffective=%{url_effective}\n' "$url"
+              fi
               echo '--- headers ---'
-              cat "artifacts-fast/headers-$i.txt"
+              cat "artifacts-fast/headers-$n.txt" 2>/dev/null
               echo '--- body sample ---'
-              head -c 500 "artifacts-fast/body-$i.bin"
+              head -c 1000 "artifacts-fast/body-$n.bin" 2>/dev/null
               echo
             } >> "$OUT" 2>&1
-          done
-          grep -a -n -m 10 '1609688\|Экономическая безопасность\|Получено согласие' artifacts-fast/body-*.bin >> "$OUT" 2>&1 || true
+          }
+
+          probe 'HTTPS via system DNS' "https://$HOST$PATH_Q" '' 1
+          probe 'HTTP via system DNS' "http://$HOST$PATH_Q" '' 2
+          if [ -n "$IP" ]; then
+            probe 'HTTPS forced to public-DNS IP' "https://$HOST$PATH_Q" "$HOST:443:$IP" 3
+            probe 'HTTP forced to public-DNS IP' "http://$HOST$PATH_Q" "$HOST:80:$IP" 4
+          fi
+
+          {
+            echo
+            echo '=== body matches ==='
+            grep -a -n -m 20 '1609688\|Экономическая безопасность\|Получено согласие' artifacts-fast/body-*.bin || true
+          } >> "$OUT" 2>&1
       - name: Upload probe
         if: always()
         uses: actions/upload-artifact@v4
