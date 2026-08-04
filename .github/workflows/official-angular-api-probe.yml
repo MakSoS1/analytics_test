@@ -1,0 +1,56 @@
+name: Probe SPbGEU and Herzen official APIs
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch official JS bundles and discover APIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p angular
+          for spec in \
+            'spbgeu|https://pk.unecon.ru/js/main-IZ4KVLR4.js' \
+            'herzen|https://priem.herzen.spb.ru/js/main-IZ4KVLR4.js'; do
+            name=${spec%%|*}; url=${spec#*|}
+            curl -fsSL --compressed --connect-timeout 10 --max-time 60 -A 'Mozilla/5.0' "$url" -o "angular/$name-main.js"
+          done
+          python - <<'PY'
+          import json,re
+          from pathlib import Path
+          result={}
+          for name in ['spbgeu','herzen']:
+            p=Path(f'angular/{name}-main.js')
+            text=p.read_text('utf-8','replace')
+            urls=[]
+            for pat in [
+              r'https?://[^"\'\\\s)]+',
+              r'["\'](/[^"\']*(?:api|rating|specialt|entrant|contest|abit|list)[^"\']*)["\']',
+            ]:
+              for m in re.finditer(pat,text,re.I):
+                val=m.group(1) if m.lastindex else m.group(0)
+                if val not in urls: urls.append(val)
+            snippets=[]
+            for key in ['apiUrl','environment','HttpClient','specialties','rating','applicant','entrant','code','agreement','consent','Согласие','согласие']:
+              for m in list(re.finditer(re.escape(key),text,re.I))[:20]:
+                snippets.append({'key':key,'text':text[max(0,m.start()-500):m.start()+1600]})
+            result[name]={'bytes':len(text),'urls':urls[:500],'snippets':snippets[:250]}
+          Path('angular/result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),'utf-8')
+          print(json.dumps(result,ensure_ascii=False,indent=2)[:200000])
+          PY
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-angular-api-probe
+          path: angular
+          retention-days: 2
