@@ -18,6 +18,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python -m pip install --quiet beautifulsoup4 requests
           mkdir -p inspect/js
           PAGE='https://www.postupashkin.ru/priem-2026/moi-shansy?vuz=itmo'
           curl -fsSL --compressed -A 'Mozilla/5.0' "$PAGE" -o inspect/page.html
@@ -74,6 +75,7 @@ jobs:
           print(json.dumps(forms,ensure_ascii=False,indent=2))
           PY
       - name: Upload inspection
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: postupashkin-inspection
