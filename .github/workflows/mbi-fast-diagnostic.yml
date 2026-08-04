@@ -1,0 +1,63 @@
+name: MBI fast endpoint probe
+
+on:
+  push:
+    branches: [mbi-diagnostic-run]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe endpoint
+        shell: bash
+        run: |
+          set +e
+          mkdir -p artifacts-fast
+          OUT=artifacts-fast/report.txt
+          URLS=(
+            'https://inet.ibi.spb.ru/raspisan/ks/cb2026.php?c=bak-o-b'
+            'http://inet.ibi.spb.ru/raspisan/ks/cb2026.php?c=bak-o-b'
+          )
+          {
+            date -u
+            echo '=== DNS ==='
+            getent ahosts inet.ibi.spb.ru
+            dig +short A inet.ibi.spb.ru
+            dig +short AAAA inet.ibi.spb.ru
+          } > "$OUT" 2>&1
+          i=0
+          for url in "${URLS[@]}"; do
+            i=$((i+1))
+            {
+              echo
+              echo "=== URL $i: $url ==="
+              curl -4 -k -L --connect-timeout 8 --max-time 20 \
+                -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36' \
+                -e 'https://ibispb.ru/abitur/bachelor/terms-and-conditions-of-admission/' \
+                -D "artifacts-fast/headers-$i.txt" \
+                -o "artifacts-fast/body-$i.bin" \
+                -w 'code=%{http_code}\nremote_ip=%{remote_ip}\ncontent_type=%{content_type}\nbytes=%{size_download}\nnamelookup=%{time_namelookup}\nconnect=%{time_connect}\nappconnect=%{time_appconnect}\nstarttransfer=%{time_starttransfer}\ntotal=%{time_total}\nexit=%{exitcode}\neffective=%{url_effective}\n' \
+                "$url"
+              echo '--- headers ---'
+              cat "artifacts-fast/headers-$i.txt"
+              echo '--- body sample ---'
+              head -c 500 "artifacts-fast/body-$i.bin"
+              echo
+            } >> "$OUT" 2>&1
+          done
+          grep -a -n -m 10 '1609688\|Экономическая безопасность\|Получено согласие' artifacts-fast/body-*.bin >> "$OUT" 2>&1 || true
+      - name: Upload probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mbi-fast-probe
+          path: artifacts-fast
+          retention-days: 3
