@@ -1,0 +1,108 @@
+name: Targeted final official competitor checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  final-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          python -m pip install --quiet requests beautifulsoup4
+          npm init -y >/dev/null
+          npm install playwright@latest >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: KFU direct form traversal
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p final/kfu final/spbgeu
+          python - <<'PY'
+          import json,re
+          from pathlib import Path
+          from urllib.parse import urlencode
+          import requests
+          from bs4 import BeautifulSoup
+
+          base='https://abiturient.kpfu.ru/entrant/abit_entrant_originals_list'
+          s=requests.Session();s.headers['User-Agent']='Mozilla/5.0 (X11; Linux x86_64) Chrome/138 Safari/537.36'
+          common={'p_open':'','p_level':'3','p_inst':'0','p_faculty':'72'}
+          result={'steps':[],'matches':[]}
+          def get(params,name):
+            r=s.get(base,params=params,timeout=70,verify=False)
+            Path(f'final/kfu/{name}.html').write_bytes(r.content)
+            soup=BeautifulSoup(r.content.decode('cp1251','replace'),'html.parser')
+            result['steps'].append({'name':name,'url':r.url,'status':r.status_code,'bytes':len(r.content),'text':' '.join(soup.get_text(' ',strip=True).split())[:3000]})
+            return soup
+          soup=get(common,'01-specialties')
+          opts=[]
+          sel=soup.find('select',attrs={'name':'p_speciality'})
+          if sel:
+            for o in sel.find_all('option'):
+              txt=' '.join(o.get_text(' ',strip=True).split())
+              if '38.05.01' in txt or 'Экономическ' in txt or '38.03.01' in txt:
+                opts.append((o.get('value'),txt))
+          result['specialties']=opts
+          for j,(sp,txt) in enumerate(opts):
+            p={**common,'p_speciality':sp}
+            soup2=get(p,f'02-{j}-forms')
+            form_opts=[]
+            sel2=soup2.find('select',attrs={'name':'p_typeofstudy'})
+            if sel2:
+              for o in sel2.find_all('option'):
+                t=' '.join(o.get_text(' ',strip=True).split())
+                if o.get('value'): form_opts.append((o.get('value'),t))
+            for k,(form,ftxt) in enumerate(form_opts):
+              for cat in ['1','5','7','2']:
+                pp={**p,'p_typeofstudy':form,'p_category':cat}
+                su=get(pp,f'03-{j}-{k}-{cat}')
+                text=su.get_text(' ',strip=True)
+                if '1444663' in text:
+                  rows=[]
+                  for tr in su.find_all('tr'):
+                    cells=[' '.join(x.get_text(' ',strip=True).split()) for x in tr.find_all(['th','td'])]
+                    if '1444663' in cells: rows.append(cells)
+                  result['matches'].append({'specialty':txt,'form':ftxt,'category':cat,'rows':rows,'url':base+'?'+urlencode(pp)})
+          Path('final/kfu/result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),'utf-8')
+          print(json.dumps(result,ensure_ascii=False,indent=2))
+          PY
+      - name: SPbGEU direct target lists
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > final/spbgeu/check.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const ids=[412,419,420,421,441];
+          const code='1760018';
+          const browser=await chromium.launch({headless:true});
+          const result=[];
+          for(const id of ids){
+            const ctx=await browser.newContext({locale:'ru-RU',ignoreHTTPSErrors:true});
+            const p=await ctx.newPage();const net=[];
+            p.on('response',async r=>{const q=r.request();const ct=(r.headers()['content-type']||'').toLowerCase();if(['xhr','fetch'].includes(q.resourceType())||ct.includes('json')){const z={url:r.url(),status:r.status(),method:q.method(),postData:q.postData(),type:q.resourceType(),ct};try{const b=await r.body();z.bytes=b.length;if(b.length<8000000){const fn=`${id}-${String(net.length).padStart(3,'0')}.bin`;fs.writeFileSync(`final/spbgeu/${fn}`,b);z.file=fn;const t=b.toString('utf8');z.contains=t.includes(code);if(z.contains)z.snippets=[...t.matchAll(new RegExp(`.{0,700}${code}.{0,2500}`,'gis'))].slice(0,10).map(x=>x[0]);}}catch(e){z.err=String(e)}net.push(z)}});
+            let err=null;try{await p.goto(`https://pk.unecon.ru/rating/${id}#2`,{waitUntil:'domcontentloaded',timeout:100000})}catch(e){err=String(e)}
+            await p.waitForTimeout(18000);
+            const body=await p.locator('body').innerText().catch(()=>''), html=await p.content().catch(()=>'');
+            fs.writeFileSync(`final/spbgeu/${id}.html`,html);fs.writeFileSync(`final/spbgeu/${id}.txt`,body);
+            result.push({id,url:p.url(),err,title:await p.title().catch(()=>''),contains:body.includes(code)||html.includes(code),body:body.slice(0,25000),network:net});
+            await ctx.close();
+          }
+          await browser.close();fs.writeFileSync('final/spbgeu/result.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2).slice(0,200000));
+          JS
+          node final/spbgeu/check.mjs
+      - name: Upload final official checks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-targeted-final
+          path: final
+          retention-days: 2
