@@ -1,0 +1,80 @@
+name: Search current SPbGEU and Herzen official lists
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Query official report endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p angular-search/raw
+          python - <<'PY'
+          import concurrent.futures,json,re
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+
+          sites={
+            'spbgeu':{'base':'https://pk.unecon.ru','codes':{'39.03.01','38.03.02','43.03.01'}},
+            'herzen':{'base':'https://priem.herzen.spb.ru','codes':{'37.03.02','44.03.04','44.03.05','44.03.01'}},
+          }
+          targets=['1952637','2175231']
+          tasks=[]; meta={}
+          for name,cfg in sites.items():
+            s=requests.Session();s.headers['User-Agent']='Mozilla/5.0'
+            d=s.get(cfg['base']+'/api/specialties/enroll/2026/1/0',timeout=90).json()['data']
+            selected=[]
+            for x in d:
+              if x.get('specialtyCode') in cfg['codes']:
+                for src in x.get('specialtySources',[]):
+                  if src.get('sourceId')==1:
+                    selected.append({'id':x['specialtyId'],'code':x.get('specialtyCode'),'name':x.get('specialtyName'),'note':x.get('specialtyNote'),'source':1,'places':src.get('admissionNumber')})
+            meta[name]=selected
+            for x in selected:tasks.append((name,cfg['base'],x))
+
+          def one(task):
+            name,base,x=task
+            s=requests.Session();s.headers.update({'User-Agent':'Mozilla/5.0','Referer':base+f"/rating/{x['id']}#1"})
+            rec={'site':name,**x}
+            try:
+              r=s.get(base+f"/api/freports/list/{x['id']}/1/2",timeout=80)
+              txt=r.text
+              m=re.search(r'reportId=([a-f0-9]+)',txt,re.I)
+              rec['list_status']=r.status_code;rec['report_id']=m.group(1) if m else None
+              if not m:return rec
+              rr=s.post(base+f'/_fr/preview.getReport?reportId={m.group(1)}&renderBody=yes',timeout=100)
+              body=rr.text
+              fn=f"angular-search/raw/{name}-{x['id']}.html";Path(fn).write_text(body,'utf-8')
+              rec['preview_status']=rr.status_code;rec['bytes']=len(rr.content)
+              soup=BeautifulSoup(body,'html.parser');plain=' '.join(soup.get_text(' ',strip=True).split())
+              rec['matches']={}
+              for code in targets:
+                if code in plain:
+                  snippets=[]
+                  for m2 in re.finditer(re.escape(code),plain):snippets.append(plain[max(0,m2.start()-800):m2.start()+2500])
+                  rec['matches'][code]=snippets[:5]
+              rec['body_start']=plain[:1200]
+            except Exception as e:rec['error']=repr(e)
+            return rec
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:results=list(ex.map(one,tasks))
+          out={'meta':meta,'results':results}
+          Path('angular-search/result.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),'utf-8')
+          print(json.dumps(out,ensure_ascii=False,indent=2)[:200000])
+          PY
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-angular-list-search
+          path: angular-search
+          retention-days: 2
