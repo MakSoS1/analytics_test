@@ -1,0 +1,72 @@
+name: MBI direct IP recovery
+
+on:
+  push:
+    branches: [mbi-diagnostic-run]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test historical IPs and alternate hosts
+        shell: bash
+        run: |
+          set +e
+          mkdir -p direct-ip
+          OUT=direct-ip/report.txt
+          : > "$OUT"
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36'
+          REF='https://ibispb.ru/abitur/bachelor/terms-and-conditions-of-admission/'
+          PATH_Q='/raspisan/ks/cb2026.php?c=bak-o-b'
+
+          probe() {
+            local label="$1" url="$2" resolve="$3" n="$4"
+            {
+              echo
+              echo "===== $label ====="
+              echo "url=$url resolve=$resolve"
+              args=(-4 -k -L --connect-timeout 8 --max-time 35 -A "$UA" -e "$REF")
+              if [ -n "$resolve" ]; then args+=(--resolve "$resolve"); fi
+              curl "${args[@]}" \
+                -D "direct-ip/headers-$n.txt" \
+                -o "direct-ip/body-$n.bin" \
+                -w 'code=%{http_code}\nremote_ip=%{remote_ip}\nremote_port=%{remote_port}\ncontent_type=%{content_type}\nbytes=%{size_download}\nconnect=%{time_connect}\nappconnect=%{time_appconnect}\nstarttransfer=%{time_starttransfer}\ntotal=%{time_total}\nexit=%{exitcode}\neffective=%{url_effective}\n' \
+                "$url"
+              echo '--- headers ---'
+              cat "direct-ip/headers-$n.txt" 2>/dev/null
+              echo '--- body sample ---'
+              head -c 1500 "direct-ip/body-$n.bin" 2>/dev/null
+              echo
+              echo '--- matches ---'
+              grep -a -n -m 10 '1609688\|Экономическая безопасность\|Получено согласие\|Конкурсн' "direct-ip/body-$n.bin" 2>/dev/null || true
+            } >> "$OUT" 2>&1
+          }
+
+          date -u >> "$OUT"
+          probe 'Old host HTTPS via historical IP 195.5.154.130' "https://inet.ibi.spb.ru$PATH_Q" 'inet.ibi.spb.ru:443:195.5.154.130' 1
+          probe 'Old host HTTP via historical IP 195.5.154.130' "http://inet.ibi.spb.ru$PATH_Q" 'inet.ibi.spb.ru:80:195.5.154.130' 2
+          probe 'Old host HTTPS via older IP 195.5.154.134' "https://inet.ibi.spb.ru$PATH_Q" 'inet.ibi.spb.ru:443:195.5.154.134' 3
+          probe 'Old host HTTP via older IP 195.5.154.134' "http://inet.ibi.spb.ru$PATH_Q" 'inet.ibi.spb.ru:80:195.5.154.134' 4
+
+          probe 'Alternate inet.ibispb.ru HTTPS' "https://inet.ibispb.ru$PATH_Q" '' 5
+          probe 'Alternate inet.ibispb.ru HTTP' "http://inet.ibispb.ru$PATH_Q" '' 6
+          probe 'Alternate newinet.ibispb.ru HTTPS' "https://newinet.ibispb.ru$PATH_Q" '' 7
+          probe 'Alternate newinet.ibispb.ru HTTP' "http://newinet.ibispb.ru$PATH_Q" '' 8
+
+          probe 'Old hostname forced to current ibispb IP HTTPS' "https://inet.ibi.spb.ru$PATH_Q" 'inet.ibi.spb.ru:443:45.130.41.167' 9
+          probe 'Old hostname forced to current ibispb IP HTTP' "http://inet.ibi.spb.ru$PATH_Q" 'inet.ibi.spb.ru:80:45.130.41.167' 10
+      - name: Upload recovered responses
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mbi-direct-ip
+          path: direct-ip
+          retention-days: 3
