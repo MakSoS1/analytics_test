@@ -1,0 +1,126 @@
+name: Direct official competitor list inspection
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install parser
+        run: python -m pip install --quiet requests beautifulsoup4
+      - name: Discover and fetch official list sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p official/pages official/sources
+          python - <<'PY'
+          from __future__ import annotations
+          import concurrent.futures, json, re, time
+          from pathlib import Path
+          from urllib.parse import urljoin, urlparse
+          import requests
+          from bs4 import BeautifulSoup
+
+          checks = [
+            ('2021331','spb-rta-econ','sankt-peterburgskiy-imeni-v-b-bobkova-filial-gosudarstvennogo-kazennogo-obrazovatelnogo-uchrezhdeniy',98578),
+            ('2021331','petrsu-econ','petrgu',127658),
+            ('2021331','spbpu-econsec','spbpu',31525),
+            ('2021331','spbu-econ','spbgu',22272),
+            ('1441782','spb-fin-bi','sankt-peterburgskiy-filial-finuniversiteta',72067),
+            ('1441782','itmo-bi','itmo',105414),
+            ('2052971','lgu-management','lgu-im-a-s-pushkina',28061),
+            ('2052971','lgu-econ','lgu-im-a-s-pushkina',28054),
+            ('2052971','spb-ranepa-econ','sankt-peterburg-filial-ranhigs',60796),
+            ('1760018','spbgeu-target-econ','spbgeu',157484),
+            ('2175231','herzen-prof','rgpu-im-a-i-gertsena',139759),
+            ('2175231','smtu-bi','spbgmtu',64454),
+            ('2175231','spbpu-econsec','spbpu',31525),
+            ('1444663','bryansk-ranepa-econ-quota','bryanskiy-filial-ranhigs',59653),
+            ('1444663','bryansk-ranepa-es-quota','bryanskiy-filial-ranhigs',59657),
+            ('1444663','kfu-econ','kfu',61530),
+            ('1952637','finu-target-gmu','finuniversitet',168605),
+            ('1952637','herzen-ped','rgpu-im-a-i-gertsena',139719),
+            ('2341290','mbi-econsec','mbi',147606),
+          ]
+          s=requests.Session()
+          s.headers.update({'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/138 Safari/537.36'})
+
+          def one(item):
+            app,label,slug,gid=item
+            page=f'https://www.postupashkin.ru/catalog/{slug}/priem-2026/list/{gid}'
+            rec={'app':app,'label':label,'group_id':gid,'postupashkin_url':page}
+            try:
+              r=s.get(page,timeout=45)
+              rec['post_status']=r.status_code
+              rec['post_bytes']=len(r.content)
+              Path(f'official/pages/{app}-{label}-{gid}.html').write_bytes(r.content)
+              soup=BeautifulSoup(r.text,'html.parser')
+              links=[]
+              for a in soup.find_all('a',href=True):
+                txt=' '.join(a.get_text(' ',strip=True).split()).lower()
+                href=urljoin(page,a['href'])
+                if 'списки на сайте вуза' in txt or ('сайт' in txt and 'вуза' in txt and 'списк' in txt):
+                  links.append(href)
+              rec['official_links']=list(dict.fromkeys(links))
+            except Exception as e:
+              rec['error']=repr(e)
+            return rec
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+            records=list(ex.map(one,checks))
+
+          all_sources=[]
+          for rec in records:
+            for u in rec.get('official_links',[]):
+              all_sources.append((rec['app'],rec['label'],rec['group_id'],u))
+
+          def fetch_source(item):
+            app,label,gid,u=item
+            safe=re.sub(r'[^a-zA-Z0-9._-]+','_',urlparse(u).netloc + urlparse(u).path)[:120]
+            out={'app':app,'label':label,'group_id':gid,'url':u}
+            try:
+              r=s.get(u,timeout=60,allow_redirects=True)
+              out.update({'status':r.status_code,'final_url':r.url,'bytes':len(r.content),'content_type':r.headers.get('content-type'),'last_modified':r.headers.get('last-modified')})
+              fn=f'official/sources/{app}-{label}-{gid}-{safe}.bin'
+              Path(fn).write_bytes(r.content)
+              text=r.content.decode(r.encoding or 'utf-8','replace')
+              out['contains_app']=app in text
+              out['matches']=[m.group(0) for m in re.finditer(r'.{0,300}'+re.escape(app)+r'.{0,700}',text,re.I|re.S)][:5]
+              out['title']=BeautifulSoup(text,'html.parser').title.get_text(' ',strip=True) if '<html' in text.lower() and BeautifulSoup(text,'html.parser').title else None
+              out['script_src']=[urljoin(r.url,x.get('src')) for x in BeautifulSoup(text,'html.parser').find_all('script',src=True)][:30]
+            except Exception as e:
+              out['error']=repr(e)
+            return out
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+            sources=list(ex.map(fetch_source,all_sources))
+
+          Path('official/discovered.json').write_text(json.dumps(records,ensure_ascii=False,indent=2),'utf-8')
+          Path('official/fetched.json').write_text(json.dumps(sources,ensure_ascii=False,indent=2),'utf-8')
+          report=[]
+          for rec in records:
+            report.append(f"## {rec['app']} — {rec['label']} (group {rec['group_id']})")
+            report.append(f"Postupashkin: status={rec.get('post_status')} links={rec.get('official_links')}")
+            for src in [x for x in sources if x['app']==rec['app'] and x['group_id']==rec['group_id']]:
+              report.append(f"- official={src.get('final_url') or src['url']} status={src.get('status')} bytes={src.get('bytes')} contains_id={src.get('contains_app')} type={src.get('content_type')}")
+              if src.get('matches'):
+                report.extend('  MATCH '+m[:1000].replace('\n',' ') for m in src['matches'])
+            report.append('')
+          Path('official/report.md').write_text('\n'.join(report),'utf-8')
+          print('\n'.join(report))
+          PY
+      - name: Upload official-source inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-competitor-check
+          path: official
+          retention-days: 2
