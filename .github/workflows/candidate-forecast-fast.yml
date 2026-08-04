@@ -1,0 +1,46 @@
+name: Fetch competitor forecasts fast
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch forecasts concurrently
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p forecasts-fast
+          python - <<'PY'
+          import concurrent.futures, json, time, requests
+          from pathlib import Path
+
+          ids=['2021331','1441782','2052971','1760018','2175231','1444663','2341290','1952637']
+          def one(app):
+              url=f'https://www.postupashkin.ru/priem-2026/forecast?app={app}'
+              last={}
+              for n in range(4):
+                  r=requests.get(url,headers={'User-Agent':'Mozilla/5.0','Accept':'application/json','Cache-Control':'no-cache'},timeout=60)
+                  r.raise_for_status(); last=r.json()
+                  if not last.get('pending'): break
+                  time.sleep(5)
+              Path(f'forecasts-fast/{app}.json').write_text(json.dumps(last,ensure_ascii=False,indent=2)+'\n','utf-8')
+              return app,last.get('found'),last.get('pending'),len(last.get('positions') or []),last.get('access')
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+              for result in ex.map(one,ids): print(result)
+          PY
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: competitor-forecasts-fast
+          path: forecasts-fast
+          retention-days: 1
