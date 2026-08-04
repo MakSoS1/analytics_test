@@ -1,0 +1,75 @@
+name: Capture official admissions browser network v2
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null
+          npm install playwright@latest >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Capture official sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p browser2
+          cat > browser2/capture.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const targets = [
+            ['spbgeu','https://pk.unecon.ru/rating/specialties','1760018'],
+            ['herzen','https://priem.herzen.spb.ru/rating/specialties','2175231'],
+            ['kfu','https://abiturient.kpfu.ru/entrant/abit_entrant_originals_list','1444663'],
+          ];
+          const browser = await chromium.launch({headless:true});
+          const all={};
+          for (const [name,url,code] of targets) {
+            const context=await browser.newContext({locale:'ru-RU',ignoreHTTPSErrors:true,userAgent:'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/138 Safari/537.36'});
+            const page=await context.newPage(); const net=[];
+            page.on('response', async resp=>{
+              const req=resp.request(), ct=(resp.headers()['content-type']||'').toLowerCase();
+              if(['xhr','fetch'].includes(req.resourceType())||ct.includes('json')){
+                const rec={url:resp.url(),status:resp.status(),method:req.method(),type:req.resourceType(),ct,postData:req.postData()};
+                try{const b=await resp.body(); rec.bytes=b.length; if(b.length<8000000){const fn=`${name}-${String(net.length).padStart(4,'0')}.bin`;fs.writeFileSync(`browser2/${fn}`,b);rec.file=fn;const t=b.toString('utf8');rec.containsCode=t.includes(code);if(rec.containsCode)rec.snippets=[...t.matchAll(new RegExp(`.{0,300}${code}.{0,1000}`,'gis'))].slice(0,5).map(m=>m[0]);}}catch(e){rec.error=String(e)}
+                net.push(rec);
+              }
+            });
+            let navError=null; try{await page.goto(url,{waitUntil:'domcontentloaded',timeout:100000});}catch(e){navError=String(e)}
+            await page.waitForTimeout(35000);
+            const body=await page.locator('body').innerText().catch(()=>''), html=await page.content().catch(()=>'');
+            fs.writeFileSync(`browser2/${name}.html`,html);fs.writeFileSync(`browser2/${name}.txt`,body);
+            await page.screenshot({path:`browser2/${name}.png`,fullPage:true,timeout:30000}).catch(()=>{});
+            const controls=await page.locator('input,select,button,a').evaluateAll(els=>els.slice(0,1200).map(e=>({tag:e.tagName,type:e.getAttribute('type'),name:e.getAttribute('name'),id:e.id,placeholder:e.getAttribute('placeholder'),aria:e.getAttribute('aria-label'),text:(e.innerText||e.value||'').trim().slice(0,300),href:e.getAttribute('href')}))).catch(()=>[]);
+            const actions=[];
+            const inputs=page.locator('input');
+            for(let i=0;i<Math.min(await inputs.count(),30);i++){
+              const el=inputs.nth(i); if(!await el.isVisible().catch(()=>false))continue;
+              const ph=(await el.getAttribute('placeholder'))||'', aria=(await el.getAttribute('aria-label'))||'', type=(await el.getAttribute('type'))||'';
+              if(/код|поиск|search|уникальн/i.test(`${ph} ${aria}`)){
+                try{await el.fill(code);await el.press('Enter').catch(()=>{});await page.waitForTimeout(8000);actions.push({ph,aria,type,body:(await page.locator('body').innerText()).slice(0,15000)});}catch(e){actions.push({ph,error:String(e)})}
+              }
+            }
+            all[name]={url,pageUrl:page.url(),navError,title:await page.title().catch(()=>''),containsCode:body.includes(code)||html.includes(code),bodyStart:body.slice(0,30000),controls,network:net,actions};
+            await context.close();
+          }
+          await browser.close(); fs.writeFileSync('browser2/result.json',JSON.stringify(all,null,2)); console.log(JSON.stringify(all,null,2).slice(0,200000));
+          JS
+          node browser2/capture.mjs
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-browser-network-v2
+          path: browser2
+          retention-days: 2
