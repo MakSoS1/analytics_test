@@ -1,0 +1,242 @@
+name: MBI hourly admissions monitor
+
+on:
+  schedule:
+    - cron: '7 * * * *'
+    - cron: '45 8 5 8 *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mbi-hourly-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check deadline
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          now=$(date -u +%s)
+          deadline=$(date -u -d '2026-08-05 09:00:00' +%s)
+          if [ "$now" -gt "$deadline" ]; then
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'active=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch and parse official list
+        if: steps.gate.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p monitor
+          curl -fsS -4 --connect-timeout 10 --max-time 45 \
+            --resolve inet.ibi.spb.ru:80:195.5.154.130 \
+            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36' \
+            -e 'https://ibispb.ru/abitur/bachelor/terms-and-conditions-of-admission/' \
+            -D /tmp/mbi-headers.txt \
+            'http://inet.ibi.spb.ru/raspisan/ks/cb2026.php?c=bak-o-b' \
+            -o /tmp/mbi-list.html
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import html
+          import json
+          import re
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          APPLICANT_ID = '1609688'
+          CONFIRMED_GENERAL_PLACES = 9
+
+          raw = Path('/tmp/mbi-list.html').read_text(encoding='utf-8', errors='replace')
+          headers = Path('/tmp/mbi-headers.txt').read_text(encoding='utf-8', errors='replace')
+
+          program_marker = '38.05.01 «Экономическая безопасность»'
+          start = raw.find(program_marker)
+          if start < 0:
+              raise SystemExit('Target programme was not found in the official page')
+
+          next_program = raw.find('Конкурсный список лиц, подавших документы', start + len(program_marker))
+          programme_html = raw[start:next_program if next_program >= 0 else len(raw)]
+
+          source_date_match = re.search(r'на\s+(\d{2}\s+[^<]+?\s+\d{4}\s+года)', programme_html, flags=re.I)
+          source_date = html.unescape(source_date_match.group(1)).strip() if source_date_match else None
+
+          main_marker = '<h3>Основные места</h3>'
+          main_start = programme_html.find(main_marker)
+          if main_start < 0:
+              raise SystemExit('Main competition table was not found')
+          table_start = programme_html.find('<table', main_start)
+          table_end = programme_html.find('</table>', table_start)
+          if table_start < 0 or table_end < 0:
+              raise SystemExit('Main competition table is malformed')
+          table_html = programme_html[table_start:table_end + len('</table>')]
+
+          def clean_cell(value: str) -> str:
+              value = re.sub(r'<[^>]+>', '', value, flags=re.S)
+              value = html.unescape(value)
+              value = re.sub(r'\s+', ' ', value).strip()
+              return value
+
+          rows: list[dict[str, object]] = []
+          for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', table_html, flags=re.S | re.I):
+              cells = [clean_cell(x) for x in re.findall(r'<td[^>]*>(.*?)</td>', tr, flags=re.S | re.I)]
+              if len(cells) < 12 or not cells[0].isdigit():
+                  continue
+              row = {
+                  'position': int(cells[0]),
+                  'id': cells[1],
+                  'score': int(cells[10]) if cells[10].isdigit() else None,
+                  'note': cells[11],
+                  'consent': 'согласие на зачисление' in cells[11].lower(),
+              }
+              rows.append(row)
+
+          own_index = next((i for i, row in enumerate(rows) if row['id'] == APPLICANT_ID), None)
+          if own_index is None:
+              raise SystemExit(f'Applicant {APPLICANT_ID} was not found in main competition')
+
+          own = rows[own_index]
+          above = rows[:own_index]
+          consents_above = [row for row in above if row['consent']]
+          without_consent_above = [row for row in above if not row['consent']]
+          consent_rank = len(consents_above) + 1 if own['consent'] else None
+
+          if consent_rank is None:
+              risk_state = 'own_consent_missing'
+          elif consent_rank > CONFIRMED_GENERAL_PLACES:
+              risk_state = 'outside_confirmed_places'
+          elif consent_rank == CONFIRMED_GENERAL_PLACES:
+              risk_state = 'last_confirmed_place'
+          else:
+              risk_state = 'inside_confirmed_places_with_margin'
+
+          semantic_payload = {
+              'rows': rows,
+              'source_date': source_date,
+          }
+          semantic_hash = hashlib.sha256(
+              json.dumps(semantic_payload, ensure_ascii=False, sort_keys=True).encode('utf-8')
+          ).hexdigest()
+
+          checked_at = datetime.now(timezone.utc).isoformat(timespec='seconds')
+          status = {
+              'checked_at_utc': checked_at,
+              'source': 'official MBI list fetched from inet.ibi.spb.ru via 195.5.154.130:80 with the original Host header',
+              'source_date': source_date,
+              'applicant_id': APPLICANT_ID,
+              'general_position': own['position'],
+              'score': own['score'],
+              'own_consent': own['consent'],
+              'confirmed_general_places': CONFIRMED_GENERAL_PLACES,
+              'consents_above_count': len(consents_above),
+              'consent_rank': consent_rank,
+              'risk_state': risk_state,
+              'consents_above': [
+                  {'id': row['id'], 'position': row['position'], 'score': row['score']}
+                  for row in consents_above
+              ],
+              'without_consent_above': [
+                  {'id': row['id'], 'position': row['position'], 'score': row['score']}
+                  for row in without_consent_above
+              ],
+              'total_main_candidates': len(rows),
+              'semantic_hash': semantic_hash,
+              'http_last_modified': next(
+                  (line.split(':', 1)[1].strip() for line in headers.splitlines() if line.lower().startswith('last-modified:')),
+                  None,
+              ),
+              'note': 'The HTTP Last-Modified value is generated on every request and is not treated as an update timestamp.',
+          }
+
+          previous_path = Path('monitor/mbi-current.json')
+          previous = None
+          if previous_path.exists():
+              try:
+                  previous = json.loads(previous_path.read_text(encoding='utf-8'))
+              except Exception:
+                  previous = None
+
+          tracked_fields = [
+              'source_date',
+              'general_position',
+              'own_consent',
+              'confirmed_general_places',
+              'consents_above_count',
+              'consent_rank',
+              'risk_state',
+              'consents_above',
+              'without_consent_above',
+              'total_main_candidates',
+              'semantic_hash',
+          ]
+          changes = {}
+          if previous:
+              for field in tracked_fields:
+                  if previous.get(field) != status.get(field):
+                      changes[field] = {'from': previous.get(field), 'to': status.get(field)}
+          else:
+              changes = {'initial_snapshot': True}
+          status['changes_since_previous_check'] = changes
+          status['meaningful_change'] = bool(changes and 'initial_snapshot' not in changes)
+
+          previous_path.write_text(json.dumps(status, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          Path('monitor/mbi-latest.html').write_text(raw, encoding='utf-8')
+
+          history_entry = {
+              'checked_at_utc': checked_at,
+              'source_date': source_date,
+              'general_position': own['position'],
+              'own_consent': own['consent'],
+              'consents_above_count': len(consents_above),
+              'consent_rank': consent_rank,
+              'risk_state': risk_state,
+              'semantic_hash': semantic_hash,
+              'meaningful_change': status['meaningful_change'],
+              'changes': changes,
+          }
+          with Path('monitor/mbi-history.jsonl').open('a', encoding='utf-8') as fh:
+              fh.write(json.dumps(history_entry, ensure_ascii=False) + '\n')
+
+          print(json.dumps(status, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Commit snapshot
+        if: steps.gate.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add monitor/mbi-current.json monitor/mbi-history.jsonl monitor/mbi-latest.html
+          if git diff --cached --quiet; then
+            echo 'No files changed'
+          else
+            git commit -m "Update MBI admissions snapshot $(date -u +'%Y-%m-%d %H:%M UTC') [skip ci]"
+            git push
+          fi
+
+      - name: Remove monitor after deadline
+        if: steps.gate.outputs.active == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/mbi-hourly-monitor.yml
+          git commit -m 'Stop MBI hourly monitor after consent deadline [skip ci]'
+          git push
