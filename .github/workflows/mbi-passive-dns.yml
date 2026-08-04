@@ -1,0 +1,54 @@
+name: MBI passive DNS lookup
+
+on:
+  push:
+    branches: [mbi-diagnostic-run]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  passive-dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Query passive DNS sources
+        shell: bash
+        run: |
+          set +e
+          mkdir -p passive-dns
+          OUT=passive-dns/report.txt
+          : > "$OUT"
+          query() {
+            name="$1"; url="$2"; file="$3"
+            {
+              echo
+              echo "===== $name ====="
+              echo "$url"
+              curl -L --connect-timeout 10 --max-time 30 -A 'Mozilla/5.0' -D - "$url" -o "passive-dns/$file"
+              echo
+              echo "--- body ---"
+              head -c 20000 "passive-dns/$file"
+              echo
+            } >> "$OUT" 2>&1
+          }
+          date -u >> "$OUT"
+          query 'HackerTarget hostsearch' 'https://api.hackertarget.com/hostsearch/?q=ibi.spb.ru' 'hackertarget-hostsearch.txt'
+          query 'HackerTarget DNS lookup' 'https://api.hackertarget.com/dnslookup/?q=inet.ibi.spb.ru' 'hackertarget-dnslookup.txt'
+          query 'AlienVault OTX passive DNS' 'https://otx.alienvault.com/api/v1/indicators/domain/inet.ibi.spb.ru/passive_dns' 'otx-passive-dns.json'
+          query 'ThreatMiner passive DNS' 'https://api.threatminer.org/v2/domain.php?q=inet.ibi.spb.ru&rt=2' 'threatminer.json'
+          query 'crt.sh subdomains' 'https://crt.sh/?q=%25.ibi.spb.ru&output=json' 'crtsh.json'
+          query 'Subdomain Center' 'https://api.subdomain.center/?domain=ibi.spb.ru' 'subdomain-center.json'
+          query 'Google DNS over HTTPS' 'https://dns.google/resolve?name=inet.ibi.spb.ru&type=A' 'google-doh.json'
+          query 'Cloudflare DNS over HTTPS' 'https://cloudflare-dns.com/dns-query?name=inet.ibi.spb.ru&type=A' 'cloudflare-doh.json'
+      - name: Upload passive DNS results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mbi-passive-dns
+          path: passive-dns
+          retention-days: 3
