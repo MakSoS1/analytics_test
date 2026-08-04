@@ -1,5 +1,5 @@
 {
-  "checked_at_utc": "2026-08-04T12:11:42+00:00",
+  "checked_at_utc": "2026-08-04T15:32:03+00:00",
   "source": "official MBI list fetched from inet.ibi.spb.ru via 195.5.154.130:80 with the original Host header",
   "source_date": "04 августа 2026 года",
   "applicant_id": "1609688",
@@ -11,29 +11,98 @@
   "consent_rank": 9,
   "risk_state": "last_confirmed_place",
   "consents_above": [
-    {"id": "967331", "position": 2, "score": 262},
-    {"id": "2318977", "position": 4, "score": 260},
-    {"id": "1795612", "position": 5, "score": 258},
-    {"id": "1421079", "position": 10, "score": 249},
-    {"id": "1263789", "position": 12, "score": 246},
-    {"id": "1252789", "position": 13, "score": 244},
-    {"id": "1826110", "position": 14, "score": 243},
-    {"id": "1072404", "position": 16, "score": 237}
+    {
+      "id": "967331",
+      "position": 2,
+      "score": 262
+    },
+    {
+      "id": "2318977",
+      "position": 4,
+      "score": 260
+    },
+    {
+      "id": "1795612",
+      "position": 5,
+      "score": 258
+    },
+    {
+      "id": "1421079",
+      "position": 10,
+      "score": 249
+    },
+    {
+      "id": "1263789",
+      "position": 12,
+      "score": 246
+    },
+    {
+      "id": "1252789",
+      "position": 13,
+      "score": 244
+    },
+    {
+      "id": "1826110",
+      "position": 14,
+      "score": 243
+    },
+    {
+      "id": "1072404",
+      "position": 16,
+      "score": 237
+    }
   ],
   "without_consent_above": [
-    {"id": "2021331", "position": 1, "score": 273},
-    {"id": "1441782", "position": 3, "score": 261},
-    {"id": "2052971", "position": 6, "score": 256},
-    {"id": "1760018", "position": 7, "score": 255},
-    {"id": "2175231", "position": 8, "score": 255},
-    {"id": "1444663", "position": 9, "score": 251},
-    {"id": "2341290", "position": 11, "score": 249},
-    {"id": "1952637", "position": 15, "score": 239}
+    {
+      "id": "2021331",
+      "position": 1,
+      "score": 273
+    },
+    {
+      "id": "1441782",
+      "position": 3,
+      "score": 261
+    },
+    {
+      "id": "2052971",
+      "position": 6,
+      "score": 256
+    },
+    {
+      "id": "1760018",
+      "position": 7,
+      "score": 255
+    },
+    {
+      "id": "2175231",
+      "position": 8,
+      "score": 255
+    },
+    {
+      "id": "1444663",
+      "position": 9,
+      "score": 251
+    },
+    {
+      "id": "2341290",
+      "position": 11,
+      "score": 249
+    },
+    {
+      "id": "1952637",
+      "position": 15,
+      "score": 239
+    }
   ],
   "total_main_candidates": 113,
-  "semantic_hash": "7bfaed21f02d05dd3dad8749d5829b1fd2d803af584c346ba963b4e5675db5c6",
-  "http_last_modified": "Tue, 04 Aug 2026 11:00:07GMT",
+  "semantic_hash": "c14d2fd59c24d5d3a6872b2b26944b6698058f8dbd66ebd7feca49b92d5f239a",
+  "http_last_modified": "Tue, 04 Aug 2026 15:31:47GMT",
   "note": "The HTTP Last-Modified value is generated on every request and is not treated as an update timestamp.",
-  "changes_since_previous_check": {"initial_snapshot": true},
-  "meaningful_change": false
+  "changes_since_previous_check": {
+    "semantic_hash": {
+      "from": "7bfaed21f02d05dd3dad8749d5829b1fd2d803af584c346ba963b4e5675db5c6",
+      "to": "c14d2fd59c24d5d3a6872b2b26944b6698058f8dbd66ebd7feca49b92d5f239a"
+    }
+  },
+  "meaningful_change": true
 }
