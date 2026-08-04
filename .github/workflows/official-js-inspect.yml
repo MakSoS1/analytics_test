@@ -1,0 +1,101 @@
+name: Inspect official admissions site APIs
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-js:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch JavaScript and inspect endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p apis/files
+          python - <<'PY'
+          import concurrent.futures, json, re
+          from pathlib import Path
+          from urllib.parse import urljoin
+          import requests
+          from bs4 import BeautifulSoup
+
+          roots = {
+            'finu':'https://www.fa.ru/spiski/listabit.php',
+            'spbpu':'https://my.spbstu.ru/home/abit/list-applicants/bachelor',
+            'petrsu':'https://abit.petrsu.ru/guest/competition-lists/5',
+            'herzen':'https://priem.herzen.spb.ru/rating/specialties',
+            'itmo':'https://abit.itmo.ru/rankings/bachelor',
+            'smtu':'https://abit.smtu.ru/listrait/',
+            'lgu':'https://priem.lengu.ru/',
+            'spbgeu':'https://pk.unecon.ru/rating/specialties',
+            'kfu':'https://abiturient.kpfu.ru/entrant/abit_entrant_originals_list',
+            'rta':'https://spbrta.customs.gov.ru/postupayushhim/konkursnye-spiski-budget',
+          }
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 (X11; Linux x86_64) Chrome/138 Safari/537.36'
+          urls=[]; meta=[]
+          for name,root in roots.items():
+            try:
+              r=s.get(root,timeout=50)
+              Path(f'apis/files/{name}-root.html').write_bytes(r.content)
+              rec={'name':name,'root':root,'status':r.status_code,'final':r.url,'bytes':len(r.content),'error':None}
+              soup=BeautifulSoup(r.text,'html.parser')
+              assets=[]
+              for tag,attr in [('script','src'),('link','href')]:
+                for x in soup.find_all(tag):
+                  val=x.get(attr)
+                  if val and (tag=='script' or '.js' in val or '/js/' in val):
+                    u=urljoin(r.url,val)
+                    if u.startswith('http'): assets.append(u)
+              rec['assets']=list(dict.fromkeys(assets))
+              urls += [(name,u) for u in rec['assets']]
+              meta.append(rec)
+            except Exception as e:
+              meta.append({'name':name,'root':root,'error':repr(e)})
+
+          def fetch(item):
+            name,u=item
+            safe=re.sub(r'[^a-zA-Z0-9._-]+','_',u)[:180]
+            try:
+              r=s.get(u,timeout=50)
+              p=Path(f'apis/files/{name}-{safe}.txt'); p.write_bytes(r.content)
+              return {'name':name,'url':u,'status':r.status_code,'bytes':len(r.content),'file':str(p),'type':r.headers.get('content-type')}
+            except Exception as e:
+              return {'name':name,'url':u,'error':repr(e)}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
+            assets=list(ex.map(fetch,urls))
+
+          needles=re.compile(r'''(?i)(https?://[^"'\\\s)]+|/[a-zA-Z0-9_./?=&%-]*(?:api|ajax|rating|list|entrant|admission|competition)[a-zA-Z0-9_./?=&%-]*)''')
+          report=[]
+          for a in assets:
+            if not a.get('file'): continue
+            text=Path(a['file']).read_text('utf-8','replace')
+            hits=[]
+            for m in needles.finditer(text):
+              h=m.group(0)
+              if h not in hits: hits.append(h)
+              if len(hits)>=100: break
+            for key in ['unique_code','codeAbit','fetch(','axios','HttpClient','XMLHttpRequest','filters[','URLSearchParams','agreement','consent','согласие']:
+              for m in list(re.finditer(re.escape(key),text,re.I))[:8]:
+                snippet=text[max(0,m.start()-350):m.start()+1000].replace('\n',' ')
+                hits.append(f'SNIP[{key}] {snippet[:1350]}')
+            if hits:
+              report.append({'name':a['name'],'url':a['url'],'hits':hits[:160]})
+          Path('apis/meta.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2),'utf-8')
+          Path('apis/assets.json').write_text(json.dumps(assets,ensure_ascii=False,indent=2),'utf-8')
+          Path('apis/report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),'utf-8')
+          print(json.dumps(report,ensure_ascii=False,indent=2)[:150000])
+          PY
+      - name: Upload API inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-js-inspect
+          path: apis
+          retention-days: 2
