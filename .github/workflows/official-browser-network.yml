@@ -1,0 +1,105 @@
+name: Capture official admissions browser network
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null
+          npm install playwright@latest >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Capture network and DOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p browser
+          cat > /tmp/capture.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+
+          const targets = [
+            ['spbgeu','https://pk.unecon.ru/rating/specialties','1760018'],
+            ['herzen','https://priem.herzen.spb.ru/rating/specialties','2175231'],
+            ['kfu','https://abiturient.kpfu.ru/entrant/abit_entrant_originals_list','1444663'],
+            ['itmo','https://abit.itmo.ru/rankings/bachelor','1441782'],
+          ];
+          const browser = await chromium.launch({headless:true});
+          const all = {};
+          for (const [name,url,code] of targets) {
+            const context = await browser.newContext({locale:'ru-RU', userAgent:'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/138 Safari/537.36'});
+            const page = await context.newPage();
+            const net=[];
+            page.on('response', async response => {
+              const req=response.request();
+              const ct=(response.headers()['content-type']||'').toLowerCase();
+              if (['xhr','fetch'].includes(req.resourceType()) || ct.includes('json')) {
+                const rec={url:response.url(),status:response.status(),method:req.method(),type:req.resourceType(),contentType:ct,postData:req.postData()};
+                try {
+                  const body=await response.body();
+                  rec.bytes=body.length;
+                  if (body.length < 5_000_000) {
+                    const safe=(name+'-'+String(net.length).padStart(4,'0')).replace(/[^a-z0-9_-]/gi,'_');
+                    fs.writeFileSync(`browser/${safe}.bin`,body);
+                    rec.file=`${safe}.bin`;
+                    const txt=body.toString('utf8');
+                    rec.containsCode=txt.includes(code);
+                    if(rec.containsCode) rec.codeSnippets=[...txt.matchAll(new RegExp(`.{0,500}${code}.{0,1500}`,'gis'))].slice(0,5).map(m=>m[0]);
+                  }
+                } catch(e){rec.bodyError=String(e)}
+                net.push(rec);
+              }
+            });
+            let navError=null;
+            try { await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000}); } catch(e){ navError=String(e); }
+            await page.waitForTimeout(30000);
+            let bodyText=''; let html='';
+            try { bodyText=await page.locator('body').innerText({timeout:5000}); } catch{}
+            try { html=await page.content(); } catch{}
+            fs.writeFileSync(`browser/${name}.html`,html);
+            fs.writeFileSync(`browser/${name}.txt`,bodyText);
+            try { await page.screenshot({path:`browser/${name}.png`,fullPage:true,timeout:30000}); } catch{}
+            const controls=await page.locator('input,select,button,a').evaluateAll(els=>els.slice(0,1000).map(e=>({tag:e.tagName,type:e.getAttribute('type'),name:e.getAttribute('name'),id:e.id,placeholder:e.getAttribute('placeholder'),aria:e.getAttribute('aria-label'),text:(e.innerText||e.value||'').trim().slice(0,300),href:e.getAttribute('href')}))).catch(()=>[]);
+            // Attempt a global code search box if one is visible.
+            let actions=[];
+            for (const locator of [
+              page.getByPlaceholder(/код|уникальн|поиск/i),
+              page.locator('input').filter({has:page.locator('')})
+            ]) {
+              try {
+                const n=await locator.count();
+                for(let i=0;i<Math.min(n,10);i++){
+                  const el=locator.nth(i); if(!(await el.isVisible())) continue;
+                  const ph=(await el.getAttribute('placeholder'))||'';
+                  const type=(await el.getAttribute('type'))||'';
+                  if(!/код|поиск|search|уникальн/i.test(ph+' '+type)) continue;
+                  await el.fill(code); await el.press('Enter').catch(()=>{}); await page.waitForTimeout(5000);
+                  actions.push({filled:ph||type,after:(await page.locator('body').innerText().catch(()=>'' )).slice(0,10000)});
+                }
+              } catch{}
+            }
+            all[name]={url,pageUrl:page.url(),navError,title:await page.title().catch(()=>''),bodyStart:bodyText.slice(0,20000),containsCode:bodyText.includes(code)||html.includes(code),controls,network:net,actions};
+            await context.close();
+          }
+          await browser.close();
+          fs.writeFileSync('browser/result.json',JSON.stringify(all,null,2));
+          console.log(JSON.stringify(all,null,2).slice(0,200000));
+          JS
+          node /tmp/capture.mjs
+      - name: Upload browser capture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-browser-network
+          path: browser
+          retention-days: 2
