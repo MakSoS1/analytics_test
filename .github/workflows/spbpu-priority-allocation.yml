@@ -1,0 +1,102 @@
+name: Simulate SPbPU priority allocation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch official lists and allocate priorities
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p spbpu-sim
+          python - <<'PY'
+          import concurrent.futures,json,requests
+          from collections import defaultdict,deque
+          from pathlib import Path
+
+          base='https://my.spbstu.ru'
+          s=requests.Session();s.headers.update({'User-Agent':'Mozilla/5.0','Referer':base+'/home/abit/list-applicants/bachelor'})
+          s.get(base+'/home/abit/list-applicants/bachelor',timeout=60)
+          payload={'id_1':'2','id_2':'1','education_level':'bachelor'}
+          codes=s.post(base+'/home/get-code-list',json=payload,timeout=60).json().get('code_list',[])
+
+          def fetch(c):
+            ss=requests.Session();ss.headers.update(s.headers)
+            params={'filter_1':'2','filter_2':'1','filter_3':str(c['id']),'education_level':'bachelor'}
+            try:
+              rows=ss.get(base+'/home/get-abit-list',params=params,timeout=90).json().get('results',[])
+              info=ss.post(base+'/home/get-direction-info',json={'id_3':c['id'],'education_level':'bachelor','condition':'1'},timeout=60).json()
+              places=int(info[0].get('places') or 0) if info else 0
+              date=info[0].get('date_info') if info else None
+              return {'id':c['id'],'title':c['title'],'places':places,'date':date,'rows':rows}
+            except Exception as e:return {'id':c['id'],'title':c['title'],'error':repr(e),'places':0,'rows':[]}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+            groups=list(ex.map(fetch,codes))
+
+          # Consent is university-wide; collect each consenting applicant's applications and priorities.
+          apps=defaultdict(list)
+          rankings={}
+          capacities={}
+          for g in groups:
+            gid=g['id']; capacities[gid]=g['places']; rankings[gid]=[]
+            for idx,r in enumerate(g['rows']):
+              if str(r.get('approval','')).strip()!='+' or 'Участвует' not in str(r.get('info','')): continue
+              code=str(r.get('code'))
+              try: pr=int(r.get('priority'))
+              except: continue
+              apps[code].append({'gid':gid,'priority':pr,'rank':idx,'raw_num':r.get('num'),'score':r.get('sum')})
+              rankings[gid].append(code)
+
+          # Deduplicate and order by priority then group rank. Equal priorities are ambiguous.
+          prefs={}
+          for code,ls in apps.items():
+            uniq={x['gid']:x for x in ls}
+            prefs[code]=sorted(uniq.values(),key=lambda x:(x['priority'],x['rank'],x['gid']))
+
+          # Applicant-proposing deferred acceptance, groups prefer official ranking order.
+          rank_index={gid:{code:i for i,code in enumerate(lst)} for gid,lst in rankings.items()}
+          held={gid:[] for gid in capacities}
+          next_idx={code:0 for code in prefs}
+          queue=deque(prefs)
+          while queue:
+            code=queue.popleft(); i=next_idx[code]
+            if i>=len(prefs[code]): continue
+            gid=prefs[code][i]['gid']; next_idx[code]=i+1
+            if capacities.get(gid,0)<=0:
+              queue.append(code); continue
+            candidates=held[gid]+[code]
+            candidates=sorted(set(candidates),key=lambda c:rank_index[gid].get(c,10**9))
+            keep=candidates[:capacities[gid]]; reject=candidates[capacities[gid]:]
+            held[gid]=keep
+            for r in reject: queue.append(r)
+
+          assignment={code:gid for gid,codes2 in held.items() for code in codes2}
+          targets={}
+          for code in ['2021331','2175231']:
+            gid=assignment.get(code)
+            target={'assigned_gid':gid,'assigned_title':next((g['title'] for g in groups if g['id']==gid),None),'applications':prefs.get(code,[])}
+            if gid:
+              target['assigned_position']=held[gid].index(code)+1
+              target['capacity']=capacities[gid]
+            targets[code]=target
+
+          result={'source_dates':sorted(set(g.get('date') for g in groups if g.get('date'))),'groups_fetched':len(groups),'groups_failed':[{'id':g['id'],'title':g['title'],'error':g.get('error')} for g in groups if g.get('error')],'consenting_applicants':len(prefs),'targets':targets,'notes':['Simulation uses official group ranking and priority numbers. Equal priority ties are resolved by group rank and may differ from the university system.','Special quota/BVI interactions outside the fetched main competition condition are not modeled.']}
+          Path('spbpu-sim/result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),'utf-8')
+          print(json.dumps(result,ensure_ascii=False,indent=2))
+          PY
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: spbpu-priority-allocation
+          path: spbpu-sim
+          retention-days: 2
