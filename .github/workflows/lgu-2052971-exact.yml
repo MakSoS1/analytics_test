@@ -1,0 +1,72 @@
+name: Find exact LGU program for 2052971
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: pip install requests beautifulsoup4
+      - name: Crawl official LGU lists
+        run: |
+          cat > /tmp/crawl.py <<'PY'
+          import requests, re, json, time
+          from bs4 import BeautifulSoup
+          from urllib.parse import urljoin
+          base='https://priem.lengu.ru/'
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          idx=s.get(base+'show_pk1.php',params={'pk':'Бакалавриат и специалитет'},timeout=60)
+          idx.raise_for_status(); idx.encoding='utf-8'
+          open('lgu-index.html','wb').write(idx.content)
+          soup=BeautifulSoup(idx.text,'html.parser')
+          links=[]
+          for a in soup.find_all('a',href=True):
+              href=a['href']
+              if 'show_napr1.php' in href:
+                  links.append(urljoin(base,href))
+          links=list(dict.fromkeys(links))
+          print('links',len(links))
+          found=[]
+          for i,u in enumerate(links):
+              try:
+                  r=s.get(u,timeout=60); r.encoding='utf-8'
+                  if '2052971' not in r.text: continue
+                  sp=BeautifulSoup(r.text,'html.parser')
+                  text=' '.join(sp.stripped_strings)
+                  group=''; date=''; tm=''
+                  m=re.search(r'Конкурсная группа\s*-\s*(.+?)(?:Подразделение|Форма обучения)',text)
+                  if m: group=m.group(1).strip()
+                  md=re.search(r'Дата формирования\s*-\s*([0-9.]+)',text)
+                  mt=re.search(r'Время формирования\s*-\s*([0-9:]+)',text)
+                  if md: date=md.group(1)
+                  if mt: tm=mt.group(1)
+                  row_cells=[]
+                  for tr in sp.find_all('tr'):
+                      cells=[' '.join(c.stripped_strings) for c in tr.find_all(['td','th'])]
+                      if any('2052971' in c for c in cells):
+                          row_cells=cells; break
+                  item={'url':u,'group':group,'date':date,'time':tm,'row':row_cells}
+                  found.append(item)
+                  print(json.dumps(item,ensure_ascii=False))
+              except Exception as e:
+                  print('ERR',u,repr(e))
+          open('lgu-2052971.json','w',encoding='utf-8').write(json.dumps({'count_links':len(links),'found':found},ensure_ascii=False,indent=2))
+          with open('lgu-2052971.md','w',encoding='utf-8') as f:
+              f.write('# LGU exact programs for 2052971\n\n')
+              for x in found:
+                  f.write(f"## {x['group']}\n- generated: {x['date']} {x['time']}\n- url: {x['url']}\n- row: `{x['row']}`\n\n")
+          PY
+          python /tmp/crawl.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lgu-2052971-exact
+          path: |
+            lgu-index.html
+            lgu-2052971.json
+            lgu-2052971.md
+          retention-days: 2
