@@ -1,0 +1,1 @@
+Trigger official-list/API checks for tracked MBI competitors on 2026-08-07 around 05:00 MSK.
