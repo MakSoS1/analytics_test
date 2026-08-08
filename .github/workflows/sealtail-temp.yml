@@ -1,0 +1,53 @@
+name: SealTail temporary CTF submit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.ctf/sealtail/**'
+      - '.github/workflows/sealtail-temp.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Submit crafted capsule
+        run: python3 .ctf/sealtail/submit.py
+
+      - name: Encrypt response locally on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > pub.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmCK+x6uirLzA+NfddivH
+          ErY44XGxtHxx1KjzmhYqVy0tkLi9ktFtJAWr1zdlVI3xxoCFV/639EsE+hWkjphg
+          nCEiNyYJjlaVZZD0UzMOQGvO1mdt7nUulJrPmb31X3Bsyno5XPwhMVaX87J0UBLp
+          MCtlBvYGveeWhowhDKamQ1KGu0V9WAf3/OHRtptocO8fV2IvJiFHVbstpLFHZ7Ai
+          T1ZNiCKSvzhCVogFUo+AkF4KYZI/Gf8nWo65zbpfkVUOiY0h2e777PBgn50g0ijX
+          ngSz1SUi1c7vdYXwTWQon7Oi2XPa+XDzgg9aDkrwHPD8ZEaGBr0xMTtMCwC3x/S5
+          uQIDAQAB
+          -----END PUBLIC KEY-----
+          EOF
+          openssl rand -hex 32 > pass.txt
+          openssl enc -aes-256-cbc -pbkdf2 -salt -pass file:pass.txt -in response.bin -out response.enc
+          openssl pkeyutl -encrypt -pubin -inkey pub.pem -in pass.txt -out pass.enc \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+          rm -f response.bin pass.txt pub.pem crafted.capsule
+
+      - name: Upload encrypted result
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealtail-encrypted-result
+          path: |
+            response.enc
+            pass.enc
+            result_meta.txt
+          retention-days: 1
+          if-no-files-found: error
