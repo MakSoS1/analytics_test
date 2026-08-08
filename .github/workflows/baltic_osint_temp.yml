@@ -10,69 +10,70 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    timeout-minutes: 8
     steps:
-      - name: Recover archived Seaco OData query schema and probe backend
+      - name: Search Wayback for archived Seaco OData responses
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import requests,re,time,html,urllib.parse
+          import requests,re,time,urllib.parse,json
           H={'User-Agent':'Mozilla/5.0'}
-          base='https://newseaweb.seacoglobal.com'
-          svc=base+'/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV'
-          print('=== LIVE ODATA ===')
-          for path in ['/$metadata','/']:
-              try:
-                  r=requests.get(svc+path,headers={**H,'Accept':'application/xml,application/json'},timeout=25,verify=False,allow_redirects=True)
-                  print('LIVE',path,r.status_code,r.url,r.headers.get('Content-Type'),len(r.content))
-                  print(r.text[:30000])
-              except Exception as e: print('LIVE_ERR',path,repr(e))
-
-          print('=== ARCHIVED JS ===')
-          files=[
-            ('20231103030901','js/UnitEnquiry/UnitEnquiry.js'),
-            ('20231103032542','js/UnitEnquiry/ContainerDetails.js'),
-            ('20260209130559','js/UnitEnquiry/UnitEnquirySpecifications.js'),
-            ('20260209130559','js/UnitEnquiry/FullSpecificationReefers.js'),
+          host='newseaweb.seacoglobal.com'
+          root='https://'+host+'/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV'
+          patterns=[
+              host+'/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/*',
+              host+'/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/Equipment_Status*',
+              host+'/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/$metadata',
           ]
-          root='https://newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/'
-          alltext=''
-          for ts,path in files:
-              original=root+path
-              urls=[
-                'https://web.archive.org/web/'+ts+'id_/'+original,
-                'http://web.archive.org/web/'+ts+'id_/'+original,
-              ]
-              text=None
-              for attempt in range(4):
-                  for u in urls:
-                      try:
-                          rr=requests.get(u,headers=H,timeout=35,allow_redirects=True)
-                          print('ARCH',path,'TRY',attempt,rr.status_code,len(rr.content),rr.url)
-                          if rr.status_code==200 and len(rr.content)>100:
-                              text=rr.text; break
-                      except Exception as e: print('ARCH_ERR',path,attempt,type(e).__name__)
-                  if text is not None: break
-                  time.sleep(2+attempt)
-              if text is None: continue
-              alltext+='\n/* '+path+' */\n'+text
-              print('\n---',path,'RELEVANT---')
-              for line in text.splitlines():
-                  l=line.lower()
-                  if any(k in l for k in ['.read(','.read(','serviceurl','entity','filter','unitno','equipment','tir','csc','approval','specif','container','eqp','unitid','unit_id']):
-                      print(line[:7000])
-          print('=== ALL ODATA PATH LITERALS ===')
-          # Extract likely model.read/create/remove entity-set paths and property-ish tokens near TIR/CSC.
-          for m in re.finditer(r'["\'](/[^"\']{1,180})["\']',alltext):
-              z=m.group(1)
-              if any(k in z.lower() for k in ['unit','spec','container','equip','detail','reefer','enquir']): print('PATH',z)
-          for key in ['tir','csc','approval','certificate']:
-              print('\nCONTEXT_KEY',key)
-              low=alltext.lower(); pos=0; n=0
-              while n<30:
-                  i=low.find(key,pos)
-                  if i<0: break
-                  print(re.sub(r'\s+',' ',alltext[max(0,i-500):i+1000])[:1600])
-                  pos=i+len(key); n+=1
+          rows=[]
+          for pat in patterns:
+              try:
+                  r=requests.get('https://web.archive.org/cdx/search/cdx',params={
+                      'url':pat,'output':'json','filter':'statuscode:200','fl':'timestamp,original,statuscode,mimetype,digest,length','collapse':'urlkey','limit':'2000'
+                  },headers=H,timeout=90)
+                  print('CDX_PATTERN',pat,r.status_code,len(r.content))
+                  print(r.text[:60000])
+                  try:
+                      a=r.json()
+                      for x in a[1:]: rows.append(x)
+                  except Exception: pass
+              except Exception as e: print('CDX_ERR',pat,repr(e))
+          print('UNIQUE_MATCHES_BEGIN')
+          uniq=[]; seen=set()
+          for x in rows:
+              k=(x[0],x[1])
+              if k in seen: continue
+              seen.add(k); uniq.append(x); print('ROW',x)
+          print('UNIQUE_MATCHES_END')
+
+          # Prioritize metadata / Equipment_Status and fetch only a small set.
+          cand=[x for x in uniq if ('equipment_status' in x[1].lower() or '$metadata' in x[1].lower())]
+          print('FETCH_CANDIDATES',len(cand))
+          for x in cand[:80]:
+              ts,u=x[0],x[1]
+              au='https://web.archive.org/web/'+ts+'id_/'+u
+              ok=False
+              for attempt in range(3):
+                  try:
+                      rr=requests.get(au,headers=H,timeout=40,allow_redirects=True)
+                      print('\nFETCH',ts,u,rr.status_code,rr.headers.get('Content-Type'),len(rr.content),rr.url)
+                      if rr.status_code==200:
+                          print(rr.text[:50000]); ok=True; break
+                  except Exception as e: print('FETCH_ERR',type(e).__name__)
+                  time.sleep(2)
+              if ok and ('963946' in rr.text or '<edmx:' in rr.text or 'Tir' in rr.text):
+                  print('*** INTERESTING ***')
+
+          # Ask CDX specifically for URL-encoded target query variants.
+          queries=[
+              root+"/Equipment_Status?$filter=IUnitNo%20eq%20'SEGU9639460'%20and%20IUnitNo1%20eq%20''",
+              root+"/Equipment_Status?$filter=IUnitNo%20eq%20%27SEGU9639460%27%20and%20IUnitNo1%20eq%20%27%27",
+              root+"/Equipment_Status?$filter=IUnitNo%20eq%20'SEGU9639460'",
+          ]
+          for q in queries:
+              try:
+                  rr=requests.get('https://web.archive.org/cdx/search/cdx',params={'url':q,'output':'json','fl':'timestamp,original,statuscode,mimetype,digest,length','filter':'statuscode:200'},headers=H,timeout=50)
+                  print('TARGET_CDX',q,rr.status_code,rr.text[:12000])
+              except Exception as e: print('TARGET_CDX_ERR',repr(e))
           PY
