@@ -19,8 +19,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: cover-channel-lab-${{ github.ref }}
-  cancel-in-progress: true
+  group: cover-channel-lab-${{ github.run_id }}
+  cancel-in-progress: false
 
 env:
   HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
