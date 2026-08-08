@@ -1,0 +1,79 @@
+name: Cover Channel HF Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: 'Completed Cover Channel Dataset Lab run ID to import'
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+
+jobs:
+  sync-existing-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require Hugging Face write token
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$HF_TOKEN" ]]; then
+            echo 'Repository secret HF_TOKEN is required and must have Hugging Face write permission.' >&2
+            exit 1
+          fi
+      - name: Install Hugging Face client
+        run: python -m pip install 'huggingface_hub[hf_xet]>=1.0.0'
+      - name: Download retained artifacts from completed run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/source-artifacts"
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/source-artifacts"
+          find "$RUNNER_TEMP/source-artifacts" -maxdepth 2 -type d | sort
+      - name: Upload dataset and model artifacts to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        working-directory: cover-channel-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/source-artifacts"
+          release="releases/gh-${SOURCE_RUN_ID}-import"
+          found=0
+          for d in "$root"/dataset-*; do
+            [[ -d "$d" ]] || continue
+            found=1
+            name="$(basename "$d")"
+            ./scripts/upload_hf.sh "$d" "$release/$name" "Import $name from GitHub run $SOURCE_RUN_ID"
+          done
+          for d in "$root"/baseline-models-*; do
+            [[ -d "$d" ]] || continue
+            found=1
+            ./scripts/upload_hf.sh "$d" "$release/models" "Import baseline models from GitHub run $SOURCE_RUN_ID"
+          done
+          for d in "$root"/release-status-*; do
+            [[ -d "$d" ]] || continue
+            found=1
+            ./scripts/upload_hf.sh "$d" "$release/status" "Import release status from GitHub run $SOURCE_RUN_ID"
+          done
+          if [[ "$found" -ne 1 ]]; then
+            echo "No retained cover-channel artifacts found in run $SOURCE_RUN_ID" >&2
+            exit 1
+          fi
