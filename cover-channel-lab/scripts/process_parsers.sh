@@ -15,14 +15,22 @@ set -e
 echo "$SURI_RC" | sudo tee "$OUT/suricata/exit_code.txt" >/dev/null
 sudo chown -R "$(id -u):$(id -g)" "$OUT/suricata"
 
-# Zeek 8.2.1 is pinned for parser reproducibility. The official image installs
-# binaries under /opt/zeek/bin; do not depend on the image shell PATH.
+# Zeek 8.2.1 is pinned for parser reproducibility. The image exposes `zeek` on
+# its container PATH (the exact installation prefix is image-specific), so call
+# the binary directly instead of hard-coding /opt/zeek/bin.
+docker run --rm zeek/zeek:8.2.1 zeek --version > "$OUT/zeek/version.txt" 2>&1
 set +e
-docker run --rm -v "$PCAP:/data/input.pcap:ro" -v "$OUT/zeek:/out" -w /out zeek/zeek:8.2.1 \
-  sh -lc '/opt/zeek/bin/zeek --version > version.txt 2>&1; /opt/zeek/bin/zeek -C -r /data/input.pcap LogAscii::use_json=T > run.stdout 2>run.stderr'
+docker run --rm \
+  -v "$PCAP:/data/input.pcap:ro" \
+  -v "$OUT/zeek:/out" \
+  -w /out \
+  zeek/zeek:8.2.1 \
+  zeek -C -r /data/input.pcap LogAscii::use_json=T \
+  > "$OUT/zeek/run.stdout" 2> "$OUT/zeek/run.stderr"
 ZEEK_RC=$?
 set -e
 echo "$ZEEK_RC" > "$OUT/zeek/exit_code.txt"
+sudo chown -R "$(id -u):$(id -g)" "$OUT/zeek" 2>/dev/null || true
 sudo chmod -R a+rX "$OUT/zeek" 2>/dev/null || true
 
 mkdir -p "$STAGE_DIR/parser"
