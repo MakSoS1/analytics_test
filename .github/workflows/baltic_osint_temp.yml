@@ -10,38 +10,31 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     steps:
-      - name: Fetch exact ERR video block and resolve media
+      - name: Download ERR original and extract full-rate door sequence
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import requests,re,html,urllib.parse,json
-          U='https://news.err.ee/media/videoBlock/649008ff0277d6873f8e91b37a661cc6?photoId=3178979&contentId=1609932407&contentTitle=Watch%3A%20Estonia%27s%20special%20forces%20detain%20a%20suspected%20smugglers%20ship'
-          P='https://news.err.ee/1609932407/watch-estonia-s-special-forces-detain-a-suspected-smugglers-ship'
-          H={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36','Referer':P,'Accept':'text/html,application/json,*/*'}
-          s=requests.Session(); r=s.get(U,headers=H,timeout=40,allow_redirects=True)
-          print('BLOCK',r.status_code,r.url,r.headers.get('Content-Type'),len(r.content))
-          raw=html.unescape(r.text).replace('\\/','/')
-          print('BLOCK_RAW_BEGIN'); print(raw[:80000]); print('BLOCK_RAW_END')
-          print('EXTRACT_BEGIN')
-          vals=[]
-          for pat in [r'https?://[^\"\'<> ]+',r'(?<=[\"\'])(/[^\"\']+)(?=[\"\'])']:
-            for m in re.finditer(pat,raw,re.I):
-              z=m.group(0) if not m.groups() else m.group(1)
-              if any(k in z.lower() for k in ['m3u8','mp4','video','media','stream','player','api','manifest','playlist']):
-                if z not in vals: vals.append(z)
-          for z in vals: print('VAL',z[:3000])
-          print('EXTRACT_END')
-          for z in vals:
-            if z.startswith('/'): z=urllib.parse.urljoin(r.url,z)
-            if not z.startswith('http'): continue
-            try:
-              rr=s.get(z,headers=H,timeout=35,allow_redirects=True)
-              print('\nFETCH',rr.status_code,rr.url,rr.headers.get('Content-Type'),len(rr.content))
-              ct=(rr.headers.get('Content-Type') or '').lower()
-              if 'text' in ct or 'json' in ct or 'mpegurl' in ct: print(rr.text[:30000])
-              else: print(rr.content[:80].hex())
-            except Exception as e: print('ERR',z[:500],repr(e))
-          PY
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          URL='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' "$URL" -o /tmp/baltic.mp4
+          ffprobe -v error -show_entries stream=width,height,r_frame_rate,bit_rate -show_entries format=duration,size,bit_rate -of json /tmp/baltic.mp4
+          mkdir -p /tmp/frames /tmp/crops
+          # Full 25 fps around the clearest approach to the target reefer door.
+          ffmpeg -hide_banner -loglevel error -ss 90 -to 101 -i /tmp/baltic.mp4 -vsync 0 -q:v 1 /tmp/frames/f_%04d.jpg
+          # Broad crop of the right-hand reefer door, retaining all approval labels/plate zones.
+          for f in /tmp/frames/*.jpg; do
+            b=$(basename "$f")
+            ffmpeg -hide_banner -loglevel error -i "$f" -vf 'crop=760:650:520:40,scale=1520:1300:flags=lanczos' -frames:v 1 "/tmp/crops/$b"
+          done
+          tar -C /tmp -czf /tmp/door_frames_25fps.tar.gz frames crops
+          echo "FRAME_COUNT $(find /tmp/frames -type f | wc -l)"
+          ls -lh /tmp/baltic.mp4 /tmp/door_frames_25fps.tar.gz
+      - name: Upload door sequence
+        uses: actions/upload-artifact@v4
+        with:
+          name: baltic-door-25fps
+          path: /tmp/door_frames_25fps.tar.gz
+          retention-days: 1
