@@ -12,59 +12,57 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Compare ATO sister batch certificates
+      - name: Inspect public Triton unit specifications search API
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq poppler-utils >/dev/null
-          python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,re,html,urllib.parse,subprocess,tempfile,json,os
+          import requests,re,html,urllib.parse,json
           from bs4 import BeautifulSoup
-          U='https://www.reefertransport.nl/Certified.aspx'; H={'User-Agent':'Mozilla/5.0'}
-          Q=[('SEGU','963946'),('SEGU','972002'),('RJCU','201919')]
-          pfx='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$prefixComboBox'; num='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$numberTextBox'
-          def hidd(sp): return {x.get('name'):x.get('value','') for x in sp.find_all('input') if x.get('name') and (x.get('type') or '').lower()=='hidden'}
-          def cert(prefix,number):
-              s=requests.Session(); soup=BeautifulSoup(s.get(U,headers=H,timeout=30).text,'html.parser')
-              d=hidd(soup); d[pfx]=prefix; d[num]=number; d['__EVENTTARGET']='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$searchButton'; d['__EVENTARGUMENT']=''
-              d['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_prefixComboBox_ClientState']=json.dumps({'logEntries':[],'value':prefix,'text':prefix,'enabled':True,'checkedIndices':[],'checkedItemsTextOverflows':False},separators=(',',':'))
-              d['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_numberTextBox_ClientState']=json.dumps({'enabled':True,'emptyMessage':'number','validationText':number,'valueAsString':number,'lastSetTextBoxValue':number},separators=(',',':'))
-              sr=s.post(U,data=d,headers={**H,'Referer':U},timeout=30); ss=BeautifulSoup(sr.text,'html.parser')
-              img=ss.find('input',{'type':'image','title':'Open Certificate'})
-              if not img: return {'query':prefix+number,'error':'no certificate button'}
-              name=img.get('name'); d2=hidd(ss); d2[pfx]=prefix; d2[num]=number; d2['__EVENTTARGET']=''; d2['__EVENTARGUMENT']=''
-              for k in ['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_prefixComboBox_ClientState','ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_numberTextBox_ClientState']:
-                  n=ss.find('input',{'name':k}); d2[k]=n.get('value','') if n else ''
-              d2[name+'.x']='6'; d2[name+'.y']='6'
-              cr=s.post(U,data=d2,headers={**H,'Referer':U},timeout=30)
-              m=re.search(r'window\.open\(["\']([^"\']*ViewPdf\.aspx[^"\']*)["\']',html.unescape(cr.text),re.I)
-              if not m: return {'query':prefix+number,'error':'ViewPdf not found'}
-              vu=urllib.parse.urljoin(U,m.group(1)); vr=s.get(vu,headers={**H,'Referer':U},timeout=40)
-              if not vr.content.startswith(b'%PDF'): return {'query':prefix+number,'error':'not pdf'}
-              fd,path=tempfile.mkstemp(suffix='.pdf'); os.write(fd,vr.content); os.close(fd)
-              txt=subprocess.check_output(['pdftotext','-layout',path,'-'],text=True,errors='replace'); os.unlink(path)
-              out={'query':prefix+number}
-              pats={
-                'certificate':r'No\.\s*([0-9]+)',
-                'series':r'container series\s+([A-Z]{4}\s*\d+\s*-\s*\d+)',
-                'tested':r'Tested container\s*:\s*([^\n]+)',
-                'box_manufacturer':r'Box manufacturer\s*:\s*([^\n]+)',
-                'box_model':r'Box model number\s*:\s*([^\n]+)',
-                'box_date':r'Box manufacturing date\s*:\s*([^\n]+)',
-                'unit_manufacturer':r'Unit manufacturer\s*:\s*([^\n]+)',
-                'unit_type':r'Unit type\s*:\s*([^\n]+)',
-                'inspection_company':r'Inspection company\s*:\s*([^\n]+)',
-                'inspection_date':r'Inspection date\s*:\s*([^\n]+)',
-              }
-              for k,p in pats.items():
-                  mm=re.search(p,txt,re.I)
-                  if mm: out[k]=' '.join(mm.group(1).split())
-              return out
-          results=[]
-          for p,n in Q:
-              try: results.append(cert(p,n))
-              except Exception as e: results.append({'query':p+n,'error':type(e).__name__+': '+str(e)[:160]})
-          print(json.dumps(results,ensure_ascii=False,indent=2))
+          H={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/139 Safari/537.36'}
+          base='https://tools.tritoncontainer.com'
+          u=base+'/tritoncontainer/unitSpecs/list'
+          s=requests.Session(); r=s.get(u,headers=H,timeout=30)
+          print('LIST',r.status_code,r.url,len(r.content))
+          txt=html.unescape(r.text)
+          for line in txt.splitlines():
+              low=line.lower()
+              if any(k in low for k in ['unitspec','datatable','ajax','unitnumber','search','script src']):
+                  print('HTML',line[:3000])
+          soup=BeautifulSoup(r.text,'html.parser')
+          scripts=[]
+          for sc in soup.find_all('script'):
+              src=sc.get('src')
+              if src:
+                  scripts.append(urllib.parse.urljoin(r.url,src))
+          print('SCRIPTS',json.dumps(scripts,indent=2))
+          for su in scripts:
+              try:
+                  rr=s.get(su,headers={**H,'Referer':u},timeout=30)
+                  body=rr.text
+                  hits=[]
+                  for m in re.finditer(r'.{0,250}(?:unitSpecs|DataTable|ajax|unitNumber|serverSide|search).{0,500}',body,re.I|re.S):
+                      z=' '.join(m.group(0).split())
+                      if z not in hits: hits.append(z)
+                  if hits:
+                      print('\nSCRIPT',su,rr.status_code,len(rr.content))
+                      for z in hits[:30]: print('HIT',z[:2000])
+              except Exception as e: print('SCRIPT_ERR',su,repr(e))
+          # Try common endpoint candidates safely with a known public unit and our target.
+          candidates=[
+              '/tritoncontainer/unitSpecs/search',
+              '/tritoncontainer/unitSpecs/list.json',
+              '/tritoncontainer/unitSpecs/data',
+              '/tritoncontainer/unitSpecs/find',
+          ]
+          for path in candidates:
+              for method in ['get','post']:
+                  try:
+                      fn=getattr(s,method)
+                      kwargs={'headers':{**H,'Referer':u},'timeout':20,'allow_redirects':True}
+                      if method=='get': kwargs['params']={'unitNumbers':'TTNU8845830\nSEGU9639460','unitNumber':'TTNU8845830'}
+                      else: kwargs['data']={'unitNumbers':'TTNU8845830\nSEGU9639460','unitNumber':'TTNU8845830'}
+                      q=fn(base+path,**kwargs)
+                      print('PROBE',method.upper(),path,q.status_code,q.url,q.headers.get('Content-Type'),len(q.content),q.text[:800].replace('\n',' '))
+                  except Exception as e: print('PROBE_ERR',method,path,repr(e))
           PY
