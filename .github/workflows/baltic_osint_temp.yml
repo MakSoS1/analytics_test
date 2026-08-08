@@ -10,13 +10,22 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ctf-baltic-osint-temp
+      - name: Extract close-up frames from public PPA footage
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
+          V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
+          curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic.mp4
+          mkdir -p /tmp/close
+          ffmpeg -hide_banner -loglevel error -ss 90 -i /tmp/baltic.mp4 -t 10 -vf 'fps=10' -q:v 1 /tmp/close/f_%03d.jpg
+          ls -lh /tmp/close | tail
       - uses: actions/upload-artifact@v4
         with:
-          name: baltic-contact-sheets
-          path: osint_frames/contact_*.jpg
+          name: baltic-closeup-90-100
+          path: /tmp/close/*.jpg
           retention-days: 1
