@@ -1,22 +1,30 @@
 # Cover Channel Web Protocol Traffic Lab
 
-A reproducible, network-only laboratory for generating benign and suspicious synthetic traffic used to train and validate covert-channel / Web-C2 detection for an NGFW/NDR pipeline with Suricata and Zeek.
+A reproducible, network-only laboratory for generating benign and suspicious synthetic traffic for covert-channel / Web-C2 detection in an NGFW/NDR ML pipeline with Suricata and Zeek.
 
-The lab intentionally does **not** run malware. It does not execute shell commands received over the network, read user files, collect credentials, persist on hosts, connect a synthetic C2 to the Internet, or provide an unrestricted SOCKS/proxy implementation. Tunnel scenarios only reproduce safe wire grammars and acknowledge allowlisted local targets.
+The lab intentionally does **not** run malware. It does not execute received commands, read user files, collect credentials, persist on hosts, connect a synthetic C2 to the Internet, or provide unrestricted proxying. Every simulated client namespace has no default route and all attacker/service fixtures terminate inside the isolated `10.20.0.0/24` lab.
 
 ## What is implemented
 
-- isolated `10.20.0.0/24` topology using Linux network namespaces on a GitHub-hosted Ubuntu runner;
-- roles matching Office, Dev, C2, DevOps, SOC and a monitor bridge;
-- real HTTP/1.1, HTTPS, HTTP/2 negotiation, WebSocket/WSS, SSE, DoH-wire-format and browser-native local traffic;
-- safe WSS tunnel/multiplexing message grammar with no arbitrary forwarding;
-- request URI, standard/custom header, body, response, syntax, timing, WebSocket, H2, browser, SSE/long-poll, gRPC-wire-format, tunnel, TLS-visibility, LOTS-local-analogue, MQTT-over-WSS-like and DoH fixtures;
-- paired benign hard negatives using the same carrier/service shape;
-- multiple client implementations: httpx, curl, Node fetch, Go net/http, Python stdlib, H2-capable httpx, and genuine headless Chromium for browser challenge profiles;
-- immutable Bronze, normalized Silver and feature-ready Gold layers;
-- Suricata offline parsing and Zeek 8.2.1 offline parsing;
-- campaign/event/decrypted-ground-truth manifests, checksums, campaign-level splits and leakage checks;
-- sharded GitHub Actions orchestration with immediate Hugging Face upload when the write token is available.
+- GitHub-hosted Ubuntu topology using Linux network namespaces for Office, Dev, C2, DevOps and SOC personas plus a monitor bridge;
+- real HTTP/1.1 and HTTPS exchanges;
+- real HTTP/2 traffic, plus real gRPC unary/server-stream/client-stream/bidi RPC via `grpcio`;
+- real WebSocket/WSS traffic;
+- real MQTT v5 over WSS using Paho + a local Mosquitto WebSocket listener;
+- real QUIC/HTTP/3 using `aioquic`, including parallel/sparse H3 streams and a real H3→H2→H1 fallback campaign;
+- H3 DATAGRAM + CONNECT-UDP-like challenge and real WebTransport stream challenge;
+- bounded HTTP/1.1 CONNECT fixture that returns a local echo channel but **never** forwards to the requested target;
+- H2 extended-CONNECT/RFC8441 cases kept as explicitly labelled semantic fixtures rather than falsely represented as wire-real;
+- OHTTP media-type/binary privacy hard negative explicitly labelled as a fixture rather than full RFC 9458 HPKE;
+- SSE, long polling, local DoH wire-format, genuine headless Chromium browser primitives and browser-originated WSS;
+- request URI, standard/custom header, body, response, syntax, timing, WSS tunnel, TLS-visibility, LOTS-local-analogue and control-plane/data-plane scenarios;
+- paired benign hard negatives and counterfactual-style pairs using the same service/carrier family;
+- independent client stacks: httpx H1/H2, curl, Node fetch, Go net/http, Python stdlib, Chromium, aioquic, grpcio and Paho MQTT;
+- Suricata offline parsing plus pinned Zeek 8.2.1 offline parsing with fatal parser quality gates;
+- JA4/JA4S/JA4H/JA4T/JA4L extraction when exported by the parser, plus HTTP/TLS/DNS/QUIC/WebSocket/session aggregates;
+- Bronze, Silver and Gold dataset layers with campaign/event ground truth, checksums, strict splits and leakage audit;
+- B1-content, B2-session and B3-opaque LightGBM baselines with calibration, test/challenge metrics, feature importance and SHAP summaries;
+- a post-baseline 500-session black-box gradient-free nuisance search kept exclusively as adversarial holdout.
 
 ## Storage layout
 
@@ -30,10 +38,19 @@ release/
 │   └── reproducibility.json
 ├── silver/<shard>/
 │   ├── suricata-raw/
+│   │   ├── eve.json
+│   │   └── ...
 │   ├── zeek-raw/
+│   │   ├── conn.log
+│   │   ├── http.log / ssl.log / dns.log / quic.log / websocket.log when present
+│   │   └── ...
 │   └── normalized/*.parquet
 ├── gold/<shard>/
 │   ├── session_features.parquet
+│   ├── parser_session_features.parquet
+│   ├── transaction_features.parquet
+│   ├── field_features.parquet
+│   ├── campaign_splits.parquet
 │   ├── train_campaigns.txt
 │   ├── validation_campaigns.txt
 │   ├── test_campaigns.txt
@@ -44,35 +61,67 @@ release/
     └── leakage_checks.json
 ```
 
-Bronze is the rollback source of truth. Never delete it merely because Silver/Gold has been produced. Decrypted ground truth is laboratory-only supervision and must not be consumed by the opaque production model.
+**Bronze is the rollback source of truth.** The compressed PCAP is retained together with generator manifests and laboratory-only decrypted ground truth, so Silver and Gold can be regenerated after parser, feature or schema changes. Decrypted ground truth must never be fed to the opaque production expert.
 
-## CI stages
-
-The workflow `.github/workflows/cover-channel-lab.yml` implements:
+## Dataset stages
 
 | Stage | Target |
 |---|---:|
-| A parser/observability | 600 sessions |
-| B isolated core | 12,960 sessions |
-| C sequence corpus | 720 campaigns × 60 transactions = 43,200 transactions |
-| D mixed captures | 30 captures, 60/90/120 minutes, 3k–14.6k flows each, first 10 fully benign |
-| F browser/tunnel/privacy challenge | at least 4,200 sessions |
-| G commodity LOTS/MQTT/DoH | paired suspicious/benign profile corpus |
+| A — parser/observability | 600 sessions |
+| B — isolated core | 12,960 sessions |
+| C — sequence corpus | 720 campaigns × 60 transactions = 43,200 transactions |
+| D — mixed realistic captures | 30 captures, actual 60/90/120 minutes, 3k–15k flows, first 10 fully benign |
+| F — browser/WSS/gRPC/TLS challenge | ≥4,200 sessions |
+| G — commodity LOTS/MQTT/DoH | paired suspicious/benign corpus with higher benign ratios for common services |
+| H — future transport holdout | 1,400 H3/QUIC, CONNECT, H3 datagram, WebTransport and privacy sessions |
+| I — adversarial holdout | 500 post-baseline suspicious sessions, never train data |
 
-Stage E generalization is enforced through campaign-level split metadata and challenge-only stages; train files never include challenge stages.
+Stage E generalization is enforced by campaign-level grouping and explicit holdouts. `node_fetch`/`python_stdlib`, selected carriers/transforms, browser challenge, F/G/H/I stages and future transports are excluded from train according to the split contract.
 
-## Running manually on Ubuntu
+## Model artifacts
+
+The full workflow trains three separate experts rather than early-fusing incompatible visibility modes:
+
+- `B1-content.joblib` — content-visible HTTP transaction features;
+- `B2-session.joblib` — campaign/session aggregates;
+- `B3-opaque.joblib` — packet/flow/TLS/parser metadata only.
+
+Validation uses isotonic calibration when both classes are present. The stored threshold targets high validation recall, while reports separately retain precision, recall, F1, ROC-AUC/PR-AUC where defined, test/challenge confusion matrices, feature importance and SHAP summaries.
+
+The adversarial job generates 500 new wire sessions **after** these baselines exist, scores them against `B3-opaque`, and stores attack-success rate plus the lowest-scoring candidates without feeding them back into the same training release.
+
+## Parser and quality gates
+
+A shard is rejected if any of the following holds:
+
+- PCAP is missing or empty;
+- expected campaign traffic cannot be mapped to packets with at least 0.95 campaign coverage;
+- Suricata exits non-zero or does not produce non-empty `eve.json`;
+- Zeek exits non-zero or does not produce non-empty `conn.log`;
+- campaign IDs are duplicated;
+- a holdout client leaks into train or seed/payload identity crosses splits;
+- source checksums are missing.
+
+This prevents a successful GitHub job from masking a capture-only dataset whose parser layer is actually empty.
+
+## Hugging Face persistence
+
+The configured dataset repository is `Maksim123321/cover-channel-web-protocols`, created as a **private Hugging Face dataset repository** when credentials allow it. GitHub Actions expects one repository secret named exactly `HF_TOKEN` containing a Hugging Face user access token with write permission.
+
+Persistence policy:
+
+1. source code, configs, schemas and documentation live permanently in GitHub;
+2. every generated shard is uploaded immediately to its unique Hugging Face release path when `HF_TOKEN` exists;
+3. every complete Bronze/Silver/Gold shard is also stored as a GitHub Actions artifact for 90 days;
+4. `.github/workflows/cover-channel-hf-sync.yml` can later import an already completed GitHub run into Hugging Face, so missing credentials do not require regenerating 60–120 minute captures.
+
+No secret is committed to source code or dataset manifests.
+
+## Manual smoke run
 
 ```bash
 cd cover-channel-lab
-python -m pip install -r requirements.txt
-sudo apt-get update
-sudo apt-get install -y software-properties-common tcpdump tshark zstd jq
-sudo add-apt-repository -y ppa:oisf/suricata-stable
-sudo apt-get update
-sudo apt-get install -y suricata
-
-docker pull zeek/zeek:8.2.1
+./scripts/install_runner.sh
 ./scripts/setup_netns.sh
 ./scripts/start_services.sh
 ./scripts/generate_stage.sh parser 0 1 /tmp/cc-stage /tmp/cc-stage/capture.pcap
@@ -81,14 +130,8 @@ docker pull zeek/zeek:8.2.1
 ./scripts/stop_services.sh
 ```
 
-## Hugging Face persistence
-
-The default remote is `Maksim123321/cover-channel-web-protocols` as a **private dataset repository**. A GitHub Actions repository secret named exactly `HF_TOKEN` must contain a Hugging Face user access token with write permission. No token is written to the repository or dataset manifests.
-
-Each job uploads only its unique shard path. GitHub is the durable source for code/configuration/documentation; Hugging Face is the durable source for generated Bronze/Silver/Gold data.
-
 ## Safety boundary
 
-The simulated clients have no default route. `.test` hostnames resolve only to `10.20.0.20`. The WSS tunnel endpoint only acknowledges `synthetic-api.test`, `echo.test`, or `cover-api.test` on fixed lab ports and never performs the requested onward connection. DoH requests are echoed locally and never forwarded to an upstream resolver.
+All `.test` names resolve to `10.20.0.20`. Simulated client namespaces have no default route. WSS tunnel messages can reference only fixed synthetic targets and the server acknowledges them without arbitrary forwarding. The HTTP CONNECT fixture only echoes bytes locally after validating an allowlist and never opens an onward connection. DoH is never forwarded upstream. H3 DATAGRAM, WebTransport, gRPC and MQTT fixtures likewise terminate inside the lab.
 
-See `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, and `docs/PRODUCTION_FEATURE_CONTRACT.md` for details.
+See `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, and `docs/PRODUCTION_FEATURE_CONTRACT.md` for operational details.
