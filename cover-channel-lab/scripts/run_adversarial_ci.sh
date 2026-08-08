@@ -9,7 +9,7 @@ cleanup(){ "$ROOT/scripts/stop_services.sh" || true; }
 trap cleanup EXIT
 "$ROOT/scripts/setup_netns.sh"
 "$ROOT/scripts/start_services.sh"
-"$ROOT/scripts/generate_adversarial.sh" "$STAGE_DIR" "$PCAP"
+bash "$ROOT/scripts/generate_adversarial.sh" "$STAGE_DIR" "$PCAP"
 "$ROOT/scripts/process_parsers.sh" "$PCAP" "$STAGE_DIR" "$PARSER_DIR"
 "$ROOT/scripts/package_layers.sh" "$STAGE_DIR" "$PCAP" "$PARSER_DIR" "$RELEASE_DIR" "$NAME"
 cleanup; trap - EXIT
