@@ -1,0 +1,35 @@
+name: caplag-game-route-probe
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-game-route-probe.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Distinguish existing microservice routes without auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import requests
+          base='https://platform.caplag.ru/microserv/task'
+          # known route calibrates what an existing unauthenticated endpoint looks like
+          paths=['/web/parma-line/1/state','/web/parma-line/1/up']
+          slugs=['cyberkomi','cyber-komi','neyrovokzal','neurovokzal','sysola','game','library','library-ticket-167','bibliotechnyi-bilet-167','bibliotechnyy-bilet-167','komi-game']
+          for typ in ['game','web']:
+              for slug in slugs:
+                  paths.append(f'/{typ}/{slug}/1/state')
+          s=requests.Session();s.headers['User-Agent']='CAPLAG-CTF-helper'
+          for p in paths:
+              try:r=s.get(base+p,timeout=12,allow_redirects=False)
+              except Exception as e:
+                  print(p+' error='+type(e).__name__);continue
+              loc=r.headers.get('location','')
+              print(f'{p}|http={r.status_code}|bytes={len(r.content)}|loc={loc[:180]}|body={r.text[:180].replace(chr(10)," ")}')
+          PY
