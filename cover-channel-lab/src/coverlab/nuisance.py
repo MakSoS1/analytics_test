@@ -23,12 +23,11 @@ def _core_len() -> int:
 
 
 def infer(campaign_id: str) -> dict:
-    """Reconstruct the exact nuisance assignment used by orchestrate.
+    """Reconstruct the exact nuisance assignment written by orchestrate.
 
-    The campaign IDs are deterministic and are part of the reproducibility
-    contract. This lets the wire generator consume the same factors that are
-    later copied to the manifest, without coupling every protocol client to the
-    orchestrator implementation.
+    Campaign IDs are deterministic and part of the reproducibility contract.
+    The returned values therefore match each stage's configured transform,
+    timing and payload-size factors and are consumed before bytes hit the wire.
     """
     cid = str(campaign_id)
     transform_idx = 0
@@ -39,30 +38,45 @@ def infer(campaign_id: str) -> dict:
     if m:
         rep = int(m.group(1))
         transform_idx = rep % len(TRANSFORMS)
-        timing_idx = (rep // len(TRANSFORMS)) % len(TIMINGS)
-        size_idx = (rep // (len(TRANSFORMS) * len(TIMINGS))) % len(SIZES)
+        timing_idx = rep % len(TIMINGS)
+        size_idx = rep % len(SIZES)
     else:
         m = re.match(r"^b-(\d+)-\d+$", cid)
         if m:
             cfg = int(m.group(1))
-            n = _core_len()
-            transform_idx = (cfg // n) % len(TRANSFORMS)
-            timing_idx = (cfg // (n * len(TRANSFORMS))) % len(TIMINGS)
-            size_idx = (cfg // (n * len(TRANSFORMS) * len(TIMINGS))) % len(SIZES)
+            transform_idx = (cfg // _core_len()) % len(TRANSFORMS)
+            timing_idx = (cfg // 7) % len(TIMINGS)
+            size_idx = (cfg // 13) % len(SIZES)
         else:
-            m = re.match(r"^[cfg h]-(\d+)-", cid.replace(" ", ""))
+            m = re.match(r"^c-(\d+)-(\d+)$", cid)
             if m:
                 profile = int(m.group(1))
                 transform_idx = profile % len(TRANSFORMS)
-                timing_idx = (profile // len(TRANSFORMS)) % len(TIMINGS)
-                size_idx = (profile // (len(TRANSFORMS) * len(TIMINGS))) % len(SIZES)
+                timing_idx = profile % len(TIMINGS)
+                size_idx = profile % len(SIZES)
             else:
-                m = re.match(r"^adv-(\d+)$", cid)
+                m = re.match(r"^[fgh]-(\d+)-(\d+)(?:-\d+)?$", cid)
                 if m:
-                    i = int(m.group(1))
-                    transform_idx = (i * 3) % len(TRANSFORMS)
-                    timing_idx = (i * 7) % len(TIMINGS)
-                    size_idx = (i * 11) % len(SIZES)
+                    profile = int(m.group(1))
+                    rep = int(m.group(2))
+                    transform_idx = (profile + rep) % len(TRANSFORMS)
+                    timing_idx = (profile + rep) % len(TIMINGS)
+                    size_idx = (profile + rep) % len(SIZES)
+                else:
+                    m = re.match(r"^d-(\d+)-(\d+)$", cid)
+                    if m:
+                        capture_idx = int(m.group(1))
+                        flow_idx = int(m.group(2))
+                        transform_idx = (flow_idx + capture_idx) % len(TRANSFORMS)
+                        timing_idx = (flow_idx + capture_idx) % len(TIMINGS)
+                        size_idx = (flow_idx + capture_idx) % len(SIZES)
+                    else:
+                        m = re.match(r"^adv-(\d+)$", cid)
+                        if m:
+                            i = int(m.group(1))
+                            transform_idx = (i * 3) % len(TRANSFORMS)
+                            timing_idx = (i * 7) % len(TIMINGS)
+                            size_idx = (i * 11) % len(SIZES)
 
     return {
         "transform_chain": [TRANSFORMS[transform_idx]],
@@ -93,22 +107,24 @@ def _size_bytes(default: int) -> int:
 
 def _delay(r: random.Random) -> None:
     profile = _CTX.get().get("timing_profile", "fixed")
-    # Delays are accelerated for CI but remain wire-observable and distinct.
+    # Delays are accelerated for CI but remain packet-timestamp-observable and
+    # statistically distinct. Long 60/90/120-minute mixed captures add their own
+    # real wall-clock scheduling on top of this per-event nuisance.
     if profile == "fixed":
         d = 0.012
     elif profile == "low_jitter":
         d = 0.010 + r.random() * 0.004
     elif profile == "medium_jitter":
         d = 0.004 + r.random() * 0.025
-    else:  # burst: groups of near-back-to-back events separated by a pause
+    else:  # burst
         d = 0.002 if r.random() < 0.80 else 0.045
     time.sleep(d)
 
 
 def _raw_bytes(r: random.Random, n: int, suspicious: bool) -> bytes:
     data = bytearray(r.randrange(0, 256) for _ in range(max(1, n)))
-    # Equal-length semantic markers change meaning without creating a trivial
-    # length shortcut. Subsequent transforms make both sides structurally alike.
+    # Equal-length semantic markers alter meaning without introducing a trivial
+    # length shortcut. Both sides pass through exactly the same transform family.
     marker = b"C2" if suspicious else b"LG"
     data[: min(2, len(data))] = marker[: min(2, len(data))]
     return bytes(data)
@@ -143,11 +159,11 @@ def encoded_value(r: random.Random, suspicious: bool, default_size: int = 48) ->
 
 
 def entropy_blob(r: random.Random, default_size: int) -> bytes:
-    # Body-size nuisance affects multipart/octet-stream/browser upload carriers.
+    # Payload-size nuisance affects multipart/octet-stream/browser upload bodies.
     return bytes(r.randrange(0, 256) for _ in range(_size_bytes(default_size)))
 
 
 def synthetic_bytes(r: random.Random, suspicious: bool, default_size: int = 48) -> bytes:
-    # Used by H3/gRPC/MQTT protocol dispatchers. Keeping the transform result as
-    # bytes changes actual frame/message sizes and alphabets on the wire.
+    # Used by H3/gRPC/MQTT dispatchers: transform result changes actual
+    # frame/message lengths and alphabets rather than only manifest metadata.
     return encoded_value(r, suspicious, default_size).encode("ascii")
