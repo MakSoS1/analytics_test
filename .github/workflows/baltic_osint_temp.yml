@@ -12,13 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Inspect public Textainer report viewer
+      - name: Export public Textainer report for SEGU9639460
         shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,re,html
+          import requests,re,html,urllib.parse
           from bs4 import BeautifulSoup
           base='https://tex.textainer.com'
           u=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
@@ -28,22 +28,22 @@ jobs:
           data['ctl00$bodyContent$ucEqpIds$txtEqpId']='SEGU9639460'
           data['ctl00$bodyContent$btnSubmit']='Preview'
           pr=s.post(u,data=data,headers={**h,'Referer':u},timeout=30,allow_redirects=True)
-          print('FINAL',pr.url,'LEN',len(pr.text),'COOKIES',[(c.name,c.value[:80]) for c in s.cookies])
-          out=BeautifulSoup(pr.text,'html.parser')
-          print('FORMS')
-          for f in out.find_all('form'): print(str(f)[:5000])
-          print('URL_ATTRS_BEGIN')
-          for tag in out.find_all(True):
-              for attr in ['src','href','action','url']:
-                  v=tag.get(attr)
-                  if v and any(x in v.lower() for x in ['report','viewer','axd','session','control']): print(tag.name,attr,html.unescape(v)[:3000])
-          print('URL_ATTRS_END')
-          print('SCRIPT_SNIPS_BEGIN')
-          for m in re.finditer(r'.{0,250}(?:ReportViewer|Reserved\.ReportViewer|Session|ControlID|Viewer)[^\n]{0,1200}',pr.text,re.I):
-              print(html.unescape(m.group(0))[:1600])
-          print('SCRIPT_SNIPS_END')
-          print('HIDDENS_BEGIN')
-          for t in out.find_all('input'):
-              if t.get('type')=='hidden': print(t.get('name'),t.get('value','')[:4000])
-          print('HIDDENS_END')
+          txt=html.unescape(pr.text).replace('\\/','/')
+          m=re.search(r'm_exportUrlBase\s*=\s*["\']([^"\']+Format=)["\']',txt)
+          if not m:
+              # constructor contains export URL as positional quoted argument
+              ms=re.findall(r'["\'](/Reserved\.ReportViewerWebControl\.axd\?[^"\']+OpType=Export[^"\']+Format=)["\']',txt)
+              if not ms: raise SystemExit('export base not found')
+              exp=ms[0]
+          else: exp=m.group(1)
+          exp=html.unescape(exp)
+          print('EXPORT_BASE',exp)
+          for fmt in ['CSV','XML','PDF','Excel']:
+              url=urllib.parse.urljoin(base,exp+urllib.parse.quote(fmt))
+              rr=s.get(url,headers={**h,'Referer':pr.url},timeout=40)
+              print('\n===',fmt,'STATUS',rr.status_code,'TYPE',rr.headers.get('Content-Type'),'LEN',len(rr.content),'===')
+              if fmt in ('CSV','XML') or 'text' in rr.headers.get('Content-Type','').lower():
+                  print(rr.text[:30000])
+              else:
+                  print(rr.content[:24].hex())
           PY
