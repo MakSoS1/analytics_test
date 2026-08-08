@@ -16,8 +16,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,re,html
+          import requests
           from bs4 import BeautifulSoup
           u='https://tex.textainer.com/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
           s=requests.Session(); h={'User-Agent':'Mozilla/5.0'}
@@ -38,17 +39,17 @@ jobs:
           pr=s.post(u,data=data,headers={**h,'Referer':u},timeout=30,allow_redirects=True)
           print('POST',pr.status_code,'URL',pr.url,'LEN',len(pr.text))
           out=BeautifulSoup(pr.text,'html.parser')
-          text='\n'.join(x.strip() for x in out.stripped_strings)
-          # Print only lines/segments around the queried unit and equipment spec labels.
-          keys=['SEGU963946','Equipment','Manufactur','Tare','Gross','Payload','Type','Status','Year','Date','Reefer','45R1','CSC','Approval','TIR','Singamas']
-          lines=text.splitlines()
+          lines=list(out.stripped_strings)
+          keys=['SEGU963946','Equipment','Manufactur','Tare','Gross','Payload','Type','Status','Year','Date','Reefer','45R1','CSC','Approval','TIR','Singamas','Capacity']
           print('RESULT_BEGIN')
+          done=set()
           for i,line in enumerate(lines):
               if any(k.lower() in line.lower() for k in keys):
-                  a=max(0,i-2); b=min(len(lines),i+4)
-                  print(' | '.join(lines[a:b])[:3000])
+                  a=max(0,i-3); b=min(len(lines),i+7)
+                  blob=' | '.join(lines[a:b])
+                  if blob not in done:
+                      done.add(blob); print(blob[:4000])
           print('RESULT_END')
-          # show tables in compact form
           print('TABLES_BEGIN')
           for ti,t in enumerate(out.find_all('table')):
               rows=[]
@@ -56,7 +57,7 @@ jobs:
                   vals=[' '.join(c.stripped_strings) for c in tr.find_all(['th','td'])]
                   if vals: rows.append(' || '.join(vals))
               blob='\n'.join(rows)
-              if 'SEGU963946' in blob or any(k.lower() in blob.lower() for k in ['manufacturer','tare','equipment type']):
-                  print('TABLE',ti); print(blob[:10000])
+              if 'SEGU963946' in blob or any(k.lower() in blob.lower() for k in ['manufacturer','tare','equipment type','gross weight']):
+                  print('TABLE',ti); print(blob[:12000])
           print('TABLES_END')
           PY
