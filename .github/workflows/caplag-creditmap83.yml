@@ -1,0 +1,113 @@
+name: caplag-creditmap83
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-creditmap83.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Generate ephemeral key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
+      - name: Upload public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-creditmap83-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
+          retention-days: 1
+      - name: Wait for encrypted auth bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/MakSoS1/analytics_test/contents/handoff/caplag-creditmap83-${kid}.enc.b64?ref=ctf-caplag-submit83-20260808"
+          for i in $(seq 1 150); do
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json')); txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/auth.enc').write_bytes(base64.b64decode(txt))
+          PY
+              openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/auth.enc -out /tmp/auth.json -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              chmod 600 /tmp/auth.json
+              echo encrypted_handoff=received; exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Diff challenge counters around correct game check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,requests,sys,time
+          from html import unescape
+          a=json.load(open('/tmp/auth.json'))
+          P='https://platform.caplag.ru'; ps=requests.Session(); ps.headers['User-Agent']='Mozilla/5.0 CAPLAG-CTF-helper'
+          r=ps.get(P+'/login',timeout=20); r.raise_for_status()
+          m=re.search(r'name=["\']nonce["\'][^>]*value=["\']([^"\']+)',r.text,re.I) or re.search(r'value=["\']([^"\']+)["\'][^>]*name=["\']nonce["\']',r.text,re.I)
+          d={'name':a['username'],'password':a['password']}
+          if m:d['nonce']=unescape(m.group(1))
+          rr=ps.post(P+'/login',data=d,allow_redirects=True,timeout=20)
+          if '/login' in rr.url: print('platform_login=failed'); sys.exit(2)
+          print('platform_login=ok')
+          def snap():
+              out={}
+              # Use one challenge-list call if available; fallback individual IDs.
+              q=ps.get(P+'/api/v1/challenges',timeout=20)
+              if q.status_code==200:
+                  data=q.json().get('data') or []
+                  for x in data:
+                      try: cid=int(x['id'])
+                      except Exception: continue
+                      if 70 <= cid <= 110 and x.get('category')=='Game':
+                          out[cid]={'name':x.get('name'),'attempts':x.get('attempts'),'solved':x.get('solved_by_me')}
+              if not out:
+                  for cid in range(70,111):
+                      qq=ps.get(P+f'/api/v1/challenges/{cid}',timeout=10)
+                      if qq.status_code!=200: continue
+                      x=qq.json().get('data') or {}
+                      if x.get('category')=='Game': out[cid]={'name':x.get('name'),'attempts':x.get('attempts'),'solved':x.get('solved_by_me')}
+              return out
+          before=snap()
+          print('game_challenge_count='+str(len(before)))
+          for cid in sorted(before):
+              x=before[cid]; print(f'before|{cid}|attempts={x["attempts"]}|solved={x["solved"]}|name={x["name"]}')
+
+          gs=requests.Session(); gs.headers.update({'X-API-Key':'caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia','Content-Type':'application/json'})
+          token=a['ctfd_token']
+          ir=gs.post('https://game-check.caplag.ru/init',json={'ctfd_token':token},timeout=20)
+          print('init_http='+str(ir.status_code))
+          for step,code in [('ch02.library.ticket','167'),('ch02.library.phrase','Старая Каланча первый глаз города смотрит сверху')]:
+              qr=gs.post('https://game-check.caplag.ru/check',json={'code':code,'ctfd_token':token,'step':step},timeout=20)
+              try: valid=bool(qr.json().get('valid'))
+              except Exception: valid=False
+              print(step+'_valid='+str(valid).lower())
+              time.sleep(2)
+          time.sleep(5)
+          after=snap()
+          changes=[]
+          for cid in sorted(set(before)|set(after)):
+              b=before.get(cid); z=after.get(cid)
+              if b!=z: changes.append((cid,b,z))
+          print('changed_count='+str(len(changes)))
+          for cid,b,z in changes:
+              print('changed_id='+str(cid))
+              print('changed_before='+json.dumps(b,ensure_ascii=False))
+              print('changed_after='+json.dumps(z,ensure_ascii=False))
+          PY
