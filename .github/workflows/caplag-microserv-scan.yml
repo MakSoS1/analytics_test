@@ -1,0 +1,49 @@
+name: caplag-microserv-scan
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-microserv-scan.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Scan public platform frontend assets for microservice API routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import requests,re,urllib.parse
+          base='https://platform.caplag.ru'
+          s=requests.Session();s.headers['User-Agent']='CAPLAG-CTF-helper'
+          seeds=['/','/login','/challenges']
+          assets=set();pages=[]
+          for p in seeds:
+              try:r=s.get(base+p,timeout=20)
+              except Exception:continue
+              pages.append((p,r.text))
+              for u in re.findall(r'(?:src|href)=["\']([^"\']+)',r.text,re.I):
+                  if '.js' in u or '.css' in u:
+                      assets.add(urllib.parse.urljoin(base,u))
+          print('asset_count='+str(len(assets)))
+          blobs=pages[:]
+          for u in sorted(assets):
+              try:r=s.get(u,timeout=20)
+              except Exception:continue
+              if r.status_code==200 and len(r.content)<5_000_000:
+                  blobs.append((u,r.text))
+          pats=[r'/microserv/[^"\'\s<>]+',r'microserv.{0,180}',r'/task/(?:web|game|misc)/[^"\'\s<>]+',r'/up\b.{0,120}',r'/state\b.{0,120}']
+          seen=set()
+          for name,text in blobs:
+              for pat in pats:
+                  for m in re.finditer(pat,text,re.I|re.S):
+                      x=re.sub(r'\s+',' ',m.group(0))[:500]
+                      key=(name,x)
+                      if key not in seen:
+                          seen.add(key); print('SOURCE='+name+' MATCH='+x)
+          print('match_count='+str(len(seen)))
+          PY
