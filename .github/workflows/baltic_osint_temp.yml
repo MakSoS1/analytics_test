@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Query Textainer TIR for exact Fuwa design sisters
+      - name: Query Textainer approval fields for Sep 2018 Fuwa reefers
         shell: bash
         run: |
           set -euo pipefail
@@ -20,33 +20,20 @@ jobs:
           python3 - <<'PY'
           import requests,re,html,urllib.parse,csv,io
           from bs4 import BeautifulSoup
-          units=['SEGU9639460','SEKU9334912','SEGU9864029','SEKU9153030','SEKU9154037','SEKU9159039','SEKU9163070','SEKU9163430','SEKU9170038','SEKU9171902']
-          base='https://tex.textainer.com'
-          u=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
+          units=['SEGU9639460','SEGU9638628','TEMU9593561','TEMU9594491','TEMU9593556','TEMU9593577','TEMU9594486','TEMU9594505']
+          base='https://tex.textainer.com'; u=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
           s=requests.Session(); h={'User-Agent':'Mozilla/5.0'}
           r=s.get(u,headers=h,timeout=30); soup=BeautifulSoup(r.text,'html.parser')
           data={t.get('name'):t.get('value','') for t in soup.find_all('input') if t.get('name') and t.get('type')=='hidden'}
-          data['ctl00$bodyContent$ucEqpIds$txtEqpId']='\n'.join(units)
-          data['ctl00$bodyContent$btnSubmit']='Preview'
+          data['ctl00$bodyContent$ucEqpIds$txtEqpId']='\n'.join(units); data['ctl00$bodyContent$btnSubmit']='Preview'
           pr=s.post(u,data=data,headers={**h,'Referer':u},timeout=40,allow_redirects=True)
           txt=html.unescape(pr.text).replace('\\/','/')
           ms=re.findall(r'["\'](/Reserved\.ReportViewerWebControl\.axd\?[^"\']+OpType=Export[^"\']+Format=)["\']',txt)
           if not ms: raise SystemExit('export base not found')
-          exp=html.unescape(ms[0])
-          url=urllib.parse.urljoin(base,exp+urllib.parse.quote('CSV'))
-          rr=s.get(url,headers={**h,'Referer':pr.url},timeout=40)
-          print('CSV_STATUS',rr.status_code,len(rr.content))
-          text=rr.content.decode('utf-8-sig','replace')
-          # Emit only rows/fields relevant to unit id, TIR, CSC, model/manufacturer/date.
-          rows=list(csv.reader(io.StringIO(text)))
-          for row in rows:
-              joined=' | '.join(x.strip() for x in row)
-              if any(k.lower() in joined.lower() for k in units) or any(k in joined.upper() for k in ['TIR','CSC','MANUFACTUR','MODEL','TYPE','BUILD','DATE']):
-                  print('ROW',joined[:5000])
-          # Also compactly print all non-empty CSV content if report uses a transposed layout.
-          print('COMPACT_BEGIN')
+          rr=s.get(urllib.parse.urljoin(base,html.unescape(ms[0])+urllib.parse.quote('CSV')),headers={**h,'Referer':pr.url},timeout=40)
+          rows=list(csv.reader(io.StringIO(rr.content.decode('utf-8-sig','replace'))))
+          print('CSV',rr.status_code,len(rr.content))
           for row in rows:
               vals=[x.strip() for x in row if x.strip()]
-              if vals: print(' :: '.join(vals)[:5000])
-          print('COMPACT_END')
+              if vals: print(' :: '.join(vals)[:6000])
           PY
