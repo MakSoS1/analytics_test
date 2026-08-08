@@ -10,7 +10,7 @@ permissions:
 jobs:
   submit:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Generate ephemeral key
         shell: bash
@@ -50,12 +50,12 @@ jobs:
             sleep 3
           done
           exit 1
-      - name: Submit exact raw librarian message
+      - name: Submit paced transliteration candidates
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,re,requests,sys
+          import json,re,requests,sys,time
           from html import unescape
           BASE='https://platform.caplag.ru'; creds=json.load(open('/tmp/creds.json'))
           s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 CAPLAG-CTF-helper'
@@ -73,16 +73,31 @@ jobs:
           before=(s.get(BASE+'/api/v1/challenges/83',timeout=20).json().get('data') or {})
           print('solved_before='+str(bool(before.get('solved_by_me',False))).lower())
           print('attempts_before='+str(before.get('attempts',None)))
-          candidate='Старая Каланча первый глаз города смотрит сверху'
-          resp=s.post(BASE+'/api/v1/challenges/attempt',json={'challenge_id':83,'submission':candidate},headers={'CSRF-Token':csrf,'Referer':BASE+'/challenges'},timeout=20)
-          try:
-              j=resp.json(); data=j.get('data') or {}; status=str(data.get('status') or 'unknown'); msg=str(data.get('message') or '')
-          except Exception:
-              status='http_'+str(resp.status_code); msg='non-json'
-          print('submission_status='+status)
-          print('submission_message='+re.sub(r'[\r\n]+',' ',msg)[:120])
+          candidates=[
+            'caplag{staraya_kalancha_perviy_glaz_goroda_smotrit_sverhu}',
+            'caplag{Staraya_Kalancha_perviy_glaz_goroda_smotrit_sverhu}',
+            'caplag{STARAYA_KALANCHA_PERVIY_GLAZ_GORODA_SMOTRIT_SVERHU}',
+            'CAPLAG{staraya_kalancha_perviy_glaz_goroda_smotrit_sverhu}',
+            'caplag{staraya-kalancha-perviy-glaz-goroda-smotrit-sverhu}',
+            'caplag{staraya_kalancha_pervyy_glaz_goroda_smotrit_sverkhu}',
+            'caplag{staraya_kalancha_pervy_glaz_goroda_smotrit_sverhu}',
+            'caplag{staraya_kalancha_pervij_glaz_goroda_smotrit_sverhu}'
+          ]
+          headers={'CSRF-Token':csrf,'Referer':BASE+'/challenges'}
+          for i,candidate in enumerate(candidates,1):
+              resp=s.post(BASE+'/api/v1/challenges/attempt',json={'challenge_id':83,'submission':candidate},headers=headers,timeout=20)
+              try:
+                  j=resp.json(); data=j.get('data') or {}; status=str(data.get('status') or 'unknown'); msg=str(data.get('message') or '')
+              except Exception:
+                  status='http_'+str(resp.status_code); msg='non-json'
+              print(f'attempt_{i:02d}_status='+status)
+              if status.lower()=='correct':
+                  print('submission_result=success'); print('winner_index='+str(i)); sys.exit(0)
+              if status.lower()=='ratelimited' or resp.status_code==429:
+                  print('submission_result=rate_limited'); sys.exit(5)
+              if i < len(candidates): time.sleep(7.2)
           after=(s.get(BASE+'/api/v1/challenges/83',timeout=20).json().get('data') or {})
           print('solved_after='+str(bool(after.get('solved_by_me',False))).lower())
           print('attempts_after='+str(after.get('attempts',None)))
-          if status.lower()!='correct': sys.exit(4)
+          print('submission_result=no_match'); sys.exit(4)
           PY
