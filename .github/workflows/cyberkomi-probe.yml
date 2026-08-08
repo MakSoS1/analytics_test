@@ -1,4 +1,4 @@
-name: cyberkomi-public-probe
+name: cyberkomi-task01-public-asset
 
 on:
   push:
@@ -12,123 +12,46 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
-      - name: Fetch, unpack, and statically inspect public Unity build
+      - name: Fetch task 01 image and public pack metadata
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p out/build out/analysis out/extracted work
-          base='https://cyberkomi.caplag.ru/'
+          mkdir -p out
 
-          curl -fsS --connect-timeout 10 --max-time 30 \
-            -D out/build/root.headers \
-            -o out/build/index.html \
-            "$base"
+          curl -fsS --connect-timeout 10 --max-time 60 \
+            -D out/task01.headers \
+            -o out/board_anbur_phrase.png \
+            'https://game-file.caplag.ru/d/task01_nevrovozal/board_anbur_phrase.png'
 
-          for path in Build/build.loader.js Build/build.framework.js.br Build/build.data.br Build/build.wasm.br; do
-            safe=$(printf '%s' "$path" | tr '/.' '__')
-            curl -sS -I --connect-timeout 10 --max-time 30 \
-              "${base}${path}" > "out/build/${safe}.head" || true
+          : > out/public_assets.tsv
+          for url in \
+            'https://game-file.caplag.ru/d/task01_nevrovozal/board_anbur_phrase.png' \
+            'https://game-file.caplag.ru/d/task03_kalancha/old_eye_feed_23.webm' \
+            'https://game-file.caplag.ru/d/task04_gallery/gallery_case_04.zip' \
+            'https://game-file.caplag.ru/d/task07_heatline/heatline_pack.zip' \
+            'https://game-file.caplag.ru/d/task08_kontur/parma9_audit_pack.zip' \
+            'https://game-file.caplag.ru/d/task09_omeba/omeba_archive_pack.zip'; do
+            tmp=$(mktemp)
+            curl -sS -I --connect-timeout 10 --max-time 30 "$url" > "$tmp" || true
+            code=$(awk 'toupper($1) ~ /^HTTP\// {c=$2} END{print c}' "$tmp")
+            len=$(awk 'BEGIN{IGNORECASE=1} /^Content-Length:/ {gsub("\\r",""); v=$2} END{print v}' "$tmp")
+            type=$(awk 'BEGIN{IGNORECASE=1} /^Content-Type:/ {gsub("\\r",""); $1=""; sub(/^ /,""); v=$0} END{print v}' "$tmp")
+            printf '%s\t%s\t%s\t%s\n' "$url" "${code:-NA}" "${len:-NA}" "${type:-NA}" >> out/public_assets.tsv
+            rm -f "$tmp"
           done
 
-          curl -fsS --connect-timeout 10 --max-time 30 \
-            -o out/build/build.loader.js \
-            "${base}Build/build.loader.js"
-          curl -fsS --compressed --connect-timeout 10 --max-time 60 \
-            -o out/build/build.framework.js \
-            "${base}Build/build.framework.js.br"
+          file out/board_anbur_phrase.png > out/file.txt
+          sha256sum out/board_anbur_phrase.png > out/sha256.txt
+          identify out/board_anbur_phrase.png > out/image_info.txt 2>/dev/null || true
+          printf 'Task 01 public image fetched.\n'
 
-          # Browser receives these Brotli-decoded. curl --compressed reproduces that.
-          curl -fsS --compressed --connect-timeout 10 --max-time 300 \
-            -o work/build.data \
-            "${base}Build/build.data.br"
-          curl -fsS --compressed --connect-timeout 10 --max-time 180 \
-            -o work/build.wasm \
-            "${base}Build/build.wasm.br"
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import mmap, struct, re, json
-
-          data_path=Path('work/build.data')
-          out=Path('out/analysis')
-          ext=Path('out/extracted')
-          magic=b'UnityWebData1.0\x00'
-          keywords=re.compile(
-              rb'caplag|ctfd_|token|authori[sz]ation|bearer|https?://|wss?://|api[/.:_-]|'
-              rb'PARMA|SYKTYV|sysola|access[ _-]?code|flag|prompt|agent|system[ _-]?prompt|'
-              rb'instruction|model|challenge|task|hint|secret|playerprefs|23', re.I)
-
-          def ascii_strings(buf, minlen=4):
-              # printable ASCII plus tab
-              for m in re.finditer(rb'[\x09\x20-\x7e]{%d,}' % minlen, buf):
-                  yield m.start(), m.group()
-
-          with data_path.open('rb') as f, mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as mm:
-              if mm[:len(magic)] != magic:
-                  raise SystemExit(f'bad UnityWebData magic: {mm[:32]!r}')
-              pos=len(magic)
-              header_size=struct.unpack_from('<I',mm,pos)[0]; pos+=4
-              rows=[]
-              while pos < header_size:
-                  off,size,nlen=struct.unpack_from('<III',mm,pos); pos+=12
-                  name=mm[pos:pos+nlen].decode('utf-8','replace'); pos+=nlen
-                  rows.append((name,off,size))
-              Path('out/analysis/data_filelist.tsv').write_text(
-                  'path\toffset\tsize\n'+''.join(f'{n}\t{o}\t{s}\n' for n,o,s in rows), encoding='utf-8')
-              Path('out/analysis/data_summary.json').write_text(json.dumps({
-                  'archive_size': len(mm), 'header_size': header_size, 'file_count': len(rows)
-              }, indent=2)+'\n')
-
-              hits=[]
-              for name,off,size in rows:
-                  # Search strings directly in every embedded file. Avoid copying huge slices.
-                  view=mm[off:off+size]
-                  local=0
-                  for rel,s in ascii_strings(view):
-                      if keywords.search(s):
-                          txt=s[:2000].decode('utf-8','replace')
-                          hits.append((name, rel, txt))
-                          if len(hits) >= 20000:
-                              break
-                  # Preserve likely text/config/metadata files of reasonable size for offline review.
-                  lower=name.lower()
-                  if size <= 25_000_000 and (lower.endswith(('.json','.txt','.xml','.csv','.bytes','.ini','.cfg','.yaml','.yml','.dat')) or 'global-metadata' in lower):
-                      safe=re.sub(r'[^A-Za-z0-9._-]+','_',name).strip('_') or 'file'
-                      (ext/safe).write_bytes(view)
-                  if len(hits) >= 20000:
-                      break
-              with Path('out/analysis/data_keyword_strings.tsv').open('w',encoding='utf-8') as g:
-                  g.write('file\trel_offset\tstring\n')
-                  for name,rel,txt in hits:
-                      g.write(f'{name}\t{rel}\t{txt.replace(chr(9)," ").replace(chr(10)," ")}\n')
-          PY
-
-          # Scan decoded wasm for literal strings and useful network/game markers.
-          strings -a -n 4 -t d work/build.wasm \
-            | grep -Eai 'caplag|ctfd_|token|authori[sz]ation|bearer|https?://|wss?://|api[/.:_-]|PARMA|SYKTYV|sysola|access[ _-]?code|flag|prompt|agent|system[ _-]?prompt|instruction|challenge|task|hint|secret|playerprefs|(^|[^0-9])23([^0-9]|$)' \
-            | head -n 20000 > out/analysis/wasm_keyword_strings.txt || true
-
-          strings -el -n 4 -t d work/build.wasm \
-            | grep -Eai 'caplag|ctfd_|token|authori[sz]ation|bearer|https?://|api|PARMA|SYKTYV|sysola|access|flag|prompt|agent|system|instruction|challenge|task|hint|secret|23' \
-            | head -n 10000 > out/analysis/wasm_utf16_keyword_strings.txt || true
-
-          # Broad URL extraction from data and wasm.
-          strings -a -n 6 work/build.data work/build.wasm \
-            | grep -Eo 'https?://[^[:space:]"<>]+' \
-            | sort -u > out/analysis/urls.txt || true
-
-          printf 'decoded_data_bytes\t%s\n' "$(stat -c%s work/build.data)" > out/analysis/sizes.tsv
-          printf 'decoded_wasm_bytes\t%s\n' "$(stat -c%s work/build.wasm)" >> out/analysis/sizes.tsv
-          find out/extracted -type f -printf '%P\t%s\n' | sort > out/analysis/extracted_manifest.tsv
-          find out -type f -printf '%P\t%s bytes\n' | sort > out/analysis/artifact_manifest.tsv
-
-      - name: Upload static analysis only
+      - name: Upload task 01
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-static-analysis
+          name: cyberkomi-task01
           path: out/
           retention-days: 1
           if-no-files-found: error
