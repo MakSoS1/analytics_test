@@ -12,31 +12,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Recover pre-migration Seaco Unit Enquiry endpoints from archives
+      - name: Inspect archived Seaco JS and OData captures
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import requests,json,re,urllib.parse
+          import requests,re,urllib.parse,json
           H={'User-Agent':'Mozilla/5.0'}
-          queries=[
-            'newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/*',
-            'newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV*',
-            'seaweb.seacoglobal.com/*Unit*Enquiry*',
-            'seaweb.seacoglobal.com/*',
-            'www.seacoglobal.com/*unit*enquiry*',
+          snaps=[
+            ('20250427212031','https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/js/UnitEnquiry/FullSpecificationReefers.js'),
+            ('20250427212030','https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/js/UnitEnquiry/UnitEnquiry.js'),
+            ('20250427212030','https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/js/UnitEnquiry/ContainerDetails.js'),
+            ('20250427212031','https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/js/UnitEnquiry/UnitEnquirySpecifications.js'),
+            ('20250427212049','https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/Application.js'),
           ]
-          for q in queries:
-            u='https://web.archive.org/cdx/search/cdx?url='+urllib.parse.quote(q,safe='*/:$')+'&output=json&fl=timestamp,original,statuscode,mimetype,digest&filter=statuscode:200&from=2017&to=20260630&collapse=urlkey&limit=500'
+          for ts,u in snaps:
+            wu=f'https://web.archive.org/web/{ts}id_/{u}'
+            print('\n### SNAP',u)
+            try:
+              r=requests.get(wu,headers=H,timeout=50); print('RES',r.status_code,len(r.content),r.url); print(r.text[:200000])
+            except Exception as e: print('ERR',repr(e))
+          # enumerate captures on both historical hosts, with/without wildcard path
+          qs=[
+            'seaweb.seacoglobal.com/sap/opu/odata/sap/*',
+            'seaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/*',
+            'seaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/Equipment_Status*',
+            'newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/*',
+            'newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/Equipment_Status*',
+          ]
+          for q in qs:
+            params={'url':q,'output':'json','fl':'timestamp,original,statuscode,mimetype,digest,length','filter':'statuscode:200','from':'2020','to':'20260630','limit':'1000'}
             print('\n### CDX',q)
             try:
-              r=requests.get(u,headers=H,timeout=60); print('STATUS',r.status_code,'LEN',len(r.content)); print(r.text[:120000])
+              r=requests.get('https://web.archive.org/cdx/search/cdx',params=params,headers=H,timeout=70); print('RES',r.status_code,len(r.content)); print(r.text[:250000])
             except Exception as e: print('ERR',repr(e))
-          # Also ask Common Crawl index for the SAP service/app URLs.
-          for idx in ['CC-MAIN-2026-26','CC-MAIN-2026-21','CC-MAIN-2026-12','CC-MAIN-2025-47']:
-            for q in ['newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/*','newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV*']:
-              u=f'https://index.commoncrawl.org/{idx}-index?url='+urllib.parse.quote(q,safe='*/:$')+'&output=json&filter=status:200'
-              try:
-                r=requests.get(u,headers=H,timeout=45); print('\n### CC',idx,q,r.status_code,len(r.content)); print(r.text[:50000])
-              except Exception as e: print('CCERR',repr(e))
           PY
