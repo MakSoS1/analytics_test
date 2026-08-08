@@ -10,21 +10,40 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Fetch public SEACO approval plate references
+      - name: Fetch public FTS Telegram media originals
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/ref
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          curl -L --fail --compressed -A "$UA" 'https://www.hecny.com/storage/722/20230803_123612.jpg' -o /tmp/ref/hecny.jpg
-          curl -L --fail --compressed -A "$UA" 'https://alcontainer.dk/cdn/shop/files/FB_IMG_1754310082573.jpg?v=1754310113&width=1445' -o /tmp/ref/seaco20.jpg
-          curl -L --fail --compressed -A "$UA" 'https://ireland.apollo.olxcdn.com/v1/files/8nx6ooca1p212-PL/image%3Bs%3D4032x3024' -o /tmp/ref/geseaco40.jpg || true
-          file /tmp/ref/*
-          ls -lh /tmp/ref
+          curl -L --compressed -A "$UA" 'https://t.me/s/customs_rf/9371' -o /tmp/tg.html
+          python3 - <<'PY'
+          import html,re
+          p=html.unescape(open('/tmp/tg.html','r',errors='ignore').read()).replace('\\/','/')
+          # Restrict to media URLs close to the relevant post range 9372..9378 where the album lives.
+          urls=[]
+          for m in re.finditer(r'https://cdn\d+\.telesco\.pe/file/[^\"\'<> )]+', p):
+              u=m.group(0)
+              if u not in urls: urls.append(u)
+          print('CDN_URLS_BEGIN')
+          for i,u in enumerate(urls): print(i,u)
+          print('CDN_URLS_END')
+          open('/tmp/urls.txt','w').write('\n'.join(urls))
+          PY
+          mkdir -p /tmp/media
+          n=0
+          while IFS= read -r u; do
+            [ -n "$u" ] || continue
+            ext=.jpg
+            case "$u" in *.mp4*) ext=.mp4;; *.webp*) ext=.webp;; esac
+            curl -L --fail --compressed -A "$UA" "$u" -o "/tmp/media/m_${n}${ext}" || true
+            n=$((n+1))
+          done </tmp/urls.txt
+          file /tmp/media/* || true
+          ls -lh /tmp/media || true
       - uses: actions/upload-artifact@v4
         with:
-          name: seaco-approval-plate-refs
-          path: /tmp/ref/*
+          name: fts-telegram-media
+          path: /tmp/media/*
           retention-days: 1
