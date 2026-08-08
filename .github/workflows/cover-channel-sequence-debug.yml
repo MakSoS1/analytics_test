@@ -1,0 +1,58 @@
+name: Cover Channel Sequence Debug
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cover-channel-sequence-debug.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  debug-sequence-profile-01:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Run minimal Stage C slice with full log capture
+        id: reproduce
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        shell: bash
+        run: |
+          set -o pipefail
+          ./scripts/setup_netns.sh
+          ./scripts/start_services.sh
+          mkdir -p "$RUNNER_TEMP/sequence-debug"
+          ./scripts/generate_stage.sh sequence 1 72 "$RUNNER_TEMP/sequence-debug/stage" "$RUNNER_TEMP/sequence-debug/sequence.pcap" \
+            > >(tee "$RUNNER_TEMP/sequence-debug/stdout.log") \
+            2> >(tee "$RUNNER_TEMP/sequence-debug/stderr.log" >&2)
+      - name: Show diagnostic tail
+        if: always()
+        shell: bash
+        run: |
+          echo '=== stdout ==='
+          tail -200 "$RUNNER_TEMP/sequence-debug/stdout.log" 2>/dev/null || true
+          echo '=== stderr ==='
+          tail -300 "$RUNNER_TEMP/sequence-debug/stderr.log" 2>/dev/null || true
+          echo '=== service logs ==='
+          find "$RUNNER_TEMP/coverlab-services" -type f -maxdepth 1 -print -exec tail -80 {} \; 2>/dev/null || true
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sequence-debug-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/sequence-debug
+            ${{ runner.temp }}/coverlab-services
+          retention-days: 7
+      - name: Fail if reproduction failed
+        if: steps.reproduce.outcome != 'success'
+        run: exit 1
