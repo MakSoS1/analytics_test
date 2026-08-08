@@ -20,7 +20,6 @@ jobs:
           V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
           curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic_original.mp4
           ls -lh /tmp/baltic_original.mp4
-          ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate,avg_frame_rate,bit_rate:format=duration,size,bit_rate -of default=nw=1 /tmp/baltic_original.mp4
       - uses: actions/upload-artifact@v4
         with:
           name: baltic-original-ppa-video
