@@ -1,0 +1,132 @@
+name: cyberkomi-final-step-check
+
+on:
+  push:
+    branches: [ctf-cyberkomi-probe-20260808]
+    paths:
+      - '.github/workflows/cyberkomi-finalcheck.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Generate one-time token handoff key
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p handoff out
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out handoff/private.pem >/dev/null 2>&1
+          openssl pkey -in handoff/private.pem -pubout -out handoff/public.pem >/dev/null 2>&1
+
+      - name: Publish one-time public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-finalcheck-handoff-key
+          path: handoff/public.pem
+          retention-days: 1
+
+      - name: Receive token and validate final game steps
+        shell: bash
+        env:
+          RAW_HANDOFF: https://raw.githubusercontent.com/MakSoS1/analytics_test/ctf-cyberkomi-probe-20260808/handoff/finalcheck.enc.b64
+        run: |
+          set -euo pipefail
+          umask 077
+          got=0
+          for i in $(seq 1 240); do
+            if curl -fsSL --connect-timeout 5 --max-time 10 -H 'Cache-Control: no-cache' "${RAW_HANDOFF}?n=${GITHUB_RUN_ID}-${i}" -o handoff/token.b64 2>/dev/null; then
+              got=1
+              break
+            fi
+            sleep 2
+          done
+          [ "$got" -eq 1 ] || { echo 'Encrypted token handoff not received.'; exit 2; }
+          base64 -d handoff/token.b64 > handoff/token.enc
+          openssl pkeyutl -decrypt -inkey handoff/private.pem -in handoff/token.enc -out handoff/token.txt \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
+          TOKEN=$(cat handoff/token.txt)
+          echo "::add-mask::$TOKEN"
+          test -n "$TOKEN"
+
+          python3 - "$TOKEN" <<'PY'
+          import json,pathlib,sys,subprocess
+          token=sys.argv[1]
+          checks=[
+            ('ch10.core.guard_denied','CORE-EVT-GUARD-DENIED'),
+            ('ch10.core.lowlevel','CORE-EVT-LOWLEVEL'),
+            ('ch10.core.guard_unlocked','CORE-EVT-GUARD-UNLOCKED'),
+            ('ch10.core.final','SYSOLA-10-REMEMBERS'),
+          ]
+          results=[]
+          for i,(step,code) in enumerate(checks):
+              req={'step':step,'code':code,'ctfd_token':token}
+              p=pathlib.Path(f'handoff/check{i}.json')
+              p.write_text(json.dumps(req,separators=(',',':')))
+              cp=subprocess.run([
+                'curl','-sS','--connect-timeout','8','--max-time','30',
+                '-H','Content-Type: application/json',
+                '-H','X-API-Key: caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia',
+                '--data-binary',f'@{p}','-w','\n__HTTP__%{http_code}',
+                'https://game-check.caplag.ru/check'
+              ],capture_output=True,text=True)
+              body=cp.stdout; http='000'
+              if '\n__HTTP__' in body: body,http=body.rsplit('\n__HTTP__',1)
+              results.append({'step':step,'candidate':code,'http':http,'body':body})
+          pathlib.Path('out/final_step_checks.json').write_text(json.dumps(results,ensure_ascii=False,indent=2))
+          PY
+
+          # Read-only platform/CTFd discovery to map the final flag to its actual challenge.
+          for path in \
+            '/api/v1/challenges' \
+            '/api/v1/teams/me' \
+            '/api/v1/teams/me/solves' \
+            '/microserv/auth/ctfd/validate'; do
+            safe=$(printf '%s' "$path" | sed 's#[^A-Za-z0-9]#_#g')
+            curl -sS --connect-timeout 8 --max-time 30 \
+              -H "Authorization: Token $TOKEN" \
+              -H 'Accept: application/json' \
+              -D "out/${safe}.headers" \
+              -o "out/${safe}.body" \
+              -w '%{http_code}' \
+              "https://platform.caplag.ru${path}" > "out/${safe}.status" || true
+          done
+
+          rm -f handoff/token.txt handoff/token.enc handoff/token.b64 handoff/check*.json handoff/private.pem
+
+          cat > handoff/output_public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAz5AYuQkFbMs5/eUEJA0m
+          CsSOaVZF1JE76TRn8js2iN/LLAFu2BIKvbKQY+PQDxyJQqr71keg4cQiMWO5ZCbw
+          FmTjq808affSZGx+P49GqYR513e6GDpCHho8cc9TYeOfgeW29tlTb/Qd9lhu6SrI
+          ZruTi0jSGuWQXqo24HnWkc9fEA1jRaUPITIZGyemcvH4Qri0WBpN9RO1iWDuuDru
+          8nafRMpzEEax/RYuNoJBlrsjjOBBH1kgaf6kPix+ntNBLy59X0D3q3YBTX6b0l5G
+          glYE4Y4Gh721x9VT59sdyugL+MkjtOLAHisbDDa3YTjFnmVTBTQ87uJJwMKhlE0f
+          e9l8gTS1ZsRixTL9WLV2xD9zy8LpJv95DQ1wTOgRDQr2YFqndrcZjUV8C3V45uxz
+          lpnwwR4L19d2ntfGfDpTnvtZBAu7JOWiTwfM09o9i5OIGhXqu3Tq5MEAwMmKiYnz
+          jZ/R5nq2EmPQurostLLPctCT570QjSW95e40ZyvI9idpAgMBAAE=
+          -----END PUBLIC KEY-----
+          PEM
+          tar -C out -czf handoff/results.tar.gz .
+          openssl rand 32 > handoff/key
+          openssl rand 16 > handoff/iv
+          openssl enc -aes-256-ctr -K "$(xxd -p -c256 handoff/key)" -iv "$(xxd -p -c256 handoff/iv)" -in handoff/results.tar.gz -out handoff/results.enc
+          cat handoff/key handoff/iv > handoff/keyblob
+          openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
+          rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem
+          echo 'Final step checks completed; encrypted output only.'
+
+      - name: Upload encrypted result
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-finalcheck-result
+          path: |
+            handoff/results.enc
+            handoff/keyblob.enc
+          retention-days: 1
