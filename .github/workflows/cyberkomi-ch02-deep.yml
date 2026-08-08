@@ -1,0 +1,82 @@
+name: cyberkomi-ch02-deep-inspect
+
+on:
+  push:
+    branches: [ctf-cyberkomi-probe-20260808]
+    paths: ['.github/workflows/cyberkomi-ch02-deep.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Extract Chapter 2 serialized objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/raw
+          curl -fsSL --compressed --connect-timeout 10 --max-time 240 'https://cyberkomi.caplag.ru/Build/build.data.br' -o /tmp/build.data
+          python3 - <<'PY'
+          import pathlib,struct
+          b=pathlib.Path('/tmp/build.data').read_bytes(); magic=b'UnityWebData1.0\x00'; assert b.startswith(magic)
+          pos=len(magic); end=struct.unpack_from('<I',b,pos)[0]; pos+=4
+          while pos<end:
+              off,n,pl=struct.unpack_from('<III',b,pos); pos+=12
+              path=b[pos:pos+pl].decode(); pos+=pl
+              if path=='data.unity3d': pathlib.Path('/tmp/data.unity3d').write_bytes(b[off:off+n]); break
+          PY
+          python3 -m pip -q install 'UnityPy>=1.20.0'
+          python3 - <<'PY'
+          import UnityPy,pathlib,json,base64,re
+          env=UnityPy.load('/tmp/data.unity3d')
+          rows=[]
+          for obj in env.objects:
+              af=getattr(getattr(obj,'assets_file',None),'name','')
+              if af!='level2': continue
+              row={'path_id':obj.path_id,'type':obj.type.name,'size':obj.byte_size}
+              try:
+                  data=obj.read()
+                  for attr in ('m_Name','name'):
+                      v=getattr(data,attr,None)
+                      if isinstance(v,str) and v: row['name']=v
+                  go=getattr(data,'m_GameObject',None)
+                  if go:
+                      try:
+                          gd=go.read(); row['game_object']=getattr(gd,'m_Name',None)
+                      except Exception: pass
+              except Exception as e: row['read_error']=repr(e)
+              try:
+                  tt=obj.read_typetree(); row['typetree']=tt
+              except Exception as e: row['typetree_error']=repr(e)
+              if obj.type.name=='MonoBehaviour':
+                  try:
+                      raw=obj.get_raw_data()
+                  except Exception:
+                      r=obj.reader; old=r.Position; r.Position=obj.byte_start; raw=r.read_bytes(obj.byte_size); r.Position=old
+                  pathlib.Path(f'out/raw/level2_{obj.path_id}.bin').write_bytes(raw)
+                  row['raw_file']=f'raw/level2_{obj.path_id}.bin'
+                  # pull every plausible UTF-8 fragment, not just aligned strings
+                  dec=raw.decode('utf-8','ignore')
+                  frags=[]
+                  for s in re.findall(r'[\x20-\x7e\u0400-\u04ff\n\r\t]{3,}',dec):
+                      s=s.strip('\x00\r\n\t ')
+                      if s and s not in frags: frags.append(s)
+                  if frags: row['utf8_fragments']=frags
+              rows.append(row)
+          pathlib.Path('out/level2_objects.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2,default=str))
+          # isolate controller object already identified in previous extraction
+          p=pathlib.Path('out/raw/level2_199.bin')
+          if p.exists():
+              b=p.read_bytes()
+              pathlib.Path('out/controller_199.hex.txt').write_text('\n'.join(f'{i:08x}: '+b[i:i+16].hex(' ') for i in range(0,len(b),16)))
+          PY
+      - name: Upload deep inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-ch02-deep-inspect
+          path: out
+          retention-days: 1
