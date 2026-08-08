@@ -12,28 +12,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Fetch public Fontanka SZTU gallery
+      - name: Probe public Fontanka image resize variants
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/fontanka
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq imagemagick >/dev/null
+          mkdir -p /tmp/probe
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          cat > /tmp/urls <<'EOF'
-          https://n1s1.hsmedia.ru/f0/9b/5f/f09b5f164ff1c9662b6d675a01eeb142/600x600_21_dd1cf474d3e32dc9e31c8bad795d810c%40957x1280_0xN6eWt5zy_4107125146580789640.jpg.webp
-          https://n1s1.hsmedia.ru/87/79/5c/87795c689a827a90abda4aea84377b74/600x600_21_587fc245593649240925273410cbc7af%40960x1280_0xH7Bj7Df0_3996339366609221086.jpg.webp
-          https://n1s1.hsmedia.ru/d9/3a/4c/d93a4cf8c6810d2fc26092ab422b2df8/600x600_21_43d912b14de20369ff38db61400c9a31%40960x1280_0xvkglCpYS_3130482514435179491.jpg.webp
-          https://n1s1.hsmedia.ru/08/de/c4/08dec4760dc21c6bf2f014ad2d996332/600x600_21_c1aa6ff27fdeacde40994435919c32d9%401255x956_0xgCF4IVNi_3785705967902736543.jpg.webp
-          https://n1s1.hsmedia.ru/ba/62/9f/ba629f27bd4292af8b296b1f0f4cfb83/600x600_21_468487fa1e0d4960f9c0a0df9bdb2bfe%40720x1280_0xIrrlUsVz_7419726029876184577.jpg.webp
-          EOF
-          n=0
-          while IFS= read -r u; do
-            curl -L --fail --compressed -A "$UA" -H 'Referer: https://www.fontanka.ru/' "$u" -o "/tmp/fontanka/f_${n}.webp" || true
-            n=$((n+1))
-          done </tmp/urls
-          file /tmp/fontanka/* || true
-          ls -lh /tmp/fontanka
+          BASE='https://n1s1.hsmedia.ru/f0/9b/5f/f09b5f164ff1c9662b6d675a01eeb142/'
+          TAIL='dd1cf474d3e32dc9e31c8bad795d810c%40957x1280_0xN6eWt5zy_4107125146580789640.jpg.webp'
+          for pref in '600x600_21_' '957x1280_21_' '957x1280_0_' '1200x1600_21_' '1200x1600_0_' '1920x2560_21_' '1920x2560_0_' ''; do
+            safe=$(printf '%s' "$pref" | tr '/ ' '__')
+            [ -n "$safe" ] || safe=none
+            u="${BASE}${pref}${TAIL}"
+            echo "TRY $pref"
+            if curl -L --fail --compressed -A "$UA" -H 'Referer: https://www.fontanka.ru/' "$u" -o "/tmp/probe/${safe}.webp"; then
+              identify "/tmp/probe/${safe}.webp" || true
+            fi
+          done
       - uses: actions/upload-artifact@v4
         with:
-          name: fontanka-sztu-gallery
-          path: /tmp/fontanka/*
+          name: fontanka-dimension-probe
+          path: /tmp/probe/*
           retention-days: 1
