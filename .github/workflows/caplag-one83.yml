@@ -50,7 +50,7 @@ jobs:
             sleep 3
           done
           exit 1
-      - name: Submit paced transliteration candidates
+      - name: Submit punctuation-sensitive candidates
         shell: bash
         run: |
           set -euo pipefail
@@ -74,27 +74,29 @@ jobs:
           print('solved_before='+str(bool(before.get('solved_by_me',False))).lower())
           print('attempts_before='+str(before.get('attempts',None)))
           candidates=[
-            'caplag{staraya_kalancha_perviy_glaz_goroda_smotrit_sverhu}',
-            'caplag{Staraya_Kalancha_perviy_glaz_goroda_smotrit_sverhu}',
-            'caplag{STARAYA_KALANCHA_PERVIY_GLAZ_GORODA_SMOTRIT_SVERHU}',
-            'CAPLAG{staraya_kalancha_perviy_glaz_goroda_smotrit_sverhu}',
-            'caplag{staraya-kalancha-perviy-glaz-goroda-smotrit-sverhu}',
-            'caplag{staraya_kalancha_pervyy_glaz_goroda_smotrit_sverkhu}',
-            'caplag{staraya_kalancha_pervy_glaz_goroda_smotrit_sverhu}',
-            'caplag{staraya_kalancha_pervij_glaz_goroda_smotrit_sverhu}'
+            'Старая Каланча первый глаз города смотрит сверху,',
+            'caplag{Старая Каланча первый глаз города смотрит сверху,}',
+            'caplag{Старая_Каланча_первый_глаз_города_смотрит_сверху,}',
+            'caplag{старая_каланча_первый_глаз_города_смотрит_сверху,}',
+            'caplag{staraya_kalancha_perviy_glaz_goroda_smotrit_sverhu,}',
+            'caplag{staraya_kalancha_pervyi_glaz_goroda_smotrit_sverkhu,}',
+            'Старая Каланча первый глаз города смотрит сверху.',
+            'caplag{Старая_Каланча_первый_глаз_города_смотрит_сверху.}'
           ]
           headers={'CSRF-Token':csrf,'Referer':BASE+'/challenges'}
           for i,candidate in enumerate(candidates,1):
-              resp=s.post(BASE+'/api/v1/challenges/attempt',json={'challenge_id':83,'submission':candidate},headers=headers,timeout=20)
-              try:
-                  j=resp.json(); data=j.get('data') or {}; status=str(data.get('status') or 'unknown'); msg=str(data.get('message') or '')
-              except Exception:
-                  status='http_'+str(resp.status_code); msg='non-json'
+              while True:
+                  resp=s.post(BASE+'/api/v1/challenges/attempt',json={'challenge_id':83,'submission':candidate},headers=headers,timeout=20)
+                  try:
+                      j=resp.json(); data=j.get('data') or {}; status=str(data.get('status') or 'unknown').lower(); msg=str(data.get('message') or '')
+                  except Exception:
+                      status='http_'+str(resp.status_code); msg=''
+                  if status=='ratelimited' or resp.status_code==429:
+                      mm=re.search(r'(\d+)\s*seconds?',msg,re.I); time.sleep((int(mm.group(1))+3) if mm else 65); continue
+                  break
               print(f'attempt_{i:02d}_status='+status)
-              if status.lower()=='correct':
+              if status=='correct':
                   print('submission_result=success'); print('winner_index='+str(i)); sys.exit(0)
-              if status.lower()=='ratelimited' or resp.status_code==429:
-                  print('submission_result=rate_limited'); sys.exit(5)
               if i < len(candidates): time.sleep(7.2)
           after=(s.get(BASE+'/api/v1/challenges/83',timeout=20).json().get('data') or {})
           print('solved_after='+str(bool(after.get('solved_by_me',False))).lower())
