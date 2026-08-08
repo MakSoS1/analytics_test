@@ -10,30 +10,41 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
-      - name: Resolve public ERR embedded media
+      - name: Download and OCR public PPA footage
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg tesseract-ocr >/dev/null
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          URL='https://news.err.ee/media/videoBlock/649008ff0277d6873f8e91b37a661cc6?photoId=3178979&contentId=1609932407&contentTitle=Watch%3A%20Estonia%27s%20special%20forces%20detain%20a%20suspected%20smugglers%20ship'
-          curl -L --compressed -A "$UA" -H 'Referer: https://news.err.ee/1609932407/watch-estonia-s-special-forces-detain-a-suspected-smugglers-ship' "$URL" -o /tmp/vb.html
-          echo SIZE=$(wc -c </tmp/vb.html)
+          V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
+          curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic.mp4
+          ffprobe -v error -show_entries stream=width,height:format=duration,size -of default=nw=1 /tmp/baltic.mp4
+          mkdir -p /tmp/frames
+          ffmpeg -hide_banner -loglevel error -i /tmp/baltic.mp4 -vf 'fps=2,scale=iw*2:ih*2:flags=lanczos,unsharp=5:5:0.8:5:5:0.0' -q:v 2 /tmp/frames/f_%04d.jpg
           python3 - <<'PY'
-          import html,re
-          p=html.unescape(open('/tmp/vb.html','r',errors='ignore').read())
-          print('MEDIA_BEGIN')
-          pats=[r'https?[^\"\'<> ]+\.(?:mp4|m3u8|mpd)(?:\?[^\"\'<> ]*)?',r'//[^\"\'<> ]+\.(?:mp4|m3u8|mpd)(?:\?[^\"\'<> ]*)?']
-          seen=set()
-          for pat in pats:
-              for m in re.finditer(pat,p,re.I):
-                  u=m.group(0).replace('\\/','/')
-                  if u not in seen:
-                      seen.add(u); print(u[:3000])
-          for term in ['m3u8','mp4','source','file','stream','media','video']:
-              for m in list(re.finditer(term,p,re.I))[:15]:
-                  a=max(0,m.start()-500); b=min(len(p),m.end()+1000)
-                  print('SNIP',term,p[a:b].replace('\n',' ')[:1600])
-          print('MEDIA_END')
+          import glob,os,re,subprocess
+          # broad patterns because OCR often confuses one or two characters
+          exactish=re.compile(r'\b[A-Z]{3,5}[\s:_-]*[0-9]{5,8}\b',re.I)
+          tir=re.compile(r'\bTIR\b.{0,120}',re.I)
+          slash=re.compile(r'\b[A-Z0-9]{1,8}\s*/\s*[A-Z0-9-]{1,12}(?:\s*/\s*[A-Z0-9-]{1,12})?\b',re.I)
+          interesting=re.compile(r'(?:[A-Z].*){3,}.*\d|\d.*(?:[A-Z].*){3,}',re.I)
+          print('OCR_CANDIDATES_BEGIN')
+          for fn in sorted(glob.glob('/tmp/frames/*.jpg')):
+              try:
+                  txt=subprocess.check_output(['tesseract',fn,'stdout','--psm','11'],stderr=subprocess.DEVNULL,text=True,timeout=8)
+              except Exception:
+                  continue
+              lines=[' '.join(x.split()) for x in txt.splitlines() if x.strip()]
+              cand=[]
+              for line in lines:
+                  if exactish.search(line) or tir.search(line) or slash.search(line) or (len(line)<=80 and interesting.search(line)):
+                      cand.append(line)
+              if cand:
+                  # frame index at 2 fps -> approximate t=(n-1)/2 s
+                  n=int(re.search(r'(\d+)',os.path.basename(fn)).group(1)); t=(n-1)/2
+                  print(f'{os.path.basename(fn)} t={t:.1f}s :: ' + ' | '.join(cand[:20]))
+          print('OCR_CANDIDATES_END')
           PY
