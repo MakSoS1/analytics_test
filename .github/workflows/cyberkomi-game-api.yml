@@ -1,0 +1,41 @@
+name: cyberkomi-game-api
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/cyberkomi-game-api.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Inspect public game API surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          for p in /openapi.json /docs /redoc /health /; do
+            safe=$(printf '%s' "$p" | tr '/.' '__')
+            code=$(curl -sS -L -o "out/${safe}.body" -w '%{http_code}' --connect-timeout 10 --max-time 30 "https://game-check.caplag.ru${p}" || true)
+            echo "$p http=$code bytes=$(wc -c < "out/${safe}.body")"
+          done
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('out/_openapi_json.body')
+          if p.exists():
+              try:
+                  j=json.loads(p.read_text())
+                  print('openapi_title='+str((j.get('info') or {}).get('title')))
+                  for route,ops in (j.get('paths') or {}).items():
+                      print('route='+route+' methods='+','.join(sorted(ops)))
+              except Exception as e: print('openapi_parse=false')
+          PY
+      - name: Upload public API metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-game-api
+          path: out
+          retention-days: 1
