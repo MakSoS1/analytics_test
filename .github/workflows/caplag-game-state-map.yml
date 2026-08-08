@@ -1,0 +1,104 @@
+name: caplag-game-state-map
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-game-state-map.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Generate ephemeral key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
+      - name: Upload public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-game-state-map-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
+          retention-days: 1
+      - name: Wait for encrypted token
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/MakSoS1/analytics_test/contents/handoff/caplag-game-state-map-${kid}.enc.b64?ref=ctf-caplag-submit83-20260808"
+          for i in $(seq 1 150); do
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json')); txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/token.enc').write_bytes(base64.b64decode(txt))
+          PY
+              openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/token.enc -out /tmp/token.txt -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              chmod 600 /tmp/token.txt
+              echo encrypted_handoff=received; exit 0
+            fi
+            sleep 2
+          done
+          echo encrypted_handoff=timeout; exit 1
+      - name: Map authenticated read-only state routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import requests,json,re
+          token=open('/tmp/token.txt').read().strip()
+          base='https://platform.caplag.ru/microserv/task'
+          headers={'Authorization':'Token '+token,'User-Agent':'CAPLAG-CTF-helper','Accept':'application/json'}
+          s=requests.Session(); s.headers.update(headers)
+          tests=[('calibration','web','parma-line')]
+          slugs=[
+            'cyberkomi','cyber-komi','neurovokzal','neyrovokzal','neirovokzal','нейровокзал',
+            'sysola','syktyvkar','syktyv-kar','komi-game','game','library','library-ticket-167',
+            'bibliotechnyi-bilet-167','bibliotechnyy-bilet-167','bibliotechnyi-bilet','bibliotechnyy-bilet',
+            'ticket-167','lib-167','chapter-2','chapter2','ch02','ch2'
+          ]
+          for typ in ['game','web']:
+              for slug in slugs: tests.append(('candidate',typ,slug))
+          seen=set()
+          for kind,typ,slug in tests:
+              key=(typ,slug)
+              if key in seen: continue
+              seen.add(key)
+              url=f'{base}/{typ}/{slug}/1/state'
+              try:r=s.get(url,timeout=15,allow_redirects=False)
+              except Exception as e:
+                  print(f'{kind}|{typ}|{slug}|error={type(e).__name__}'); continue
+              ctype=r.headers.get('content-type','')
+              body=r.text[:4000]
+              # Never print anything token-like even if service echoes it.
+              body=re.sub(r'(?i)(token|authorization|secret|password|flag)\s*[":=]+\s*["\']?[^,"\'}\s]+',r'\1=<redacted>',body)
+              parsed=None
+              if 'json' in ctype:
+                  try: parsed=r.json()
+                  except Exception: pass
+              summary=''
+              if isinstance(parsed,dict):
+                  safe={}
+                  for k,v in parsed.items():
+                      kl=str(k).lower()
+                      if any(w in kl for w in ['token','authorization','secret','password','flag','credential']):
+                          safe[k]='<redacted>'; continue
+                      if isinstance(v,(str,int,float,bool,type(None))):
+                          safe[k]=v if not (isinstance(v,str) and len(v)>300) else v[:300]+'…'
+                      elif isinstance(v,list): safe[k]=f'<list:{len(v)}>'
+                      elif isinstance(v,dict): safe[k]=f'<dict:{len(v)}>'
+                  summary=json.dumps(safe,ensure_ascii=False,sort_keys=True)
+              else:
+                  summary=re.sub(r'\s+',' ',body)[:800]
+              print(f'{kind}|{typ}|{slug}|http={r.status_code}|bytes={len(r.content)}|summary={summary}')
+          PY
