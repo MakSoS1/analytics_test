@@ -10,41 +10,31 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 6
     steps:
-      - name: Extract compact historical Seaco customs/TIR fields
+      - name: Query Seaco Equipment Status exactly as legacy client
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import requests,re,urllib.parse,json
-          H={'User-Agent':'Mozilla/5.0'}
-          snaps=[
-            ('20250427212031','FullSpecificationReefers.js'),
-            ('20250427212030','UnitEnquiry.js'),
-            ('20250427212030','ContainerDetails.js'),
-            ('20250427212031','UnitEnquirySpecifications.js'),
-          ]
-          base='https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/js/UnitEnquiry/'
-          for ts,name in snaps:
-            u=f'https://web.archive.org/web/{ts}id_/{base}{name}'
-            r=requests.get(u,headers=H,timeout=60)
-            print('\nFILE',name,'STATUS',r.status_code,'LEN',len(r.text))
-            lines=r.text.splitlines()
-            for i,line in enumerate(lines):
-              if re.search(r'tir|custom|approval|seal|csc|equipment_status|specif|certif|model|factory|manuf',line,re.I):
-                lo=max(0,i-2); hi=min(len(lines),i+3)
-                print(f'CTX {i+1}:',' || '.join(x.strip() for x in lines[lo:hi])[:5000])
-          # query CDX and print only OData URLs/captures
-          for host in ['seaweb.seacoglobal.com','newseaweb.seacoglobal.com']:
-            q=host+'/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/*'
-            p={'url':q,'output':'json','fl':'timestamp,original,statuscode,mimetype,length','filter':'statuscode:200','from':'2020','to':'20260630','limit':'2000'}
-            r=requests.get('https://web.archive.org/cdx/search/cdx',params=p,headers=H,timeout=70)
-            print('\nCDX',host,r.status_code,'LEN',len(r.text))
-            try:
-              arr=r.json()
-              for row in arr[:1]+arr[1:]:
-                s=' | '.join(map(str,row))
-                if re.search(r'Equipment|\$metadata|UE_PGW|Spec|Reefer|Status',s,re.I): print(s[:6000])
-            except Exception: print(r.text[:20000])
+          import requests,urllib.parse,re,json
+          H={'User-Agent':'Mozilla/5.0','Accept':'application/json,application/xml,text/plain,*/*'}
+          filt="IUnitNo eq 'SEGU9639460' and IUnitNo1 eq ''"
+          for host in ['https://seaweb.seacoglobal.com','https://newseaweb.seacoglobal.com']:
+            base=host+'/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV'
+            urls=[
+              base+'/$metadata?saml2=disabled',
+              base+'/Equipment_Status?$filter='+urllib.parse.quote(filt,safe="'()")+'&saml2=disabled&$format=json',
+              base+'/Equipment_Status?$filter='+urllib.parse.quote(filt,safe="'()")+'&$format=json&saml2=disabled',
+            ]
+            for u in urls:
+              try:
+                s=requests.Session(); r=s.get(u,headers=H,timeout=50,allow_redirects=True)
+                print('\nREQ',u); print('RES',r.status_code,r.url,r.headers.get('Content-Type'),len(r.content));
+                txt=r.text
+                if '963946' in txt or re.search(r'"Tir"|<d:Tir>|TIR',txt,re.I):
+                  for pat in [r'.{0,600}963946.{0,2500}',r'.{0,500}["<]Tir[">:].{0,1500}',r'.{0,500}TIR.{0,1500}']:
+                    for m in re.finditer(pat,txt,re.I|re.S): print('HIT',m.group(0)[:5000].replace('\n',' '))
+                else: print(txt[:3000].replace('\n',' '))
+              except Exception as e: print('ERR',repr(e))
           PY
