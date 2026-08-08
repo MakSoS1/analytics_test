@@ -3,9 +3,33 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
+
+# aioquic 1.2.x exposes SNI through QuicConfiguration.server_name; its
+# asyncio.connect() does not accept a server_name keyword. Keep compatibility in
+# one place because both the readiness client and the H3 scenario dispatcher use
+# the same helper. This wrapper can be removed when the callers no longer pass
+# the legacy keyword.
+import aioquic.asyncio.client as _aioquic_client
+from aioquic.quic.configuration import QuicConfiguration as _QuicConfiguration
+
+_aioquic_connect = _aioquic_client.connect
+
+
+@asynccontextmanager
+async def _aioquic_connect_compat(host, port, *, server_name=None, configuration=None, **kwargs):
+    if configuration is None:
+        configuration = _QuicConfiguration(is_client=True)
+    if server_name is not None:
+        configuration.server_name = server_name
+    async with _aioquic_connect(host, port, configuration=configuration, **kwargs) as protocol:
+        yield protocol
+
+
+_aioquic_client.connect = _aioquic_connect_compat
 
 # Extend the source-plan catalog with future-transport challenge scenarios before
 # orchestrate imports SCENARIOS/BY_ID from the base module.
