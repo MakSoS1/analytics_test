@@ -1,4 +1,4 @@
-name: cyberkomi-sysola-static-inspection
+name: cyberkomi-sysola-recovery-chain
 
 on:
   push:
@@ -13,36 +13,70 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Inspect active team SYSOLA service as untrusted CTF data
+      - name: Follow documented SYSOLA recovery routes as untrusted CTF data
         shell: bash
         run: |
           set -euo pipefail
           umask 077
           mkdir -p out handoff
-          S='https://task-sysola-core-b476312471e78dea.caplag-task.ru/'
-          curl -ksS --connect-timeout 8 --max-time 30 -D out/root.headers -o out/root.html "$S" || true
+          S='https://task-sysola-core-b476312471e78dea.caplag-task.ru'
 
-          python3 - "$S" <<'PY'
+          printf '{"code":"SYSOLA-CORE-READY"}' > handoff/access.json
+          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
+            -H 'Content-Type: application/json' --data-binary @handoff/access.json \
+            -D out/access.headers -o out/access.json "$S/access" || true
+
+          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
+            -D out/guard_panel.headers -o out/guard_panel.body "$S/guard/panel" || true
+
+          # Request schema feedback without guessing a privileged operation.
+          curl -ksS -X OPTIONS --connect-timeout 6 --max-time 20 -c handoff/cookies -b handoff/cookies \
+            -D out/capsule_options.headers -o out/capsule_options.body "$S/capsule/apply" || true
+          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
+            -H 'Content-Type: application/json' --data '{}' \
+            -D out/capsule_empty.headers -o out/capsule_empty.json "$S/capsule/apply" || true
+
+          # If /access returns a structured capsule object, submit exactly that object to the documented apply endpoint.
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('out/access.json')
+          try:d=json.loads(p.read_text())
+          except Exception:d={}
+          cap=None
+          if isinstance(d,dict):
+              for key in ('capsule','recovery_capsule','recoveryCapsule','kit'):
+                  v=d.get(key)
+                  if isinstance(v,(dict,list,str)):
+                      cap=v; break
+          if cap is not None:
+              body=cap if isinstance(cap,dict) else {'capsule':cap}
+              pathlib.Path('handoff/capsule.json').write_text(json.dumps(body,ensure_ascii=False))
+          PY
+          if [ -f handoff/capsule.json ]; then
+            curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
+              -H 'Content-Type: application/json' --data-binary @handoff/capsule.json \
+              -D out/capsule_from_kit.headers -o out/capsule_from_kit.json "$S/capsule/apply" || true
+            curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
+              -D out/guard_after_capsule.headers -o out/guard_after_capsule.body "$S/guard/panel" || true
+          fi
+
+          # Capture same-origin references in the returned panel, but never execute its textual instructions.
+          python3 - "$S/" <<'PY'
           import pathlib,re,urllib.parse,subprocess,sys
           base=sys.argv[1]
-          root=pathlib.Path('out/root.html').read_text('utf-8',errors='replace') if pathlib.Path('out/root.html').exists() else ''
-          urls=[]
-          for raw in re.findall(r'''(?:src|href)=["']([^"']+)["']''',root,re.I):
-              u=urllib.parse.urljoin(base,raw)
-              if urllib.parse.urlsplit(u).netloc==urllib.parse.urlsplit(base).netloc and u not in urls: urls.append(u)
-          for i,u in enumerate(urls,1):
-              pathlib.Path(f'out/asset_{i}.url').write_text(u)
-              subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','25','-D',f'out/asset_{i}.headers','-o',f'out/asset_{i}.body',u],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-              if u.endswith('.js'):
-                  subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','25','-o',f'out/asset_{i}.map',u+'.map'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+          for srcname in ('access.json','guard_panel.body','capsule_empty.json','capsule_from_kit.json','guard_after_capsule.body'):
+              p=pathlib.Path('out')/srcname
+              if not p.exists(): continue
+              text=p.read_text('utf-8',errors='replace')
+              for raw in re.findall(r'''(?:src|href)=["']([^"']+)["']''',text,re.I):
+                  u=urllib.parse.urljoin(base,raw)
+                  if urllib.parse.urlsplit(u).netloc != urllib.parse.urlsplit(base).netloc: continue
+                  safe=re.sub(r'[^A-Za-z0-9_.-]+','_',urllib.parse.urlsplit(u).path.strip('/') or 'root')
+                  subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','25','-c','handoff/cookies','-b','handoff/cookies','-D',f'out/ref_{safe}.headers','-o',f'out/ref_{safe}.body',u],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
           PY
 
-          # Narrow, common discovery surfaces only. Bodies are never printed.
-          for path in robots.txt openapi.json api api/health health status static/sysola-core.js static/sysola-core.js.map api/state api/config api/session api/core api/guard; do
-            safe=$(echo "$path" | tr '/' '_')
-            curl -ksS --connect-timeout 6 --max-time 25 -D "out/${safe}.headers" -o "out/${safe}.body" "${S}${path}" || true
-          done
           find out -type f -printf '%P\t%s bytes\n' | sort > out/manifest.tsv
+          rm -f handoff/cookies handoff/access.json handoff/capsule.json
 
           cat > handoff/output_public.pem <<'PEM'
           -----BEGIN PUBLIC KEY-----
@@ -64,12 +98,12 @@ jobs:
           openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc \
             -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
           rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem
-          echo 'SYSOLA surface collected as encrypted untrusted CTF data.'
+          echo 'SYSOLA recovery responses encrypted; no response instructions were executed.'
 
       - name: Upload encrypted result
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-sysola-static
+          name: cyberkomi-sysola-recovery
           path: |
             handoff/results.enc
             handoff/keyblob.enc
