@@ -10,53 +10,61 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 5
     steps:
-      - name: Query public unit approval sources
+      - name: Query official ATO certified reefer database
         shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,re,html,urllib.parse,csv,io
+          import requests,re
           from bs4 import BeautifulSoup
-          H={'User-Agent':'Mozilla/5.0'}
-
-          print('=== CAI PUBLIC UNIT LOOKUPS ===')
-          for unit in ['SEGU9639460','SEKU9334912']:
-              u='https://www.capps.com/cgi-bin/publicUnitInfo?UNIT='+unit
-              try:
-                  r=requests.get(u,headers=H,timeout=25)
-                  txt=BeautifulSoup(r.text,'html.parser').get_text(' ',strip=True)
-                  print(unit,'STATUS',r.status_code,'LEN',len(r.content))
-                  for pat in ['TIR','CSC','Manufactured','Manufacturer','Location','ISO']:
-                      m=re.search(r'(.{0,120}\b'+re.escape(pat)+r'\b.{0,220})',txt,re.I)
-                      if m: print(m.group(1))
-              except Exception as e: print(unit,'ERR',repr(e))
-
-          print('=== USDA CPHST RAW TARGET ROW ===')
-          try:
-              r=requests.get('https://vessels.cphst.org/containerList.cfm',headers=H,timeout=25)
-              lines=r.text.splitlines()
-              for i,line in enumerate(lines):
-                  if '963652' in line or '>6986<' in line:
-                      print('LINE',i,BeautifulSoup(line,'html.parser').get_text(' ',strip=True))
-                      print('RAW',line[:2000])
-          except Exception as e: print('CPHST ERR',repr(e))
-
-          print('=== TEXTAINER TARGET + REFERENCE ===')
-          base='https://tex.textainer.com'; q=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
-          units=['SEGU9639460','SEKU9334912']
-          s=requests.Session(); r=s.get(q,headers=H,timeout=20); soup=BeautifulSoup(r.text,'html.parser')
-          data={t.get('name'):t.get('value','') for t in soup.find_all('input') if t.get('name') and t.get('type')=='hidden'}
-          data['ctl00$bodyContent$ucEqpIds$txtEqpId']='\r\n'.join(units); data['ctl00$bodyContent$btnSubmit']='Preview'
-          pr=s.post(q,data=data,headers={**H,'Referer':q},timeout=30,allow_redirects=True)
-          txt=html.unescape(pr.text).replace('\\/','/')
-          ms=re.findall(r'["\'](/Reserved\.ReportViewerWebControl\.axd\?[^"\']+OpType=Export[^"\']+Format=)["\']',txt)
-          if ms:
-              rr=s.get(urllib.parse.urljoin(base,html.unescape(ms[0])+'CSV'),headers={**H,'Referer':pr.url},timeout=40)
-              for row in csv.DictReader(io.StringIO(rr.content.decode('utf-8-sig','replace'))):
-                  print('UNIT',row.get('txtEqpId'))
-                  for k in ['txtEqpDesc','txtManufacture4','txtManufacture5','txtRate2','txtRate4','txtApproval1','txtApproval2','txtApproval3','txtApproval4']:
-                      print(k,repr(row.get(k)))
+          U='https://www.reefertransport.nl/Certified.aspx'
+          H={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'}
+          s=requests.Session()
+          r=s.get(U,headers=H,timeout=30)
+          print('GET',r.status_code,len(r.content),r.url)
+          soup=BeautifulSoup(r.text,'html.parser')
+          print('FORM',[(f.get('id'),f.get('action'),f.get('method')) for f in soup.find_all('form')])
+          print('INPUTS_BEGIN')
+          for x in soup.find_all(['input','select','button']):
+              print(x.name,'name=',repr(x.get('name')),'id=',repr(x.get('id')),'type=',repr(x.get('type')),'value=',repr(x.get('value')),'text=',repr(x.get_text(' ',strip=True)[:80]))
+          print('INPUTS_END')
+          data={x.get('name'):x.get('value','') for x in soup.find_all('input') if x.get('name') and x.get('type') in (None,'hidden')}
+          # identify likely text/search input and search button from actual markup
+          texts=[x for x in soup.find_all('input') if x.get('name') and (x.get('type') or '').lower() in ('text','search','')]
+          buttons=[x for x in soup.find_all(['input','button']) if x.get('name') and ((x.get('type') or '').lower() in ('submit','button') or 'search' in (x.get('value') or x.get_text()).lower())]
+          print('TEXT_CANDIDATES',[(x.get('name'),x.get('id')) for x in texts])
+          print('BUTTON_CANDIDATES',[(x.get('name'),x.get('value'),x.get('id')) for x in buttons])
+          target=None
+          for x in texts:
+              key=((x.get('name') or '')+' '+(x.get('id') or '')).lower()
+              if 'container' in key or 'search' in key or 'number' in key: target=x; break
+          if target is None and texts: target=texts[0]
+          if not target: raise SystemExit('no text input found')
+          data[target.get('name')]='SEGU9639460'
+          if buttons:
+              b=buttons[0]; data[b.get('name')]=b.get('value') or 'Search'
+          # ASP.NET postback needs all relevant hidden state; preserve cookies/referer.
+          pr=s.post(U,data=data,headers={**H,'Referer':U},timeout=30,allow_redirects=True)
+          print('POST',pr.status_code,len(pr.content),pr.url)
+          ps=BeautifulSoup(pr.text,'html.parser')
+          txt=ps.get_text('\n',strip=True)
+          print('RESULT_TEXT_BEGIN')
+          # only print lines near target / certificate/specification vocabulary
+          lines=[re.sub(r'\s+',' ',z).strip() for z in txt.splitlines() if z.strip()]
+          hits=[]
+          keys=['SEGU','963946','certificate','certified','manufacturer','machinery','container','commission','classification','date','serial','owner','type','model','ato','ABS','Bureau','Lloyd','RINA','CCS']
+          for i,line in enumerate(lines):
+              if any(k.lower() in line.lower() for k in keys):
+                  for j in range(max(0,i-3),min(len(lines),i+8)):
+                      if lines[j] not in hits: hits.append(lines[j])
+          for z in hits[:300]: print(z)
+          print('RESULT_TEXT_END')
+          print('LINKS_BEGIN')
+          for a in ps.find_all('a',href=True):
+              h=a['href']; t=a.get_text(' ',strip=True)
+              if any(k in (h+' '+t).lower() for k in ['cert','pdf','963946','segu']): print(repr(t),repr(h))
+          print('LINKS_END')
           PY
