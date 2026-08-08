@@ -1,6 +1,19 @@
 {
-  "revision": 3,
-  "purpose": "Definitive complete strict corpus build after wire-effective nuisance factors, real 60-transaction multi-phase Stage C campaigns, local HTTP/3-QUIC, gRPC/HTTP2, MQTT-over-WSS, bounded CONNECT, MASQUE/WebTransport challenge fixtures, strict Suricata/Zeek gates, Gold leakage checks, B1/B2/B3 baselines, exactly 500 post-baseline adversarial sessions, Hugging Face backfill, and 90-day GitHub artifact persistence.",
+  "revision": 4,
+  "purpose": "Definitive complete strict corpus build after verified Stage A end-to-end smoke on commit c4642d2a8694afaef6731d36c08566243c32c974: 600 campaigns, 1800 events, Suricata and Zeek both successful, campaign-to-packet mapping 0.996667, leakage audit passed. Continue with wire-effective nuisance factors, real 60-transaction multi-phase Stage C campaigns, local HTTP/3-QUIC, gRPC/HTTP2, MQTT-over-WSS, bounded CONNECT, MASQUE/WebTransport challenge fixtures, strict Suricata/Zeek gates, Gold leakage checks, B1/B2/B3 baselines, exactly 500 post-baseline adversarial sessions, Hugging Face backfill, and 90-day GitHub artifact persistence.",
+  "verified_stage_a": {
+    "commit": "c4642d2a8694afaef6731d36c08566243c32c974",
+    "workflow_run_id": 31280628685,
+    "artifact": "dataset-stage-a-31280628685",
+    "campaigns": 600,
+    "events": 1800,
+    "event_to_packet_mapping_coverage": 0.996667,
+    "suricata_exit_zero": true,
+    "zeek_exit_zero": true,
+    "suricata_eve_nonempty": true,
+    "zeek_conn_nonempty": true,
+    "leakage_audit_passed": true
+  },
   "required_stage_a_campaigns": 600,
   "required_parser_gates": ["suricata_eve_nonempty", "zeek_conn_nonempty", "mapping_coverage_ge_0_95", "leakage_audit_passed"],
   "required_corpus": {
