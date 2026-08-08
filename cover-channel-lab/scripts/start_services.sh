@@ -63,9 +63,14 @@ run_in_c2 "$PYTHON_BIN" -m coverlab.h3_fixture server --host 10.20.0.20 --port 8
 run_in_c2 "$PYTHON_BIN" -m coverlab.connect_server --host 10.20.0.20 --port 8082 >"$LOGDIR/connect.log" 2>&1 & echo $! > "$LOGDIR/connect.pid"
 run_in_c2 mosquitto -c "$CERTDIR/mosquitto.conf" -v >"$LOGDIR/mqtt.log" 2>&1 & echo $! > "$LOGDIR/mqtt.pid"
 
+mqtt_probe='import ssl,time,paho.mqtt.client as mqtt; c=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,client_id="health-probe",protocol=mqtt.MQTTv5,transport="websockets"); x=ssl.create_default_context(); x.check_hostname=False; x.verify_mode=ssl.CERT_NONE; c.tls_set_context(x); c.ws_set_options(path="/mqtt"); c.connect("mqtt-broker.test",9443,keepalive=5); c.loop_start(); end=time.time()+2; [(time.sleep(.05)) for _ in iter(int,1) if not c.is_connected() and time.time()<end]; ok=c.is_connected(); c.disconnect(); c.loop_stop(); raise SystemExit(0 if ok else 1)'
+grpc_probe='import grpc; c=grpc.insecure_channel("cover-h2.test:50051"); grpc.channel_ready_future(c).result(timeout=2); c.close()'
+
 for _ in $(seq 1 80); do
   if sudo ip netns exec cc-dev curl --noproxy '*' -fsS http://cover-api.test:8080/healthz >/dev/null 2>&1 \
-    && sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.h3_fixture client --host cover-h3.test --port 8444 --path /healthz >/dev/null 2>&1; then
+    && sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.h3_fixture client --host cover-h3.test --port 8444 --path /healthz >/dev/null 2>&1 \
+    && sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$grpc_probe" >/dev/null 2>&1 \
+    && sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$mqtt_probe" >/dev/null 2>&1; then
     echo "coverlab HTTP/H2/WSS, CONNECT, gRPC, H3 and MQTT services ready"; exit 0
   fi
   sleep .25
