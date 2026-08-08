@@ -12,41 +12,26 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 6
     steps:
-      - name: Fetch task 01 image and public pack metadata
+      - name: Fetch task 01 redirected archive
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p out
+          mkdir -p out/unpacked
 
-          curl -fsS --connect-timeout 10 --max-time 60 \
+          curl -fsSL --connect-timeout 10 --max-time 90 \
             -D out/task01.headers \
-            -o out/board_anbur_phrase.png \
+            -o out/board_anbur_phrase.zip \
             'https://game-file.caplag.ru/d/task01_nevrovozal/board_anbur_phrase.png'
 
-          : > out/public_assets.tsv
-          for url in \
-            'https://game-file.caplag.ru/d/task01_nevrovozal/board_anbur_phrase.png' \
-            'https://game-file.caplag.ru/d/task03_kalancha/old_eye_feed_23.webm' \
-            'https://game-file.caplag.ru/d/task04_gallery/gallery_case_04.zip' \
-            'https://game-file.caplag.ru/d/task07_heatline/heatline_pack.zip' \
-            'https://game-file.caplag.ru/d/task08_kontur/parma9_audit_pack.zip' \
-            'https://game-file.caplag.ru/d/task09_omeba/omeba_archive_pack.zip'; do
-            tmp=$(mktemp)
-            curl -sS -I --connect-timeout 10 --max-time 30 "$url" > "$tmp" || true
-            code=$(awk 'toupper($1) ~ /^HTTP\// {c=$2} END{print c}' "$tmp")
-            len=$(awk 'BEGIN{IGNORECASE=1} /^Content-Length:/ {gsub("\\r",""); v=$2} END{print v}' "$tmp")
-            type=$(awk 'BEGIN{IGNORECASE=1} /^Content-Type:/ {gsub("\\r",""); $1=""; sub(/^ /,""); v=$0} END{print v}' "$tmp")
-            printf '%s\t%s\t%s\t%s\n' "$url" "${code:-NA}" "${len:-NA}" "${type:-NA}" >> out/public_assets.tsv
-            rm -f "$tmp"
-          done
-
-          file out/board_anbur_phrase.png > out/file.txt
-          sha256sum out/board_anbur_phrase.png > out/sha256.txt
-          identify out/board_anbur_phrase.png > out/image_info.txt 2>/dev/null || true
-          printf 'Task 01 public image fetched.\n'
+          file out/board_anbur_phrase.zip > out/file.txt
+          sha256sum out/board_anbur_phrase.zip > out/sha256.txt
+          unzip -l out/board_anbur_phrase.zip > out/archive_list.txt
+          unzip -o out/board_anbur_phrase.zip -d out/unpacked >/dev/null
+          find out/unpacked -type f -printf '%P\t%s bytes\n' | sort > out/unpacked_manifest.tsv
+          printf 'Task 01 redirected archive fetched.\n'
 
       - name: Upload task 01
         uses: actions/upload-artifact@v4
