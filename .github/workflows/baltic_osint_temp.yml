@@ -12,52 +12,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Query public Textainer Unit Inquiry for SEGU9639460
+      - name: Inspect public Textainer report viewer
         shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests
+          import requests,re,html
           from bs4 import BeautifulSoup
-          u='https://tex.textainer.com/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
+          base='https://tex.textainer.com'
+          u=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
           s=requests.Session(); h={'User-Agent':'Mozilla/5.0'}
-          r=s.get(u,timeout=20,headers=h); soup=BeautifulSoup(r.text,'html.parser')
-          print('FIELDS_BEGIN')
-          for tag in soup.find_all(['input','textarea','select']):
-              print(tag.name, tag.get('name'), tag.get('id'), tag.get('type'), tag.get('value'))
-          print('FIELDS_END')
-          data={}
-          for tag in soup.find_all('input'):
-              n=tag.get('name')
-              if n and tag.get('type')=='hidden': data[n]=tag.get('value','')
-          tas=soup.find_all('textarea')
-          if not tas: raise SystemExit('no textarea')
-          eqname=tas[0].get('name'); print('EQNAME',eqname)
-          data[eqname]='SEGU9639460'
+          r=s.get(u,headers=h,timeout=20); soup=BeautifulSoup(r.text,'html.parser')
+          data={t.get('name'):t.get('value','') for t in soup.find_all('input') if t.get('name') and t.get('type')=='hidden'}
+          data['ctl00$bodyContent$ucEqpIds$txtEqpId']='SEGU9639460'
           data['ctl00$bodyContent$btnSubmit']='Preview'
           pr=s.post(u,data=data,headers={**h,'Referer':u},timeout=30,allow_redirects=True)
-          print('POST',pr.status_code,'URL',pr.url,'LEN',len(pr.text))
+          print('FINAL',pr.url,'LEN',len(pr.text),'COOKIES',[(c.name,c.value[:80]) for c in s.cookies])
           out=BeautifulSoup(pr.text,'html.parser')
-          lines=list(out.stripped_strings)
-          keys=['SEGU963946','Equipment','Manufactur','Tare','Gross','Payload','Type','Status','Year','Date','Reefer','45R1','CSC','Approval','TIR','Singamas','Capacity']
-          print('RESULT_BEGIN')
-          done=set()
-          for i,line in enumerate(lines):
-              if any(k.lower() in line.lower() for k in keys):
-                  a=max(0,i-3); b=min(len(lines),i+7)
-                  blob=' | '.join(lines[a:b])
-                  if blob not in done:
-                      done.add(blob); print(blob[:4000])
-          print('RESULT_END')
-          print('TABLES_BEGIN')
-          for ti,t in enumerate(out.find_all('table')):
-              rows=[]
-              for tr in t.find_all('tr'):
-                  vals=[' '.join(c.stripped_strings) for c in tr.find_all(['th','td'])]
-                  if vals: rows.append(' || '.join(vals))
-              blob='\n'.join(rows)
-              if 'SEGU963946' in blob or any(k.lower() in blob.lower() for k in ['manufacturer','tare','equipment type','gross weight']):
-                  print('TABLE',ti); print(blob[:12000])
-          print('TABLES_END')
+          print('FORMS')
+          for f in out.find_all('form'): print(str(f)[:5000])
+          print('URL_ATTRS_BEGIN')
+          for tag in out.find_all(True):
+              for attr in ['src','href','action','url']:
+                  v=tag.get(attr)
+                  if v and any(x in v.lower() for x in ['report','viewer','axd','session','control']): print(tag.name,attr,html.unescape(v)[:3000])
+          print('URL_ATTRS_END')
+          print('SCRIPT_SNIPS_BEGIN')
+          for m in re.finditer(r'.{0,250}(?:ReportViewer|Reserved\.ReportViewer|Session|ControlID|Viewer)[^\n]{0,1200}',pr.text,re.I):
+              print(html.unescape(m.group(0))[:1600])
+          print('SCRIPT_SNIPS_END')
+          print('HIDDENS_BEGIN')
+          for t in out.find_all('input'):
+              if t.get('type')=='hidden': print(t.get('name'),t.get('value','')[:4000])
+          print('HIDDENS_END')
           PY
