@@ -1,0 +1,57 @@
+name: cyberkomi-ch02-phrase-check
+
+on:
+  push:
+    branches: [ctf-cyberkomi-probe-20260808]
+    paths: ['.github/workflows/cyberkomi-ch02-check.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Generate one-time handoff key
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p handoff
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out handoff/private.pem >/dev/null 2>&1
+          openssl pkey -in handoff/private.pem -pubout -out handoff/public.pem >/dev/null 2>&1
+      - name: Publish public handoff key
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-ch02-handoff-key
+          path: handoff/public.pem
+          retention-days: 1
+      - name: Validate reconstructed librarian phrase
+        shell: bash
+        env:
+          RAW_HANDOFF: https://raw.githubusercontent.com/MakSoS1/analytics_test/ctf-cyberkomi-probe-20260808/handoff/ch02.enc.b64
+        run: |
+          set -euo pipefail; umask 077
+          got=0
+          for i in $(seq 1 180); do
+            if curl -fsSL --connect-timeout 5 --max-time 10 -H 'Cache-Control: no-cache' "${RAW_HANDOFF}?n=${GITHUB_RUN_ID}-${i}" -o handoff/token.b64 2>/dev/null; then got=1; break; fi
+            sleep 2
+          done
+          [ "$got" -eq 1 ] || exit 2
+          base64 -d handoff/token.b64 > handoff/token.enc
+          openssl pkeyutl -decrypt -inkey handoff/private.pem -in handoff/token.enc -out handoff/token.txt \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
+          TOKEN=$(cat handoff/token.txt); echo "::add-mask::$TOKEN"; test -n "$TOKEN"
+          python3 - "$TOKEN" <<'PY'
+          import json,pathlib,subprocess,sys
+          token=sys.argv[1]
+          phrase='Старая Каланча первый глаз города смотрит сверху'
+          req={'step':'ch02.library.phrase','code':phrase,'ctfd_token':token}
+          p=pathlib.Path('handoff/request.json'); p.write_text(json.dumps(req,ensure_ascii=False,separators=(',',':')))
+          cp=subprocess.run(['curl','-sS','--connect-timeout','8','--max-time','30','-H','Content-Type: application/json','-H','X-API-Key: caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia','--data-binary',f'@{p}','https://game-check.caplag.ru/check'],capture_output=True,text=True)
+          try:
+              d=json.loads(cp.stdout); print('chapter2_phrase_valid='+str(bool(d.get('valid'))).lower())
+          except Exception:
+              print('chapter2_phrase_valid=unparseable'); raise
+          PY
+          rm -f handoff/token.txt handoff/token.enc handoff/token.b64 handoff/request.json handoff/private.pem
