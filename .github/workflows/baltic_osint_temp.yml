@@ -12,16 +12,35 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Download original public PPA footage
+      - name: Discover public BV TLSTAR endpoints
         shell: bash
         run: |
           set -euo pipefail
-          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
-          curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic_original.mp4
-          ls -lh /tmp/baltic_original.mp4
-      - uses: actions/upload-artifact@v4
-        with:
-          name: baltic-original-ppa-video
-          path: /tmp/baltic_original.mp4
-          retention-days: 1
+          python3 - <<'PY'
+          import requests,re,json,subprocess
+          H={'User-Agent':'Mozilla/5.0'}
+          print('=== CRT.SH BV DOMAINS CONTAINING TL/CONTAINER/HERMES ===')
+          for q in ['%25.bureauveritas.com','%25.bureauveritas.cn','%25.veristar.com']:
+              try:
+                  r=requests.get('https://crt.sh/',params={'q':q,'output':'json'},headers=H,timeout=45)
+                  print('CRT',q,r.status_code,len(r.content))
+                  arr=r.json(); names=set()
+                  for x in arr:
+                      for n in (x.get('name_value') or '').splitlines():
+                          n=n.strip().lower().lstrip('*.')
+                          if n and any(k in n for k in ['tlstar','hermes','container','logistic','tl-','tls']): names.add(n)
+                  for n in sorted(names): print('NAME',n)
+              except Exception as e: print('CRT_ERR',q,repr(e))
+          print('=== COMMON HOST PROBE ===')
+          hosts=[]
+          bases=['bureauveritas.com','bureauveritas.cn','veristar.com']
+          prefixes=['tlstar','tl-star','tlstar2','container','containers','containerinspection','container-inspection','hermes','tl','newcontainer','newcontainers']
+          for p in prefixes:
+              for b in bases: hosts.append(p+'.'+b)
+          for h in hosts:
+              try:
+                  rr=requests.get('https://'+h+'/',headers=H,timeout=7,allow_redirects=True,verify=False)
+                  if rr.status_code not in (502,503,504) or len(rr.content)>1000:
+                      print('HOST',h,rr.status_code,rr.url,rr.headers.get('Server'),rr.headers.get('Content-Type'),len(rr.content),re.sub(r'\s+',' ',rr.text[:180]))
+              except Exception: pass
+          PY
