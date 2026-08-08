@@ -1,4 +1,4 @@
-name: cyberkomi-unity-scene-inspect
+name: cyberkomi-library-screen-export
 
 on:
   push:
@@ -10,17 +10,16 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  export:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Download and inspect current Unity bundle
+      - name: Export chapter 2 terminal screens
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out
-          curl -fsSL --compressed --connect-timeout 10 --max-time 240 \
-            'https://cyberkomi.caplag.ru/Build/build.data.br' -o /tmp/build.data
+          mkdir -p out/images
+          curl -fsSL --compressed --connect-timeout 10 --max-time 240 'https://cyberkomi.caplag.ru/Build/build.data.br' -o /tmp/build.data
           python3 - <<'PY'
           import pathlib,struct
           b=pathlib.Path('/tmp/build.data').read_bytes(); magic=b'UnityWebData1.0\x00'; assert b.startswith(magic)
@@ -28,80 +27,41 @@ jobs:
           while pos<end:
               off,n,pl=struct.unpack_from('<III',b,pos); pos+=12
               path=b[pos:pos+pl].decode(); pos+=pl
-              if path=='data.unity3d':
-                  pathlib.Path('/tmp/data.unity3d').write_bytes(b[off:off+n]); break
-          else: raise SystemExit('data.unity3d not found')
+              if path=='data.unity3d': pathlib.Path('/tmp/data.unity3d').write_bytes(b[off:off+n]); break
           PY
-          python3 -m pip -q install 'UnityPy>=1.20.0'
+          python3 -m pip -q install 'UnityPy>=1.20.0' pillow
           python3 - <<'PY'
-          import UnityPy, pathlib, json, re, traceback
+          import UnityPy,pathlib,json,re
           env=UnityPy.load('/tmp/data.unity3d')
-          report={'files':[], 'objects':{}, 'matches':[]}
-          try:
-              report['files']=list(env.files.keys())
-          except Exception as e: report['files_error']=repr(e)
-          counts={}
-          string_rows=[]
-          mb_rows=[]
-          go_rows=[]
-          tex_rows=[]
+          wanted={'bg_login','bg_lib','bg_answer','bg_terminal','bg_menu','bg_complete','bg_gg','bg_AI'}
+          exported=[]; objrows=[]
           for obj in env.objects:
-              typ=obj.type.name; counts[typ]=counts.get(typ,0)+1
-              if typ=='GameObject':
+              af=getattr(getattr(obj,'assets_file',None),'name','')
+              typ=obj.type.name
+              if typ=='Texture2D':
                   try:
-                      d=obj.read(); go_rows.append({'path_id':obj.path_id,'name':getattr(d,'m_Name','')})
-                  except Exception: pass
-              elif typ in ('TextAsset',):
-                  try:
-                      d=obj.read(); raw=getattr(d,'m_Script',b'')
-                      if isinstance(raw,bytes): raw=raw.decode('utf-8','replace')
-                      string_rows.append({'type':typ,'path_id':obj.path_id,'name':getattr(d,'m_Name',''),'text':raw})
-                  except Exception: pass
-              elif typ=='MonoBehaviour':
-                  rec={'path_id':obj.path_id}
-                  try:
-                      d=obj.read(); rec['name']=getattr(d,'m_Name','')
-                      try:
-                          sc=d.m_Script.read(); rec['script']=getattr(sc,'m_Name','')
-                      except Exception: rec['script']=''
-                  except Exception as e: rec['read_error']=repr(e)
-                  try:
-                      tree=obj.read_typetree()
-                      rec['typetree']=tree
+                      d=obj.read(); name=getattr(d,'m_Name','')
+                      if name in wanted:
+                          # distinguish duplicate texture names using source serialized file
+                          safe=re.sub(r'[^A-Za-z0-9_.-]+','_',af or 'unknown')
+                          fn=f'{safe}__{obj.path_id}__{name}.png'
+                          d.image.save('out/images/'+fn)
+                          exported.append({'file':af,'path_id':obj.path_id,'name':name,'png':fn,'w':d.m_Width,'h':d.m_Height})
                   except Exception as e:
-                      rec['typetree_error']=repr(e)
-                  mb_rows.append(rec)
-              elif typ in ('Texture2D','Sprite'):
+                      exported.append({'file':af,'path_id':obj.path_id,'error':repr(e)})
+              elif typ=='GameObject':
                   try:
-                      d=obj.read(); tex_rows.append({'type':typ,'path_id':obj.path_id,'name':getattr(d,'m_Name',''),'w':getattr(d,'m_Width',None),'h':getattr(d,'m_Height',None)})
+                      d=obj.read(); n=getattr(d,'m_Name','')
+                      if re.search(r'Panel \(lib\)|Panel \(login\)|Panel \(menu\)|complete|answer|terminal|ChapterTitle',n,re.I):
+                          objrows.append({'file':af,'path_id':obj.path_id,'name':n})
                   except Exception: pass
-          report['objects']=counts
-          pathlib.Path('out/report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2,default=str))
-          pathlib.Path('out/gameobjects.json').write_text(json.dumps(go_rows,ensure_ascii=False,indent=2))
-          pathlib.Path('out/textassets.json').write_text(json.dumps(string_rows,ensure_ascii=False,indent=2))
-          pathlib.Path('out/textures.json').write_text(json.dumps(tex_rows,ensure_ascii=False,indent=2))
-          # Keep only MonoBehaviour records that contain useful text or are chapter/game controllers/TMP components.
-          keep=[]
-          needle=re.compile(r'(167|билет|библиот|материал|требован|координ|строк|слов|Library|TMP|TextMesh|request)',re.I)
-          for r in mb_rows:
-              s=json.dumps(r,ensure_ascii=False,default=str)
-              if needle.search(s): keep.append(r)
-          pathlib.Path('out/relevant_monobehaviours.json').write_text(json.dumps(keep,ensure_ascii=False,indent=2,default=str))
-          # Raw printable strings per serialized file containing chapter-2 markers.
-          rawdump=[]
-          for name,f in env.files.items():
-              try: data=f.reader.read_bytes(f.reader.Length) if hasattr(f,'reader') else b''
-              except Exception:
-                  try:
-                      f.reader.Position=0; data=f.reader.read_bytes(f.reader.Length)
-                  except Exception: continue
-              if any(x in data for x in ['Билет'.encode(), 'Национальная библиотека'.encode(), b'ch02.library']):
-                  rawdump.append({'file':name,'size':len(data),'utf8_strings':[m.group().decode('utf-8','replace') for m in re.finditer(rb'[\x20-\x7e\xc0-\xff]{4,}',data)]})
-          pathlib.Path('out/chapter2_raw_strings.json').write_text(json.dumps(rawdump,ensure_ascii=False,indent=2))
+          pathlib.Path('out/exported.json').write_text(json.dumps(exported,ensure_ascii=False,indent=2))
+          pathlib.Path('out/relevant_gameobjects.json').write_text(json.dumps(objrows,ensure_ascii=False,indent=2))
           PY
-      - name: Upload inspection
+          ls -lah out/images > out/listing.txt
+      - name: Upload library screens
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-unity-inspect-current
+          name: cyberkomi-library-screens
           path: out
           retention-days: 1
