@@ -1,0 +1,89 @@
+name: cyberkomi-public-probe
+
+on:
+  push:
+    branches:
+      - ctf-cyberkomi-probe-20260808
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch public application shell and same-origin assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p out/assets out/common
+          base='https://cyberkomi.caplag.ru/'
+
+          curl -fsS --connect-timeout 10 --max-time 30 \
+            -D out/root.headers \
+            -o out/index.html \
+            "$base"
+
+          python3 - <<'PY'
+          import html.parser, pathlib, urllib.parse
+
+          base = 'https://cyberkomi.caplag.ru/'
+          text = pathlib.Path('out/index.html').read_text('utf-8', errors='replace')
+
+          class P(html.parser.HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.urls=[]
+              def handle_starttag(self, tag, attrs):
+                  d=dict(attrs)
+                  for key in ('src','href'):
+                      if key in d and d[key]:
+                          self.urls.append(d[key])
+
+          p=P(); p.feed(text)
+          seen=[]
+          for raw in p.urls:
+              u=urllib.parse.urljoin(base, raw)
+              parts=urllib.parse.urlsplit(u)
+              if parts.scheme == 'https' and parts.netloc == 'cyberkomi.caplag.ru':
+                  clean=urllib.parse.urlunsplit((parts.scheme,parts.netloc,parts.path,parts.query,''))
+                  if clean not in seen:
+                      seen.append(clean)
+          pathlib.Path('out/asset_urls.txt').write_text('\n'.join(seen)+'\n', encoding='utf-8')
+          PY
+
+          i=0
+          while IFS= read -r url; do
+            [ -n "$url" ] || continue
+            i=$((i+1))
+            curl -fsS --connect-timeout 10 --max-time 30 \
+              -D "out/assets/${i}.headers" \
+              -o "out/assets/${i}.body" \
+              "$url" || true
+            printf '%s\t%s\n' "$i" "$url" >> out/assets/map.tsv
+          done < out/asset_urls.txt
+
+          for path in robots.txt manifest.json site.webmanifest sw.js service-worker.js favicon.ico; do
+            safe=$(printf '%s' "$path" | tr '/.' '__')
+            code=$(curl -sS --connect-timeout 10 --max-time 20 \
+              -D "out/common/${safe}.headers" \
+              -o "out/common/${safe}.body" \
+              -w '%{http_code}' \
+              "https://cyberkomi.caplag.ru/$path" || true)
+            printf '%s\t%s\n' "$path" "$code" >> out/common/status.tsv
+          done
+
+          # Record only metadata in stdout, never response bodies.
+          printf 'Fetched root and %s same-origin linked assets.\n' "$i"
+          find out -type f -printf '%P\t%s bytes\n' | sort > out/file_manifest.tsv
+
+      - name: Upload probe bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-public-probe
+          path: out/
+          retention-days: 1
+          if-no-files-found: error
