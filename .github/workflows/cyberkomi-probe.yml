@@ -1,4 +1,4 @@
-name: cyberkomi-il2cpp-recovery
+name: cyberkomi-il2cpp-isil
 
 on:
   push:
@@ -12,88 +12,65 @@ permissions:
 jobs:
   recover:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
-      - name: Download public Unity IL2CPP files and recover managed metadata/code
+      - name: Recover relevant CTF client methods as ISIL
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p out work/cpp2il work/cppout
+          mkdir -p out/isil work/cpp2il work/cppout
 
-          curl -fsS --compressed --connect-timeout 10 --max-time 300 \
-            -o work/build.data \
-            'https://cyberkomi.caplag.ru/Build/build.data.br'
-          curl -fsS --compressed --connect-timeout 10 --max-time 300 \
-            -o work/build.wasm \
-            'https://cyberkomi.caplag.ru/Build/build.wasm.br'
-          curl -fsS --compressed --connect-timeout 10 --max-time 90 \
-            -o work/build.framework.js \
-            'https://cyberkomi.caplag.ru/Build/build.framework.js.br'
+          curl -fsS --compressed --connect-timeout 10 --max-time 300 -o work/build.data 'https://cyberkomi.caplag.ru/Build/build.data.br'
+          curl -fsS --compressed --connect-timeout 10 --max-time 300 -o work/build.wasm 'https://cyberkomi.caplag.ru/Build/build.wasm.br'
+          curl -fsS --compressed --connect-timeout 10 --max-time 90 -o work/build.framework.js 'https://cyberkomi.caplag.ru/Build/build.framework.js.br'
 
           python3 - <<'PY'
           from pathlib import Path
           import struct
-          src=Path('work/build.data').read_bytes()
-          magic=b'UnityWebData1.0\x00'
-          assert src.startswith(magic)
+          src=Path('work/build.data').read_bytes(); magic=b'UnityWebData1.0\x00'; assert src.startswith(magic)
           p=len(magic); header=struct.unpack_from('<I',src,p)[0]; p+=4
-          wanted='Il2CppData/Metadata/global-metadata.dat'
           while p<header:
               off,size,nlen=struct.unpack_from('<III',src,p); p+=12
               name=src[p:p+nlen].decode('utf-8','replace'); p+=nlen
-              if name==wanted:
-                  Path('work/global-metadata.dat').write_bytes(src[off:off+size])
-                  break
-          else: raise SystemExit('global-metadata.dat missing')
+              if name=='Il2CppData/Metadata/global-metadata.dat':
+                  Path('work/global-metadata.dat').write_bytes(src[off:off+size]); break
+          else: raise SystemExit('metadata missing')
           PY
 
-          # Current development build. It supports modern Unity metadata and WASM.
-          curl -fsSL --connect-timeout 15 --max-time 180 \
-            -o work/cpp2il.zip \
-            'https://nightly.link/SamboyCoding/Cpp2IL/workflows/dotnet-core/development/Cpp2IL-net9-linux-x64.zip'
+          curl -fsSL --connect-timeout 15 --max-time 180 -o work/cpp2il.zip 'https://nightly.link/SamboyCoding/Cpp2IL/workflows/dotnet-core/development/Cpp2IL-net9-linux-x64.zip'
           unzip -q work/cpp2il.zip -d work/cpp2il
           exe=$(find work/cpp2il -maxdepth 3 -type f \( -name 'Cpp2IL' -o -name 'Cpp2IL-*' \) -perm -u+x | head -n1 || true)
-          if [ -z "$exe" ]; then
-            exe=$(find work/cpp2il -maxdepth 3 -type f -name 'Cpp2IL*' | head -n1)
-            chmod +x "$exe"
-          fi
-          printf 'Cpp2IL binary: %s\n' "$exe" > out/tool.txt
-          "$exe" --list-output-formats > out/output_formats.txt 2>&1 || true
-          "$exe" --list-processors > out/processors.txt 2>&1 || true
+          if [ -z "$exe" ]; then exe=$(find work/cpp2il -maxdepth 3 -type f -name 'Cpp2IL*' | head -n1); chmod +x "$exe"; fi
 
-          # Force paths avoids game-layout autodetection for WebGL.
           set +e
           NO_COLOR=true "$exe" \
             --force-binary-path="$(pwd)/work/build.wasm" \
             --force-metadata-path="$(pwd)/work/global-metadata.dat" \
             --force-unity-version='6000.0.76f1' \
             --wasm-framework-file="$(pwd)/work/build.framework.js" \
-            --output-as=dll_il_recovery \
+            --output-as=isil \
             --output-to="$(pwd)/work/cppout" \
-            --verbose > out/cpp2il.log 2>&1
+            > out/cpp2il-isil.log 2>&1
           rc=$?
           set -e
-          printf '%s\n' "$rc" > out/cpp2il_rc.txt
+          printf '%s\n' "$rc" > out/rc.txt
 
-          find work/cppout -type f -printf '%P\t%s bytes\n' | sort > out/cppout_manifest.tsv || true
-          ac=$(find work/cppout -type f -name 'Assembly-CSharp.dll' | head -n1 || true)
-          if [ -n "$ac" ]; then
-            cp "$ac" out/Assembly-CSharp.dll
-            dotnet tool install --tool-path work/tools ilspycmd >/dev/null
-            mkdir -p out/decompiled
-            work/tools/ilspycmd -p -o out/decompiled "$ac" > out/ilspy.log 2>&1 || true
-            # Keep the CTF's own code, not thousands of generated/runtime files.
-            find out/decompiled -type f | grep -Ei '(AnswerCheck|IntroHeadphones|LibraryTerminal|Kalancha|Gallery|ParmaLine|GovRelay|Heatline|Kontur|Omeba|Sysola|Chapter|GameServer|Progress|Scene)' > out/relevant_files.txt || true
+          root=$(find work/cppout -type d -path '*/IsilDump/Assembly-CSharp' | head -n1 || true)
+          if [ -n "$root" ]; then
+            for name in AnswerCheckController IntroHeadphonesVideoScreen LibraryTerminalChapter2Controller KalanchaChapter3Controller GalleryChapter4Controller ParmaLineChapter5Controller GovRelayChapter6Controller HeatlineChapter7Controller KonturChapter8Controller OmebaArchiveChapter9Controller SysolaCoreChapter10Controller; do
+              f=$(find "$root" -type f -name "${name}.txt" | head -n1 || true)
+              [ -z "$f" ] || cp "$f" "out/isil/${name}.txt"
+              find "$root" -type f -name "${name}_NestedType_*.txt" -exec cp {} out/isil/ \; 2>/dev/null || true
+            done
           fi
+          find out/isil -type f -printf '%P\t%s bytes\n' | sort > out/manifest.tsv
+          printf 'Relevant ISIL extraction complete, rc=%s. No player credentials used.\n' "$rc"
 
-          # Public static analysis only; no user token or task answer is used.
-          printf 'IL2CPP recovery finished with rc=%s.\n' "$rc"
-
-      - name: Upload recovered CTF client code
+      - name: Upload relevant ISIL
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-il2cpp-recovery
+          name: cyberkomi-il2cpp-isil
           path: out/
           retention-days: 1
           if-no-files-found: error
