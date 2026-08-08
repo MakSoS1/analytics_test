@@ -1,0 +1,100 @@
+name: caplag-chain83
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-chain83.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Generate ephemeral key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
+      - name: Upload public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-chain83-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
+          retention-days: 1
+      - name: Wait for encrypted credentials
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/MakSoS1/analytics_test/contents/handoff/caplag-chain83-${kid}.enc.b64?ref=ctf-caplag-submit83-20260808"
+          for i in $(seq 1 150); do
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json')); txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/creds.enc').write_bytes(base64.b64decode(txt))
+          PY
+              openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/creds.enc -out /tmp/creds.json -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              chmod 600 /tmp/creds.json
+              echo encrypted_handoff=received; exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Test known chain-code mapping candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,requests,sys,time,pathlib
+          from html import unescape
+          BASE='https://platform.caplag.ru'; c=json.load(open('/tmp/creds.json'))
+          s=requests.Session();s.headers['User-Agent']='Mozilla/5.0 CAPLAG-CTF-helper'
+          r=s.get(BASE+'/login',timeout=20);r.raise_for_status()
+          m=re.search(r'name=["\']nonce["\'][^>]*value=["\']([^"\']+)',r.text,re.I) or re.search(r'value=["\']([^"\']+)["\'][^>]*name=["\']nonce["\']',r.text,re.I)
+          d={'name':c['username'],'password':c['password']}
+          if m:d['nonce']=unescape(m.group(1))
+          rr=s.post(BASE+'/login',data=d,allow_redirects=True,timeout=20)
+          if '/login' in rr.url: print('login=failed');sys.exit(2)
+          page=s.get(BASE+'/challenges',timeout=20);csrf=None
+          for p in [r'csrfNonce\s*:\s*["\']([^"\']+)',r'["\']csrfNonce["\']\s*:\s*["\']([^"\']+)']:
+              mm=re.search(p,page.text,re.I)
+              if mm:csrf=unescape(mm.group(1));break
+          if not csrf:sys.exit(3)
+          before=(s.get(BASE+'/api/v1/challenges/83',timeout=20).json().get('data') or {})
+          print('solved_before='+str(bool(before.get('solved_by_me',False))).lower())
+          codes=[
+            'KAR-167-READ','EYE-23-GALLERY','ART-04-PARMA','BUS-05-STEFAN','GOV-06-HEATLINE',
+            'HEAT-42-AUGUST-VENT','HEAT-07-KONTUR','KONTUR-08-OMEBAKEY','OMEBA-09-CORESEED','SYSOLA-CORE-READY',
+            'CORE-EVT-GUARD-DENIED','CORE-EVT-LOWLEVEL','CORE-EVT-GUARD-UNLOCKED','SYSOLA-10-REMEMBERS',
+            'MIRROR-23-ALIVE'
+          ]
+          candidates=[]
+          for code in codes:
+              for x in [f'caplag{{{code}}}',code]:
+                  if x not in candidates:candidates.append(x)
+          headers={'CSRF-Token':csrf,'Referer':BASE+'/challenges'}
+          for i,x in enumerate(candidates,1):
+              while True:
+                  q=s.post(BASE+'/api/v1/challenges/attempt',json={'challenge_id':83,'submission':x},headers=headers,timeout=20)
+                  try:
+                      j=q.json();dd=j.get('data') or {};status=str(dd.get('status') or '').lower();msg=str(dd.get('message') or '')
+                  except Exception:status='http_'+str(q.status_code);msg=''
+                  if status=='ratelimited' or q.status_code==429:
+                      mm=re.search(r'(\d+)\s*seconds?',msg,re.I);time.sleep((int(mm.group(1))+3) if mm else 65);continue
+                  break
+              print(f'attempt_{i:02d}='+status)
+              if status=='correct':
+                  pathlib.Path('/tmp/winner_index').write_text(str(i)); print('success=true'); print('winner_index='+str(i));sys.exit(0)
+              if i<len(candidates):time.sleep(7.2)
+          print('success=false');sys.exit(4)
+          PY
