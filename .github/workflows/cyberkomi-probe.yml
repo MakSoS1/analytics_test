@@ -1,4 +1,4 @@
-name: cyberkomi-task01-public-asset
+name: cyberkomi-unity-object-inspection
 
 on:
   push:
@@ -10,33 +10,130 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 12
     steps:
-      - name: Fetch task 01 redirected archive
+      - name: Decode Unity data and inspect serialized objects
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p out/unpacked
+          mkdir -p out work
 
-          curl -fsSL --connect-timeout 10 --max-time 90 \
-            -D out/task01.headers \
-            -o out/board_anbur_phrase.zip \
-            'https://game-file.caplag.ru/d/task01_nevrovozal/board_anbur_phrase.png'
+          curl -fsS --compressed --connect-timeout 10 --max-time 300 \
+            -o work/build.data \
+            'https://cyberkomi.caplag.ru/Build/build.data.br'
 
-          file out/board_anbur_phrase.zip > out/file.txt
-          sha256sum out/board_anbur_phrase.zip > out/sha256.txt
-          unzip -l out/board_anbur_phrase.zip > out/archive_list.txt
-          unzip -o out/board_anbur_phrase.zip -d out/unpacked >/dev/null
-          find out/unpacked -type f -printf '%P\t%s bytes\n' | sort > out/unpacked_manifest.tsv
-          printf 'Task 01 redirected archive fetched.\n'
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+          src=Path('work/build.data').read_bytes()
+          magic=b'UnityWebData1.0\x00'
+          assert src.startswith(magic)
+          p=len(magic)
+          header=struct.unpack_from('<I',src,p)[0]; p+=4
+          found=False
+          while p<header:
+              off,size,nlen=struct.unpack_from('<III',src,p); p+=12
+              name=src[p:p+nlen].decode('utf-8','replace'); p+=nlen
+              if name=='data.unity3d':
+                  Path('work/data.unity3d').write_bytes(src[off:off+size])
+                  found=True
+          assert found
+          PY
 
-      - name: Upload task 01
+          python3 -m pip -q install 'UnityPy>=1.10.18'
+
+          python3 - <<'PY'
+          import UnityPy, json, re, struct
+          from pathlib import Path
+
+          env=UnityPy.load('work/data.unity3d')
+          out=Path('out')
+          rows=[]
+          scripts={}
+
+          # Resolve MonoScript path IDs to class names where possible.
+          for obj in env.objects:
+              if obj.type.name == 'MonoScript':
+                  try:
+                      d=obj.read()
+                      cls=getattr(d,'m_ClassName','') or ''
+                      ns=getattr(d,'m_Namespace','') or ''
+                      asm=getattr(d,'m_AssemblyName','') or ''
+                      scripts[obj.path_id]={'class':cls,'namespace':ns,'assembly':asm}
+                  except Exception as e:
+                      scripts[obj.path_id]={'error':type(e).__name__}
+          out.joinpath('monoscripts.json').write_text(json.dumps(scripts,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          def candidate_strings(raw):
+              vals=[]
+              # Unity serialized strings commonly appear as LE int32 length + UTF-8 bytes + 4-byte alignment.
+              for i in range(0,max(0,len(raw)-8)):
+                  n=struct.unpack_from('<I',raw,i)[0]
+                  if not (1 <= n <= 4096) or i+4+n>len(raw):
+                      continue
+                  b=raw[i+4:i+4+n]
+                  try: s=b.decode('utf-8')
+                  except UnicodeDecodeError: continue
+                  if not s or any(ord(c)<9 or (13<ord(c)<32) for c in s):
+                      continue
+                  printable=sum(c.isprintable() for c in s)/len(s)
+                  if printable < .95: continue
+                  if re.search(r'[A-Za-zА-Яа-яЁё0-9:/._-]{3}',s):
+                      vals.append((i,s))
+              # stable unique
+              seen=set(); res=[]
+              for x in vals:
+                  if x[1] not in seen:
+                      seen.add(x[1]); res.append(x)
+              return res
+
+          interesting=[]
+          for obj in env.objects:
+              try:
+                  raw=bytes(obj.get_raw_data())
+              except Exception:
+                  continue
+              ss=candidate_strings(raw)
+              joined='\n'.join(s for _,s in ss)
+              hit=bool(re.search(r'task01|anbur|board_|game-check|serverStep|BUS-05|STEFAN|Chapter01|AnswerCheck|ctfd|sysola',joined,re.I))
+              rec={'path_id':obj.path_id,'type':obj.type.name,'size':len(raw),'strings':ss[:250]}
+              if obj.type.name=='MonoBehaviour':
+                  try:
+                      d=obj.read()
+                      sp=getattr(d,'m_Script',None)
+                      sid=getattr(sp,'path_id',None) if sp else None
+                      rec['script_path_id']=sid
+                      rec['script']=scripts.get(sid)
+                      rec['name']=getattr(d,'m_Name','')
+                  except Exception as e:
+                      rec['read_error']=type(e).__name__
+              if hit:
+                  interesting.append(rec)
+
+          out.joinpath('interesting_objects.json').write_text(json.dumps(interesting,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # Also write a concise text report for easy review.
+          with out.joinpath('interesting_objects.txt').open('w',encoding='utf-8') as f:
+              for r in interesting:
+                  f.write(f"PATH {r['path_id']} TYPE {r['type']} SIZE {r['size']} SCRIPT {r.get('script')} NAME {r.get('name','')}\n")
+                  for off,s in r['strings']:
+                      f.write(f"  +{off}: {s}\n")
+                  f.write('\n')
+
+          # General object and script counts only.
+          from collections import Counter
+          c=Counter(o.type.name for o in env.objects)
+          out.joinpath('object_counts.json').write_text(json.dumps(c,indent=2),encoding='utf-8')
+          print(f'Inspected {sum(c.values())} serialized objects; {len(interesting)} interesting objects.')
+          PY
+
+      - name: Upload inspection
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-task01
+          name: cyberkomi-unity-inspection
           path: out/
           retention-days: 1
           if-no-files-found: error
