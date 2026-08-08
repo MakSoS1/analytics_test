@@ -18,23 +18,16 @@ jobs:
           set -euo pipefail
           URL='https://news.err.ee/1609932407/watch-estonia-s-special-forces-detain-a-suspected-smugglers-ship'
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          curl -L --retry 2 --compressed -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' "$URL" -o /tmp/page.html || true
-          echo SIZE=$(wc -c </tmp/page.html 2>/dev/null || echo 0)
+          curl -L --compressed -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' "$URL" -o /tmp/page.html
           python3 - <<'PY'
           import html,re
-          p=open('/tmp/page.html','r',errors='ignore').read()
-          p=html.unescape(p)
-          urls=sorted(set(re.findall(r'https?[^\"\'<> ]+',p)))
-          print('MEDIA_URLS_BEGIN')
-          for u in urls:
-              lu=u.lower()
-              if any(x in lu for x in ['mp4','m3u8','video','stream','media','jupiter','player','cdn','err.ee']):
-                  print(u[:1500])
-          print('MEDIA_URLS_END')
-          print('RELEVANT_LINES_BEGIN')
-          for line in p.splitlines():
-              l=line.lower()
-              if any(x in l for x in ['mp4','m3u8','video','streamurl','mediaid','media_id','player','jupiter']):
-                  print(line[:4000])
-          print('RELEVANT_LINES_END')
+          p=html.unescape(open('/tmp/page.html','r',errors='ignore').read())
+          for term in ['iframe','<video','video-player','videoPlayer','mediaId','media-id','stream','3178979','Videos released','click the photo above','content-video','data-video']:
+              print('\n===',term,'===')
+              for m in list(re.finditer(re.escape(term),p,re.I))[:20]:
+                  a=max(0,m.start()-900); b=min(len(p),m.end()+1600)
+                  print(p[a:b].replace('\n',' ')[:2600])
+          print('\n=== TAGS ===')
+          for pat in [r'<iframe[^>]*>',r'<video[^>]*>',r'<source[^>]*>',r'<[^>]+(?:video|media)[^>]*>']:
+              for m in re.finditer(pat,p,re.I): print(m.group(0)[:3000])
           PY
