@@ -10,37 +10,65 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
-      - name: Discover public BV TLSTAR endpoints
+      - name: Probe archived Seaco Unit Enquiry
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import requests,re,json,subprocess
+          import requests,re,json,urllib.parse,html
           H={'User-Agent':'Mozilla/5.0'}
-          print('=== CRT.SH BV DOMAINS CONTAINING TL/CONTAINER/HERMES ===')
-          for q in ['%25.bureauveritas.com','%25.bureauveritas.cn','%25.veristar.com']:
+          roots=[
+            'https://newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/index.html',
+            'https://newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/manifest.json',
+            'https://newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/Component.js',
+          ]
+          print('CDX_EXACT_BEGIN')
+          captures=[]
+          for u in roots:
               try:
-                  r=requests.get('https://crt.sh/',params={'q':q,'output':'json'},headers=H,timeout=45)
-                  print('CRT',q,r.status_code,len(r.content))
-                  arr=r.json(); names=set()
-                  for x in arr:
-                      for n in (x.get('name_value') or '').splitlines():
-                          n=n.strip().lower().lstrip('*.')
-                          if n and any(k in n for k in ['tlstar','hermes','container','logistic','tl-','tls']): names.add(n)
-                  for n in sorted(names): print('NAME',n)
-              except Exception as e: print('CRT_ERR',q,repr(e))
-          print('=== COMMON HOST PROBE ===')
-          hosts=[]
-          bases=['bureauveritas.com','bureauveritas.cn','veristar.com']
-          prefixes=['tlstar','tl-star','tlstar2','container','containers','containerinspection','container-inspection','hermes','tl','newcontainer','newcontainers']
-          for p in prefixes:
-              for b in bases: hosts.append(p+'.'+b)
-          for h in hosts:
+                  r=requests.get('https://web.archive.org/cdx/search/cdx',params={'url':u,'output':'json','filter':'statuscode:200','filter':'mimetype:text/html|application/json|application/javascript','fl':'timestamp,original,statuscode,mimetype,digest','collapse':'digest'},headers=H,timeout=45)
+                  print('CDX',u,r.status_code,len(r.content),r.text[:1500].replace('\n',' '))
+                  try:
+                      arr=r.json()
+                      for row in arr[1:]: captures.append((row[0],row[1]))
+                  except Exception: pass
+              except Exception as e: print('CDX_ERR',u,repr(e))
+          print('CDX_EXACT_END')
+          # wildcard through alternate CDX index format
+          target='newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/*'
+          try:
+              r=requests.get('https://web.archive.org/cdx/search/cdx',params={'url':target,'output':'json','filter':'statuscode:200','fl':'timestamp,original,statuscode,mimetype','collapse':'urlkey','limit':'500'},headers=H,timeout=60)
+              print('WILDCARD',r.status_code,len(r.content))
+              print(r.text[:30000])
               try:
-                  rr=requests.get('https://'+h+'/',headers=H,timeout=7,allow_redirects=True,verify=False)
-                  if rr.status_code not in (502,503,504) or len(rr.content)>1000:
-                      print('HOST',h,rr.status_code,rr.url,rr.headers.get('Server'),rr.headers.get('Content-Type'),len(rr.content),re.sub(r'\s+',' ',rr.text[:180]))
+                  arr=r.json()
+                  for row in arr[1:]: captures.append((row[0],row[1]))
               except Exception: pass
+          except Exception as e: print('WILDCARD_ERR',repr(e))
+          print('FETCH_CAPTURES_BEGIN')
+          seen=set()
+          for ts,u in captures:
+              key=(ts,u)
+              if key in seen: continue
+              seen.add(key)
+              au='https://web.archive.org/web/'+ts+'id_/'+u
+              try:
+                  rr=requests.get(au,headers=H,timeout=45,allow_redirects=True)
+                  print('\nCAP',ts,u,'=>',rr.status_code,rr.url,rr.headers.get('Content-Type'),len(rr.content))
+                  text=rr.text if len(rr.content)<1000000 else rr.text[:1000000]
+                  # Print service/OData related lines only.
+                  for line in text.splitlines():
+                      l=line.lower()
+                      if any(k in l for k in ['odata','datasource','serviceurl','serviceuri','sap/opu','unit','equipment','tir','csc','certificate','approval','model']):
+                          print(line[:5000])
+              except Exception as e: print('CAP_ERR',au,repr(e))
+          print('FETCH_CAPTURES_END')
+          # Memento availability API can work when CDX is blocked.
+          for u in roots:
+              try:
+                  rr=requests.get('https://archive.org/wayback/available',params={'url':u,'timestamp':'20200101'},headers=H,timeout=30)
+                  print('AVAILABLE',u,rr.status_code,rr.text[:3000])
+              except Exception as e: print('AVAILABLE_ERR',repr(e))
           PY
