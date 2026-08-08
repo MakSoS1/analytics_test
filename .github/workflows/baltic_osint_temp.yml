@@ -10,41 +10,27 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     steps:
-      - name: Try public server-side fetches for exact Seaco OData query
+      - name: Try alternate public fetch proxies for exact public Seaco OData query
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import requests,urllib.parse,time,re
-          H={'User-Agent':'Mozilla/5.0'}
+          import requests,urllib.parse,json,re
+          H={'User-Agent':'Mozilla/5.0','Accept':'application/json,application/xml,text/plain,*/*'}
           target="https://newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/Equipment_Status?$filter=IUnitNo%20eq%20'SEGU9639460'%20and%20IUnitNo1%20eq%20''&$format=json"
-          targets=[
-              'https://r.jina.ai/'+target,
-              'https://r.jina.ai/http://newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/Equipment_Status?%24filter='+urllib.parse.quote("IUnitNo eq 'SEGU9639460' and IUnitNo1 eq ''",safe="'()")+'&%24format=json',
+          enc=urllib.parse.quote(target,safe='')
+          urls=[
+              'https://api.allorigins.win/raw?url='+enc,
+              'https://api.codetabs.com/v1/proxy?quest='+enc,
+              'https://corsproxy.io/?url='+enc,
+              'https://thingproxy.freeboard.io/fetch/'+target,
+              'https://newseaweb-seacoglobal-com.translate.goog/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/Equipment_Status?%24filter='+urllib.parse.quote("IUnitNo eq 'SEGU9639460' and IUnitNo1 eq ''",safe="'()")+'&%24format=json&_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en',
           ]
-          for u in targets:
+          for u in urls:
               try:
-                  r=requests.get(u,headers=H,timeout=60,allow_redirects=True)
-                  print('PROXY',r.status_code,r.url,r.headers.get('Content-Type'),len(r.content))
-                  print(r.text[:50000])
-              except Exception as e: print('PROXY_ERR',repr(e))
-          print('=== WAYBACK SAVE ===')
-          save='https://web.archive.org/save/'+target
-          try:
-              r=requests.get(save,headers=H,timeout=90,allow_redirects=False)
-              print('SAVE',r.status_code,len(r.content),dict(r.headers))
-              print(r.text[:10000])
-              loc=r.headers.get('Content-Location') or r.headers.get('Location')
-              if loc:
-                  fu=urllib.parse.urljoin('https://web.archive.org',loc)
-                  rr=requests.get(fu,headers=H,timeout=60,allow_redirects=True)
-                  print('SAVED_FETCH',rr.status_code,rr.url,rr.headers.get('Content-Type'),len(rr.content)); print(rr.text[:50000])
-          except Exception as e: print('SAVE_ERR',repr(e))
-          # availability immediately after save attempt
-          try:
-              rr=requests.get('https://archive.org/wayback/available',params={'url':target},headers=H,timeout=40)
-              print('AVAILABLE',rr.status_code,rr.text[:10000])
-          except Exception as e: print('AVAILABLE_ERR',repr(e))
+                  r=requests.get(u,headers=H,timeout=70,allow_redirects=True)
+                  print('\n=== PROXY ==='); print('REQ',u[:500]); print('RES',r.status_code,r.url,r.headers.get('Content-Type'),len(r.content)); print(r.text[:60000])
+              except Exception as e: print('\nPROXY_ERR',u[:250],repr(e))
           PY
