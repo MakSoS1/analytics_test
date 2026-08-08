@@ -1,0 +1,131 @@
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import ssl
+from collections import defaultdict
+
+from aioquic.asyncio import QuicConnectionProtocol, serve
+from aioquic.asyncio.client import connect
+from aioquic.h3.connection import H3_ALPN, H3Connection
+from aioquic.h3.events import DataReceived, DatagramReceived, HeadersReceived, WebTransportStreamDataReceived
+from aioquic.quic.configuration import QuicConfiguration
+from aioquic.quic.events import ProtocolNegotiated
+
+
+class LabH3Server(QuicConnectionProtocol):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs); self.h3: H3Connection | None = None; self.headers = {}; self.body = defaultdict(bytearray)
+    def quic_event_received(self, event):
+        if isinstance(event, ProtocolNegotiated) and event.alpn_protocol in H3_ALPN:
+            self.h3 = H3Connection(self._quic, enable_webtransport=True)
+        if self.h3 is None: return
+        for he in self.h3.handle_event(event): self.http_event(he)
+    def http_event(self, event):
+        if self.h3 is None: return
+        if isinstance(event, HeadersReceived):
+            headers = dict(event.headers); self.headers[event.stream_id] = headers
+            method = headers.get(b":method", b"GET"); protocol = headers.get(b":protocol")
+            if method == b"CONNECT" and protocol in {b"connect-udp", b"webtransport"}:
+                response = [(b":status", b"200"), (b"server", b"coverlab-h3")]
+                if protocol == b"webtransport": response.append((b"sec-webtransport-http3-draft", b"draft02"))
+                self.h3.send_headers(event.stream_id, response, end_stream=False); self.transmit()
+            elif event.stream_ended: self.respond(event.stream_id)
+        elif isinstance(event, DataReceived):
+            self.body[event.stream_id].extend(event.data)
+            if event.stream_ended: self.respond(event.stream_id)
+        elif isinstance(event, DatagramReceived):
+            self.h3.send_datagram(event.stream_id, event.data[:1200]); self.transmit()
+        elif isinstance(event, WebTransportStreamDataReceived):
+            self._quic.send_stream_data(event.stream_id, event.data, end_stream=event.stream_ended); self.transmit()
+    def respond(self, stream_id: int):
+        if self.h3 is None: return
+        h = self.headers.get(stream_id, {})
+        payload = json.dumps({"ok": True, "method": h.get(b":method", b"GET").decode(errors="replace"),
+                              "path": h.get(b":path", b"/").decode(errors="replace"),
+                              "request_bytes": len(self.body.get(stream_id, b""))}, separators=(",", ":")).encode()
+        self.h3.send_headers(stream_id, [(b":status", b"200"), (b"content-type", b"application/json")])
+        self.h3.send_data(stream_id, payload, end_stream=True); self.transmit()
+
+
+class LabH3Client(QuicConnectionProtocol):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs); self.h3 = H3Connection(self._quic, enable_webtransport=True); self.events = defaultdict(list); self.waiters = {}; self.datagrams = {}
+    def quic_event_received(self, event):
+        for he in self.h3.handle_event(event):
+            sid = getattr(he, "stream_id", None)
+            if isinstance(he, DatagramReceived):
+                fut = self.datagrams.get(he.stream_id)
+                if fut and not fut.done(): fut.set_result(he.data)
+                continue
+            if sid is not None:
+                self.events[sid].append(he)
+                if isinstance(he, (HeadersReceived, DataReceived)) and he.stream_ended:
+                    fut = self.waiters.get(sid)
+                    if fut and not fut.done(): fut.set_result(self.events[sid])
+    async def request(self, authority: str, path: str, method: str = "GET", body: bytes = b""):
+        sid = self._quic.get_next_available_stream_id(); fut = asyncio.get_running_loop().create_future(); self.waiters[sid] = fut
+        self.h3.send_headers(sid, [(b":method", method.encode()), (b":scheme", b"https"), (b":authority", authority.encode()),
+                                   (b":path", path.encode()), (b"user-agent", b"coverlab-aioquic/1")], end_stream=(not body))
+        if body: self.h3.send_data(sid, body, end_stream=True)
+        self.transmit(); events = await asyncio.wait_for(fut, timeout=8); status = 0; response_bytes = 0
+        for e in events:
+            if isinstance(e, HeadersReceived):
+                for k, v in e.headers:
+                    if k == b":status": status = int(v)
+            elif isinstance(e, DataReceived): response_bytes += len(e.data)
+        return {"stream_id": sid, "status": status, "response_bytes": response_bytes}
+    async def connect_udp(self, authority: str, payload: bytes):
+        sid = self._quic.get_next_available_stream_id()
+        self.h3.send_headers(sid, [(b":method", b"CONNECT"), (b":scheme", b"https"), (b":authority", authority.encode()),
+                                   (b":path", b"/.well-known/masque/udp/echo.test/7/"), (b":protocol", b"connect-udp"),
+                                   (b"capsule-protocol", b"?1")], end_stream=False)
+        self.transmit()
+        for _ in range(40):
+            await asyncio.sleep(.01)
+            if any(isinstance(e, HeadersReceived) for e in self.events[sid]): break
+        dgram = asyncio.get_running_loop().create_future(); self.datagrams[sid] = dgram
+        self.h3.send_datagram(sid, payload); self.transmit(); echoed = await asyncio.wait_for(dgram, timeout=5)
+        self.h3.send_data(sid, b"", end_stream=True); self.transmit()
+        return {"stream_id": sid, "status": 200, "datagram_bytes": len(echoed)}
+    async def webtransport(self, authority: str, payload: bytes):
+        sid = self._quic.get_next_available_stream_id()
+        self.h3.send_headers(sid, [(b":method", b"CONNECT"), (b":scheme", b"https"), (b":authority", authority.encode()),
+                                   (b":path", b"/webtransport"), (b":protocol", b"webtransport"),
+                                   (b"sec-webtransport-http3-draft", b"draft02")], end_stream=False); self.transmit()
+        for _ in range(40):
+            await asyncio.sleep(.01)
+            if any(isinstance(e, HeadersReceived) for e in self.events[sid]): break
+        stream_id = self.h3.create_webtransport_stream(sid, is_unidirectional=False)
+        self._quic.send_stream_data(stream_id, payload, end_stream=True); self.transmit(); await asyncio.sleep(.05)
+        self.h3.send_data(sid, b"", end_stream=True); self.transmit()
+        return {"stream_id": sid, "webtransport_stream": stream_id, "sent_bytes": len(payload)}
+
+
+async def run_server(cert: str, key: str, host: str, port: int):
+    cfg = QuicConfiguration(is_client=False, alpn_protocols=H3_ALPN, max_datagram_frame_size=65536); cfg.load_cert_chain(cert, key)
+    await serve(host, port, configuration=cfg, create_protocol=LabH3Server); await asyncio.Future()
+
+
+async def run_client(host: str, port: int, mode: str, path: str, body: bytes):
+    cfg = QuicConfiguration(is_client=True, alpn_protocols=H3_ALPN, max_datagram_frame_size=65536); cfg.verify_mode = ssl.CERT_NONE
+    authority = f"{host}:{port}"
+    async with connect(host, port, configuration=cfg, create_protocol=LabH3Client, server_name=host) as proto:
+        if mode == "request": return await proto.request(authority, path, "POST" if body else "GET", body)
+        if mode == "connect-udp": return await proto.connect_udp(authority, body or b"synthetic-datagram")
+        if mode == "webtransport": return await proto.webtransport(authority, body or b"synthetic-webtransport")
+        raise ValueError(mode)
+
+
+def main():
+    p = argparse.ArgumentParser(); sub = p.add_subparsers(dest="cmd", required=True)
+    ps = sub.add_parser("server"); ps.add_argument("--cert", required=True); ps.add_argument("--key", required=True); ps.add_argument("--host", default="10.20.0.20"); ps.add_argument("--port", type=int, default=8444)
+    pc = sub.add_parser("client"); pc.add_argument("--host", default="cover-h3.test"); pc.add_argument("--port", type=int, default=8444)
+    pc.add_argument("--mode", choices=["request", "connect-udp", "webtransport"], default="request"); pc.add_argument("--path", default="/h3/status"); pc.add_argument("--body", default="")
+    args = p.parse_args()
+    if args.cmd == "server": asyncio.run(run_server(args.cert, args.key, args.host, args.port))
+    else: print(json.dumps(asyncio.run(run_client(args.host, args.port, args.mode, args.path, args.body.encode()))))
+
+
+if __name__ == "__main__": main()
