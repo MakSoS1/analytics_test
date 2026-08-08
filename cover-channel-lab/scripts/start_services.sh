@@ -60,14 +60,15 @@ run_in_c2 "$PYTHON_BIN" -m hypercorn coverlab.server:app --bind 10.20.0.20:8080 
 run_in_c2 "$PYTHON_BIN" -m hypercorn coverlab.server:app --bind 10.20.0.20:8443 --certfile "$CERTDIR/server.crt" --keyfile "$CERTDIR/server.key" --workers 1 >"$LOGDIR/https.log" 2>&1 & echo $! > "$LOGDIR/https.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.grpc_server --bind 10.20.0.20:50051 >"$LOGDIR/grpc.log" 2>&1 & echo $! > "$LOGDIR/grpc.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.h3_fixture server --host 10.20.0.20 --port 8444 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/h3.log" 2>&1 & echo $! > "$LOGDIR/h3.pid"
+run_in_c2 "$PYTHON_BIN" -m coverlab.connect_server --host 10.20.0.20 --port 8082 >"$LOGDIR/connect.log" 2>&1 & echo $! > "$LOGDIR/connect.pid"
 run_in_c2 mosquitto -c "$CERTDIR/mosquitto.conf" -v >"$LOGDIR/mqtt.log" 2>&1 & echo $! > "$LOGDIR/mqtt.pid"
 
 for _ in $(seq 1 80); do
   if sudo ip netns exec cc-dev curl --noproxy '*' -fsS http://cover-api.test:8080/healthz >/dev/null 2>&1 \
     && sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.h3_fixture client --host cover-h3.test --port 8444 --path /healthz >/dev/null 2>&1; then
-    echo "coverlab HTTP/H2/WSS, gRPC, H3 and MQTT services ready"; exit 0
+    echo "coverlab HTTP/H2/WSS, CONNECT, gRPC, H3 and MQTT services ready"; exit 0
   fi
   sleep .25
 done
-cat "$LOGDIR/http.log" "$LOGDIR/https.log" "$LOGDIR/grpc.log" "$LOGDIR/h3.log" "$LOGDIR/mqtt.log" >&2 || true
+cat "$LOGDIR/http.log" "$LOGDIR/https.log" "$LOGDIR/grpc.log" "$LOGDIR/h3.log" "$LOGDIR/connect.log" "$LOGDIR/mqtt.log" >&2 || true
 exit 1
