@@ -14,12 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Fetch public application shell and same-origin assets
+      - name: Fetch public Unity shell and build metadata
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p out/assets out/common
+          mkdir -p out/common out/build
           base='https://cyberkomi.caplag.ru/'
 
           curl -fsS --connect-timeout 10 --max-time 30 \
@@ -27,57 +27,60 @@ jobs:
             -o out/index.html \
             "$base"
 
-          python3 - <<'PY'
-          import html.parser, pathlib, urllib.parse
-
-          base = 'https://cyberkomi.caplag.ru/'
-          text = pathlib.Path('out/index.html').read_text('utf-8', errors='replace')
-
-          class P(html.parser.HTMLParser):
-              def __init__(self):
-                  super().__init__()
-                  self.urls=[]
-              def handle_starttag(self, tag, attrs):
-                  d=dict(attrs)
-                  for key in ('src','href'):
-                      if key in d and d[key]:
-                          self.urls.append(d[key])
-
-          p=P(); p.feed(text)
-          seen=[]
-          for raw in p.urls:
-              u=urllib.parse.urljoin(base, raw)
-              parts=urllib.parse.urlsplit(u)
-              if parts.scheme == 'https' and parts.netloc == 'cyberkomi.caplag.ru':
-                  clean=urllib.parse.urlunsplit((parts.scheme,parts.netloc,parts.path,parts.query,''))
-                  if clean not in seen:
-                      seen.append(clean)
-          pathlib.Path('out/asset_urls.txt').write_text('\n'.join(seen)+'\n', encoding='utf-8')
-          PY
-
-          i=0
-          while IFS= read -r url; do
-            [ -n "$url" ] || continue
-            i=$((i+1))
-            curl -fsS --connect-timeout 10 --max-time 30 \
-              -D "out/assets/${i}.headers" \
-              -o "out/assets/${i}.body" \
-              "$url" || true
-            printf '%s\t%s\n' "$i" "$url" >> out/assets/map.tsv
-          done < out/asset_urls.txt
-
           for path in robots.txt manifest.json site.webmanifest sw.js service-worker.js favicon.ico; do
             safe=$(printf '%s' "$path" | tr '/.' '__')
             code=$(curl -sS --connect-timeout 10 --max-time 20 \
               -D "out/common/${safe}.headers" \
               -o "out/common/${safe}.body" \
               -w '%{http_code}' \
-              "https://cyberkomi.caplag.ru/$path" || true)
+              "${base}${path}" || true)
             printf '%s\t%s\n' "$path" "$code" >> out/common/status.tsv
           done
 
-          # Record only metadata in stdout, never response bodies.
-          printf 'Fetched root and %s same-origin linked assets.\n' "$i"
+          : > out/build/status.tsv
+          for path in \
+            Build/build.loader.js \
+            Build/build.framework.js.br \
+            Build/build.data.br \
+            Build/build.wasm.br; do
+            safe=$(printf '%s' "$path" | tr '/.' '__')
+            curl -sS -I --connect-timeout 10 --max-time 30 \
+              "${base}${path}" > "out/build/${safe}.head" || true
+            code=$(awk 'toupper($1) ~ /^HTTP\// {c=$2} END{print c}' "out/build/${safe}.head")
+            length=$(awk 'BEGIN{IGNORECASE=1} /^Content-Length:/ {gsub("\\r",""); v=$2} END{print v}' "out/build/${safe}.head")
+            encoding=$(awk 'BEGIN{IGNORECASE=1} /^Content-Encoding:/ {gsub("\\r",""); v=$2} END{print v}' "out/build/${safe}.head")
+            printf '%s\t%s\t%s\t%s\n' "$path" "${code:-NA}" "${length:-NA}" "${encoding:-NA}" >> out/build/status.tsv
+          done
+
+          curl -fsS --connect-timeout 10 --max-time 30 \
+            -D out/build/loader.headers \
+            -o out/build/build.loader.js \
+            "${base}Build/build.loader.js"
+
+          # The framework is modest; ask curl to decode Brotli if nginx marks it encoded.
+          curl -fsS --compressed --connect-timeout 10 --max-time 60 \
+            -D out/build/framework.headers \
+            -o out/build/build.framework.js \
+            "${base}Build/build.framework.js.br" || true
+
+          # Probe common StreamingAssets index/config names without logging bodies.
+          : > out/build/streaming-status.tsv
+          for path in \
+            StreamingAssets/aa/catalog.json \
+            StreamingAssets/catalog.json \
+            StreamingAssets/config.json \
+            StreamingAssets/settings.json \
+            StreamingAssets/version.json; do
+            safe=$(printf '%s' "$path" | tr '/.' '__')
+            code=$(curl -sS --connect-timeout 10 --max-time 20 \
+              -D "out/build/${safe}.headers" \
+              -o "out/build/${safe}.body" \
+              -w '%{http_code}' \
+              "${base}${path}" || true)
+            printf '%s\t%s\n' "$path" "$code" >> out/build/streaming-status.tsv
+          done
+
+          printf 'Public Unity metadata fetched.\n'
           find out -type f -printf '%P\t%s bytes\n' | sort > out/file_manifest.tsv
 
       - name: Upload probe bundle
