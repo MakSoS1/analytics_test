@@ -10,47 +10,31 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 5
     steps:
-      - name: Fetch public ERR video and inspect frames
+      - name: Resolve public ERR media metadata
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install -q yt-dlp
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq tesseract-ocr ffmpeg >/dev/null
-
           URL='https://news.err.ee/1609932407/watch-estonia-s-special-forces-detain-a-suspected-smugglers-ship'
-          echo 'Resolving public video...'
-          yt-dlp --no-playlist --print 'VIDEO_ID=%(id)s' --print 'TITLE=%(title)s' --skip-download "$URL" || true
-          yt-dlp --no-playlist -f 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best' --merge-output-format mp4 -o /tmp/baltic.mp4 "$URL"
-          ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/baltic.mp4 | sed 's/^/DURATION=/'
-
-          mkdir -p /tmp/frames
-          ffmpeg -hide_banner -loglevel error -i /tmp/baltic.mp4 -vf 'fps=4,scale=1920:-2' -q:v 2 /tmp/frames/f_%05d.jpg
-
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
+          curl -L --retry 2 --compressed -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' "$URL" -o /tmp/page.html || true
+          echo SIZE=$(wc -c </tmp/page.html 2>/dev/null || echo 0)
           python3 - <<'PY'
-          import glob, os, re, subprocess
-          patterns = [
-              re.compile(r'\b[A-Z]{4}\s*\d{6,7}\b'),
-              re.compile(r'\bTIR\b.{0,80}', re.I),
-              re.compile(r'\b[A-Z]{2,5}/[A-Z0-9]{1,8}\b.{0,50}', re.I),
-          ]
-          hits=[]
-          for i, fn in enumerate(glob.glob('/tmp/frames/*.jpg')):
-              # OCR every frame at 4 fps; whitelist-like PSM variants are deliberately avoided
-              try:
-                  txt=subprocess.check_output(['tesseract',fn,'stdout','--psm','11'],stderr=subprocess.DEVNULL,text=True,timeout=10)
-              except Exception:
-                  continue
-              clean=' '.join(txt.split())
-              found=[]
-              for p in patterns:
-                  found.extend(m.group(0) for m in p.finditer(clean))
-              if found:
-                  hits.append((os.path.basename(fn), clean[:600], found))
-          print('OCR_HITS_BEGIN')
-          for fn, txt, found in hits:
-              print(fn, '=>', ' | '.join(found), '||', txt)
-          print('OCR_HITS_END')
+          import html,re
+          p=open('/tmp/page.html','r',errors='ignore').read()
+          p=html.unescape(p)
+          urls=sorted(set(re.findall(r'https?[^\"\'<> ]+',p)))
+          print('MEDIA_URLS_BEGIN')
+          for u in urls:
+              lu=u.lower()
+              if any(x in lu for x in ['mp4','m3u8','video','stream','media','jupiter','player','cdn','err.ee']):
+                  print(u[:1500])
+          print('MEDIA_URLS_END')
+          print('RELEVANT_LINES_BEGIN')
+          for line in p.splitlines():
+              l=line.lower()
+              if any(x in l for x in ['mp4','m3u8','video','streamurl','mediaid','media_id','player','jupiter']):
+                  print(line[:4000])
+          print('RELEVANT_LINES_END')
           PY
