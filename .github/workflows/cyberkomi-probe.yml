@@ -1,4 +1,4 @@
-name: cyberkomi-offline-packs-and-scene-strings
+name: cyberkomi-public-microservices-and-wasm
 
 on:
   push:
@@ -14,96 +14,89 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Download public task packs and dump Unity scene strings
+      - name: Fetch public microservice pages without player credentials
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p out/packs out/scene work
+          mkdir -p out/web out/wasm out/font work
 
-          # Public challenge artifacts only; no player token is used here.
-          declare -A urls=(
-            [task03.webm]='https://game-file.caplag.ru/d/task03_kalancha/old_eye_feed_23.webm'
-            [task04.zip]='https://game-file.caplag.ru/d/task04_gallery/gallery_case_04.zip'
-            [task07.zip]='https://game-file.caplag.ru/d/task07_heatline/heatline_pack.zip'
-            [task08.zip]='https://game-file.caplag.ru/d/task08_kontur/parma9_audit_pack.zip'
-            [task09.zip]='https://game-file.caplag.ru/d/task09_omeba/omeba_archive_pack.zip'
-          )
-          for name in "${!urls[@]}"; do
-            curl -fsSL --connect-timeout 10 --max-time 180 -o "out/packs/$name" "${urls[$name]}"
+          i=0
+          for url in \
+            'https://platform.caplag.ru/microserv/task/web/parma-line/1' \
+            'https://platform.caplag.ru/microserv/task/web/gov-relay/1' \
+            'https://platform.caplag.ru/microserv/task/web/sysola-core/1' \
+            'https://parma-line.syk-ctf.local/' \
+            'https://gov-relay.syk-ctf.local/' \
+            'https://sysola-core.syk-ctf.local/' \
+            'https://heatline.syk-ctf.local/' \
+            'https://kontur-update.syk-ctf.local/' \
+            'https://omeba-archive.syk-ctf.local/'; do
+            i=$((i+1))
+            code=$(curl -ksSL --connect-timeout 8 --max-time 45 \
+              -D "out/web/${i}.headers" \
+              -o "out/web/${i}.body" \
+              -w '%{http_code}' "$url" || true)
+            printf '%s\t%s\n' "$i" "$url" >> out/web/map.tsv
+            printf '%s\t%s\n' "$i" "${code:-ERR}" >> out/web/status.tsv
           done
 
-          for z in out/packs/*.zip; do
-            d="${z%.zip}.unpacked"
-            mkdir -p "$d"
-            unzip -o "$z" -d "$d" >/dev/null
+          # Probe game-check interface without a token or answer; bodies remain in the artifact.
+          for ep in init check; do
+            curl -ksS --connect-timeout 8 --max-time 30 \
+              -D "out/web/gamecheck_${ep}_get.headers" \
+              -o "out/web/gamecheck_${ep}_get.body" \
+              "https://game-check.caplag.ru/${ep}" || true
+            curl -ksS -X OPTIONS --connect-timeout 8 --max-time 30 \
+              -D "out/web/gamecheck_${ep}_options.headers" \
+              -o "out/web/gamecheck_${ep}_options.body" \
+              "https://game-check.caplag.ru/${ep}" || true
           done
-          find out/packs -type f -printf '%P\t%s bytes\n' | sort > out/packs_manifest.tsv
 
-          curl -fsS --compressed --connect-timeout 10 --max-time 300 \
-            -o work/build.data \
-            'https://cyberkomi.caplag.ru/Build/build.data.br'
+          # Task 07: download public pack and decompile the WebAssembly firmware.
+          curl -fsSL --connect-timeout 10 --max-time 90 \
+            -o work/task07.zip \
+            'https://game-file.caplag.ru/d/task07_heatline/heatline_pack.zip'
+          unzip -q work/task07.zip -d work/task07
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wabt >/dev/null
+          wasm2wat --generate-names --fold-exprs \
+            work/task07/heatline_controller.wasm \
+            -o out/wasm/heatline_controller.wat
+          cp work/task07/heatline_panel.js out/wasm/
+          cp work/task07/heatline_state.bin out/wasm/
 
+          # Render the historical Anttikoski Abur font as an image for offline glyph matching.
+          # The font file itself is deliberately deleted and never uploaded.
+          curl -fsSL --connect-timeout 10 --max-time 45 \
+            -o work/Abur.ttf \
+            'https://db.onlinewebfonts.com/t/b485c0b24f979d6d5430ee17e038cb9c.ttf'
+          python3 -m pip -q install pillow
           python3 - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
           from pathlib import Path
-          import struct
-          src=Path('work/build.data').read_bytes()
-          magic=b'UnityWebData1.0\x00'
-          assert src.startswith(magic)
-          p=len(magic); header=struct.unpack_from('<I',src,p)[0]; p+=4
-          while p<header:
-              off,size,nlen=struct.unpack_from('<III',src,p); p+=12
-              name=src[p:p+nlen].decode('utf-8','replace'); p+=nlen
-              if name=='data.unity3d':
-                  Path('work/data.unity3d').write_bytes(src[off:off+size])
-                  break
-          else: raise SystemExit('data.unity3d missing')
+          font=ImageFont.truetype('work/Abur.ttf',72)
+          keys=['Q','W','E','R','T','Y','U','I','O','й','A','S','D','F','G','H','J','K','L','Z','X','C','V','B','N','M']
+          names=['AN','BUR','GAJ','DOJ','E','ZHOJ','DZHOJ','ZATA',"DZ'ITA",'I','KOKE','LEJ','MENO','NENO','VOJ','PEJ','REJ','SIJ','TAJ','U(V)','VER','CHERY','SHOJ','YRY','JAT','O']
+          cellw,cellh=180,120
+          out=Image.new('RGB',(5*cellw,6*cellh),'white'); d=ImageDraw.Draw(out)
+          small=ImageFont.load_default()
+          for idx,(k,nm) in enumerate(zip(keys,names)):
+              x=(idx%5)*cellw; y=(idx//5)*cellh
+              d.text((x+10,y+5),f'{k}  {nm}',font=small,fill='black')
+              d.text((x+50,y+28),k,font=font,fill='black')
+          out.save('out/font/abur_anttikoski_chart.png')
           PY
+          rm -f work/Abur.ttf
 
-          python3 -m pip -q install 'UnityPy>=1.10.18'
-          python3 - <<'PY'
-          import UnityPy, re, struct, json
-          from pathlib import Path
-          env=UnityPy.load('work/data.unity3d')
-          rows=[]
-          def strings(raw):
-              vals=[]; seen=set()
-              # Unity length-prefixed UTF-8 strings.
-              for i in range(max(0,len(raw)-8)):
-                  n=struct.unpack_from('<I',raw,i)[0]
-                  if not (1<=n<=8192) or i+4+n>len(raw): continue
-                  b=raw[i+4:i+4+n]
-                  try: s=b.decode('utf-8')
-                  except UnicodeDecodeError: continue
-                  if any(ord(c)<9 or (13<ord(c)<32) for c in s): continue
-                  if sum(c.isprintable() for c in s)/len(s) < .97: continue
-                  if s in seen: continue
-                  seen.add(s); vals.append((i,s))
-              return vals
-          for o in env.objects:
-              if o.type.name!='MonoBehaviour': continue
-              try: raw=bytes(o.get_raw_data())
-              except Exception: continue
-              ss=strings(raw)
-              if ss:
-                  rows.append({'path_id':o.path_id,'size':len(raw),'strings':ss})
-          Path('out/scene/monobehaviour_strings.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding='utf-8')
-          with Path('out/scene/monobehaviour_strings.txt').open('w',encoding='utf-8') as f:
-              for r in rows:
-                  f.write(f"PATH {r['path_id']} SIZE {r['size']}\n")
-                  for off,s in r['strings']:
-                      f.write(f"  +{off}: {s}\n")
-                  f.write('\n')
-          print(f'Dumped strings from {len(rows)} MonoBehaviours.')
-          PY
+          # Metadata only in public Actions stdout.
+          find out -type f -printf '%P\t%s bytes\n' | sort > out/manifest.tsv
+          printf 'Public-only inspection complete. No player token was used.\n'
 
-          # Never print challenge file contents to public logs.
-          printf 'Prepared offline packs and scene-string report.\n'
-
-      - name: Upload offline analysis
+      - name: Upload inspection artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-offline-analysis
+          name: cyberkomi-public-inspection
           path: out/
           retention-days: 1
           if-no-files-found: error
