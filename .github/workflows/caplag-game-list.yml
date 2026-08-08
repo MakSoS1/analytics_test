@@ -1,0 +1,74 @@
+name: caplag-game-list
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/caplag-game-list.yml'
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate ephemeral key
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: caplag-game-list-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
+          retention-days: 1
+      - name: Wait for encrypted login
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/${{ github.repository }}/contents/handoff/caplag-game-list-${kid}.enc.b64?ref=${{ github.ref_name }}"
+          for i in $(seq 1 180); do
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json')); txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/creds.enc').write_bytes(base64.b64decode(txt))
+          PY
+              openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/creds.enc -out /tmp/creds.json -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              chmod 600 /tmp/creds.json
+              echo encrypted_handoff=received; exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: List visible Game challenges
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,requests,sys
+          from html import unescape
+          BASE='https://platform.caplag.ru'; c=json.load(open('/tmp/creds.json'))
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 CAPLAG-CTF-helper'
+          r=s.get(BASE+'/login',timeout=20); r.raise_for_status()
+          m=re.search(r'name=["\']nonce["\'][^>]*value=["\']([^"\']+)',r.text,re.I) or re.search(r'value=["\']([^"\']+)["\'][^>]*name=["\']nonce["\']',r.text,re.I)
+          d={'name':c['username'],'password':c['password']}
+          if m: d['nonce']=unescape(m.group(1))
+          rr=s.post(BASE+'/login',data=d,allow_redirects=True,timeout=20)
+          if '/login' in rr.url: print('login=failed');sys.exit(2)
+          print('login=ok')
+          q=s.get(BASE+'/api/v1/challenges',timeout=20); print('challenges_http='+str(q.status_code))
+          data=q.json().get('data') or []
+          games=[]
+          for x in data:
+            if str(x.get('category','')).lower()!='game': continue
+            games.append(x)
+          print('game_count='+str(len(games)))
+          for x in sorted(games,key=lambda z:int(z.get('id',0))):
+            cid=x.get('id'); detail=s.get(BASE+f'/api/v1/challenges/{cid}',timeout=20).json().get('data') or {}
+            safe_name=str(detail.get('name','')).replace('\n',' ')[:200]
+            print(f'game|id={cid}|name={safe_name}|solved={str(bool(detail.get("solved_by_me",False))).lower()}|attempts={detail.get("attempts")}|max={detail.get("max_attempts")}')
+          PY
