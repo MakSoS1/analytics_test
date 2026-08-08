@@ -9,17 +9,18 @@ on:
   workflow_dispatch:
     inputs:
       run_full:
-        description: 'Run full B/C/D/F/G dataset generation'
+        description: 'Run full A/B/C/D/F/G/H + models + adversarial dataset pipeline'
         required: true
         default: true
         type: boolean
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
-  group: cover-channel-lab-${{ github.run_id }}
-  cancel-in-progress: false
+  group: cover-channel-lab-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
@@ -52,7 +53,7 @@ jobs:
         shell: bash
         run: |
           if [[ -n "$HF_TOKEN" ]]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
-      - name: Create private HF dataset and publish card
+      - name: Initialize private Hugging Face dataset card when authorized
         if: steps.hf.outputs.enabled == 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -62,13 +63,13 @@ jobs:
           cp cover-channel-lab/DATASET_CARD.md /tmp/hf-card/README.md
           cd cover-channel-lab
           ./scripts/upload_hf.sh /tmp/hf-card . "Initialize/update dataset card from $GITHUB_SHA"
-      - name: Explain persistence mode
+      - name: Persistence mode
         shell: bash
         run: |
           echo "HF enabled: ${{ steps.hf.outputs.enabled }}"
           echo "Full generation requested: ${{ steps.mode.outputs.full }}"
           if [[ "${{ steps.hf.outputs.enabled }}" != "true" ]]; then
-            echo "HF_TOKEN is absent: full shards will still run and persist complete Bronze/Silver/Gold releases as GitHub Actions artifacts."
+            echo "HF_TOKEN is absent: every complete release shard will still be retained as a GitHub Actions artifact for 90 days and can later be imported with Cover Channel HF Sync."
           fi
 
   parser-validation:
@@ -88,7 +89,7 @@ jobs:
         env:
           PYTHONPATH: src
         run: pytest -q
-      - name: Generate and parse Stage A (600 sessions)
+      - name: Generate, parse and validate Stage A — 600 sessions
         working-directory: cover-channel-lab
         run: ./scripts/run_shard_ci.sh parser 0 1 "$RUNNER_TEMP/coverlab" A-parser-00
       - name: Upload Stage A to Hugging Face
@@ -97,12 +98,12 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/${{ needs.preflight.outputs.release_id }}/A-parser" "Stage A parser validation $GITHUB_SHA"
-      - name: Preserve complete Stage A release in GitHub
+      - name: Retain complete Stage A Bronze/Silver/Gold
         uses: actions/upload-artifact@v4
         with:
           name: dataset-stage-a-${{ github.run_id }}
           path: ${{ runner.temp }}/coverlab/release
-          retention-days: 7
+          retention-days: 90
           compression-level: 0
 
   full-shards:
@@ -135,6 +136,10 @@ jobs:
           - {stage: lots, shard: 1, shards: 4, name: lots-01}
           - {stage: lots, shard: 2, shards: 4, name: lots-02}
           - {stage: lots, shard: 3, shards: 4, name: lots-03}
+          - {stage: future, shard: 0, shards: 4, name: future-00}
+          - {stage: future, shard: 1, shards: 4, name: future-01}
+          - {stage: future, shard: 2, shards: 4, name: future-02}
+          - {stage: future, shard: 3, shards: 4, name: future-03}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -143,7 +148,7 @@ jobs:
       - name: Install runner dependencies
         working-directory: cover-channel-lab
         run: ./scripts/install_runner.sh
-      - name: Generate, parse and package shard
+      - name: Generate, parse, quality-gate and package shard
         working-directory: cover-channel-lab
         run: ./scripts/run_shard_ci.sh "${{ matrix.stage }}" "${{ matrix.shard }}" "${{ matrix.shards }}" "$RUNNER_TEMP/coverlab" "${{ matrix.name }}"
       - name: Persist shard to Hugging Face immediately
@@ -152,12 +157,96 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/${{ needs.preflight.outputs.release_id }}/${{ matrix.name }}" "${{ matrix.name }} $GITHUB_SHA"
-      - name: Preserve complete shard in GitHub
+      - name: Retain complete Bronze/Silver/Gold shard
         uses: actions/upload-artifact@v4
         with:
           name: dataset-${{ matrix.name }}-${{ github.run_id }}
           path: ${{ runner.temp }}/coverlab/release
-          retention-days: 7
+          retention-days: 90
+          compression-level: 0
+
+  baseline-models:
+    needs: [preflight, full-shards]
+    if: needs.preflight.outputs.full_requested == 'true' && needs.full-shards.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download non-mixed dataset shards from this release
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dataset-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/training-dataset
+          merge-multiple: false
+      - name: Exclude any mixed artifacts that happened to finish early
+        shell: bash
+        run: find "$RUNNER_TEMP/training-dataset" -mindepth 1 -maxdepth 1 -type d -name 'dataset-mixed-*' -exec rm -rf {} +
+      - name: Install model dependencies
+        working-directory: cover-channel-lab
+        run: python -m pip install -r requirements.txt
+      - name: Train B1-content B2-session B3-opaque and calibration
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        run: python -m coverlab.train_baseline --dataset-root "$RUNNER_TEMP/training-dataset" --out "$RUNNER_TEMP/models" --seed 23
+      - name: Upload model release to Hugging Face
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/models" "releases/${{ needs.preflight.outputs.release_id }}/models" "B1 B2 B3 baseline models $GITHUB_SHA"
+      - name: Retain model bundles and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-models-${{ github.run_id }}
+          path: ${{ runner.temp }}/models
+          retention-days: 90
+
+  adversarial-holdout:
+    needs: [preflight, baseline-models]
+    if: needs.preflight.outputs.full_requested == 'true' && needs.baseline-models.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download frozen baseline models
+        uses: actions/download-artifact@v4
+        with:
+          name: baseline-models-${{ github.run_id }}
+          path: ${{ runner.temp }}/models
+      - name: Install runner dependencies
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Generate exactly 500 new post-baseline adversarial sessions
+        working-directory: cover-channel-lab
+        run: bash ./scripts/run_adversarial_ci.sh "$RUNNER_TEMP/adversarial" adversarial-00
+      - name: Score adversarial holdout against frozen B3-opaque
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m coverlab.score_adversarial \
+            --features "$RUNNER_TEMP/adversarial/release/gold/adversarial-00/session_features.parquet" \
+            --model "$RUNNER_TEMP/models/B3-opaque.joblib" \
+            --out "$RUNNER_TEMP/adversarial/release/quality/adversarial-00/adversarial_report.json"
+      - name: Upload adversarial holdout to Hugging Face
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/adversarial/release" "releases/${{ needs.preflight.outputs.release_id }}/adversarial" "500-session adversarial holdout $GITHUB_SHA"
+      - name: Retain adversarial Bronze/Silver/Gold and ASR report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataset-adversarial-00-${{ github.run_id }}
+          path: ${{ runner.temp }}/adversarial/release
+          retention-days: 90
           compression-level: 0
 
   mixed-captures:
@@ -193,16 +282,16 @@ jobs:
           idx="${{ matrix.capture }}"
           printf -v name 'D-mixed-%02d' "$idx"
           ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/${{ needs.preflight.outputs.release_id }}/$name" "$name $GITHUB_SHA"
-      - name: Preserve complete mixed release in GitHub
+      - name: Retain complete mixed Bronze/Silver/Gold release
         uses: actions/upload-artifact@v4
         with:
           name: dataset-mixed-${{ matrix.capture }}-${{ github.run_id }}
           path: ${{ runner.temp }}/coverlab/release
-          retention-days: 7
+          retention-days: 90
           compression-level: 0
 
   finalize:
-    needs: [preflight, parser-validation, full-shards, mixed-captures]
+    needs: [preflight, parser-validation, full-shards, baseline-models, adversarial-holdout, mixed-captures]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -212,9 +301,11 @@ jobs:
           python-version: '3.12'
       - name: Build release status
         env:
-          FULL_RESULT: ${{ needs.full-shards.result }}
-          MIXED_RESULT: ${{ needs.mixed-captures.result }}
           PARSER_RESULT: ${{ needs.parser-validation.result }}
+          FULL_RESULT: ${{ needs.full-shards.result }}
+          MODEL_RESULT: ${{ needs.baseline-models.result }}
+          ADV_RESULT: ${{ needs.adversarial-holdout.result }}
+          MIXED_RESULT: ${{ needs.mixed-captures.result }}
           RELEASE_ID: ${{ needs.preflight.outputs.release_id }}
           HF_ENABLED: ${{ needs.preflight.outputs.hf_enabled }}
         run: |
@@ -227,6 +318,8 @@ jobs:
             'github_run_id':os.environ['GITHUB_RUN_ID'],
             'parser_validation':os.environ.get('PARSER_RESULT',''),
             'full_shards':os.environ.get('FULL_RESULT',''),
+            'baseline_models':os.environ.get('MODEL_RESULT',''),
+            'adversarial_holdout':os.environ.get('ADV_RESULT',''),
             'mixed_captures':os.environ.get('MIXED_RESULT',''),
             'hf_enabled':os.environ.get('HF_ENABLED','false') == 'true',
             'finished_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -241,10 +334,10 @@ jobs:
         run: |
           python -m pip install 'huggingface_hub[hf_xet]>=1.0.0'
           cd cover-channel-lab
-          ./scripts/upload_hf.sh /tmp/release-status "releases/$RELEASE_ID" "Finalize $RELEASE_ID"
-      - name: Preserve release status in GitHub
+          ./scripts/upload_hf.sh /tmp/release-status "releases/$RELEASE_ID/status" "Finalize $RELEASE_ID"
+      - name: Retain release status
         uses: actions/upload-artifact@v4
         with:
           name: release-status-${{ github.run_id }}
           path: /tmp/release-status/release.json
-          retention-days: 30
+          retention-days: 90
