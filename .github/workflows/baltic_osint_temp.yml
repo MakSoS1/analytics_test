@@ -10,40 +10,27 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
-      - name: Locate original Baltic Spirit YouTube footage
+      - name: Fetch high-resolution Baltic Spirit reposts
         shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install -q -U yt-dlp
-          python3 - <<'PY'
-          import subprocess,json,re
-          urls=[
-            'https://www.youtube.com/@TomasstbergJacobsen/videos',
-            'https://www.youtube.com/@TomasstbergJacobsen/shorts',
-          ]
-          for u in urls:
-              print('CHANNEL',u)
-              p=subprocess.run(['yt-dlp','--flat-playlist','--playlist-end','80','-J',u],capture_output=True,text=True,timeout=180)
-              print('RC',p.returncode)
-              if p.returncode:
-                  print('ERR',p.stderr[-1200:]); continue
-              try: d=json.loads(p.stdout)
-              except Exception as e: print('JSONERR',type(e).__name__); continue
-              for x in d.get('entries') or []:
-                  title=x.get('title') or ''
-                  desc=x.get('description') or ''
-                  date=x.get('upload_date') or x.get('release_date') or ''
-                  if any(k in (title+' '+desc).lower() for k in ['baltic','estonia','eston','ship','container','kommando','police','spirit','muuga']) or str(date).startswith('202602'):
-                      print(json.dumps({k:x.get(k) for k in ['id','title','url','upload_date','timestamp','duration','view_count']},ensure_ascii=False))
-          # Also ask yt-dlp search for the distinctive ship name and channel name.
-          for q in ['ytsearch20:Baltic Spirit Estonia','ytsearch20:Baltic Spirit TomasstbergJacobsen','ytsearch20:Estonia K-Commando Baltic Spirit']:
-              print('SEARCH',q)
-              p=subprocess.run(['yt-dlp','--flat-playlist','--playlist-end','20','-J',q],capture_output=True,text=True,timeout=180)
-              if p.returncode: print('ERR',p.stderr[-800:]); continue
-              try: d=json.loads(p.stdout)
-              except: continue
-              for x in d.get('entries') or []:
-                  print(json.dumps({k:x.get(k) for k in ['id','title','url','channel','channel_id','upload_date','duration']},ensure_ascii=False))
-          PY
+          mkdir -p videos
+          for id in 3VtMul7deY8 l7lQQBoQZYg Qxv26O4naKU; do
+            echo "FORMATS $id"
+            yt-dlp --no-warnings -F "https://www.youtube.com/watch?v=$id" | tail -n 35 || true
+            yt-dlp --no-warnings --merge-output-format mp4 -f "bv*[height<=2160]+ba/b[height<=2160]" -o "videos/${id}.%(ext)s" "https://www.youtube.com/watch?v=$id" || true
+          done
+          echo "FILES"
+          ls -lh videos
+          for f in videos/*; do
+            ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,duration -of default=nw=1 "$f" || true
+          done
+      - name: Upload video sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: baltic-spirit-hq-reposts
+          path: videos/
+          retention-days: 1
