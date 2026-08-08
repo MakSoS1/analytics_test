@@ -12,29 +12,45 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Query Seaco Equipment Status exactly as legacy client
+      - name: Query public reefer unit specifications
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import requests,urllib.parse,re,json
-          H={'User-Agent':'Mozilla/5.0','Accept':'application/json,application/xml,text/plain,*/*'}
-          filt="IUnitNo eq 'SEGU9639460' and IUnitNo1 eq ''"
-          for host in ['https://seaweb.seacoglobal.com','https://newseaweb.seacoglobal.com']:
-            base=host+'/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV'
-            urls=[
-              base+'/$metadata?saml2=disabled',
-              base+'/Equipment_Status?$filter='+urllib.parse.quote(filt,safe="'()")+'&saml2=disabled&$format=json',
-              base+'/Equipment_Status?$filter='+urllib.parse.quote(filt,safe="'()")+'&$format=json&saml2=disabled',
-            ]
-            for u in urls:
+          import requests,re,json
+          from bs4 import BeautifulSoup
+
+          units=['TTNU8845830','RJCU2019190','SEGU9720021','SEGU9639460','SEKU9169910','SEKU9154037']
+          H={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/139 Safari/537.36'}
+          out=[]
+          for unit in units:
+              url='https://tools.tritoncontainer.com/tritoncontainer/unitSpecs/show/'+unit
+              rec={'unit':unit,'url':url}
               try:
-                s=requests.Session(); r=s.get(u,headers=H,timeout=50,allow_redirects=True)
-                print('\nREQ',u); print('RES',r.status_code,r.url,r.headers.get('Content-Type'),len(r.content));
-                txt=r.text
-                if '963946' in txt or re.search(r'"Tir"|<d:Tir>|TIR',txt,re.I):
-                  for pat in [r'.{0,600}963946.{0,2500}',r'.{0,500}["<]Tir[">:].{0,1500}',r'.{0,500}TIR.{0,1500}']:
-                    for m in re.finditer(pat,txt,re.I|re.S): print('HIT',m.group(0)[:5000].replace('\n',' '))
-                else: print(txt[:3000].replace('\n',' '))
-              except Exception as e: print('ERR',repr(e))
+                  r=requests.get(url,headers=H,timeout=40,allow_redirects=True)
+                  rec.update(status=r.status_code,final=r.url,length=len(r.content))
+                  soup=BeautifulSoup(r.text,'html.parser')
+                  text='\n'.join(x.strip() for x in soup.stripped_strings)
+                  # Only extract public technical fields; do not reproduce arbitrary page instructions/content.
+                  for key,patterns in {
+                    'manufacturer':[r'Manufacturer\s*[:\n]+\s*([^\n]{2,120})'],
+                    'manufacture_date':[r'Manufacture Date\s*[:\n]+\s*([^\n]{2,40})'],
+                    'iso':[r'ISO Code\s*[:\n]+\s*([^\n]{2,40})'],
+                    'csc':[r'CSC\s*[:\n]+\s*([^\n]{2,80})'],
+                    'tir':[r'TIR\s*[:\n]+\s*([^\n]{2,80})'],
+                    'box_builder':[r'Box builder\s*[:\n]+\s*([^\n]{2,80})'],
+                    'max_gross':[r'Max gross weight\s*[:\n]+\s*([^\n]{2,60})'],
+                    'tare':[r'Tare weight\s*[:\n]+\s*([^\n]{2,60})'],
+                    'payload':[r'Max payload\s*[:\n]+\s*([^\n]{2,60})'],
+                    'cube':[r'Cubic capacity\s*[:\n]+\s*([^\n]{2,60})'],
+                  }.items():
+                      for p in patterns:
+                          m=re.search(p,text,re.I)
+                          if m:
+                              rec[key]=m.group(1).strip()
+                              break
+              except Exception as e:
+                  rec['error']=type(e).__name__+': '+str(e)[:160]
+              out.append(rec)
+          print(json.dumps(out,ensure_ascii=False,indent=2))
           PY
