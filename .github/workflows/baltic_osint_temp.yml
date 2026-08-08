@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Inspect archived Seaco JS and OData captures
+      - name: Extract compact historical Seaco customs/TIR fields
         shell: bash
         run: |
           set -euo pipefail
@@ -20,30 +20,31 @@ jobs:
           import requests,re,urllib.parse,json
           H={'User-Agent':'Mozilla/5.0'}
           snaps=[
-            ('20250427212031','https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/js/UnitEnquiry/FullSpecificationReefers.js'),
-            ('20250427212030','https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/js/UnitEnquiry/UnitEnquiry.js'),
-            ('20250427212030','https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/js/UnitEnquiry/ContainerDetails.js'),
-            ('20250427212031','https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/js/UnitEnquiry/UnitEnquirySpecifications.js'),
-            ('20250427212049','https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/Application.js'),
+            ('20250427212031','FullSpecificationReefers.js'),
+            ('20250427212030','UnitEnquiry.js'),
+            ('20250427212030','ContainerDetails.js'),
+            ('20250427212031','UnitEnquirySpecifications.js'),
           ]
-          for ts,u in snaps:
-            wu=f'https://web.archive.org/web/{ts}id_/{u}'
-            print('\n### SNAP',u)
+          base='https://seaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/js/UnitEnquiry/'
+          for ts,name in snaps:
+            u=f'https://web.archive.org/web/{ts}id_/{base}{name}'
+            r=requests.get(u,headers=H,timeout=60)
+            print('\nFILE',name,'STATUS',r.status_code,'LEN',len(r.text))
+            lines=r.text.splitlines()
+            for i,line in enumerate(lines):
+              if re.search(r'tir|custom|approval|seal|csc|equipment_status|specif|certif|model|factory|manuf',line,re.I):
+                lo=max(0,i-2); hi=min(len(lines),i+3)
+                print(f'CTX {i+1}:',' || '.join(x.strip() for x in lines[lo:hi])[:5000])
+          # query CDX and print only OData URLs/captures
+          for host in ['seaweb.seacoglobal.com','newseaweb.seacoglobal.com']:
+            q=host+'/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/*'
+            p={'url':q,'output':'json','fl':'timestamp,original,statuscode,mimetype,length','filter':'statuscode:200','from':'2020','to':'20260630','limit':'2000'}
+            r=requests.get('https://web.archive.org/cdx/search/cdx',params=p,headers=H,timeout=70)
+            print('\nCDX',host,r.status_code,'LEN',len(r.text))
             try:
-              r=requests.get(wu,headers=H,timeout=50); print('RES',r.status_code,len(r.content),r.url); print(r.text[:200000])
-            except Exception as e: print('ERR',repr(e))
-          # enumerate captures on both historical hosts, with/without wildcard path
-          qs=[
-            'seaweb.seacoglobal.com/sap/opu/odata/sap/*',
-            'seaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/*',
-            'seaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/Equipment_Status*',
-            'newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/*',
-            'newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/Equipment_Status*',
-          ]
-          for q in qs:
-            params={'url':q,'output':'json','fl':'timestamp,original,statuscode,mimetype,digest,length','filter':'statuscode:200','from':'2020','to':'20260630','limit':'1000'}
-            print('\n### CDX',q)
-            try:
-              r=requests.get('https://web.archive.org/cdx/search/cdx',params=params,headers=H,timeout=70); print('RES',r.status_code,len(r.content)); print(r.text[:250000])
-            except Exception as e: print('ERR',repr(e))
+              arr=r.json()
+              for row in arr[:1]+arr[1:]:
+                s=' | '.join(map(str,row))
+                if re.search(r'Equipment|\$metadata|UE_PGW|Spec|Reefer|Status',s,re.I): print(s[:6000])
+            except Exception: print(r.text[:20000])
           PY
