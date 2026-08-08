@@ -10,31 +10,63 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 9
     steps:
-      - name: Download ERR original and extract full-rate door sequence
+      - name: Query migrated Textainer specs for exact ATO batch
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg >/dev/null
-          URL='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
-          curl -L --fail --retry 3 -A 'Mozilla/5.0' "$URL" -o /tmp/baltic.mp4
-          ffprobe -v error -show_entries stream=width,height,r_frame_rate,bit_rate -show_entries format=duration,size,bit_rate -of json /tmp/baltic.mp4
-          mkdir -p /tmp/frames /tmp/crops
-          # Full 25 fps around the clearest approach to the target reefer door.
-          ffmpeg -hide_banner -loglevel error -ss 90 -to 101 -i /tmp/baltic.mp4 -vsync 0 -q:v 1 /tmp/frames/f_%04d.jpg
-          # Broad crop of the right-hand reefer door, retaining all approval labels/plate zones.
-          for f in /tmp/frames/*.jpg; do
-            b=$(basename "$f")
-            ffmpeg -hide_banner -loglevel error -i "$f" -vf 'crop=760:650:520:40,scale=1520:1300:flags=lanczos' -frames:v 1 "/tmp/crops/$b"
-          done
-          tar -C /tmp -czf /tmp/door_frames_25fps.tar.gz frames crops
-          echo "FRAME_COUNT $(find /tmp/frames -type f | wc -l)"
-          ls -lh /tmp/baltic.mp4 /tmp/door_frames_25fps.tar.gz
-      - name: Upload door sequence
-        uses: actions/upload-artifact@v4
-        with:
-          name: baltic-door-25fps
-          path: /tmp/door_frames_25fps.tar.gz
-          retention-days: 1
+          python3 -m pip install -q beautifulsoup4
+          python3 - <<'PY'
+          import requests,re,html,urllib.parse,csv,io,time
+          from bs4 import BeautifulSoup
+          H={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'}
+          base='https://tex.textainer.com'; q=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
+          # BIC ISO 6346 check digit.
+          vals={}
+          n=10
+          for ch in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+              while n%11==0: n+=1
+              vals[ch]=n; n+=1
+          def check(prefix,serial6):
+              s=prefix+f'{serial6:06d}'
+              total=0
+              for i,ch in enumerate(s): total += (vals[ch] if ch.isalpha() else int(ch))*(2**i)
+              r=total%11
+              return 0 if r==10 else r
+          units=[f'SEGU{x:06d}{check("SEGU",x)}' for x in range(963852,963952)]
+          print('UNITS',len(units),units[:5],units[-5:])
+          def query(chunk):
+              s=requests.Session(); r=s.get(q,headers=H,timeout=30); soup=BeautifulSoup(r.text,'html.parser')
+              data={t.get('name'):t.get('value','') for t in soup.find_all('input') if t.get('name') and t.get('type')=='hidden'}
+              data['ctl00$bodyContent$ucEqpIds$txtEqpId']='\r\n'.join(chunk)
+              data['ctl00$bodyContent$btnSubmit']='Preview'
+              pr=s.post(q,data=data,headers={**H,'Referer':q},timeout=50,allow_redirects=True)
+              txt=html.unescape(pr.text).replace('\\/','/')
+              ms=re.findall(r'["\'](/Reserved\.ReportViewerWebControl\.axd\?[^"\']+OpType=Export[^"\']+Format=)["\']',txt)
+              if not ms:
+                  print('NO_EXPORT',chunk[0],pr.status_code,len(pr.content)); return []
+              rr=s.get(urllib.parse.urljoin(base,html.unescape(ms[0])+'CSV'),headers={**H,'Referer':pr.url},timeout=60)
+              print('CHUNK',chunk[0],chunk[-1],'CSV',rr.status_code,len(rr.content))
+              if rr.status_code!=200: return []
+              return list(csv.DictReader(io.StringIO(rr.content.decode('utf-8-sig','replace'))))
+          rows=[]
+          for i in range(0,len(units),20):
+              try: rows.extend(query(units[i:i+20]))
+              except Exception as e: print('ERR_CHUNK',i,repr(e))
+              time.sleep(.5)
+          print('ROWS',len(rows))
+          print('RESULTS_BEGIN')
+          for row in rows:
+              appr=' | '.join(str(row.get(k,'')) for k in ['txtApproval1','txtApproval2','txtApproval3','txtApproval4'])
+              if 'NOT AVAILABLE' not in appr.upper() or 'TIR' not in appr.upper():
+                  print('ROW',row.get('txtEqpId'),repr(row.get('txtEqpDesc')),repr(row.get('txtManufacture4')),repr(row.get('txtManufacture5')),repr(row.get('txtApproval1')),repr(row.get('txtApproval2')),repr(row.get('txtApproval3')),repr(row.get('txtApproval4')))
+          # Always print unique approval payloads and manufacturing metadata to detect any populated neighbor.
+          uniq={}
+          for row in rows:
+              key=(row.get('txtApproval1'),row.get('txtApproval2'),row.get('txtApproval3'),row.get('txtApproval4'))
+              uniq.setdefault(key,[]).append(row.get('txtEqpId'))
+          print('UNIQUE_APPROVALS',len(uniq))
+          for k,us in uniq.items(): print('APPROVAL_SET',len(us),us[:8],repr(k))
+          print('RESULTS_END')
+          PY
