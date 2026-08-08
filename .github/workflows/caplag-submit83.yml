@@ -5,7 +5,6 @@ on:
     branches: [ctf-caplag-submit83-20260808]
     paths:
       - '.github/workflows/caplag-submit83.yml'
-      - 'handoff/caplag83.enc.b64'
   workflow_dispatch:
 
 permissions:
@@ -22,27 +21,42 @@ jobs:
           set -euo pipefail
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
           openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
       - name: Upload public key
         uses: actions/upload-artifact@v4
         with:
-          name: caplag83-public-key
-          path: public.pem
+          name: caplag83-public-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
           retention-days: 1
       - name: Wait for encrypted credentials
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          url='https://raw.githubusercontent.com/MakSoS1/analytics_test/ctf-caplag-submit83-20260808/handoff/caplag83.enc.b64'
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/MakSoS1/analytics_test/contents/handoff/caplag83-${kid}.enc.b64?ref=ctf-caplag-submit83-20260808"
           for i in $(seq 1 120); do
-            if curl -fsSL "$url" -o /tmp/creds.b64 2>/dev/null; then
-              base64 -d /tmp/creds.b64 > /tmp/creds.enc
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json'))
+          txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/creds.enc').write_bytes(base64.b64decode(txt))
+          PY
               openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/creds.enc -out /tmp/creds.json -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
               chmod 600 /tmp/creds.json
+              echo 'encrypted_handoff=received'
               exit 0
             fi
-            sleep 5
+            sleep 3
           done
-          echo 'encrypted handoff not received'
+          echo 'encrypted_handoff=timeout'
           exit 1
       - name: Login and submit carefully
         shell: bash
@@ -75,56 +89,47 @@ jobs:
           if cr.status_code!=200:
               print('challenge_lookup=failed')
               sys.exit(3)
-          cj=cr.json()
-          cdata=cj.get('data') or {}
+          cj=cr.json(); cdata=cj.get('data') or {}
           print('challenge_name='+str(cdata.get('name','')))
           print('challenge_solved_by_me='+str(cdata.get('solved_by_me',cdata.get('solved',None))))
           print('challenge_attempts='+str(cdata.get('attempts',None)))
           print('challenge_max_attempts='+str(cdata.get('max_attempts',None)))
 
           phrase='Старая Каланча первый глаз города смотрит сверху'
-          # Small, reasoned candidate set only; stop immediately on success.
-          inner_variants=[]
+          inners=[]
           def add(x):
-              if x not in inner_variants: inner_variants.append(x)
-          add(phrase)
-          add(phrase.replace(' ','_'))
-          add(phrase.lower().replace(' ','_'))
-          add('Старая_Каланча_первый_глаз_города_смотрит_сверху')
-          add('СТАРАЯ_КАЛАНЧА_ПЕРВЫЙ_ГЛАЗ_ГОРОДА_СМОТРИТ_СВЕРХУ')
-          add('Staraya_Kalancha_pervyy_glaz_goroda_smotrit_sverkhu')
-          add('staraya_kalancha_pervyy_glaz_goroda_smotrit_sverkhu')
-          add('staraya_kalancha_pervyi_glaz_goroda_smotrit_sverhu')
-          add('STARAYA_KALANCHA_PERVYY_GLAZ_GORODA_SMOTRIT_SVERKHU')
-          add('LIB-167-KALANCHA')
-          add('Старая Каланча')
-          add('Старая_Каланча')
-          add('STARAYA_KALANCHA')
-          add('staraya_kalancha')
-
+              if x not in inners: inners.append(x)
+          for x in [
+              phrase,
+              phrase.replace(' ','_'),
+              phrase.lower().replace(' ','_'),
+              'СТАРАЯ_КАЛАНЧА_ПЕРВЫЙ_ГЛАЗ_ГОРОДА_СМОТРИТ_СВЕРХУ',
+              'Staraya_Kalancha_pervyy_glaz_goroda_smotrit_sverkhu',
+              'staraya_kalancha_pervyy_glaz_goroda_smotrit_sverkhu',
+              'staraya_kalancha_pervyi_glaz_goroda_smotrit_sverhu',
+              'STARAYA_KALANCHA_PERVYY_GLAZ_GORODA_SMOTRIT_SVERKHU',
+              'LIB-167-KALANCHA',
+              'Старая Каланча','Старая_Каланча','STARAYA_KALANCHA','staraya_kalancha'
+          ]: add(x)
           candidates=[]
-          for x in inner_variants:
-              candidates += [f'caplag{{{x}}}',f'CAPLAG{{{x}}}']
-          # raw phrase/code last, in case task expects no wrapper.
-          candidates += [phrase,phrase.replace(' ','_'),'LIB-167-KALANCHA']
+          for x in inners:
+              candidates.extend([f'caplag{{{x}}}',f'CAPLAG{{{x}}}'])
+          candidates.extend([phrase,phrase.replace(' ','_'),'LIB-167-KALANCHA'])
           seen=set(); candidates=[x for x in candidates if not (x in seen or seen.add(x))]
 
           endpoint=BASE+'/api/v1/challenges/attempt'
           for idx,candidate in enumerate(candidates,1):
               resp=s.post(endpoint,json={'challenge_id':83,'submission':candidate},timeout=20)
-              status='http_'+str(resp.status_code)
-              message=''
+              status='http_'+str(resp.status_code); message=''
               try:
-                  j=resp.json()
-                  d=j.get('data') or {}
+                  j=resp.json(); d=j.get('data') or {}
                   status=str(d.get('status') or j.get('success') or status)
                   message=str(d.get('message') or '')
-              except Exception:
-                  pass
-              # Never print candidate itself.
+              except Exception: pass
               safe_msg=re.sub(r'[\r\n]+',' ',message)[:160]
               print(f'attempt_{idx:02d}={status} {safe_msg}'.rstrip())
-              if status.lower() in {'correct','already_solved'} or 'correct' in status.lower() or 'already' in safe_msg.lower():
+              sl=status.lower(); ml=safe_msg.lower()
+              if sl in {'correct','already_solved'} or sl=='true' or 'correct' in sl or 'already' in ml:
                   open('/tmp/winner_index.txt','w').write(str(idx))
                   open('/tmp/winner.txt','w',encoding='utf-8').write(candidate)
                   print('submission_result=success')
@@ -133,12 +138,10 @@ jobs:
               if resp.status_code==429:
                   print('submission_result=rate_limited')
                   sys.exit(4)
-              time.sleep(0.35)
+              time.sleep(0.4)
           else:
               print('submission_result=no_match')
               sys.exit(5)
-
-          # Store winner encrypted to the same ephemeral public key so it is not exposed in logs.
           PY
           if [ -f /tmp/winner.txt ]; then
             openssl pkeyutl -encrypt -pubin -inkey public.pem -in /tmp/winner.txt -out winner.enc -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
@@ -148,6 +151,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: caplag83-result
+          name: caplag83-result-${{ github.run_id }}
           path: winner.enc.b64
           retention-days: 1
