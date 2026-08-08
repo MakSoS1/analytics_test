@@ -1,0 +1,83 @@
+name: cyberkomi-library-raw-text
+
+on:
+  push:
+    branches: [ctf-cyberkomi-probe-20260808]
+    paths: ['.github/workflows/cyberkomi-library-raw.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Extract length-prefixed strings from chapter scenes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fsSL --compressed --connect-timeout 10 --max-time 240 'https://cyberkomi.caplag.ru/Build/build.data.br' -o /tmp/build.data
+          python3 - <<'PY'
+          import pathlib,struct
+          b=pathlib.Path('/tmp/build.data').read_bytes(); magic=b'UnityWebData1.0\x00'; assert b.startswith(magic)
+          pos=len(magic); end=struct.unpack_from('<I',b,pos)[0]; pos+=4
+          while pos<end:
+              off,n,pl=struct.unpack_from('<III',b,pos); pos+=12
+              path=b[pos:pos+pl].decode(); pos+=pl
+              if path=='data.unity3d': pathlib.Path('/tmp/data.unity3d').write_bytes(b[off:off+n]); break
+          PY
+          python3 -m pip -q install 'UnityPy>=1.20.0'
+          python3 - <<'PY'
+          import UnityPy,pathlib,json,struct,re,string
+          env=UnityPy.load('/tmp/data.unity3d')
+          rows=[]
+          def plausible(s):
+              if not s or len(s)>20000: return False
+              good=sum(ch.isprintable() or ch in '\n\r\t' for ch in s)
+              if good/len(s)<.94: return False
+              return bool(re.search(r'[A-Za-zА-Яа-яЁё0-9]',s))
+          for obj in env.objects:
+              if obj.type.name!='MonoBehaviour': continue
+              af=getattr(getattr(obj,'assets_file',None),'name','')
+              try: raw=obj.get_raw_data()
+              except Exception:
+                  try:
+                      r=obj.reader; old=r.Position; r.Position=obj.byte_start; raw=r.read_bytes(obj.byte_size); r.Position=old
+                  except Exception: continue
+              found=[]; seen=set()
+              # Search all offsets for Unity's common uint32 byte-length + UTF-8 string representation.
+              for i in range(0,max(0,len(raw)-8)):
+                  n=struct.unpack_from('<I',raw,i)[0]
+                  if n<2 or n>min(12000,len(raw)-i-4): continue
+                  chunk=raw[i+4:i+4+n]
+                  try: s=chunk.decode('utf-8')
+                  except UnicodeDecodeError: continue
+                  if plausible(s) and s not in seen:
+                      seen.add(s); found.append({'offset':i,'text':s})
+              # Also catch contiguous printable decoded fragments.
+              dec=raw.decode('utf-8','ignore')
+              for s in re.findall(r'[\w\s.,:;!?/\\()\[\]{}<>«»“”"\'\-—–№+=@#$%^&*_\u0400-\u04ff]{4,}',dec,re.UNICODE):
+                  s=s.strip('\x00\r\n\t ')
+                  if plausible(s) and s not in seen:
+                      seen.add(s); found.append({'offset':None,'text':s})
+              if found:
+                  rows.append({'file':af,'path_id':obj.path_id,'size':len(raw),'strings':found})
+          pathlib.Path('out/mono_strings.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2))
+          # Human-focused subset for chapter 2 terms and nearby scene records.
+          needles=re.compile(r'(167|билет|библиот|материал|требован|координ|строк|слов|Коми|Сыктывкар|колонн|LIB-|читател|каталог|краевед)',re.I)
+          hit_files=set()
+          for r in rows:
+              if needles.search(json.dumps(r,ensure_ascii=False)): hit_files.add(r['file'])
+          subset=[r for r in rows if r['file'] in hit_files]
+          pathlib.Path('out/chapter2_candidate_files.json').write_text(json.dumps(subset,ensure_ascii=False,indent=2))
+          pathlib.Path('out/hit_files.txt').write_text('\n'.join(sorted(hit_files)))
+          PY
+      - name: Upload extracted strings
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-library-raw-text
+          path: out
+          retention-days: 1
