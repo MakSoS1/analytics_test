@@ -10,21 +10,25 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 5
     steps:
-      - name: Extract final public PPA frames
+      - name: Inspect public Textainer Unit Inquiry form fields
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg >/dev/null
-          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
-          curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic.mp4
-          mkdir -p /tmp/final
-          ffmpeg -hide_banner -loglevel error -ss 99 -i /tmp/baltic.mp4 -t 19 -vf 'fps=10' -q:v 1 /tmp/final/f_%03d.jpg
-      - uses: actions/upload-artifact@v4
-        with:
-          name: baltic-final-99-118
-          path: /tmp/final/*.jpg
-          retention-days: 1
+          python3 - <<'PY'
+          import requests,re,html
+          u='https://tex.textainer.com/Equipment/StatusAndSpecificationsInquiry.aspx'
+          s=requests.Session()
+          r=s.get(u,timeout=20,headers={'User-Agent':'Mozilla/5.0'})
+          print('STATUS',r.status_code,'LEN',len(r.text),'URL',r.url)
+          p=r.text
+          print('FORM', re.findall(r'<form[^>]+>',p,re.I)[:3])
+          for tag in re.findall(r'<(?:input|textarea|button|select)[^>]*>',p,re.I):
+              t=html.unescape(tag)
+              if any(x in t.lower() for x in ['equipment','preview','viewstate','eventvalidation','eventtarget','submit']):
+                  print(t[:1200])
+          for line in p.splitlines():
+              if 'Equipment' in line or 'Preview' in line:
+                  print('LINE',html.unescape(line.strip())[:2000])
+          PY
