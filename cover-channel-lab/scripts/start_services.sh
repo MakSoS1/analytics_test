@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON_BIN="$(command -v python)"
 CERTDIR="${RUNNER_TEMP:-/tmp}/coverlab-certs"
 LOGDIR="${RUNNER_TEMP:-/tmp}/coverlab-services"
 mkdir -p "$CERTDIR" "$LOGDIR"
@@ -44,9 +45,9 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 2 -keyout "$CERTDIR/server.key" 
 run_in_c2() {
   sudo ip netns exec cc-c2 runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' "$@"
 }
-run_in_c2 hypercorn coverlab.server:app --bind 10.20.0.20:8080 --workers 1 >"$LOGDIR/http.log" 2>&1 &
+run_in_c2 "$PYTHON_BIN" -m hypercorn coverlab.server:app --bind 10.20.0.20:8080 --workers 1 >"$LOGDIR/http.log" 2>&1 &
 echo $! > "$LOGDIR/http.pid"
-run_in_c2 hypercorn coverlab.server:app --bind 10.20.0.20:8443 --certfile "$CERTDIR/server.crt" --keyfile "$CERTDIR/server.key" --workers 1 >"$LOGDIR/https.log" 2>&1 &
+run_in_c2 "$PYTHON_BIN" -m hypercorn coverlab.server:app --bind 10.20.0.20:8443 --certfile "$CERTDIR/server.crt" --keyfile "$CERTDIR/server.key" --workers 1 >"$LOGDIR/https.log" 2>&1 &
 echo $! > "$LOGDIR/https.pid"
 
 for _ in $(seq 1 60); do
