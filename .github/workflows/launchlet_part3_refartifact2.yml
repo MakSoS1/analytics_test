@@ -1,0 +1,61 @@
+name: launchlet-part3-refartifact2
+on:
+  push:
+    branches: [agent/launchlet-part3-refartifact2-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe ref/build static artifact layouts and encrypt hits
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,itertools
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru';out=pathlib.Path('package/out')
+          refs=['preview-8b11c','8b11c','2026.05.16-rc3','2026-05-16-rc3','rc3']
+          paths=set()
+          exts=['.html','.htm','.zip','.tar','.tgz','.tar.gz','.manifest','.webmanifest','.bundle','.bin','.dat','.blob','.pack']
+          roots=['/assets/','/static/','/deploy/','/deployment/','/preview/','/build/','/builds/','/artifacts/','/output/']
+          for r in refs:
+            for root in roots:
+              paths.add(root+r+'/');paths.add(root+r+'/index.html');paths.add(root+r+'/manifest.json');paths.add(root+r+'/metadata.json');paths.add(root+r+'/app.html')
+              for ext in exts:paths.add(root+r+ext)
+          for r in refs:
+            for pfx in ['deploy-','deployment-','preview-','artifact-','output-','build-']:
+              for ext in exts:paths.add('/assets/'+pfx+r+ext)
+          h={'X-Launchlet-Preview':'launchlet-demo-board','Accept':'*/*'};hits=[]
+          for p in paths:
+            try:r=requests.get(base+p,headers=h,timeout=6,allow_redirects=False)
+            except Exception:continue
+            if not (r.status_code==404 and r.text in ('{"error":"not_found"}','404 page not found\n')):
+              body=r.content[:200000].decode('utf-8','replace')
+              item={'path':p,'status':r.status_code,'body':body,'headers':dict(r.headers)};hits.append(item)
+              flags=[f for f in re.findall(r'caplag\{[^}]+\}',body) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+              if flags:(out/'FOUND.txt').write_text(json.dumps(item,indent=2));break
+          (out/'summary.json').write_text(json.dumps({'tested':len(paths),'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-refartifact2-encrypted
+          path: artifact/
+          retention-days: 1
