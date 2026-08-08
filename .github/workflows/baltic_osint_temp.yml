@@ -12,22 +12,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Resolve public ERR media metadata
+      - name: Resolve public ERR embedded media
         shell: bash
         run: |
           set -euo pipefail
-          URL='https://news.err.ee/1609932407/watch-estonia-s-special-forces-detain-a-suspected-smugglers-ship'
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          curl -L --compressed -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' "$URL" -o /tmp/page.html
+          URL='https://news.err.ee/media/videoBlock/649008ff0277d6873f8e91b37a661cc6?photoId=3178979&contentId=1609932407&contentTitle=Watch%3A%20Estonia%27s%20special%20forces%20detain%20a%20suspected%20smugglers%20ship'
+          curl -L --compressed -A "$UA" -H 'Referer: https://news.err.ee/1609932407/watch-estonia-s-special-forces-detain-a-suspected-smugglers-ship' "$URL" -o /tmp/vb.html
+          echo SIZE=$(wc -c </tmp/vb.html)
           python3 - <<'PY'
           import html,re
-          p=html.unescape(open('/tmp/page.html','r',errors='ignore').read())
-          for term in ['iframe','<video','video-player','videoPlayer','mediaId','media-id','stream','3178979','Videos released','click the photo above','content-video','data-video']:
-              print('\n===',term,'===')
-              for m in list(re.finditer(re.escape(term),p,re.I))[:20]:
-                  a=max(0,m.start()-900); b=min(len(p),m.end()+1600)
-                  print(p[a:b].replace('\n',' ')[:2600])
-          print('\n=== TAGS ===')
-          for pat in [r'<iframe[^>]*>',r'<video[^>]*>',r'<source[^>]*>',r'<[^>]+(?:video|media)[^>]*>']:
-              for m in re.finditer(pat,p,re.I): print(m.group(0)[:3000])
+          p=html.unescape(open('/tmp/vb.html','r',errors='ignore').read())
+          print('MEDIA_BEGIN')
+          pats=[r'https?[^\"\'<> ]+\.(?:mp4|m3u8|mpd)(?:\?[^\"\'<> ]*)?',r'//[^\"\'<> ]+\.(?:mp4|m3u8|mpd)(?:\?[^\"\'<> ]*)?']
+          seen=set()
+          for pat in pats:
+              for m in re.finditer(pat,p,re.I):
+                  u=m.group(0).replace('\\/','/')
+                  if u not in seen:
+                      seen.add(u); print(u[:3000])
+          for term in ['m3u8','mp4','source','file','stream','media','video']:
+              for m in list(re.finditer(term,p,re.I))[:15]:
+                  a=max(0,m.start()-500); b=min(len(p),m.end()+1000)
+                  print('SNIP',term,p[a:b].replace('\n',' ')[:1600])
+          print('MEDIA_END')
           PY
