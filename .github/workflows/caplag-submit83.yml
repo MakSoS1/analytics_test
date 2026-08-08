@@ -58,7 +58,7 @@ jobs:
           done
           echo 'encrypted_handoff=timeout'
           exit 1
-      - name: Login and submit carefully
+      - name: Login and submit with CSRF
         shell: bash
         run: |
           set -euo pipefail
@@ -71,8 +71,7 @@ jobs:
           s=requests.Session()
           s.headers['User-Agent']='Mozilla/5.0 CAPLAG-CTF-helper'
 
-          r=s.get(BASE+'/login',timeout=20)
-          r.raise_for_status()
+          r=s.get(BASE+'/login',timeout=20); r.raise_for_status()
           m=re.search(r'name=["\']nonce["\'][^>]*value=["\']([^"\']+)',r.text,re.I)
           if not m:
               m=re.search(r'value=["\']([^"\']+)["\'][^>]*name=["\']nonce["\']',r.text,re.I)
@@ -80,20 +79,38 @@ jobs:
           if m: data['nonce']=unescape(m.group(1))
           rr=s.post(BASE+'/login',data=data,allow_redirects=True,timeout=20)
           if '/login' in rr.url or 'Incorrect' in rr.text or 'incorrect' in rr.text:
-              print('login_status=failed')
-              sys.exit(2)
+              print('login_status=failed'); sys.exit(2)
           print('login_status=ok')
+
+          page=s.get(BASE+'/challenges',timeout=20); page.raise_for_status()
+          csrf=None
+          patterns=[
+              r'csrfNonce\s*:\s*["\']([^"\']+)',
+              r'["\']csrfNonce["\']\s*:\s*["\']([^"\']+)',
+              r'["\']csrf_nonce["\']\s*:\s*["\']([^"\']+)',
+              r'name=["\']nonce["\'][^>]*value=["\']([^"\']+)',
+              r'value=["\']([^"\']+)["\'][^>]*name=["\']nonce["\']'
+          ]
+          for p in patterns:
+              mm=re.search(p,page.text,re.I)
+              if mm:
+                  csrf=unescape(mm.group(1)); break
+          print('csrf_found='+str(bool(csrf)).lower())
+          if not csrf:
+              print('csrf_context_present='+str('csrf' in page.text.lower()).lower())
+              sys.exit(6)
 
           cr=s.get(BASE+'/api/v1/challenges/83',timeout=20)
           print('challenge_http='+str(cr.status_code))
-          if cr.status_code!=200:
-              print('challenge_lookup=failed')
-              sys.exit(3)
-          cj=cr.json(); cdata=cj.get('data') or {}
+          if cr.status_code!=200: sys.exit(3)
+          cdata=(cr.json().get('data') or {})
           print('challenge_name='+str(cdata.get('name','')))
           print('challenge_solved_by_me='+str(cdata.get('solved_by_me',cdata.get('solved',None))))
-          print('challenge_attempts='+str(cdata.get('attempts',None)))
+          print('challenge_attempts_before='+str(cdata.get('attempts',None)))
           print('challenge_max_attempts='+str(cdata.get('max_attempts',None)))
+          # Print only public challenge metadata/description, never session or credential data.
+          desc=str(cdata.get('description','')).replace('\n',' ')[:1000]
+          print('challenge_description='+desc)
 
           phrase='Старая Каланча первый глаз города смотрит сверху'
           inners=[]
@@ -107,9 +124,13 @@ jobs:
               'Staraya_Kalancha_pervyy_glaz_goroda_smotrit_sverkhu',
               'staraya_kalancha_pervyy_glaz_goroda_smotrit_sverkhu',
               'staraya_kalancha_pervyi_glaz_goroda_smotrit_sverhu',
+              'staraya_kalancha_pervyj_glaz_goroda_smotrit_sverhu',
+              'staraya_kalancha_pervyi_glaz_goroda_smotrit_sverkhu',
+              'staraya_kalancha_pervyy_glaz_goroda_smotrit_sverhu',
               'STARAYA_KALANCHA_PERVYY_GLAZ_GORODA_SMOTRIT_SVERKHU',
               'LIB-167-KALANCHA',
-              'Старая Каланча','Старая_Каланча','STARAYA_KALANCHA','staraya_kalancha'
+              'Старая Каланча','Старая_Каланча','STARAYA_KALANCHA','staraya_kalancha',
+              'KALANCHA','kalancha','OLD_KALANCHA','old_kalancha'
           ]: add(x)
           candidates=[]
           for x in inners:
@@ -118,29 +139,32 @@ jobs:
           seen=set(); candidates=[x for x in candidates if not (x in seen or seen.add(x))]
 
           endpoint=BASE+'/api/v1/challenges/attempt'
+          headers={'CSRF-Token':csrf,'Referer':BASE+'/challenges'}
           for idx,candidate in enumerate(candidates,1):
-              resp=s.post(endpoint,json={'challenge_id':83,'submission':candidate},timeout=20)
+              resp=s.post(endpoint,json={'challenge_id':83,'submission':candidate},headers=headers,timeout=20)
               status='http_'+str(resp.status_code); message=''
               try:
                   j=resp.json(); d=j.get('data') or {}
                   status=str(d.get('status') or j.get('success') or status)
-                  message=str(d.get('message') or '')
-              except Exception: pass
+                  message=str(d.get('message') or j.get('message') or '')
+              except Exception:
+                  message=resp.text[:120]
               safe_msg=re.sub(r'[\r\n]+',' ',message)[:160]
               print(f'attempt_{idx:02d}={status} {safe_msg}'.rstrip())
               sl=status.lower(); ml=safe_msg.lower()
-              if sl in {'correct','already_solved'} or sl=='true' or 'correct' in sl or 'already' in ml:
+              if sl in {'correct','already_solved'} or 'correct' in sl or 'already solved' in ml:
                   open('/tmp/winner_index.txt','w').write(str(idx))
                   open('/tmp/winner.txt','w',encoding='utf-8').write(candidate)
                   print('submission_result=success')
                   print('winner_index='+str(idx))
                   break
               if resp.status_code==429:
-                  print('submission_result=rate_limited')
-                  sys.exit(4)
-              time.sleep(0.4)
+                  print('submission_result=rate_limited'); sys.exit(4)
+              time.sleep(0.45)
           else:
               print('submission_result=no_match')
+              after=s.get(BASE+'/api/v1/challenges/83',timeout=20).json().get('data') or {}
+              print('challenge_attempts_after='+str(after.get('attempts',None)))
               sys.exit(5)
           PY
           if [ -f /tmp/winner.txt ]; then
