@@ -1,0 +1,97 @@
+name: caplag-map83
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-map83.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Generate ephemeral key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
+      - name: Upload public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-map83-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
+          retention-days: 1
+      - name: Wait for encrypted auth
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/MakSoS1/analytics_test/contents/handoff/caplag-map83-${kid}.enc.b64?ref=ctf-caplag-submit83-20260808"
+          for i in $(seq 1 150); do
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json')); txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/auth.enc').write_bytes(base64.b64decode(txt))
+          PY
+              openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/auth.enc -out /tmp/auth.json -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              chmod 600 /tmp/auth.json
+              echo encrypted_handoff=received; exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Compare platform and game identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,requests,sys
+          from html import unescape
+          a=json.load(open('/tmp/auth.json'))
+          BASE='https://platform.caplag.ru'
+          s=requests.Session();s.headers['User-Agent']='Mozilla/5.0 CAPLAG-CTF-helper'
+          r=s.get(BASE+'/login',timeout=20);r.raise_for_status()
+          m=re.search(r'name=["\']nonce["\'][^>]*value=["\']([^"\']+)',r.text,re.I) or re.search(r'value=["\']([^"\']+)["\'][^>]*name=["\']nonce["\']',r.text,re.I)
+          d={'name':a['username'],'password':a['password']}
+          if m:d['nonce']=unescape(m.group(1))
+          rr=s.post(BASE+'/login',data=d,allow_redirects=True,timeout=20)
+          if '/login' in rr.url: print('platform_login=failed');sys.exit(2)
+          print('platform_login=ok')
+          for ep,label in [('/api/v1/users/me','user'),('/api/v1/teams/me','team')]:
+              q=s.get(BASE+ep,timeout=20)
+              print(label+'_http='+str(q.status_code))
+              if q.status_code==200:
+                  dat=(q.json().get('data') or {})
+                  for k in ['id','name','team_id']:
+                      if k in dat: print('platform_'+label+'_'+k+'='+str(dat[k]))
+          print('platform_challenges_75_90:')
+          for cid in range(75,91):
+              q=s.get(BASE+f'/api/v1/challenges/{cid}',timeout=20)
+              if q.status_code!=200: continue
+              dat=(q.json().get('data') or {})
+              print(f'ch_{cid}|solved={bool(dat.get("solved_by_me",False))}|name={str(dat.get("name",""))[:100]}')
+          h={'X-API-Key':'caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia','Content-Type':'application/json'}
+          for payload in [ {'ctfd_token':a['ctfd_token']}, {'token':a['ctfd_token']} ]:
+              try:
+                  g=requests.post('https://game-check.caplag.ru/init',headers=h,json=payload,timeout=20)
+                  print('game_init_http='+str(g.status_code))
+                  if g.status_code==200:
+                      j=g.json()
+                      # Print only non-secret identity/progression scalars, never token or access codes.
+                      for k,v in j.items():
+                          if any(x in k.lower() for x in ['token','code','flag','secret']): continue
+                          if isinstance(v,(str,int,bool,float)) and len(str(v))<160: print('game_'+k+'='+str(v))
+                      break
+              except Exception as e:
+                  print('game_init_error='+type(e).__name__)
+          PY
