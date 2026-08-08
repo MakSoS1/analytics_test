@@ -5,46 +5,31 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 8
     steps:
-      - name: Download and OCR public PPA footage
+      - uses: actions/checkout@v4
+        with:
+          ref: ctf-baltic-osint-temp
+      - name: Generate public PPA footage contact sheets
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg tesseract-ocr >/dev/null
+          sudo apt-get install -y -qq ffmpeg >/dev/null
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
           V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
           curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic.mp4
-          ffprobe -v error -show_entries stream=width,height:format=duration,size -of default=nw=1 /tmp/baltic.mp4
-          mkdir -p /tmp/frames
-          ffmpeg -hide_banner -loglevel error -i /tmp/baltic.mp4 -vf 'fps=2,scale=iw*2:ih*2:flags=lanczos,unsharp=5:5:0.8:5:5:0.0' -q:v 2 /tmp/frames/f_%04d.jpg
-          python3 - <<'PY'
-          import glob,os,re,subprocess
-          # broad patterns because OCR often confuses one or two characters
-          exactish=re.compile(r'\b[A-Z]{3,5}[\s:_-]*[0-9]{5,8}\b',re.I)
-          tir=re.compile(r'\bTIR\b.{0,120}',re.I)
-          slash=re.compile(r'\b[A-Z0-9]{1,8}\s*/\s*[A-Z0-9-]{1,12}(?:\s*/\s*[A-Z0-9-]{1,12})?\b',re.I)
-          interesting=re.compile(r'(?:[A-Z].*){3,}.*\d|\d.*(?:[A-Z].*){3,}',re.I)
-          print('OCR_CANDIDATES_BEGIN')
-          for fn in sorted(glob.glob('/tmp/frames/*.jpg')):
-              try:
-                  txt=subprocess.check_output(['tesseract',fn,'stdout','--psm','11'],stderr=subprocess.DEVNULL,text=True,timeout=8)
-              except Exception:
-                  continue
-              lines=[' '.join(x.split()) for x in txt.splitlines() if x.strip()]
-              cand=[]
-              for line in lines:
-                  if exactish.search(line) or tir.search(line) or slash.search(line) or (len(line)<=80 and interesting.search(line)):
-                      cand.append(line)
-              if cand:
-                  # frame index at 2 fps -> approximate t=(n-1)/2 s
-                  n=int(re.search(r'(\d+)',os.path.basename(fn)).group(1)); t=(n-1)/2
-                  print(f'{os.path.basename(fn)} t={t:.1f}s :: ' + ' | '.join(cand[:20]))
-          print('OCR_CANDIDATES_END')
-          PY
+          rm -rf osint_frames
+          mkdir -p osint_frames
+          ffmpeg -hide_banner -loglevel error -i /tmp/baltic.mp4 -vf "fps=1/4,scale=640:360:flags=lanczos,drawtext=fontcolor=white:fontsize=26:box=1:boxcolor=black@0.7:x=12:y=12:text='%{pts\\:hms}',tile=4x4:padding=4:margin=4" -q:v 2 osint_frames/contact_%02d.jpg
+          identify osint_frames/* 2>/dev/null || true
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add osint_frames
+          git commit -m 'Add temporary Baltic Spirit contact sheets' || exit 0
+          git push origin HEAD:ctf-baltic-osint-temp
