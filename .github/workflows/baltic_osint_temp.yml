@@ -10,40 +10,30 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 5
     steps:
-      - name: Fetch public FTS Telegram media originals
+      - name: Fetch public Fontanka SZTU gallery
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p /tmp/fontanka
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          curl -L --compressed -A "$UA" 'https://t.me/s/customs_rf/9371' -o /tmp/tg.html
-          python3 - <<'PY'
-          import html,re
-          p=html.unescape(open('/tmp/tg.html','r',errors='ignore').read()).replace('\\/','/')
-          # Restrict to media URLs close to the relevant post range 9372..9378 where the album lives.
-          urls=[]
-          for m in re.finditer(r'https://cdn\d+\.telesco\.pe/file/[^\"\'<> )]+', p):
-              u=m.group(0)
-              if u not in urls: urls.append(u)
-          print('CDN_URLS_BEGIN')
-          for i,u in enumerate(urls): print(i,u)
-          print('CDN_URLS_END')
-          open('/tmp/urls.txt','w').write('\n'.join(urls))
-          PY
-          mkdir -p /tmp/media
+          cat > /tmp/urls <<'EOF'
+          https://n1s1.hsmedia.ru/f0/9b/5f/f09b5f164ff1c9662b6d675a01eeb142/600x600_21_dd1cf474d3e32dc9e31c8bad795d810c%40957x1280_0xN6eWt5zy_4107125146580789640.jpg.webp
+          https://n1s1.hsmedia.ru/87/79/5c/87795c689a827a90abda4aea84377b74/600x600_21_587fc245593649240925273410cbc7af%40960x1280_0xH7Bj7Df0_3996339366609221086.jpg.webp
+          https://n1s1.hsmedia.ru/d9/3a/4c/d93a4cf8c6810d2fc26092ab422b2df8/600x600_21_43d912b14de20369ff38db61400c9a31%40960x1280_0xvkglCpYS_3130482514435179491.jpg.webp
+          https://n1s1.hsmedia.ru/08/de/c4/08dec4760dc21c6bf2f014ad2d996332/600x600_21_c1aa6ff27fdeacde40994435919c32d9%401255x956_0xgCF4IVNi_3785705967902736543.jpg.webp
+          https://n1s1.hsmedia.ru/ba/62/9f/ba629f27bd4292af8b296b1f0f4cfb83/600x600_21_468487fa1e0d4960f9c0a0df9bdb2bfe%40720x1280_0xIrrlUsVz_7419726029876184577.jpg.webp
+          EOF
           n=0
           while IFS= read -r u; do
-            [ -n "$u" ] || continue
-            ext=.jpg
-            case "$u" in *.mp4*) ext=.mp4;; *.webp*) ext=.webp;; esac
-            curl -L --fail --compressed -A "$UA" "$u" -o "/tmp/media/m_${n}${ext}" || true
+            curl -L --fail --compressed -A "$UA" -H 'Referer: https://www.fontanka.ru/' "$u" -o "/tmp/fontanka/f_${n}.webp" || true
             n=$((n+1))
-          done </tmp/urls.txt
-          file /tmp/media/* || true
-          ls -lh /tmp/media || true
+          done </tmp/urls
+          file /tmp/fontanka/* || true
+          ls -lh /tmp/fontanka
       - uses: actions/upload-artifact@v4
         with:
-          name: fts-telegram-media
-          path: /tmp/media/*
+          name: fontanka-sztu-gallery
+          path: /tmp/fontanka/*
           retention-days: 1
