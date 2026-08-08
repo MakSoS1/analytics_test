@@ -9,3 +9,10 @@ numpy==2.3.2
 scapy==2.6.1
 zstandard==0.23.0
 pytest==8.4.1
+lightgbm==4.6.0
+scikit-learn==1.7.1
+joblib==1.5.1
+shap==0.48.0
+aioquic==1.2.0
+grpcio==1.74.0
+paho-mqtt==2.1.0
