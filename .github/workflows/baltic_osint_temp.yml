@@ -10,67 +10,19 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 5
     steps:
-      - name: Download and parse exact ATO batch certificate PDF
+      - name: Download original public PPA footage
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq poppler-utils >/dev/null
-          python3 -m pip install -q beautifulsoup4
-          python3 - <<'PY'
-          import requests,re,html,urllib.parse,subprocess,os
-          from bs4 import BeautifulSoup
-          U='https://www.reefertransport.nl/Certified.aspx'; H={'User-Agent':'Mozilla/5.0'}
-          s=requests.Session(); soup=BeautifulSoup(s.get(U,headers=H,timeout=30).text,'html.parser')
-          def hidd(sp): return {x.get('name'):x.get('value','') for x in sp.find_all('input') if x.get('name') and (x.get('type') or '').lower()=='hidden'}
-          pfx='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$prefixComboBox'; num='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$numberTextBox'
-          d=hidd(soup); d[pfx]='SEGU'; d[num]='963946'; d['__EVENTTARGET']='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$searchButton'; d['__EVENTARGUMENT']=''
-          d['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_prefixComboBox_ClientState']='{"logEntries":[],"value":"SEGU","text":"SEGU","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}'
-          d['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_numberTextBox_ClientState']='{"enabled":true,"emptyMessage":"number","validationText":"963946","valueAsString":"963946","lastSetTextBoxValue":"963946"}'
-          sr=s.post(U,data=d,headers={**H,'Referer':U},timeout=30); ss=BeautifulSoup(sr.text,'html.parser')
-          img=ss.find('input',{'type':'image','title':'Open Certificate'}); name=img.get('name')
-          d2=hidd(ss); d2[pfx]='SEGU'; d2[num]='963946'; d2['__EVENTTARGET']=''; d2['__EVENTARGUMENT']=''
-          for k in ['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_prefixComboBox_ClientState','ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_numberTextBox_ClientState']:
-              n=ss.find('input',{'name':k}); d2[k]=n.get('value','') if n else ''
-          d2[name+'.x']='6'; d2[name+'.y']='6'
-          cr=s.post(U,data=d2,headers={**H,'Referer':U},timeout=30)
-          m=re.search(r'window\.open\(["\']([^"\']*ViewPdf\.aspx[^"\']*)["\']',html.unescape(cr.text),re.I)
-          if not m: raise SystemExit('ViewPdf URL not found')
-          vu=urllib.parse.urljoin(U,m.group(1)); print('VIEW_URL',vu)
-          vr=s.get(vu,headers={**H,'Referer':U},timeout=40,allow_redirects=True)
-          print('VIEW',vr.status_code,vr.url,vr.headers.get('Content-Type'),len(vr.content),vr.content[:16].hex())
-          raw=vr.content
-          if raw.startswith(b'%PDF'):
-              open('/tmp/cert.pdf','wb').write(raw)
-          else:
-              text=vr.text
-              print('VIEW_HTML_BEGIN')
-              print(text[:20000])
-              print('VIEW_HTML_END')
-              vs=BeautifulSoup(text,'html.parser')
-              candidates=[]
-              for tag in vs.find_all(['iframe','embed','object','a']):
-                  for attr in ['src','data','href']:
-                      z=tag.get(attr)
-                      if z and ('pdf' in z.lower() or 'view' in z.lower() or 'download' in z.lower() or 'action=' in z.lower()): candidates.append(z)
-              for mm in re.finditer(r'["\']([^"\']+(?:\.pdf|ViewPdf\.aspx|Download[^"\']*)[^"\']*)["\']',text,re.I): candidates.append(mm.group(1))
-              seen=[]
-              for z in candidates:
-                  if z in seen: continue
-                  seen.append(z); fu=urllib.parse.urljoin(vr.url,html.unescape(z)); print('CANDIDATE',fu)
-                  try:
-                      rr=s.get(fu,headers={**H,'Referer':vr.url},timeout=40,allow_redirects=True)
-                      print('FETCH',rr.status_code,rr.url,rr.headers.get('Content-Type'),len(rr.content),rr.content[:12].hex())
-                      if rr.content.startswith(b'%PDF'):
-                          open('/tmp/cert.pdf','wb').write(rr.content); break
-                  except Exception as e: print('FETCH_ERR',repr(e))
-          if not os.path.exists('/tmp/cert.pdf'): raise SystemExit('PDF bytes not recovered')
-          print('PDFINFO_BEGIN')
-          subprocess.run(['pdfinfo','/tmp/cert.pdf'],check=False)
-          print('PDFINFO_END')
-          print('PDFTEXT_BEGIN')
-          subprocess.run(['pdftotext','-layout','/tmp/cert.pdf','-'],check=False)
-          print('PDFTEXT_END')
-          PY
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
+          V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
+          curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic_original.mp4
+          ls -lh /tmp/baltic_original.mp4
+          ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate,avg_frame_rate,bit_rate:format=duration,size,bit_rate -of default=nw=1 /tmp/baltic_original.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baltic-original-ppa-video
+          path: /tmp/baltic_original.mp4
+          retention-days: 1
