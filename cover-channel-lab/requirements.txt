@@ -1,0 +1,11 @@
+fastapi==0.116.1
+hypercorn==0.17.3
+httpx[http2]==0.28.1
+websockets==15.0.1
+dnspython==2.7.0
+pandas==2.3.1
+pyarrow==21.0.0
+numpy==2.3.2
+scapy==2.6.1
+zstandard==0.23.0
+pytest==8.4.1
