@@ -1,4 +1,4 @@
-name: cyberkomi-public-microservices-and-wasm
+name: cyberkomi-il2cpp-recovery
 
 on:
   push:
@@ -10,93 +10,90 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  recover:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
-      - name: Fetch public microservice pages without player credentials
+      - name: Download public Unity IL2CPP files and recover managed metadata/code
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p out/web out/wasm out/font work
+          mkdir -p out work/cpp2il work/cppout
 
-          i=0
-          for url in \
-            'https://platform.caplag.ru/microserv/task/web/parma-line/1' \
-            'https://platform.caplag.ru/microserv/task/web/gov-relay/1' \
-            'https://platform.caplag.ru/microserv/task/web/sysola-core/1' \
-            'https://parma-line.syk-ctf.local/' \
-            'https://gov-relay.syk-ctf.local/' \
-            'https://sysola-core.syk-ctf.local/' \
-            'https://heatline.syk-ctf.local/' \
-            'https://kontur-update.syk-ctf.local/' \
-            'https://omeba-archive.syk-ctf.local/'; do
-            i=$((i+1))
-            code=$(curl -ksSL --connect-timeout 8 --max-time 45 \
-              -D "out/web/${i}.headers" \
-              -o "out/web/${i}.body" \
-              -w '%{http_code}' "$url" || true)
-            printf '%s\t%s\n' "$i" "$url" >> out/web/map.tsv
-            printf '%s\t%s\n' "$i" "${code:-ERR}" >> out/web/status.tsv
-          done
+          curl -fsS --compressed --connect-timeout 10 --max-time 300 \
+            -o work/build.data \
+            'https://cyberkomi.caplag.ru/Build/build.data.br'
+          curl -fsS --compressed --connect-timeout 10 --max-time 300 \
+            -o work/build.wasm \
+            'https://cyberkomi.caplag.ru/Build/build.wasm.br'
+          curl -fsS --compressed --connect-timeout 10 --max-time 90 \
+            -o work/build.framework.js \
+            'https://cyberkomi.caplag.ru/Build/build.framework.js.br'
 
-          # Probe game-check interface without a token or answer; bodies remain in the artifact.
-          for ep in init check; do
-            curl -ksS --connect-timeout 8 --max-time 30 \
-              -D "out/web/gamecheck_${ep}_get.headers" \
-              -o "out/web/gamecheck_${ep}_get.body" \
-              "https://game-check.caplag.ru/${ep}" || true
-            curl -ksS -X OPTIONS --connect-timeout 8 --max-time 30 \
-              -D "out/web/gamecheck_${ep}_options.headers" \
-              -o "out/web/gamecheck_${ep}_options.body" \
-              "https://game-check.caplag.ru/${ep}" || true
-          done
-
-          # Task 07: download public pack and decompile the WebAssembly firmware.
-          curl -fsSL --connect-timeout 10 --max-time 90 \
-            -o work/task07.zip \
-            'https://game-file.caplag.ru/d/task07_heatline/heatline_pack.zip'
-          unzip -q work/task07.zip -d work/task07
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq wabt >/dev/null
-          wasm2wat --generate-names --fold-exprs \
-            work/task07/heatline_controller.wasm \
-            -o out/wasm/heatline_controller.wat
-          cp work/task07/heatline_panel.js out/wasm/
-          cp work/task07/heatline_state.bin out/wasm/
-
-          # Render the historical Anttikoski Abur font as an image for offline glyph matching.
-          # The font file itself is deliberately deleted and never uploaded.
-          curl -fsSL --connect-timeout 10 --max-time 45 \
-            -o work/Abur.ttf \
-            'https://db.onlinewebfonts.com/t/b485c0b24f979d6d5430ee17e038cb9c.ttf'
-          python3 -m pip -q install pillow
           python3 - <<'PY'
-          from PIL import Image, ImageDraw, ImageFont
           from pathlib import Path
-          font=ImageFont.truetype('work/Abur.ttf',72)
-          keys=['Q','W','E','R','T','Y','U','I','O','й','A','S','D','F','G','H','J','K','L','Z','X','C','V','B','N','M']
-          names=['AN','BUR','GAJ','DOJ','E','ZHOJ','DZHOJ','ZATA',"DZ'ITA",'I','KOKE','LEJ','MENO','NENO','VOJ','PEJ','REJ','SIJ','TAJ','U(V)','VER','CHERY','SHOJ','YRY','JAT','O']
-          cellw,cellh=180,120
-          out=Image.new('RGB',(5*cellw,6*cellh),'white'); d=ImageDraw.Draw(out)
-          small=ImageFont.load_default()
-          for idx,(k,nm) in enumerate(zip(keys,names)):
-              x=(idx%5)*cellw; y=(idx//5)*cellh
-              d.text((x+10,y+5),f'{k}  {nm}',font=small,fill='black')
-              d.text((x+50,y+28),k,font=font,fill='black')
-          out.save('out/font/abur_anttikoski_chart.png')
+          import struct
+          src=Path('work/build.data').read_bytes()
+          magic=b'UnityWebData1.0\x00'
+          assert src.startswith(magic)
+          p=len(magic); header=struct.unpack_from('<I',src,p)[0]; p+=4
+          wanted='Il2CppData/Metadata/global-metadata.dat'
+          while p<header:
+              off,size,nlen=struct.unpack_from('<III',src,p); p+=12
+              name=src[p:p+nlen].decode('utf-8','replace'); p+=nlen
+              if name==wanted:
+                  Path('work/global-metadata.dat').write_bytes(src[off:off+size])
+                  break
+          else: raise SystemExit('global-metadata.dat missing')
           PY
-          rm -f work/Abur.ttf
 
-          # Metadata only in public Actions stdout.
-          find out -type f -printf '%P\t%s bytes\n' | sort > out/manifest.tsv
-          printf 'Public-only inspection complete. No player token was used.\n'
+          # Current development build. It supports modern Unity metadata and WASM.
+          curl -fsSL --connect-timeout 15 --max-time 180 \
+            -o work/cpp2il.zip \
+            'https://nightly.link/SamboyCoding/Cpp2IL/workflows/dotnet-core/development/Cpp2IL-net9-linux-x64.zip'
+          unzip -q work/cpp2il.zip -d work/cpp2il
+          exe=$(find work/cpp2il -maxdepth 3 -type f \( -name 'Cpp2IL' -o -name 'Cpp2IL-*' \) -perm -u+x | head -n1 || true)
+          if [ -z "$exe" ]; then
+            exe=$(find work/cpp2il -maxdepth 3 -type f -name 'Cpp2IL*' | head -n1)
+            chmod +x "$exe"
+          fi
+          printf 'Cpp2IL binary: %s\n' "$exe" > out/tool.txt
+          "$exe" --list-output-formats > out/output_formats.txt 2>&1 || true
+          "$exe" --list-processors > out/processors.txt 2>&1 || true
 
-      - name: Upload inspection artifact
+          # Force paths avoids game-layout autodetection for WebGL.
+          set +e
+          NO_COLOR=true "$exe" \
+            --force-binary-path="$(pwd)/work/build.wasm" \
+            --force-metadata-path="$(pwd)/work/global-metadata.dat" \
+            --force-unity-version='6000.0.76f1' \
+            --wasm-framework-file="$(pwd)/work/build.framework.js" \
+            --output-as=dll_il_recovery \
+            --output-to="$(pwd)/work/cppout" \
+            --verbose > out/cpp2il.log 2>&1
+          rc=$?
+          set -e
+          printf '%s\n' "$rc" > out/cpp2il_rc.txt
+
+          find work/cppout -type f -printf '%P\t%s bytes\n' | sort > out/cppout_manifest.tsv || true
+          ac=$(find work/cppout -type f -name 'Assembly-CSharp.dll' | head -n1 || true)
+          if [ -n "$ac" ]; then
+            cp "$ac" out/Assembly-CSharp.dll
+            dotnet tool install --tool-path work/tools ilspycmd >/dev/null
+            mkdir -p out/decompiled
+            work/tools/ilspycmd -p -o out/decompiled "$ac" > out/ilspy.log 2>&1 || true
+            # Keep the CTF's own code, not thousands of generated/runtime files.
+            find out/decompiled -type f | grep -Ei '(AnswerCheck|IntroHeadphones|LibraryTerminal|Kalancha|Gallery|ParmaLine|GovRelay|Heatline|Kontur|Omeba|Sysola|Chapter|GameServer|Progress|Scene)' > out/relevant_files.txt || true
+          fi
+
+          # Public static analysis only; no user token or task answer is used.
+          printf 'IL2CPP recovery finished with rc=%s.\n' "$rc"
+
+      - name: Upload recovered CTF client code
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-public-inspection
+          name: cyberkomi-il2cpp-recovery
           path: out/
           retention-days: 1
           if-no-files-found: error
