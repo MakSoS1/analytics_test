@@ -12,52 +12,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Inspect public Triton unit specifications search API
+      - name: Query close 2018 Fuwa reefer approval records
         shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,re,html,urllib.parse,json
+          import requests,re,json
           from bs4 import BeautifulSoup
           H={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/139 Safari/537.36'}
-          base='https://tools.tritoncontainer.com'
-          u=base+'/tritoncontainer/unitSpecs/list'
-          s=requests.Session(); r=s.get(u,headers=H,timeout=30)
-          print('LIST',r.status_code,r.url,len(r.content))
-          txt=html.unescape(r.text)
-          for line in txt.splitlines():
-              low=line.lower()
-              if any(k in low for k in ['unitspec','datatable','ajax','unitnumber','search','script src']):
-                  print('HTML',line[:3000])
-          soup=BeautifulSoup(r.text,'html.parser')
-          scripts=[]
-          for sc in soup.find_all('script'):
-              src=sc.get('src')
-              if src:
-                  scripts.append(urllib.parse.urljoin(r.url,src))
-          print('SCRIPTS',json.dumps(scripts,indent=2))
-          for su in scripts:
-              try:
-                  rr=s.get(su,headers={**H,'Referer':u},timeout=30)
-                  body=rr.text
-                  hits=[]
-                  for m in re.finditer(r'.{0,250}(?:unitSpecs|DataTable|ajax|unitNumber|serverSide|search).{0,500}',body,re.I|re.S):
-                      z=' '.join(m.group(0).split())
-                      if z not in hits: hits.append(z)
-                  if hits:
-                      print('\nSCRIPT',su,rr.status_code,len(rr.content))
-                      for z in hits[:40]: print('HIT',z[:2400])
-              except Exception as e: print('SCRIPT_ERR',su,repr(e))
-          candidates=['/tritoncontainer/unitSpecs/search','/tritoncontainer/unitSpecs/list.json','/tritoncontainer/unitSpecs/data','/tritoncontainer/unitSpecs/find']
-          for path in candidates:
-              for method in ['get','post']:
-                  try:
-                      fn=getattr(s,method)
-                      kwargs={'headers':{**H,'Referer':u},'timeout':20,'allow_redirects':True}
-                      if method=='get': kwargs['params']={'unitNumbers':'TTNU8845830\nSEGU9639460','unitNumber':'TTNU8845830'}
-                      else: kwargs['data']={'unitNumbers':'TTNU8845830\nSEGU9639460','unitNumber':'TTNU8845830'}
-                      q=fn(base+path,**kwargs)
-                      print('PROBE',method.upper(),path,q.status_code,q.url,q.headers.get('Content-Type'),len(q.content),q.text[:1200].replace('\n',' '))
-                  except Exception as e: print('PROBE_ERR',method,path,repr(e))
+          base='https://tools.tritoncontainer.com/tritoncontainer/unitSpecs/show/'
+          units=['RJCU2019190','TTNU8845830','SEGU9639460']
+          for unit in units:
+              r=requests.get(base+unit,headers=H,timeout=30)
+              soup=BeautifulSoup(r.text,'html.parser')
+              text='\n'.join(x.strip() for x in soup.stripped_strings)
+              print('\nUNIT',unit,'STATUS',r.status_code,'URL',r.url,'LEN',len(r.content))
+              # Print only compact specification labels; no page instructions or unrelated text.
+              lines=[x.strip() for x in soup.stripped_strings]
+              for i,x in enumerate(lines):
+                  if x in ['Manufacturer','Manufacture Date','ISO Code','CSC','TIR','Box builder:']:
+                      print(x, '=>', lines[i+1] if i+1 < len(lines) else '')
+              for pat in [r'F/BV/\d+/\d+',r'GB/C\s+\d+\s+BV/\d{4}',r'LB4026THD[-\s]\d+']:
+                  vals=sorted(set(re.findall(pat,text,re.I)))
+                  if vals: print('MATCH',pat,vals)
+          # Use the actual public search form as a fallback for RJCU and target.
+          s=requests.Session(); listurl='https://tools.tritoncontainer.com/tritoncontainer/unitSpecs/list'
+          s.get(listurl,headers=H,timeout=30)
+          for val in ['RJCU2019190','SEGU9639460']:
+              q=s.post('https://tools.tritoncontainer.com/tritoncontainer/unitSpecs/refreshTable',data={'unitNumberText':val},headers={**H,'Referer':listurl,'X-Requested-With':'XMLHttpRequest'},timeout=30)
+              print('\nREFRESH',val,q.status_code,q.headers.get('Content-Type'),len(q.content))
+              body=q.text
+              for pat in [r'[A-Z]{4}\d{7}',r'F/BV/\d+/\d+',r'GB/C\s+\d+\s+BV/\d{4}',r'LB4026THD[-\s]\d+']:
+                  vals=sorted(set(re.findall(pat,body,re.I)))
+                  if vals: print('R',pat,vals[:30])
           PY
