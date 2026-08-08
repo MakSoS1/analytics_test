@@ -1,0 +1,139 @@
+name: Cover Channel Post-Baseline Holdouts
+
+on:
+  workflow_run:
+    workflows: ['Cover Channel Dataset Lab']
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  future-holdout:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '[coverlab-definitive]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [0,1,2,3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install lab dependencies
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Generate strict future-transport holdout
+        working-directory: cover-channel-lab
+        shell: bash
+        run: |
+          printf -v name 'H-future-%02d' '${{ matrix.shard }}'
+          ./scripts/run_shard_ci.sh future '${{ matrix.shard }}' 4 "$RUNNER_TEMP/coverlab" "$name"
+      - name: Upload to Hugging Face when configured
+        if: ${{ env.HF_TOKEN != '' }}
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          printf -v name 'H-future-%02d' '${{ matrix.shard }}'
+          ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/post-${{ github.event.workflow_run.id }}/$name" "$name from source run ${{ github.event.workflow_run.id }}"
+      - name: Retain complete future shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataset-H-future-${{ matrix.shard }}-${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/coverlab/release
+          retention-days: 90
+          compression-level: 0
+
+  baseline-and-adversarial:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '[coverlab-definitive]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python model dependencies
+        working-directory: cover-channel-lab
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+      - name: Download all source-run dataset shards
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          mkdir -p /tmp/source-dataset
+          cd /tmp/source-dataset
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY"
+          count="$(find . -type f -name session_features.parquet | wc -l)"
+          echo "session feature shards: $count"
+          test "$count" -ge 10
+      - name: Train B1/B2/B3 from campaign-grouped Gold only
+        working-directory: cover-channel-lab
+        shell: bash
+        run: |
+          mkdir -p /tmp/models
+          PYTHONPATH=src python -m coverlab.train_baseline --dataset-root /tmp/source-dataset --out /tmp/models --seed 23
+          test -s /tmp/models/B3-opaque.joblib
+          test -s /tmp/models/baseline_report.json
+      - name: Install network/parser dependencies for adversarial holdout
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Generate exactly 500 new post-baseline adversarial sessions
+        working-directory: cover-channel-lab
+        run: ./scripts/run_adversarial_ci.sh "$RUNNER_TEMP/adversarial" I-adversarial-00
+      - name: Score adversarial holdout against frozen B3 opaque baseline
+        working-directory: cover-channel-lab
+        shell: bash
+        run: |
+          FEATURES="$RUNNER_TEMP/adversarial/release/gold/I-adversarial-00/session_features.parquet"
+          test -s "$FEATURES"
+          PYTHONPATH=src python -m coverlab.score_adversarial \
+            --features "$FEATURES" \
+            --model /tmp/models/B3-opaque.joblib \
+            --out "$RUNNER_TEMP/adversarial/release/quality/I-adversarial-00/adversarial_report.json"
+          python - <<'PY'
+          import json, os
+          p=os.path.join(os.environ['RUNNER_TEMP'],'adversarial/release/quality/I-adversarial-00/adversarial_report.json')
+          r=json.load(open(p))
+          assert r['sessions'] == 500, r
+          assert r['holdout_only'] is True, r
+          print(json.dumps(r, indent=2))
+          PY
+      - name: Retain frozen baseline models
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverlab-baselines-${{ github.event.workflow_run.id }}
+          path: /tmp/models
+          retention-days: 90
+          compression-level: 9
+      - name: Retain complete adversarial Bronze/Silver/Gold
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataset-I-adversarial-${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/adversarial/release
+          retention-days: 90
+          compression-level: 0
+      - name: Upload models and adversarial release to Hugging Face when configured
+        if: ${{ env.HF_TOKEN != '' }}
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          ./scripts/upload_hf.sh /tmp/models "releases/post-${{ github.event.workflow_run.id }}/models" "Frozen baselines from source run ${{ github.event.workflow_run.id }}"
+          ./scripts/upload_hf.sh "$RUNNER_TEMP/adversarial/release" "releases/post-${{ github.event.workflow_run.id }}/I-adversarial" "Adversarial holdout from source run ${{ github.event.workflow_run.id }}"
