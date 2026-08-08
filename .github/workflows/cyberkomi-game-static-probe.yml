@@ -1,0 +1,33 @@
+name: cyberkomi-game-static-probe
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/cyberkomi-game-static-probe.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe common read-only service metadata paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import requests
+          base='https://game-check.caplag.ru'
+          paths=['/robots.txt','/favicon.ico','/config.json','/package.json','/version','/status','/healthz','/ready','/metrics','/api','/api/config','/api/steps','/.well-known/security.txt']
+          s=requests.Session();s.headers['User-Agent']='CAPLAG-CTF-helper'
+          for p in paths:
+              try:r=s.get(base+p,timeout=10,allow_redirects=False)
+              except Exception as e:
+                  print(p+' error='+type(e).__name__);continue
+              ctype=r.headers.get('content-type','')
+              print(f'{p} http={r.status_code} bytes={len(r.content)} type={ctype}')
+              if r.status_code==200 and len(r.content)<=10000 and ('text' in ctype or 'json' in ctype):
+                  txt=r.text.replace('\r',' ').replace('\n',' ')[:3000]
+                  print('body='+txt)
+          PY
