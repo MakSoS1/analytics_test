@@ -12,25 +12,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Try alternate public fetch proxies for exact public Seaco OData query
+      - name: Extract ERR/PPA video sources and inspect highest quality
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,urllib.parse,json,re
-          H={'User-Agent':'Mozilla/5.0','Accept':'application/json,application/xml,text/plain,*/*'}
-          target="https://newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/Equipment_Status?$filter=IUnitNo%20eq%20'SEGU9639460'%20and%20IUnitNo1%20eq%20''&$format=json"
-          enc=urllib.parse.quote(target,safe='')
-          urls=[
-              'https://api.allorigins.win/raw?url='+enc,
-              'https://api.codetabs.com/v1/proxy?quest='+enc,
-              'https://corsproxy.io/?url='+enc,
-              'https://thingproxy.freeboard.io/fetch/'+target,
-              'https://newseaweb-seacoglobal-com.translate.goog/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV/Equipment_Status?%24filter='+urllib.parse.quote("IUnitNo eq 'SEGU9639460' and IUnitNo1 eq ''",safe="'()")+'&%24format=json&_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en',
-          ]
-          for u in urls:
+          import requests,re,html,urllib.parse,os,subprocess,json
+          from bs4 import BeautifulSoup
+          U='https://news.err.ee/1609932407/watch-estonia-s-special-forces-detain-a-suspected-smugglers-ship'
+          H={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'}
+          r=requests.get(U,headers=H,timeout=40)
+          print('PAGE',r.status_code,len(r.content),r.url)
+          raw=html.unescape(r.text).replace('\\/','/')
+          print('MEDIA_URLS_BEGIN')
+          urls=[]
+          pats=[r'https?://[^\"\'<> ]+\.(?:mp4|m3u8)(?:\?[^\"\'<> ]*)?',r'https?://[^\"\'<> ]*(?:video|media|stream|jupiter)[^\"\'<> ]+']
+          for pat in pats:
+              for m in re.finditer(pat,raw,re.I):
+                  z=m.group(0).rstrip(');,')
+                  if z not in urls: urls.append(z)
+          for z in urls: print(z[:2000])
+          print('MEDIA_URLS_END')
+          # Show source snippets around likely embedded media identifiers.
+          for key in ['m3u8','.mp4','jwplayer','videoId','mediaId','video_id','jupiter','stream','source']:
+              low=raw.lower(); pos=0; c=0
+              while True:
+                  i=low.find(key.lower(),pos)
+                  if i<0 or c>=10: break
+                  print('\nKEY',key,'AT',i,'::',raw[max(0,i-900):i+2200].replace('\n',' ')[:3200])
+                  pos=i+len(key); c+=1
+          # Probe candidate direct media URLs and, for HLS, list variants.
+          candidates=[z for z in urls if '.m3u8' in z.lower() or '.mp4' in z.lower()]
+          for idx,z in enumerate(candidates[:30]):
               try:
-                  r=requests.get(u,headers=H,timeout=70,allow_redirects=True)
-                  print('\n=== PROXY ==='); print('REQ',u[:500]); print('RES',r.status_code,r.url,r.headers.get('Content-Type'),len(r.content)); print(r.text[:60000])
-              except Exception as e: print('\nPROXY_ERR',u[:250],repr(e))
+                  rr=requests.get(z,headers={**H,'Referer':U},timeout=40,allow_redirects=True)
+                  print('\nPROBE',idx,rr.status_code,rr.url,rr.headers.get('Content-Type'),len(rr.content))
+                  print(rr.text[:10000] if '.m3u8' in z.lower() else rr.content[:40].hex())
+              except Exception as e: print('PROBE_ERR',idx,repr(e))
           PY
