@@ -1,0 +1,118 @@
+name: cyberkomi-ch02-events
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/cyberkomi-ch02-events.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Fetch and inspect Chapter 2 serialized event wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fsSL --compressed --connect-timeout 15 --max-time 300 'https://cyberkomi.caplag.ru/Build/build.data.br' -o /tmp/build.data
+          python3 - <<'PY'
+          import pathlib,struct
+          b=pathlib.Path('/tmp/build.data').read_bytes(); magic=b'UnityWebData1.0\x00'; assert b.startswith(magic)
+          pos=len(magic); end=struct.unpack_from('<I',b,pos)[0]; pos+=4
+          while pos<end:
+              off,n,pl=struct.unpack_from('<III',b,pos); pos+=12
+              path=b[pos:pos+pl].decode(); pos+=pl
+              if path=='data.unity3d':
+                  pathlib.Path('/tmp/data.unity3d').write_bytes(b[off:off+n]); break
+          else: raise SystemExit('data.unity3d missing')
+          PY
+          python3 -m pip -q install 'UnityPy>=1.20.0'
+          python3 - <<'PY'
+          import UnityPy,pathlib,json,re,struct,traceback
+          env=UnityPy.load('/tmp/data.unity3d')
+          rows=[]
+          target=None
+          # Resolve MonoScript class names for every MonoBehaviour, especially level2.
+          for obj in env.objects:
+              if obj.type.name!='MonoBehaviour': continue
+              af=getattr(getattr(obj,'assets_file',None),'name','')
+              if af!='level2': continue
+              rec={'path_id':obj.path_id,'file':af}
+              try:
+                  d=obj.read()
+                  rec['gameobject_path_id']=getattr(getattr(d,'m_GameObject',None),'path_id',None)
+                  script_ptr=getattr(d,'m_Script',None)
+                  rec['script_path_id']=getattr(script_ptr,'path_id',None)
+                  if script_ptr:
+                      try:
+                          s=script_ptr.read()
+                          rec['script_class']=getattr(s,'m_ClassName','')
+                          rec['script_namespace']=getattr(s,'m_Namespace','')
+                          rec['script_assembly']=getattr(s,'m_AssemblyName','')
+                      except Exception as e: rec['script_error']=repr(e)
+              except Exception as e: rec['read_error']=repr(e)
+              if rec.get('script_class')=='LibraryTerminalChapter2Controller' or obj.path_id==199:
+                  target=obj
+                  rec['is_target']=True
+              rows.append(rec)
+          pathlib.Path('out/level2_monobehaviours.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2))
+          if target is None: raise SystemExit('target missing')
+          try: raw=target.get_raw_data()
+          except Exception:
+              r=target.reader; old=r.Position; r.Position=target.byte_start; raw=r.read_bytes(target.byte_size); r.Position=old
+          pathlib.Path('out/controller_199.raw').write_bytes(raw)
+          pathlib.Path('out/controller_199.hex.txt').write_text('\n'.join(f'{i:04x}: '+raw[i:i+16].hex(' ') for i in range(0,len(raw),16)))
+          # Best effort typetree.
+          try:
+              tree=target.read_typetree()
+              pathlib.Path('out/controller_199_typetree.json').write_text(json.dumps(tree,ensure_ascii=False,indent=2,default=str))
+          except Exception as e:
+              pathlib.Path('out/controller_199_typetree_error.txt').write_text(repr(e)+'\n'+traceback.format_exc())
+          # Extract all plausible length-prefixed strings with offsets from target.
+          strings=[]
+          for i in range(max(0,len(raw)-8)):
+              n=struct.unpack_from('<I',raw,i)[0]
+              if n<1 or n>min(4096,len(raw)-i-4): continue
+              try:s=raw[i+4:i+4+n].decode('utf-8')
+              except:continue
+              if s and sum(ch.isprintable() or ch in '\r\n\t' for ch in s)/len(s)>.95:
+                  if re.search(r'[A-Za-zА-Яа-яЁё0-9_]',s): strings.append({'offset':i,'length':n,'text':s})
+          pathlib.Path('out/controller_strings.json').write_text(json.dumps(strings,ensure_ascii=False,indent=2))
+          # Dump references in raw as candidate PPtrs (fileID,pathID encoded pairs often align); include hits to known level2 object IDs.
+          ids={r['path_id']:r for r in rows}
+          refs=[]
+          for off in range(0,len(raw)-12,4):
+              fileid=struct.unpack_from('<i',raw,off)[0]
+              pid=struct.unpack_from('<q',raw,off+4)[0]
+              if fileid==0 and pid in ids:
+                  refs.append({'offset':off,'path_id':pid,'target':ids[pid]})
+          pathlib.Path('out/controller_candidate_pptrs.json').write_text(json.dumps(refs,ensure_ascii=False,indent=2))
+          # Dump all GameObject names and attached components in level2.
+          gos=[]
+          for obj in env.objects:
+              if obj.type.name!='GameObject' or getattr(getattr(obj,'assets_file',None),'name','')!='level2': continue
+              try:
+                  d=obj.read(); comps=[]
+                  for c in getattr(d,'m_Component',[]):
+                      ptr=getattr(c,'component',c)
+                      pid=getattr(ptr,'path_id',None)
+                      cls=None
+                      if pid:
+                          rr=next((x for x in rows if x['path_id']==pid),None)
+                          if rr: cls=rr.get('script_class')
+                      comps.append({'path_id':pid,'script_class':cls})
+                  gos.append({'path_id':obj.path_id,'name':getattr(d,'m_Name',''),'components':comps})
+              except Exception as e: gos.append({'path_id':obj.path_id,'error':repr(e)})
+          pathlib.Path('out/level2_gameobjects.json').write_text(json.dumps(gos,ensure_ascii=False,indent=2))
+          PY
+      - name: Upload inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-ch02-events
+          path: out
+          retention-days: 1
