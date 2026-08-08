@@ -13,6 +13,6 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt 'huggingface_hub[hf_xet]>=1.0.0'
 docker pull zeek/zeek:8.2.1
 printf 'Suricata: '; suricata -V || true
-printf 'Zeek: '; docker run --rm zeek/zeek:8.2.1 /opt/zeek/bin/zeek --version || true
+printf 'Zeek: '; docker run --rm zeek/zeek:8.2.1 zeek --version || true
 printf 'Mosquitto: '; mosquitto -h 2>&1 | head -1 || true
 printf 'Chrome: '; (google-chrome --version || google-chrome-stable --version || chromium --version || true)
