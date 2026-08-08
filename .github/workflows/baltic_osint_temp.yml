@@ -10,22 +10,19 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 5
     steps:
-      - name: Extract close-up frames from public PPA footage
+      - name: Fetch public SEACO 45R1 reference photos
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg >/dev/null
-          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
-          curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic.mp4
-          mkdir -p /tmp/close
-          ffmpeg -hide_banner -loglevel error -ss 90 -i /tmp/baltic.mp4 -t 10 -vf 'fps=10' -q:v 1 /tmp/close/f_%03d.jpg
-          ls -lh /tmp/close | tail
+          mkdir -p /tmp/ref
+          curl -L --fail --compressed -A 'Mozilla/5.0' 'https://s0.rbk.ru/v6_top_pics/media/img/4/06/347582654694064.jpeg' -o /tmp/ref/segu9720021.jpeg
+          curl -L --fail --compressed -A 'Mozilla/5.0' 'https://www.primexcontainers.com.br/images/jch-optimize/ng/images_2024_04_08_home-2.webp' -o /tmp/ref/segu9566394.webp || true
+          file /tmp/ref/*
+          ls -lh /tmp/ref
       - uses: actions/upload-artifact@v4
         with:
-          name: baltic-closeup-90-100
-          path: /tmp/close/*.jpg
+          name: seaco-45r1-reference-photos
+          path: /tmp/ref/*
           retention-days: 1
