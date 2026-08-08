@@ -1,8 +1,18 @@
 {
-  "revision": 2,
-  "purpose": "Trigger the complete strict corpus build after integrating local HTTP/3-QUIC, generic gRPC/HTTP2, MQTT-over-WSS, MASQUE/WebTransport challenge fixtures, strict Suricata/Zeek gates, Gold leakage checks, baseline models, Hugging Face backfill, and artifact-retention safeguards.",
+  "revision": 3,
+  "purpose": "Definitive complete strict corpus build after wire-effective nuisance factors, real 60-transaction multi-phase Stage C campaigns, local HTTP/3-QUIC, gRPC/HTTP2, MQTT-over-WSS, bounded CONNECT, MASQUE/WebTransport challenge fixtures, strict Suricata/Zeek gates, Gold leakage checks, B1/B2/B3 baselines, exactly 500 post-baseline adversarial sessions, Hugging Face backfill, and 90-day GitHub artifact persistence.",
   "required_stage_a_campaigns": 600,
   "required_parser_gates": ["suricata_eve_nonempty", "zeek_conn_nonempty", "mapping_coverage_ge_0_95", "leakage_audit_passed"],
+  "required_corpus": {
+    "B_isolated_sessions": 12960,
+    "C_sequence_campaigns": 720,
+    "C_sequence_transactions": 43200,
+    "D_mixed_captures": 30,
+    "F_challenge_min_sessions": 4200,
+    "G_commodity_min_sessions": 1100,
+    "H_future_sessions": 1400,
+    "I_post_baseline_adversarial_sessions": 500
+  },
   "storage_policy": {
     "bronze": "raw pcap.zst plus manifests and decrypted laboratory ground truth",
     "silver": "raw Suricata/Zeek logs plus normalized parquet",
@@ -10,6 +20,6 @@
     "hf_target": "Maksim123321/cover-channel-web-protocols",
     "hf_visibility": "private",
     "github_artifact_fallback": true,
-    "post_run_retention_mirror_days": 90
+    "github_retention_days": 90
   }
 }
