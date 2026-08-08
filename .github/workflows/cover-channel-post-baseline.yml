@@ -18,6 +18,8 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '[coverlab-definitive]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 330
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -42,8 +44,6 @@ jobs:
       - name: Upload to Hugging Face when configured
         if: ${{ env.HF_TOKEN != '' }}
         working-directory: cover-channel-lab
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         shell: bash
         run: |
           printf -v name 'H-future-%02d' '${{ matrix.shard }}'
@@ -60,6 +60,8 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '[coverlab-definitive]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 330
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -131,8 +133,6 @@ jobs:
       - name: Upload models and adversarial release to Hugging Face when configured
         if: ${{ env.HF_TOKEN != '' }}
         working-directory: cover-channel-lab
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         shell: bash
         run: |
           ./scripts/upload_hf.sh /tmp/models "releases/post-${{ github.event.workflow_run.id }}/models" "Frozen baselines from source run ${{ github.event.workflow_run.id }}"
