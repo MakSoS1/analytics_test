@@ -18,11 +18,12 @@ jobs:
           set -u
           B='https://newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17'
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          for p in index.html manifest.json Component.js controller/App.controller.js controller/View1.controller.js; do
+          for p in index.html manifest.json Component.js controller/App.controller.js controller/View1.controller.js controller/Home.controller.js; do
             echo "===== $p ====="
+            rm -f /tmp/h /tmp/b
             curl -k -L --connect-timeout 8 --max-time 20 -A "$UA" -sS -D /tmp/h "$B/$p" -o /tmp/b || true
-            head -20 /tmp/h || true
-            wc -c /tmp/b || true
-            grep -Eo '(/sap/opu/odata[^"'"' ]+|serviceUrl[^,}]+|uri[^,}]+|TIR|Unit[^"'"' ]{0,40})' /tmp/b | head -80 || true
-            head -c 3000 /tmp/b | tr '\n' ' '; echo
+            head -20 /tmp/h 2>/dev/null || true
+            wc -c /tmp/b 2>/dev/null || true
+            grep -Ei 'odata|serviceUrl|datasource|TIR|unit|equipment|zseaco|sap/opu' /tmp/b 2>/dev/null | head -100 || true
+            head -c 6000 /tmp/b 2>/dev/null | tr '\n' ' '; echo
           done
