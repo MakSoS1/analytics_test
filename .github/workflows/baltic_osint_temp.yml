@@ -10,22 +10,21 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 5
     steps:
-      - name: Extract earlier public PPA frames
+      - name: Fetch public SEACO approval plate references
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg >/dev/null
+          mkdir -p /tmp/ref
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
-          curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic.mp4
-          mkdir -p /tmp/early
-          ffmpeg -hide_banner -loglevel error -ss 75 -i /tmp/baltic.mp4 -t 15 -vf 'fps=10' -q:v 1 /tmp/early/f_%03d.jpg
-          ls -lh /tmp/early | tail
+          curl -L --fail --compressed -A "$UA" 'https://www.hecny.com/storage/722/20230803_123612.jpg' -o /tmp/ref/hecny.jpg
+          curl -L --fail --compressed -A "$UA" 'https://alcontainer.dk/cdn/shop/files/FB_IMG_1754310082573.jpg?v=1754310113&width=1445' -o /tmp/ref/seaco20.jpg
+          curl -L --fail --compressed -A "$UA" 'https://ireland.apollo.olxcdn.com/v1/files/8nx6ooca1p212-PL/image%3Bs%3D4032x3024' -o /tmp/ref/geseaco40.jpg || true
+          file /tmp/ref/*
+          ls -lh /tmp/ref
       - uses: actions/upload-artifact@v4
         with:
-          name: baltic-early-75-90
-          path: /tmp/early/*.jpg
+          name: seaco-approval-plate-refs
+          path: /tmp/ref/*
           retention-days: 1
