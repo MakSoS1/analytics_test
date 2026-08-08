@@ -1,0 +1,69 @@
+name: launchlet-part2-auth-probe
+
+on:
+  push:
+    branches: [agent/launchlet-part2-auth-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe action authentication/context ordering
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests, pathlib, urllib.parse, json
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
+          out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint']); body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
+          api=boot['client']['anonKey']; sess=boot['client']['session']
+          tests=[
+            ('none',{}),('accept',{'Accept':'application/json'}),('ctype',{'Content-Type':'application/json'}),('accept_ctype',{'Accept':'application/json','Content-Type':'application/json'}),
+            ('apikey',{'apikey':api}),('authorization',{'Authorization':'Bearer '+sess}),('both',{'apikey':api,'Authorization':'Bearer '+sess}),
+            ('api_ctype',{'apikey':api,'Content-Type':'application/json'}),('auth_ctype',{'Authorization':'Bearer '+sess,'Content-Type':'application/json'}),
+            ('session_header',{'X-Launchlet-Session':sess}),('preview_session_header',{'X-Launchlet-Preview-Session':sess}),
+            ('auth_raw',{'Authorization':sess}),('auth_preview',{'Authorization':'Preview '+sess}),('auth_launchlet',{'Authorization':'Launchlet '+sess}),
+          ]
+          res=[]
+          for name,h in tests:
+              try:
+                  r=s.post(url,headers=h,json=body,timeout=15,allow_redirects=False)
+                  res.append({'name':name,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+              except Exception as e: res.append({'name':name,'error':repr(e)})
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(python3 -c "print(open('package/aes.key','rb').read().hex())")"
+          IV_HEX="$(python3 -c "print(open('package/iv.bin','rb').read().hex())")"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part2-auth-encrypted
+          path: artifact/
+          retention-days: 1
