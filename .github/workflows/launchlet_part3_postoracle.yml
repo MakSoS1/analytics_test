@@ -1,0 +1,70 @@
+name: launchlet-part3-postoracle
+on:
+  push:
+    branches: [agent/launchlet-part3-postoracle-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Discover POST handlers with invalid JSON oracle
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,concurrent.futures,itertools
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru';out=pathlib.Path('package/out')
+          nouns=['action','actions','server-action','server-actions','deploy','deploys','deployment','deployments','preview','previews','release','releases','publish','publication','promote','promotion','artifact','artifacts','build','builds','receipt','receipts','inspector','inspectors','deploy-inspector','export','exports','internal','admin','enterprise','production','runtime','runtimes','reference','references','ref','refs','capability','capabilities','grant','grants','token','tokens','proof','proofs','session','sessions','context','contexts','route','routes','job','jobs','task','tasks','workspace','workspaces','project','projects']
+          verbs=['invoke','redeem','inspect','export','publish','promote','release','finalize','approve','open','resolve','lookup','read','get','create','generate','preview','deploy','status','metadata','manifest','verify','authorize','auth','unlock','reveal','download','fetch','render','run','execute','dispatch','submit','commit','apply','activate','access','proof','grant','issue','exchange','claim']
+          ref='preview-8b11c';short='8b11c'
+          paths={'/api/actions/invoke','/api/receipts/redeem'}
+          for n in nouns:
+            paths.add('/api/'+n)
+            for v in verbs:
+              paths.add(f'/api/{n}/{v}');paths.add(f'/api/{v}/{n}')
+            for r in [ref,short]:
+              paths.add(f'/api/{n}/{r}')
+              for v in ['inspect','export','publish','promote','release','resolve','open','redeem','claim','access','status','manifest']:
+                paths.add(f'/api/{n}/{r}/{v}');paths.add(f'/api/{n}/{v}/{r}')
+          # likely nested namespaces
+          prefixes=['/api/internal','/api/admin','/api/preview','/api/deploy','/api/deployments','/api/release','/api/actions','/api/server-actions']
+          for pre in prefixes:
+            for n in nouns[:35]: paths.add(pre+'/'+n)
+            for v in verbs: paths.add(pre+'/'+v)
+          paths=list(paths)
+          h={'Content-Type':'application/json','Accept':'application/json','X-Launchlet-Preview':'launchlet-demo-board'}
+          def one(p):
+            try:r=requests.post(base+p,headers=h,data=b'{',timeout=5,allow_redirects=False)
+            except Exception:return None
+            if r.status_code==404 and r.text in ('{"error":"not_found"}','404 page not found\n'): return None
+            return {'path':p,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
+          hits=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+            for x in ex.map(one,paths):
+              if x:
+                hits.append(x)
+          (out/'summary.json').write_text(json.dumps({'tested':len(paths),'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-postoracle-encrypted
+          path: artifact/
+          retention-days: 1
