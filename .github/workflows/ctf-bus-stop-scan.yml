@@ -1,0 +1,175 @@
+name: Temporary Pearce bus-stop panorama matcher
+
+on:
+  pull_request:
+    branches: [ctf-geolocate-20260731]
+    paths:
+      - 'ctf/bus-stop-scan/**'
+      - '.github/workflows/ctf-bus-stop-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ctf-geolocate-20260731
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet streetview pillow py360convert numpy requests torch torchvision 'transformers==4.44.2'
+
+      - name: Match panoramas at official bus-stop coordinates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results/contact
+          python3 - <<'PY'
+          import io, json, math
+          from pathlib import Path
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+
+          import numpy as np
+          import py360convert
+          import requests
+          import torch
+          from PIL import Image, ImageDraw, ImageFont
+          from streetview import search_panoramas
+          from transformers import CLIPModel, CLIPProcessor
+
+          # Official ACT Government bus-stop feature service. Bounding box covers Pearce, Torrens,
+          # Chifley, Mawson and adjacent parts of Woden following the previous challenge location.
+          service='https://services1.arcgis.com/E5n4f1VY84i0xSjy/ArcGIS/rest/services/Transport_Canberra_Bus_Stop_view/FeatureServer/1/query'
+          params={
+              'where':'1=1','geometry':'149.045,-35.405,149.125,-35.335',
+              'geometryType':'esriGeometryEnvelope','inSR':'4326',
+              'spatialRel':'esriSpatialRelIntersects','outFields':'BUS_STOP_ID,BUS_STOP_NAME',
+              'returnGeometry':'true','outSR':'4326','f':'geojson',
+          }
+          response=requests.get(service,params=params,timeout=40)
+          response.raise_for_status()
+          geo=response.json()
+          stops=[]
+          for feature in geo.get('features',[]):
+              lon,lat=feature['geometry']['coordinates']
+              properties=feature.get('properties',{})
+              stops.append({'stop_id':properties.get('BUS_STOP_ID'),'stop_name':properties.get('BUS_STOP_NAME'),
+                            'stop_lat':float(lat),'stop_lon':float(lon)})
+          Path('results/bus_stops.geojson').write_text(json.dumps(geo,indent=2))
+          Path('results/bus_stops.json').write_text(json.dumps(stops,indent=2))
+          print('bus stops',len(stops),flush=True)
+
+          def haversine(a,b,c,d):
+              p1,p2=map(math.radians,(a,c)); dp=math.radians(c-a); dl=math.radians(d-b)
+              x=math.sin(dp/2)**2+math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+              return 12742000*math.asin(math.sqrt(x))
+
+          candidates={}; search_errors=[]
+          for stop in stops:
+              try:
+                  panos=search_panoramas(lat=stop['stop_lat'],lon=stop['stop_lon'])
+              except Exception as exc:
+                  search_errors.append({**stop,'error':repr(exc)})
+                  continue
+              nearby=[]
+              for pano in panos:
+                  distance=haversine(stop['stop_lat'],stop['stop_lon'],float(pano.lat),float(pano.lon))
+                  if distance>120: continue
+                  nearby.append({**stop,'pano_id':pano.pano_id,'lat':float(pano.lat),'lon':float(pano.lon),
+                                 'date':pano.date,'road_heading':float(pano.heading),'stop_distance_m':distance})
+              nearby.sort(key=lambda row:((int(row['date'][:4]) if row['date'] else 9999),row['stop_distance_m']))
+              # Earliest panorama and earliest leafless-season panorama closest to each stop.
+              picks=nearby[:1]
+              winter=[row for row in nearby if row['date'] and len(row['date'].split('-'))>1 and int(row['date'].split('-')[1]) in (5,6,7,8)]
+              if winter and (not picks or winter[0]['pano_id']!=picks[0]['pano_id']): picks.append(winter[0])
+              for row in picks:
+                  old=candidates.get(row['pano_id'])
+                  if old is None or row['stop_distance_m']<old['stop_distance_m']: candidates[row['pano_id']]=row
+          rows=list(candidates.values())
+          Path('results/search_errors.json').write_text(json.dumps(search_errors,indent=2))
+          Path('results/candidates.json').write_text(json.dumps(rows,indent=2))
+          print('candidate panoramas',len(rows),flush=True)
+
+          session=requests.Session()
+          session.headers.update({'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36','Referer':'https://www.google.com/maps/'})
+          def fetch(row):
+              panorama=Image.new('RGB',(1024,512)); pano_id=row['pano_id']
+              for x in range(2):
+                  tile=session.get('https://streetviewpixels-pa.googleapis.com/v1/tile',params={
+                      'cb_client':'maps_sv.tactile','panoid':pano_id,'x':x,'y':0,'zoom':1,'nbt':1,'fover':2,
+                  },timeout=20)
+                  if tile.status_code!=200 or not tile.content.startswith(b'\xff\xd8'):
+                      raise RuntimeError(f'tile status={tile.status_code}')
+                  panorama.paste(Image.open(io.BytesIO(tile.content)).convert('RGB'),(x*512,0))
+              return row,panorama
+
+          downloaded=[]; failures=[]
+          with ThreadPoolExecutor(max_workers=8) as executor:
+              futures={executor.submit(fetch,row):row for row in rows}
+              for future in as_completed(futures):
+                  try: downloaded.append(future.result())
+                  except Exception as exc: failures.append({**futures[future],'error':repr(exc)})
+          Path('results/failures.json').write_text(json.dumps(failures,indent=2))
+          print('downloaded',len(downloaded),'failures',len(failures),flush=True)
+
+          images=[]; metadata=[]
+          for meta,panorama in downloaded:
+              equi=np.asarray(panorama)
+              # Both directions along the street, plus offsets that can expose the stop-side verge.
+              for offset in (0,30,-30,180,210,150):
+                  heading=(meta['road_heading']+offset)%360
+                  projected=py360convert.e2p(equi,fov_deg=(82,62),u_deg=heading,v_deg=-3,out_hw=(252,336),mode='bilinear')
+                  images.append(Image.fromarray(np.uint8(np.clip(projected,0,255))))
+                  metadata.append({**meta,'view_heading':heading,'heading_offset':offset})
+
+          target=Image.open('ctf/geolocate/input-small.jpg').convert('RGB')
+          model=CLIPModel.from_pretrained('openai/clip-vit-base-patch32'); model.eval()
+          processor=CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')
+          with torch.no_grad():
+              target_feature=model.get_image_features(**processor(images=[target],return_tensors='pt'))
+              target_feature=target_feature/target_feature.norm(dim=-1,keepdim=True)
+          scores=[]
+          for start in range(0,len(images),64):
+              with torch.no_grad():
+                  features=model.get_image_features(**processor(images=images[start:start+64],return_tensors='pt'))
+                  features=features/features.norm(dim=-1,keepdim=True)
+              scores.extend((features@target_feature.T).squeeze(1).tolist())
+          ranking=[{**metadata[i],'clip_score':float(scores[i]),'image_index':i} for i in range(len(images))]
+          ranking.sort(key=lambda row:row['clip_score'],reverse=True)
+          diverse=[]; seen=set()
+          for row in ranking:
+              if row['pano_id'] in seen: continue
+              seen.add(row['pano_id']); diverse.append(row)
+          Path('results/ranking.json').write_text(json.dumps(ranking,indent=2))
+          Path('results/diverse_ranking.json').write_text(json.dumps(diverse,indent=2))
+
+          font=ImageFont.load_default()
+          for page in range((len(diverse)+19)//20):
+              sheet=Image.new('RGB',(1800,1200),'white'); draw=ImageDraw.Draw(sheet)
+              for j,row in enumerate(diverse[page*20:(page+1)*20]):
+                  image=images[row['image_index']].copy(); image.thumbnail((350,245))
+                  x=(j%5)*360; y=(j//5)*300; sheet.paste(image,(x,y))
+                  label=(f"#{page*20+j+1} {row['stop_id']} {row['date'] or '?'} {row['clip_score']:.4f}\n"
+                         f"{row['stop_name']}\n{row['stop_lat']:.5f},{row['stop_lon']:.5f} pano {row['lat']:.5f},{row['lon']:.5f}")
+                  draw.multiline_text((x+2,y+248),label,fill='black',font=font,spacing=2)
+              sheet.save(f'results/contact/top_{page+1:02d}.jpg',quality=92)
+          print('TOP',json.dumps(diverse[:50]),flush=True)
+          PY
+
+      - name: Upload shortlist
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pearce-bus-stop-matches
+          path: results/
+          retention-days: 1
+          if-no-files-found: error

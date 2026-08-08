@@ -1,0 +1,83 @@
+name: Temporary reverse-image geolocation probe
+
+on:
+  pull_request:
+    branches: [ctf-geolocate-20260731]
+    paths:
+      - 'ctf/geolocate/**'
+      - '.github/workflows/ctf-geolocate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out trusted temporary base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ctf-geolocate-20260731
+
+      - name: Upload static image and collect raw Yandex CBIR pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results
+          cp ctf/geolocate/input-small.jpg results/input.jpg
+          file results/input.jpg > results/file.txt
+          sha256sum results/input.jpg > results/sha256.txt
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+
+          curl --connect-timeout 20 --max-time 90 --retry 2 -sS -L \
+            -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' \
+            -c results/yandex.cookies -b results/yandex.cookies \
+            -F 'upfile=@results/input.jpg;type=image/jpeg' \
+            -D results/upload.headers -o results/upload.json \
+            -w '%{http_code}\n%{url_effective}\n' \
+            'https://yandex.com/images/search?rpt=imageview&format=json&request=%7B%22blocks%22%3A%5B%7B%22block%22%3A%22b-page_type_search-by-image__link%22%7D%5D%7D' \
+            > results/upload.status
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.parse import urlencode
+          data=json.loads(Path('results/upload.json').read_text())
+          p=data['blocks'][0]['params']
+          image=p['originalImageUrl']; cbir=p['cbirId']
+          variants=[
+            {'rpt':'imageview','cbir_id':cbir,'cbir_page':'similar'},
+            {'rpt':'imageview','cbir_id':cbir,'cbir_page':'similar','url':image},
+            {'rpt':'imageview','url':image},
+            {'rpt':'imageview','cbir_id':cbir,'url':image},
+            {'rpt':'imageview','cbir_id':cbir,'cbir_page':'similar','family':'0','pornowhitelist':'1','ipnd':'1'},
+          ]
+          urls=[]
+          for host in ('https://yandex.com/images/search','https://yandex.ru/images/search'):
+            urls += [host+'?'+urlencode(q) for q in variants]
+          Path('results/identifiers.json').write_text(json.dumps({'originalImageUrl':image,'cbirId':cbir},indent=2))
+          Path('results/result_urls.txt').write_text('\n'.join(urls)+'\n')
+          PY
+
+          n=0
+          while IFS= read -r url; do
+            n=$((n+1))
+            curl --connect-timeout 20 --max-time 90 --retry 1 -sS -L \
+              -A "$UA" -H 'Accept-Language: en-US,en;q=0.9' \
+              -c results/yandex.cookies -b results/yandex.cookies \
+              -D "results/page_${n}.headers" -o "results/page_${n}.html" \
+              -w '%{http_code}\n%{url_effective}\n' "$url" \
+              > "results/page_${n}.status" || true
+          done < results/result_urls.txt
+
+          wc -c results/page_*.html > results/page_sizes.txt || true
+
+      - name: Upload raw pages as inert files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yandex-cbir-raw-pages
+          path: results/
+          retention-days: 1
+          if-no-files-found: error

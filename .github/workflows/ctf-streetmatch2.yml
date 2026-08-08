@@ -1,0 +1,148 @@
+name: Temporary fixed Street View matcher
+
+on:
+  pull_request:
+    branches: [ctf-geolocate-20260731]
+    paths:
+      - 'ctf/streetmatch2/**'
+      - '.github/workflows/ctf-streetmatch2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  match:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ctf-geolocate-20260731
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet streetview pillow py360convert numpy requests torch torchvision 'transformers==4.44.2'
+
+      - name: Search and match panoramas
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results/contact
+          python3 - <<'PY'
+          import io, json, math, time
+          from pathlib import Path
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          import requests, numpy as np, py360convert, torch
+          from PIL import Image, ImageDraw, ImageFont
+          from streetview import search_panoramas
+          from transformers import CLIPModel, CLIPProcessor
+
+          queries=[
+            ('Armidale_A',-30.5145435,151.6647644),('Armidale_B',-30.5166664,151.6666718),
+            ('Armidale_C',-30.4827137,151.6465149),('Young',-34.3130989,148.2931061),
+            ('Bathurst',-33.4073105,149.5638428),('Orange',-33.2737122,149.0868683),
+            ('Goulburn_A',-34.6874275,149.6667480),('Goulburn_B',-34.7546577,149.7181702),
+            ('Canberra_A',-35.3146858,149.1324310),('Canberra_B',-35.3081474,149.1244965),
+            ('Canberra_C',-35.3327370,149.1543121),('Canberra_D',-35.3151436,149.1412048),
+          ]
+          def dist(a,b,c,d):
+            p1,p2=map(math.radians,(a,c)); dp=math.radians(c-a); dl=math.radians(d-b)
+            x=math.sin(dp/2)**2+math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+            return 12742000*math.asin(math.sqrt(x))
+
+          selected={}; log=[]
+          for label,lat,lon in queries:
+            try: panos=search_panoramas(lat=lat,lon=lon)
+            except Exception as e:
+              log.append({'query':label,'error':repr(e)}); continue
+            rows=[]
+            for p in panos:
+              rows.append({'pano_id':p.pano_id,'lat':float(p.lat),'lon':float(p.lon),'date':p.date,
+                'query':label,'distance_m':dist(lat,lon,float(p.lat),float(p.lon))})
+            rows.sort(key=lambda r:r['distance_m'])
+            kept=[]
+            for r in rows:
+              if any(abs(r['lat']-x['lat'])<1e-7 and abs(r['lon']-x['lon'])<1e-7 and r['date']==x['date'] for x in kept): continue
+              kept.append(r)
+              if len(kept)==8: break
+            log.append({'query':label,'total':len(rows),'kept':kept})
+            for r in kept: selected.setdefault(r['pano_id'],r)
+            time.sleep(.25)
+          candidates=list(selected.values())
+          Path('results/search.json').write_text(json.dumps(log,indent=2))
+
+          session=requests.Session()
+          session.headers.update({'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36','Referer':'https://www.google.com/maps/'})
+          def fetch_pano(row):
+            pid=row['pano_id']; zoom=2
+            pano=Image.new('RGB',(2048,1024))
+            for y in range(2):
+              for x in range(4):
+                url='https://streetviewpixels-pa.googleapis.com/v1/tile'
+                params={'cb_client':'maps_sv.tactile','panoid':pid,'x':x,'y':y,'zoom':zoom,'nbt':1,'fover':2}
+                resp=session.get(url,params=params,timeout=25)
+                if resp.status_code!=200 or not resp.content.startswith(b'\xff\xd8'):
+                  raise RuntimeError(f'tile {x},{y} status={resp.status_code} type={resp.headers.get("content-type")} body={resp.text[:160]!r}')
+                tile=Image.open(io.BytesIO(resp.content)).convert('RGB')
+                pano.paste(tile,(x*512,y*512))
+            return row,pano
+
+          downloaded=[]; failures=[]
+          with ThreadPoolExecutor(max_workers=3) as ex:
+            futs={ex.submit(fetch_pano,r):r for r in candidates}
+            for f in as_completed(futs):
+              try: downloaded.append(f.result())
+              except Exception as e: failures.append({**futs[f],'error':repr(e)})
+          Path('results/failures.json').write_text(json.dumps(failures,indent=2))
+          print('candidates',len(candidates),'downloaded',len(downloaded),'failed',len(failures))
+
+          rows=[]; images=[]
+          for meta,pano in downloaded:
+            e=np.asarray(pano)
+            for h in range(0,360,30):
+              arr=py360convert.e2p(e,fov_deg=(78,62),u_deg=h,v_deg=0,out_hw=(336,448),mode='bilinear')
+              images.append(Image.fromarray(np.uint8(np.clip(arr,0,255))))
+              rows.append({**meta,'heading':h})
+
+          model=CLIPModel.from_pretrained('openai/clip-vit-base-patch32'); model.eval()
+          proc=CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')
+          target=Image.open('ctf/geolocate/input-small.jpg').convert('RGB')
+          with torch.no_grad():
+            t=model.get_image_features(**proc(images=[target],return_tensors='pt'))
+            t=t/t.norm(dim=-1,keepdim=True)
+          for start in range(0,len(images),32):
+            with torch.no_grad():
+              f=model.get_image_features(**proc(images=images[start:start+32],return_tensors='pt'))
+              f=f/f.norm(dim=-1,keepdim=True)
+              vals=(f@t.T).squeeze(1).tolist()
+            for i,v in enumerate(vals,start): rows[i]['clip_score']=float(v)
+          order=sorted(range(len(rows)),key=lambda i:rows[i]['clip_score'],reverse=True)
+          ranking=[rows[i] for i in order]
+          Path('results/ranking.json').write_text(json.dumps(ranking,indent=2))
+          best={}
+          for r in ranking: best.setdefault(r['query'],r)
+          Path('results/best_query.json').write_text(json.dumps(list(best.values()),indent=2))
+
+          font=ImageFont.load_default()
+          for page in range((min(200,len(order))+19)//20):
+            sheet=Image.new('RGB',(1800,1200),'white'); draw=ImageDraw.Draw(sheet)
+            for j,idx in enumerate(order[page*20:(page+1)*20]):
+              im=images[idx].copy(); im.thumbnail((350,245)); x=(j%5)*360; y=(j//5)*300
+              sheet.paste(im,(x,y)); r=rows[idx]
+              txt=f"#{page*20+j+1} {r['query']} {r['date'] or '?'}\n{r['lat']:.5f},{r['lon']:.5f} h={r['heading']} s={r['clip_score']:.3f}"
+              draw.multiline_text((x+2,y+248),txt,fill='black',font=font,spacing=2)
+            sheet.save(f'results/contact/top_{page+1:02d}.jpg',quality=90)
+          print('TOP',json.dumps(ranking[:30]))
+          PY
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixed-streetview-matches
+          path: results/
+          retention-days: 1
+          if-no-files-found: error

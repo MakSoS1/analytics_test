@@ -1,0 +1,60 @@
+name: Temporary GeoCLIP geolocation inference
+
+on:
+  pull_request:
+    branches: [ctf-geolocate-20260731]
+    paths:
+      - 'ctf/geoclip/**'
+      - '.github/workflows/ctf-geoclip.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  infer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out trusted temporary base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ctf-geolocate-20260731
+
+      - name: Install compatible GeoCLIP
+        shell: bash
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet geoclip pillow 'transformers==4.44.2'
+
+      - name: Run one coordinate prediction
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results
+          python3 - <<'PY'
+          import json
+          import torch
+          from geoclip import GeoCLIP
+
+          torch.manual_seed(0)
+          model=GeoCLIP()
+          gps,probs=model.predict('ctf/geolocate/input-small.jpg',top_k=100)
+          items=[]
+          for (lat,lon),prob in zip(gps,probs):
+              items.append({'lat':float(lat),'lon':float(lon),'probability':float(prob)})
+          with open('results/geoclip_predictions.json','w') as f:
+              json.dump(items,f,indent=2)
+          print(json.dumps(items[:30]))
+          PY
+
+      - name: Upload prediction
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geoclip-predictions
+          path: results/
+          retention-days: 1
+          if-no-files-found: error

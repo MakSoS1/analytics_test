@@ -1,0 +1,215 @@
+name: Temporary wide Armidale historical scan
+
+on:
+  pull_request:
+    branches: [ctf-geolocate-20260731]
+    paths:
+      - 'ctf/armidale-scan/**'
+      - '.github/workflows/ctf-armidale-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ctf-geolocate-20260731
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet streetview pillow py360convert numpy requests torch torchvision 'transformers==4.44.2'
+
+      - name: Scan historical Armidale panoramas
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results/contact
+          python3 - <<'PY'
+          import io, json, math, time, hashlib
+          from pathlib import Path
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+
+          import requests
+          import numpy as np
+          import py360convert
+          import torch
+          from PIL import Image, ImageDraw, ImageFont, ImageOps
+          from streetview import search_panoramas
+          from transformers import CLIPModel, CLIPProcessor, AutoImageProcessor, AutoModel
+
+          # Dense coverage of central residential Armidale, where mature deciduous street trees dominate.
+          lat_values=np.arange(-30.5400,-30.4874,0.0035)
+          lon_values=np.arange(151.6370,151.6946,0.0038)
+
+          def hav(a,b,c,d):
+              p1,p2=map(math.radians,(a,c)); dp=math.radians(c-a); dl=math.radians(d-b)
+              x=math.sin(dp/2)**2+math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+              return 12742000*math.asin(math.sqrt(x))
+
+          raw={}; search_errors=[]
+          for qi,(lat,lon) in enumerate((float(a),float(b)) for a in lat_values for b in lon_values):
+              try:
+                  found=search_panoramas(lat=lat,lon=lon)
+              except Exception as exc:
+                  search_errors.append({'lat':lat,'lon':lon,'error':repr(exc)})
+                  continue
+              for p in found:
+                  distance=hav(lat,lon,float(p.lat),float(p.lon))
+                  if distance>700: continue
+                  row={'pano_id':p.pano_id,'lat':float(p.lat),'lon':float(p.lon),
+                       'date':p.date,'heading_meta':float(p.heading),'query_lat':lat,'query_lon':lon,
+                       'query_distance_m':distance}
+                  old=raw.get(p.pano_id)
+                  if old is None or distance<old['query_distance_m']: raw[p.pano_id]=row
+              if qi%25==0: print('search',qi,'unique',len(raw),flush=True)
+              time.sleep(.07)
+
+          # Group nearly identical capture positions, retaining closest-to-source-era and seasonal variety.
+          groups={}
+          for row in raw.values():
+              key=(round(row['lat'],4),round(row['lon'],4))
+              groups.setdefault(key,[]).append(row)
+          selected=[]
+          for rows in groups.values():
+              def ymd(r):
+                  if not r['date']: return (9999,99)
+                  parts=r['date'].split('-'); return (int(parts[0]),int(parts[1]) if len(parts)>1 else 99)
+              rows.sort(key=ymd)
+              picks=[]
+              # Earliest coverage is closest in time to the original consumer-camera photograph.
+              picks.extend(rows[:1])
+              # A leafless/winter panorama is especially useful when present.
+              winter=[r for r in rows if r['date'] and len(r['date'].split('-'))>1 and int(r['date'].split('-')[1]) in (5,6,7,8)]
+              if winter: picks.append(winter[0])
+              # Add one 2007-2012 alternative and latest control view.
+              early=[r for r in rows if r['date'] and int(r['date'][:4])<=2012]
+              if len(early)>1: picks.append(early[-1])
+              picks.append(rows[-1])
+              seen=set()
+              for r in picks:
+                  if r['pano_id'] not in seen:
+                      selected.append(r); seen.add(r['pano_id'])
+
+          # Cap only if unusually dense, prioritising older imagery and grid coverage.
+          selected.sort(key=lambda r:((int(r['date'][:4]) if r['date'] else 9999),r['lat'],r['lon']))
+          if len(selected)>750: selected=selected[:750]
+          Path('results/search_errors.json').write_text(json.dumps(search_errors,indent=2))
+          Path('results/candidates.json').write_text(json.dumps(selected,indent=2))
+          print('raw',len(raw),'groups',len(groups),'selected',len(selected),flush=True)
+
+          session=requests.Session()
+          session.headers.update({'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36','Referer':'https://www.google.com/maps/'})
+          def fetch(row):
+              pid=row['pano_id']; zoom=1
+              pano=Image.new('RGB',(1024,512))
+              for y in range(1):
+                  for x in range(2):
+                      url='https://streetviewpixels-pa.googleapis.com/v1/tile'
+                      params={'cb_client':'maps_sv.tactile','panoid':pid,'x':x,'y':y,'zoom':zoom,'nbt':1,'fover':2}
+                      resp=session.get(url,params=params,timeout=25)
+                      if resp.status_code!=200 or not resp.content.startswith(b'\xff\xd8'):
+                          raise RuntimeError(f'tile status={resp.status_code} type={resp.headers.get("content-type")}')
+                      pano.paste(Image.open(io.BytesIO(resp.content)).convert('RGB'),(x*512,y*512))
+              return row,pano
+
+          downloaded=[]; failures=[]
+          with ThreadPoolExecutor(max_workers=6) as ex:
+              jobs={ex.submit(fetch,r):r for r in selected}
+              for i,f in enumerate(as_completed(jobs)):
+                  try: downloaded.append(f.result())
+                  except Exception as exc: failures.append({**jobs[f],'error':repr(exc)})
+                  if i%50==0: print('download',i,'ok',len(downloaded),'fail',len(failures),flush=True)
+          Path('results/failures.json').write_text(json.dumps(failures,indent=2))
+          print('downloaded',len(downloaded),'failures',len(failures),flush=True)
+
+          # 10 perspective headings plus slight pitch variants; target photo is a normal horizontal frame.
+          metas=[]; images=[]
+          for meta,pano in downloaded:
+              e=np.asarray(pano)
+              for h in range(0,360,36):
+                  for pitch in (0,-8):
+                      arr=py360convert.e2p(e,fov_deg=(82,62),u_deg=h,v_deg=pitch,out_hw=(252,336),mode='bilinear')
+                      images.append(Image.fromarray(np.uint8(np.clip(arr,0,255))))
+                      metas.append({**meta,'view_heading':h,'view_pitch':pitch})
+          print('views',len(images),flush=True)
+
+          target=Image.open('ctf/geolocate/input-small.jpg').convert('RGB')
+          # CLIP captures scene composition; DINOv2 adds local/structural appearance.
+          clip=CLIPModel.from_pretrained('openai/clip-vit-base-patch32'); clip.eval()
+          clip_proc=CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')
+          dino=AutoModel.from_pretrained('facebook/dinov2-small'); dino.eval()
+          dino_proc=AutoImageProcessor.from_pretrained('facebook/dinov2-small')
+
+          with torch.no_grad():
+              tc=clip.get_image_features(**clip_proc(images=[target],return_tensors='pt'))
+              tc=tc/tc.norm(dim=-1,keepdim=True)
+              td=dino(**dino_proc(images=[target],return_tensors='pt')).last_hidden_state[:,0,:]
+              td=td/td.norm(dim=-1,keepdim=True)
+
+          clip_scores=[]; dino_scores=[]
+          for start in range(0,len(images),40):
+              batch=images[start:start+40]
+              with torch.no_grad():
+                  fc=clip.get_image_features(**clip_proc(images=batch,return_tensors='pt'))
+                  fc=fc/fc.norm(dim=-1,keepdim=True)
+                  fd=dino(**dino_proc(images=batch,return_tensors='pt')).last_hidden_state[:,0,:]
+                  fd=fd/fd.norm(dim=-1,keepdim=True)
+              clip_scores.extend((fc@tc.T).squeeze(1).tolist())
+              dino_scores.extend((fd@td.T).squeeze(1).tolist())
+              if start%800==0: print('embed',start,'/',len(images),flush=True)
+
+          # Rank-normalised ensemble is robust to differing score scales.
+          def ranks(vals):
+              order=sorted(range(len(vals)),key=lambda i:vals[i],reverse=True)
+              out=[0]*len(vals)
+              for r,i in enumerate(order): out[i]=1-r/max(1,len(vals)-1)
+              return out
+          rc=ranks(clip_scores); rd=ranks(dino_scores)
+          rows=[]
+          for i,m in enumerate(metas):
+              rows.append({**m,'clip_score':float(clip_scores[i]),'dino_score':float(dino_scores[i]),
+                           'ensemble':float(.58*rc[i]+.42*rd[i]),'image_index':i})
+          rows.sort(key=lambda r:r['ensemble'],reverse=True)
+          Path('results/ranking.json').write_text(json.dumps(rows,indent=2))
+
+          # Prevent a single panorama from filling the shortlist with adjacent headings.
+          diverse=[]; seen_panos={}
+          for r in rows:
+              if r['pano_id'] in seen_panos: continue
+              diverse.append(r); seen_panos.add(r['pano_id'])
+              if len(diverse)>=300: break
+          Path('results/diverse_ranking.json').write_text(json.dumps(diverse,indent=2))
+
+          font=ImageFont.load_default()
+          for page in range((min(300,len(diverse))+19)//20):
+              sheet=Image.new('RGB',(1800,1200),'white'); draw=ImageDraw.Draw(sheet)
+              for j,r in enumerate(diverse[page*20:(page+1)*20]):
+                  im=images[r['image_index']].copy(); im.thumbnail((350,245))
+                  x=(j%5)*360; y=(j//5)*300; sheet.paste(im,(x,y))
+                  txt=(f"#{page*20+j+1} {r['date'] or '?'} {r['ensemble']:.3f}\n"
+                       f"{r['lat']:.5f},{r['lon']:.5f} h={r['view_heading']} p={r['view_pitch']}\n"
+                       f"C={r['clip_score']:.3f} D={r['dino_score']:.3f}")
+                  draw.multiline_text((x+2,y+248),txt,fill='black',font=font,spacing=2)
+              sheet.save(f'results/contact/top_{page+1:02d}.jpg',quality=91)
+          print('TOP DIVERSE',json.dumps(diverse[:30]),flush=True)
+          PY
+
+      - name: Upload shortlist
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: armidale-wide-scan
+          path: |
+            results/*.json
+            results/contact/
+          retention-days: 1
+          if-no-files-found: error
