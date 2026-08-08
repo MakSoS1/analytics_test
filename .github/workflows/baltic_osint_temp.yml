@@ -5,31 +5,26 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ctf-baltic-osint-temp
-      - name: Generate public PPA footage contact sheets
+      - name: OCR contact sheets
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg >/dev/null
-          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
-          curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic.mp4
-          rm -rf osint_frames
-          mkdir -p osint_frames
-          ffmpeg -hide_banner -loglevel error -i /tmp/baltic.mp4 -vf "fps=1/4,scale=640:360:flags=lanczos,drawtext=fontcolor=white:fontsize=26:box=1:boxcolor=black@0.7:x=12:y=12:text='%{pts\\:hms}',tile=4x4:padding=4:margin=4" -q:v 2 osint_frames/contact_%02d.jpg
-          identify osint_frames/* 2>/dev/null || true
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add osint_frames
-          git commit -m 'Add temporary Baltic Spirit contact sheets' || exit 0
-          git push origin HEAD:ctf-baltic-osint-temp
+          sudo apt-get install -y -qq tesseract-ocr >/dev/null
+          for f in osint_frames/contact_*.jpg; do
+            echo "=== $f ==="
+            for psm in 11 6; do
+              echo "--- PSM $psm ---"
+              tesseract "$f" stdout --psm "$psm" 2>/dev/null | grep -Eai 'TIR|[A-Z]{3,5}[^A-Z0-9]{0,4}[0-9]{5,8}|[A-Z0-9]{1,8}[[:space:]]*/[[:space:]]*[A-Z0-9-]{1,12}' || true
+            done
+          done
