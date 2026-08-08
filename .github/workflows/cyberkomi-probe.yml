@@ -34,7 +34,7 @@ jobs:
       - name: Receive encrypted token and inspect authenticated CTF state
         shell: bash
         env:
-          RAW_HANDOFF: https://raw.githubusercontent.com/MakSoS1/analytics_test/ctf-cyberkomi-probe-20260808/handoff/token.enc
+          RAW_HANDOFF: https://raw.githubusercontent.com/MakSoS1/analytics_test/ctf-cyberkomi-probe-20260808/handoff/token.enc.b64
         run: |
           set -euo pipefail
           umask 077
@@ -42,13 +42,14 @@ jobs:
 
           got=0
           for i in $(seq 1 240); do
-            if curl -fsSL --connect-timeout 5 --max-time 10 -H 'Cache-Control: no-cache' "${RAW_HANDOFF}?nonce=${GITHUB_RUN_ID}-${i}" -o handoff/token.enc 2>/dev/null; then
+            if curl -fsSL --connect-timeout 5 --max-time 10 -H 'Cache-Control: no-cache' "${RAW_HANDOFF}?nonce=${GITHUB_RUN_ID}-${i}" -o handoff/token.enc.b64 2>/dev/null; then
               got=1
               break
             fi
             sleep 2
           done
           [ "$got" -eq 1 ] || { echo 'Encrypted handoff was not received.'; exit 2; }
+          base64 -d handoff/token.enc.b64 > handoff/token.enc
 
           openssl pkeyutl -decrypt \
             -inkey handoff/private.pem \
@@ -61,7 +62,6 @@ jobs:
           echo "::add-mask::$TOKEN"
           [ -n "$TOKEN" ] || exit 3
 
-          # Initialize the game state. Request/response bodies never go to stdout.
           python3 - "$TOKEN" <<'PY'
           import json,sys,pathlib
           pathlib.Path('handoff/init.json').write_text(json.dumps({'ctfd_token':sys.argv[1]},ensure_ascii=False),encoding='utf-8')
@@ -74,7 +74,6 @@ jobs:
             -o private_out/game_init.json \
             'https://game-check.caplag.ru/init' || true
 
-          # Authenticate to the microservice orchestrator using an ephemeral cookie jar.
           python3 - "$TOKEN" <<'PY'
           import json,sys,pathlib
           pathlib.Path('handoff/login.json').write_text(json.dumps({'token':sys.argv[1]}),encoding='utf-8')
@@ -137,9 +136,8 @@ jobs:
             cp "private_out/platform/${task}.state.poll.json" "private_out/platform/${task}.state.final.json" 2>/dev/null || true
           done
 
-          # Probe only exact endpoints returned by the authorized orchestrator.
           python3 - <<'PY'
-          import json, pathlib, re, urllib.parse
+          import json, pathlib, re
           out=[]
           for task in ('parma-line','gov-relay','sysola-core'):
               p=pathlib.Path(f'private_out/platform/{task}.state.final.json')
@@ -147,45 +145,32 @@ jobs:
               except Exception: continue
               creds=d.get('credentials') or {}
               for e in d.get('endpoints') or []:
-                  if isinstance(e,dict):
-                      vals=[str(v) for v in e.values() if isinstance(v,(str,int,float))]
-                      s=' '.join(vals)
-                  else: s=str(e)
+                  s=' '.join(str(v) for v in e.values()) if isinstance(e,dict) else str(e)
                   m=re.search(r'https?://[^\s,;]+',s)
                   if m:
-                      out.append({'task':task,'url':m.group(0).rstrip(').]'), 'login':creds.get('login'),'password':creds.get('password')})
+                      out.append({'task':task,'url':m.group(0).rstrip(').]'),'login':creds.get('login'),'password':creds.get('password')})
           pathlib.Path('handoff/endpoints.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
           PY
 
           python3 - <<'PY'
-          import json, pathlib, subprocess, urllib.parse, re
+          import json, pathlib, subprocess, urllib.parse
           eps=json.loads(pathlib.Path('handoff/endpoints.json').read_text())
           for idx,e in enumerate(eps,1):
-              u=e['url']
-              parsed=urllib.parse.urlsplit(u)
+              u=e['url']; parsed=urllib.parse.urlsplit(u)
               if parsed.scheme not in ('http','https'): continue
               base=f'{parsed.scheme}://{parsed.netloc}/'
-              dest=pathlib.Path(f'private_out/endpoints/{idx}_{e["task"]}')
-              dest.mkdir(parents=True,exist_ok=True)
+              dest=pathlib.Path(f'private_out/endpoints/{idx}_{e["task"]}'); dest.mkdir(parents=True,exist_ok=True)
               (dest/'url.txt').write_text(u)
-              cmd=['curl','-ksSL','--connect-timeout','8','--max-time','45','-D',str(dest/'root.headers'),'-o',str(dest/'root.body')]
-              if e.get('login') and e.get('password'):
-                  cmd += ['-u',f'{e["login"]}:{e["password"]}']
-              cmd += [base]
-              subprocess.run(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-              for path in ('robots.txt','openapi.json','docs','health','api','api/health'):
-                  safe=path.replace('/','_')
-                  cmd=['curl','-ksSL','--connect-timeout','6','--max-time','25','-D',str(dest/f'{safe}.headers'),'-o',str(dest/f'{safe}.body')]
-                  if e.get('login') and e.get('password'):
-                      cmd += ['-u',f'{e["login"]}:{e["password"]}']
+              for path in ('','robots.txt','openapi.json','docs','health','api','api/health'):
+                  safe='root' if not path else path.replace('/','_')
+                  cmd=['curl','-ksSL','--connect-timeout','8','--max-time','45','-D',str(dest/f'{safe}.headers'),'-o',str(dest/f'{safe}.body')]
+                  if e.get('login') and e.get('password'): cmd += ['-u',f'{e["login"]}:{e["password"]}']
                   cmd += [urllib.parse.urljoin(base,path)]
                   subprocess.run(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
           PY
 
-          # Remove plaintext credentials before packaging; platform responses/endpoints are CTF data.
           rm -f handoff/token.txt handoff/init.json handoff/login.json handoff/cookies.txt handoff/private.pem
 
-          # Encrypt the entire result to a key whose private half exists only in the model container.
           cat > handoff/output_public.pem <<'PEM'
           -----BEGIN PUBLIC KEY-----
           MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAqvptF4aTPzGzR6fNOtz3
@@ -206,7 +191,7 @@ jobs:
           cat handoff/aes.key handoff/aes.iv > handoff/keyblob.bin
           openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob.bin -out handoff/keyblob.enc \
             -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
-          rm -rf private_out handoff/aes.key handoff/aes.iv handoff/keyblob.bin handoff/results.tar.gz handoff/output_public.pem handoff/token.enc
+          rm -rf private_out handoff/aes.key handoff/aes.iv handoff/keyblob.bin handoff/results.tar.gz handoff/output_public.pem handoff/token.enc handoff/token.enc.b64
           echo 'Authenticated discovery completed; result remains encrypted.'
 
       - name: Upload encrypted result only
