@@ -10,27 +10,48 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
     steps:
-      - name: Fetch high-resolution Baltic Spirit reposts
+      - name: Probe adjacent HECNY container photos
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install -q -U yt-dlp
-          mkdir -p videos
-          for id in 3VtMul7deY8 l7lQQBoQZYg Qxv26O4naKU; do
-            echo "FORMATS $id"
-            yt-dlp --no-warnings -F "https://www.youtube.com/watch?v=$id" | tail -n 35 || true
-            yt-dlp --no-warnings --merge-output-format mp4 -f "bv*[height<=2160]+ba/b[height<=2160]" -o "videos/${id}.%(ext)s" "https://www.youtube.com/watch?v=$id" || true
-          done
-          echo "FILES"
-          ls -lh videos
-          for f in videos/*; do
-            ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,duration -of default=nw=1 "$f" || true
-          done
-      - name: Upload video sources
+          python3 - <<'PY'
+          import requests,datetime,os,hashlib
+          from concurrent.futures import ThreadPoolExecutor,as_completed
+          base='https://www.hecny.com/storage/722/'
+          center=datetime.datetime(2023,8,3,12,36,12)
+          H={'User-Agent':'Mozilla/5.0','Range':'bytes=0-2047'}
+          times=[center+datetime.timedelta(seconds=i) for i in range(-150,151)]
+          def probe(t):
+              name=t.strftime('%Y%m%d_%H%M%S')+'.jpg'
+              try:
+                  r=requests.get(base+name,headers=H,timeout=10,allow_redirects=True)
+                  ct=(r.headers.get('Content-Type') or '').lower()
+                  if r.status_code in (200,206) and ('image' in ct or r.content[:2]==b'\xff\xd8'):
+                      return name,r.status_code,r.headers.get('Content-Length'),ct
+              except Exception:
+                  pass
+          found=[]
+          with ThreadPoolExecutor(max_workers=12) as ex:
+              futs=[ex.submit(probe,t) for t in times]
+              for f in as_completed(futs):
+                  x=f.result()
+                  if x: found.append(x)
+          found.sort()
+          print('FOUND_COUNT',len(found))
+          for x in found: print('FOUND',*x)
+          os.makedirs('hecny_adjacent',exist_ok=True)
+          for name,*_ in found:
+              r=requests.get(base+name,headers={'User-Agent':'Mozilla/5.0'},timeout=30)
+              if r.status_code==200 and r.content[:2]==b'\xff\xd8':
+                  open('hecny_adjacent/'+name,'wb').write(r.content)
+                  print('SAVED',name,len(r.content),hashlib.sha256(r.content).hexdigest()[:16])
+          PY
+      - name: Upload adjacent HECNY images
         uses: actions/upload-artifact@v4
         with:
-          name: baltic-spirit-hq-reposts
-          path: videos/
+          name: hecny-adjacent-photos
+          path: hecny_adjacent/
           retention-days: 1
+          if-no-files-found: warn
