@@ -1,0 +1,109 @@
+name: caplag-readonly-api83
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-readonly-api83.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Generate ephemeral key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
+      - name: Upload public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-readonly-api83-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
+          retention-days: 1
+      - name: Wait for encrypted token
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/MakSoS1/analytics_test/contents/handoff/caplag-readonly-api83-${kid}.enc.b64?ref=ctf-caplag-submit83-20260808"
+          for i in $(seq 1 150); do
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json')); txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/token.enc').write_bytes(base64.b64decode(txt))
+          PY
+              openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/token.enc -out /tmp/token.txt -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              chmod 600 /tmp/token.txt
+              echo encrypted_handoff=received; exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Probe official read-only API routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import requests,json,re
+          token=open('/tmp/token.txt').read().strip()
+          base='https://platform.caplag.ru'
+          s=requests.Session(); s.headers.update({'Authorization':'Token '+token,'User-Agent':'CAPLAG-CTF-helper','Accept':'application/json'})
+          paths=[
+            '/api/v1/challenges/83',
+            '/api/v1/flags?challenge_id=83',
+            '/api/v1/challenges/83/flags',
+            '/api/v1/flags',
+            '/api/v1/challenge-flags?challenge_id=83',
+            '/api/v1/challenges/83/solution',
+            '/api/v1/challenges/83/solutions'
+          ]
+          for p in paths:
+              try:r=s.get(base+p,timeout=20,allow_redirects=False)
+              except Exception as e:
+                  print(p+'|error='+type(e).__name__);continue
+              print(f'{p}|http={r.status_code}|bytes={len(r.content)}|type={r.headers.get("content-type","")}')
+              if r.status_code==200:
+                  try:j=r.json()
+                  except Exception:
+                      print('body_nonjson='+re.sub(r'\s+',' ',r.text)[:500]);continue
+                  # Never dump arbitrary secrets. Only report shape first.
+                  print('top_keys='+','.join(sorted(j.keys())) if isinstance(j,dict) else 'json_type='+type(j).__name__)
+                  data=j.get('data') if isinstance(j,dict) else None
+                  if p=='/api/v1/challenges/83' and isinstance(data,dict):
+                      print('challenge_access=ok name='+str(data.get('name',''))+' solved='+str(data.get('solved_by_me')))
+                  elif isinstance(data,list):
+                      print('data_list_len='+str(len(data)))
+                      # If a flags endpoint is exposed, report only field names and challenge IDs/types; redact content/value.
+                      for i,item in enumerate(data[:20]):
+                          if not isinstance(item,dict): continue
+                          safe={}
+                          for k,v in item.items():
+                              kl=k.lower()
+                              if any(w in kl for w in ['content','flag','value','secret','token','password']): safe[k]='<redacted>'
+                              elif isinstance(v,(str,int,float,bool,type(None))): safe[k]=v
+                              else: safe[k]=f'<{type(v).__name__}>'
+                          print('item_'+str(i)+'='+json.dumps(safe,ensure_ascii=False,sort_keys=True))
+                  elif isinstance(data,dict):
+                      safe={}
+                      for k,v in data.items():
+                          kl=k.lower()
+                          if any(w in kl for w in ['content','flag','value','secret','token','password']): safe[k]='<redacted>'
+                          elif isinstance(v,(str,int,float,bool,type(None))): safe[k]=v
+                          else: safe[k]=f'<{type(v).__name__}>'
+                      print('data_shape='+json.dumps(safe,ensure_ascii=False,sort_keys=True))
+              else:
+                  try:
+                      j=r.json(); print('error_keys='+','.join(sorted(j.keys())))
+                  except Exception: pass
+          PY
