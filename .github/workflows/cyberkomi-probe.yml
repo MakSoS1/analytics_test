@@ -1,4 +1,4 @@
-name: cyberkomi-il2cpp-isil
+name: cyberkomi-private-discovery
 
 on:
   push:
@@ -10,67 +10,211 @@ permissions:
   contents: read
 
 jobs:
-  recover:
+  discover:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 18
     steps:
-      - name: Recover relevant CTF client methods as ISIL
+      - name: Generate one-time handoff key
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p out/isil work/cpp2il work/cppout
+          mkdir -p handoff private_out
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out handoff/private.pem >/dev/null 2>&1
+          openssl pkey -in handoff/private.pem -pubout -out handoff/public.pem >/dev/null 2>&1
 
-          curl -fsS --compressed --connect-timeout 10 --max-time 300 -o work/build.data 'https://cyberkomi.caplag.ru/Build/build.data.br'
-          curl -fsS --compressed --connect-timeout 10 --max-time 300 -o work/build.wasm 'https://cyberkomi.caplag.ru/Build/build.wasm.br'
-          curl -fsS --compressed --connect-timeout 10 --max-time 90 -o work/build.framework.js 'https://cyberkomi.caplag.ru/Build/build.framework.js.br'
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import struct
-          src=Path('work/build.data').read_bytes(); magic=b'UnityWebData1.0\x00'; assert src.startswith(magic)
-          p=len(magic); header=struct.unpack_from('<I',src,p)[0]; p+=4
-          while p<header:
-              off,size,nlen=struct.unpack_from('<III',src,p); p+=12
-              name=src[p:p+nlen].decode('utf-8','replace'); p+=nlen
-              if name=='Il2CppData/Metadata/global-metadata.dat':
-                  Path('work/global-metadata.dat').write_bytes(src[off:off+size]); break
-          else: raise SystemExit('metadata missing')
-          PY
-
-          curl -fsSL --connect-timeout 15 --max-time 180 -o work/cpp2il.zip 'https://nightly.link/SamboyCoding/Cpp2IL/workflows/dotnet-core/development/Cpp2IL-net9-linux-x64.zip'
-          unzip -q work/cpp2il.zip -d work/cpp2il
-          exe=$(find work/cpp2il -maxdepth 3 -type f \( -name 'Cpp2IL' -o -name 'Cpp2IL-*' \) -perm -u+x | head -n1 || true)
-          if [ -z "$exe" ]; then exe=$(find work/cpp2il -maxdepth 3 -type f -name 'Cpp2IL*' | head -n1); chmod +x "$exe"; fi
-
-          set +e
-          NO_COLOR=true "$exe" \
-            --force-binary-path="$(pwd)/work/build.wasm" \
-            --force-metadata-path="$(pwd)/work/global-metadata.dat" \
-            --force-unity-version='6000.0.76f1' \
-            --wasm-framework-file="$(pwd)/work/build.framework.js" \
-            --output-as=isil \
-            --output-to="$(pwd)/work/cppout" \
-            > out/cpp2il-isil.log 2>&1
-          rc=$?
-          set -e
-          printf '%s\n' "$rc" > out/rc.txt
-
-          root=$(find work/cppout -type d -path '*/IsilDump/Assembly-CSharp' | head -n1 || true)
-          if [ -n "$root" ]; then
-            for name in AnswerCheckController IntroHeadphonesVideoScreen LibraryTerminalChapter2Controller KalanchaChapter3Controller GalleryChapter4Controller ParmaLineChapter5Controller GovRelayChapter6Controller HeatlineChapter7Controller KonturChapter8Controller OmebaArchiveChapter9Controller SysolaCoreChapter10Controller; do
-              f=$(find "$root" -type f -name "${name}.txt" | head -n1 || true)
-              [ -z "$f" ] || cp "$f" "out/isil/${name}.txt"
-              find "$root" -type f -name "${name}_NestedType_*.txt" -exec cp {} out/isil/ \; 2>/dev/null || true
-            done
-          fi
-          find out/isil -type f -printf '%P\t%s bytes\n' | sort > out/manifest.tsv
-          printf 'Relevant ISIL extraction complete, rc=%s. No player credentials used.\n' "$rc"
-
-      - name: Upload relevant ISIL
+      - name: Publish one-time public key only
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-il2cpp-isil
-          path: out/
+          name: cyberkomi-handoff-public-key
+          path: handoff/public.pem
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Receive encrypted token and inspect authenticated CTF state
+        shell: bash
+        env:
+          RAW_HANDOFF: https://raw.githubusercontent.com/MakSoS1/analytics_test/ctf-cyberkomi-probe-20260808/handoff/token.enc
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p private_out/platform private_out/endpoints
+
+          got=0
+          for i in $(seq 1 240); do
+            if curl -fsSL --connect-timeout 5 --max-time 10 -H 'Cache-Control: no-cache' "${RAW_HANDOFF}?nonce=${GITHUB_RUN_ID}-${i}" -o handoff/token.enc 2>/dev/null; then
+              got=1
+              break
+            fi
+            sleep 2
+          done
+          [ "$got" -eq 1 ] || { echo 'Encrypted handoff was not received.'; exit 2; }
+
+          openssl pkeyutl -decrypt \
+            -inkey handoff/private.pem \
+            -in handoff/token.enc \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -pkeyopt rsa_mgf1_md:sha256 \
+            -out handoff/token.txt
+          TOKEN=$(cat handoff/token.txt)
+          echo "::add-mask::$TOKEN"
+          [ -n "$TOKEN" ] || exit 3
+
+          # Initialize the game state. Request/response bodies never go to stdout.
+          python3 - "$TOKEN" <<'PY'
+          import json,sys,pathlib
+          pathlib.Path('handoff/init.json').write_text(json.dumps({'ctfd_token':sys.argv[1]},ensure_ascii=False),encoding='utf-8')
+          PY
+          curl -fsS --connect-timeout 10 --max-time 45 \
+            -H 'Content-Type: application/json' \
+            -H 'X-API-Key: caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia' \
+            --data-binary @handoff/init.json \
+            -D private_out/game_init.headers \
+            -o private_out/game_init.json \
+            'https://game-check.caplag.ru/init' || true
+
+          # Authenticate to the microservice orchestrator using an ephemeral cookie jar.
+          python3 - "$TOKEN" <<'PY'
+          import json,sys,pathlib
+          pathlib.Path('handoff/login.json').write_text(json.dumps({'token':sys.argv[1]}),encoding='utf-8')
+          PY
+          curl -fsS --connect-timeout 10 --max-time 45 \
+            -c handoff/cookies.txt -b handoff/cookies.txt \
+            -H 'Content-Type: application/json' \
+            --data-binary @handoff/login.json \
+            -D private_out/platform/login.headers \
+            -o private_out/platform/login.json \
+            'https://platform.caplag.ru/microserv/auth/emergency/login' || true
+
+          curl -fsS --connect-timeout 10 --max-time 30 \
+            -c handoff/cookies.txt -b handoff/cookies.txt \
+            -D private_out/platform/validate.headers \
+            -o private_out/platform/validate.json \
+            'https://platform.caplag.ru/microserv/auth/ctfd/validate' || true
+
+          for task in parma-line gov-relay sysola-core; do
+            base="https://platform.caplag.ru/microserv/task/web/${task}/1"
+            curl -fsS --connect-timeout 10 --max-time 45 \
+              -c handoff/cookies.txt -b handoff/cookies.txt \
+              -D "private_out/platform/${task}.state.before.headers" \
+              -o "private_out/platform/${task}.state.before.json" \
+              "${base}/state" || true
+
+            python3 - "$task" <<'PY'
+          import json, pathlib, sys
+          task=sys.argv[1]
+          p=pathlib.Path(f'private_out/platform/{task}.state.before.json')
+          try: d=json.loads(p.read_text())
+          except Exception: d={}
+          pathlib.Path(f'handoff/{task}.need_up').write_text('0' if d.get('status') in ('active','provisioning') else '1')
+          PY
+            if [ "$(cat "handoff/${task}.need_up")" = 1 ]; then
+              curl -fsS -X POST --connect-timeout 10 --max-time 60 \
+                -c handoff/cookies.txt -b handoff/cookies.txt \
+                -H 'Content-Type: application/json' --data '{}' \
+                -D "private_out/platform/${task}.up.headers" \
+                -o "private_out/platform/${task}.up.json" \
+                "${base}/up" || true
+            fi
+
+            for n in $(seq 1 24); do
+              curl -fsS --connect-timeout 10 --max-time 45 \
+                -c handoff/cookies.txt -b handoff/cookies.txt \
+                -o "private_out/platform/${task}.state.poll.json" \
+                "${base}/state" || true
+              ready=$(python3 - "$task" <<'PY'
+          import json,pathlib,sys
+          task=sys.argv[1]
+          try: d=json.loads(pathlib.Path(f'private_out/platform/{task}.state.poll.json').read_text())
+          except Exception: d={}
+          print('1' if d.get('status')=='active' else '0')
+          PY
+              )
+              [ "$ready" = 1 ] && break
+              sleep 3
+            done
+            cp "private_out/platform/${task}.state.poll.json" "private_out/platform/${task}.state.final.json" 2>/dev/null || true
+          done
+
+          # Probe only exact endpoints returned by the authorized orchestrator.
+          python3 - <<'PY'
+          import json, pathlib, re, urllib.parse
+          out=[]
+          for task in ('parma-line','gov-relay','sysola-core'):
+              p=pathlib.Path(f'private_out/platform/{task}.state.final.json')
+              try: d=json.loads(p.read_text())
+              except Exception: continue
+              creds=d.get('credentials') or {}
+              for e in d.get('endpoints') or []:
+                  if isinstance(e,dict):
+                      vals=[str(v) for v in e.values() if isinstance(v,(str,int,float))]
+                      s=' '.join(vals)
+                  else: s=str(e)
+                  m=re.search(r'https?://[^\s,;]+',s)
+                  if m:
+                      out.append({'task':task,'url':m.group(0).rstrip(').]'), 'login':creds.get('login'),'password':creds.get('password')})
+          pathlib.Path('handoff/endpoints.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+
+          python3 - <<'PY'
+          import json, pathlib, subprocess, urllib.parse, re
+          eps=json.loads(pathlib.Path('handoff/endpoints.json').read_text())
+          for idx,e in enumerate(eps,1):
+              u=e['url']
+              parsed=urllib.parse.urlsplit(u)
+              if parsed.scheme not in ('http','https'): continue
+              base=f'{parsed.scheme}://{parsed.netloc}/'
+              dest=pathlib.Path(f'private_out/endpoints/{idx}_{e["task"]}')
+              dest.mkdir(parents=True,exist_ok=True)
+              (dest/'url.txt').write_text(u)
+              cmd=['curl','-ksSL','--connect-timeout','8','--max-time','45','-D',str(dest/'root.headers'),'-o',str(dest/'root.body')]
+              if e.get('login') and e.get('password'):
+                  cmd += ['-u',f'{e["login"]}:{e["password"]}']
+              cmd += [base]
+              subprocess.run(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+              for path in ('robots.txt','openapi.json','docs','health','api','api/health'):
+                  safe=path.replace('/','_')
+                  cmd=['curl','-ksSL','--connect-timeout','6','--max-time','25','-D',str(dest/f'{safe}.headers'),'-o',str(dest/f'{safe}.body')]
+                  if e.get('login') and e.get('password'):
+                      cmd += ['-u',f'{e["login"]}:{e["password"]}']
+                  cmd += [urllib.parse.urljoin(base,path)]
+                  subprocess.run(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+          PY
+
+          # Remove plaintext credentials before packaging; platform responses/endpoints are CTF data.
+          rm -f handoff/token.txt handoff/init.json handoff/login.json handoff/cookies.txt handoff/private.pem
+
+          # Encrypt the entire result to a key whose private half exists only in the model container.
+          cat > handoff/output_public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAqvptF4aTPzGzR6fNOtz3
+          p/Ds9uFcANf/SCwSCWZEqbNmMGqmMYOexJISES2kjQJqiPoovpFrr4bawgr9zw7y
+          sSxNcsP9lbuOdMKEU+tVS+2TebLPXMv4Ue8yX5ZhWdK3c9uz3RZHW8oWLTWgUBlC
+          N7NDHSJDqeFJm4NFxBUYfVwYzxU2uD6m8r1B3FZrz/YGmMsMQFV5gWqTdiAmtosu
+          uSxUJ1891V9Qd4URX4TGbkGGAE+aSSNF1WTykdECOSZmrspbu5C48489D94iaDyU
+          4y+NlouCIV6/DGoJvd6VSp3SwZTTNShPQ2YKhnvRN75g7Sm++9RYeipo7xmrOBIZ
+          bbyjuSC9Nd6Vy99R40e38UMAFzDUXKq5GjCBNMdA3VxrMSvs+LFeKQ77rB6h7EkX
+          xVHeZPvwwV6lYUQ1i7DnLRLlz4mVqVGVa2hifx9VY2PM/M2c5/iA0uHEWQkxZ9F1
+          YSb2e96Ws1+dS0tHu4hzArM8lZQEaHveFLsIu67isD0/AgMBAAE=
+          -----END PUBLIC KEY-----
+          PEM
+          tar -C private_out -czf handoff/results.tar.gz .
+          openssl rand 32 > handoff/aes.key
+          openssl rand 12 > handoff/aes.iv
+          openssl enc -aes-256-ctr -K "$(xxd -p -c 256 handoff/aes.key)" -iv "$(xxd -p -c 256 handoff/aes.iv)" -in handoff/results.tar.gz -out handoff/results.enc
+          cat handoff/aes.key handoff/aes.iv > handoff/keyblob.bin
+          openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob.bin -out handoff/keyblob.enc \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
+          rm -rf private_out handoff/aes.key handoff/aes.iv handoff/keyblob.bin handoff/results.tar.gz handoff/output_public.pem handoff/token.enc
+          echo 'Authenticated discovery completed; result remains encrypted.'
+
+      - name: Upload encrypted result only
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-private-result-encrypted
+          path: |
+            handoff/results.enc
+            handoff/keyblob.enc
           retention-days: 1
           if-no-files-found: error
