@@ -62,6 +62,14 @@ jobs:
           cp cover-channel-lab/DATASET_CARD.md /tmp/hf-card/README.md
           cd cover-channel-lab
           ./scripts/upload_hf.sh /tmp/hf-card . "Initialize/update dataset card from $GITHUB_SHA"
+      - name: Explain persistence mode
+        shell: bash
+        run: |
+          echo "HF enabled: ${{ steps.hf.outputs.enabled }}"
+          echo "Full generation requested: ${{ steps.mode.outputs.full }}"
+          if [[ "${{ steps.hf.outputs.enabled }}" != "true" ]]; then
+            echo "HF_TOKEN is absent: full shards will still run and persist complete Bronze/Silver/Gold releases as GitHub Actions artifacts."
+          fi
 
   parser-validation:
     needs: preflight
@@ -89,25 +97,22 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/${{ needs.preflight.outputs.release_id }}/A-parser" "Stage A parser validation $GITHUB_SHA"
-      - name: Preserve smoke/quality artifact
+      - name: Preserve complete Stage A release in GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: coverlab-stage-a-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/coverlab/release/quality
-            ${{ runner.temp }}/coverlab/release/gold
-            ${{ runner.temp }}/coverlab/release/silver/A-parser-00/normalized
+          name: dataset-stage-a-${{ github.run_id }}
+          path: ${{ runner.temp }}/coverlab/release
           retention-days: 7
-          compression-level: 9
+          compression-level: 0
 
   full-shards:
     needs: [preflight, parser-validation]
-    if: needs.preflight.outputs.hf_enabled == 'true' && needs.preflight.outputs.full_requested == 'true'
+    if: needs.preflight.outputs.full_requested == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     strategy:
       fail-fast: false
-      max-parallel: 12
+      max-parallel: 8
       matrix:
         include:
           - {stage: isolated, shard: 0, shards: 6, name: isolated-00}
@@ -142,25 +147,27 @@ jobs:
         working-directory: cover-channel-lab
         run: ./scripts/run_shard_ci.sh "${{ matrix.stage }}" "${{ matrix.shard }}" "${{ matrix.shards }}" "$RUNNER_TEMP/coverlab" "${{ matrix.name }}"
       - name: Persist shard to Hugging Face immediately
+        if: needs.preflight.outputs.hf_enabled == 'true'
         working-directory: cover-channel-lab
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/${{ needs.preflight.outputs.release_id }}/${{ matrix.name }}" "${{ matrix.name }} $GITHUB_SHA"
-      - name: Preserve quality report in GitHub
+      - name: Preserve complete shard in GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: quality-${{ matrix.name }}-${{ github.run_id }}
-          path: ${{ runner.temp }}/coverlab/release/quality
+          name: dataset-${{ matrix.name }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/coverlab/release
           retention-days: 7
+          compression-level: 0
 
   mixed-captures:
     needs: [preflight, parser-validation]
-    if: needs.preflight.outputs.hf_enabled == 'true' && needs.preflight.outputs.full_requested == 'true'
+    if: needs.preflight.outputs.full_requested == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     strategy:
       fail-fast: false
-      max-parallel: 10
+      max-parallel: 8
       matrix:
         capture: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]
     steps:
@@ -178,6 +185,7 @@ jobs:
           printf -v name 'D-mixed-%02d' "$idx"
           ./scripts/run_mixed_ci.sh "$idx" "$RUNNER_TEMP/coverlab" "$name"
       - name: Persist mixed capture to Hugging Face immediately
+        if: needs.preflight.outputs.hf_enabled == 'true'
         working-directory: cover-channel-lab
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -185,44 +193,58 @@ jobs:
           idx="${{ matrix.capture }}"
           printf -v name 'D-mixed-%02d' "$idx"
           ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/${{ needs.preflight.outputs.release_id }}/$name" "$name $GITHUB_SHA"
-      - name: Preserve quality report in GitHub
+      - name: Preserve complete mixed release in GitHub
         uses: actions/upload-artifact@v4
         with:
-          name: quality-mixed-${{ matrix.capture }}-${{ github.run_id }}
-          path: ${{ runner.temp }}/coverlab/release/quality
+          name: dataset-mixed-${{ matrix.capture }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/coverlab/release
           retention-days: 7
+          compression-level: 0
 
   finalize:
     needs: [preflight, parser-validation, full-shards, mixed-captures]
-    if: always() && needs.preflight.outputs.hf_enabled == 'true'
+    if: always()
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Publish release status
+      - name: Build release status
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           FULL_RESULT: ${{ needs.full-shards.result }}
           MIXED_RESULT: ${{ needs.mixed-captures.result }}
           PARSER_RESULT: ${{ needs.parser-validation.result }}
           RELEASE_ID: ${{ needs.preflight.outputs.release_id }}
+          HF_ENABLED: ${{ needs.preflight.outputs.hf_enabled }}
         run: |
-          python -m pip install 'huggingface_hub[hf_xet]>=1.0.0'
           mkdir -p /tmp/release-status
           python - <<'PY2'
           import json, os, datetime
           obj={
-            'release_id':os.environ['RELEASE_ID'],
+            'release_id':os.environ.get('RELEASE_ID',''),
             'github_sha':os.environ['GITHUB_SHA'],
             'github_run_id':os.environ['GITHUB_RUN_ID'],
-            'parser_validation':os.environ['PARSER_RESULT'],
-            'full_shards':os.environ['FULL_RESULT'],
-            'mixed_captures':os.environ['MIXED_RESULT'],
+            'parser_validation':os.environ.get('PARSER_RESULT',''),
+            'full_shards':os.environ.get('FULL_RESULT',''),
+            'mixed_captures':os.environ.get('MIXED_RESULT',''),
+            'hf_enabled':os.environ.get('HF_ENABLED','false') == 'true',
             'finished_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
           }
           open('/tmp/release-status/release.json','w').write(json.dumps(obj,indent=2))
           PY2
+      - name: Publish release status to Hugging Face
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          RELEASE_ID: ${{ needs.preflight.outputs.release_id }}
+        run: |
+          python -m pip install 'huggingface_hub[hf_xet]>=1.0.0'
           cd cover-channel-lab
           ./scripts/upload_hf.sh /tmp/release-status "releases/$RELEASE_ID" "Finalize $RELEASE_ID"
+      - name: Preserve release status in GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-status-${{ github.run_id }}
+          path: /tmp/release-status/release.json
+          retention-days: 30
