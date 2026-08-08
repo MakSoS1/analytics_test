@@ -1,0 +1,35 @@
+name: cyberkomi-check-headers
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/cyberkomi-check-headers.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect safe response metadata for valid Chapter 2 answers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import requests,json
+          s=requests.Session()
+          s.headers.update({'X-API-Key':'caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia','Content-Type':'application/json','User-Agent':'CAPLAG-CTF-helper'})
+          tests=[('ticket','ch02.library.ticket','167'),('phrase','ch02.library.phrase','Старая Каланча первый глаз города смотрит сверху')]
+          for label,step,code in tests:
+              # Deliberately no real CTFd token: inspect checker response only.
+              r=s.post('https://game-check.caplag.ru/check',json={'code':code,'ctfd_token':'','step':step},timeout=20)
+              print('--- '+label)
+              print('http='+str(r.status_code))
+              try: print('body='+json.dumps(r.json(),ensure_ascii=False,sort_keys=True))
+              except: print('body_nonjson_len='+str(len(r.content)))
+              for k,v in sorted(r.headers.items()):
+                  kl=k.lower()
+                  if kl in {'set-cookie','cookie','authorization','proxy-authorization'}: continue
+                  print('header_'+k+'='+v[:1000])
+          PY
