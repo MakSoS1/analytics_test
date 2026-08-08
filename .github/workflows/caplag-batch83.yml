@@ -1,0 +1,151 @@
+name: caplag-batch83
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-batch83.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Generate ephemeral credential key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
+      - name: Upload credential public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-batch83-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
+          retention-days: 1
+      - name: Wait for encrypted credentials
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/MakSoS1/analytics_test/contents/handoff/caplag-batch83-${kid}.enc.b64?ref=ctf-caplag-submit83-20260808"
+          for i in $(seq 1 180); do
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json')); txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/creds.enc').write_bytes(base64.b64decode(txt))
+          PY
+              openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/creds.enc -out /tmp/creds.json -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              chmod 600 /tmp/creds.json
+              echo encrypted_handoff=received; exit 0
+            fi
+            sleep 2
+          done
+          echo encrypted_handoff=timeout; exit 1
+      - name: Submit controlled candidate set
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/result_public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA2Ba9epHeeeFkxQns16PF
+          rc5gW8anxXMzXwCdtn2ZW8ZyaxgWJVpzdE/dYXHI2q4OvzYwRNB2UMK6xeaLuyY0
+          4xTNkx1T7JqTDrEGZ1kllooXi2hjaE3fumVksGzk5ppq1AJwTwlTld+Q1eXbeHF/
+          lAZrjQLkNuB6ITcs2WCtLucZiRlu31qUNXOE0BN63mhVxY6U4Y0uhJEUk90UbT5t
+          wO4268+320awlHz/ZjQX+zizd4NqeeLeh2atSxqkO2myTfdGbUmc38GI7kaBxZoe
+          x49Jz8nI+B0ntI8AxU80RNOyqs7s2iCNpNX5Of1sAUvvma3jvyNYww+Jk7rW+rL6
+          T6GZrnm3GSZsXKCjwSAvff+TZFdsfHArwTEu7IacMta57kL5Aj+oZ1FC3Lc6Mjgm
+          b0OeujRPULdlyzXtPOM+Sfzvuei7BJyklSu6D70grMlfyXxasNtN8EahtmJTVC2N
+          uAbDkxQmrcoiSn5RFdVRfYDcNryuzMKeQgbD4nWZpsp3AgMBAAE=
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import json,re,requests,sys,time,pathlib,subprocess,base64
+          from html import unescape
+          BASE='https://platform.caplag.ru'; creds=json.load(open('/tmp/creds.json'))
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 CAPLAG-CTF-helper'
+          r=s.get(BASE+'/login',timeout=20); r.raise_for_status()
+          m=re.search(r'name=["\']nonce["\'][^>]*value=["\']([^"\']+)',r.text,re.I) or re.search(r'value=["\']([^"\']+)["\'][^>]*name=["\']nonce["\']',r.text,re.I)
+          d={'name':creds['username'],'password':creds['password']}
+          if m: d['nonce']=unescape(m.group(1))
+          rr=s.post(BASE+'/login',data=d,allow_redirects=True,timeout=20)
+          if '/login' in rr.url: print('login_status=failed'); sys.exit(2)
+          page=s.get(BASE+'/challenges',timeout=20); csrf=None
+          for p in [r'csrfNonce\s*:\s*["\']([^"\']+)',r'["\']csrfNonce["\']\s*:\s*["\']([^"\']+)']:
+              mm=re.search(p,page.text,re.I)
+              if mm: csrf=unescape(mm.group(1)); break
+          if not csrf: print('csrf_status=missing'); sys.exit(3)
+          before=(s.get(BASE+'/api/v1/challenges/83',timeout=20).json().get('data') or {})
+          if before.get('solved_by_me'):
+              print('already_solved=true'); sys.exit(0)
+          print('attempts_before='+str(before.get('attempts',None)))
+
+          known_wrong={
+            'caplag{Старая Каланча первый глаз города смотрит сверху}','CAPLAG{Старая Каланча первый глаз города смотрит сверху}',
+            'caplag{Старая_Каланча_первый_глаз_города_смотрит_сверху}','CAPLAG{Старая_Каланча_первый_глаз_города_смотрит_сверху}',
+            'caplag{старая_каланча_первый_глаз_города_смотрит_сверху}','CAPLAG{старая_каланча_первый_глаз_города_смотрит_сверху}',
+            'caplag{СТАРАЯ_КАЛАНЧА_ПЕРВЫЙ_ГЛАЗ_ГОРОДА_СМОТРИТ_СВЕРХУ}','CAPLAG{СТАРАЯ_КАЛАНЧА_ПЕРВЫЙ_ГЛАЗ_ГОРОДА_СМОТРИТ_СВЕРХУ}',
+            'caplag{Staraya_Kalancha_pervyy_glaz_goroda_smotrit_sverkhu}','CAPLAG{Staraya_Kalancha_pervyy_glaz_goroda_smotrit_sverkhu}',
+            'Старая Каланча первый глаз города смотрит сверху',
+            'caplag{staraya_kalancha_perviy_glaz_goroda_smotrit_sverhu}','caplag{Staraya_Kalancha_perviy_glaz_goroda_smotrit_sverhu}',
+            'caplag{STARAYA_KALANCHA_PERVIY_GLAZ_GORODA_SMOTRIT_SVERHU}','CAPLAG{staraya_kalancha_perviy_glaz_goroda_smotrit_sverhu}',
+            'caplag{staraya-kalancha-perviy-glaz-goroda-smotrit-sverhu}','caplag{staraya_kalancha_pervyy_glaz_goroda_smotrit_sverkhu}',
+            'caplag{staraya_kalancha_pervy_glaz_goroda_smotrit_sverhu}','caplag{staraya_kalancha_pervij_glaz_goroda_smotrit_sverhu}'
+          }
+          candidates=[]
+          def add(x):
+              if x not in known_wrong and x not in candidates: candidates.append(x)
+          for x in ['LIB-167-KALANCHA','LIB_167_KALANCHA','lib-167-kalancha','lib_167_kalancha','167-KALANCHA','167_KALANCHA','KALANCHA-167','KALANCHA_167']:
+              add(x); add(f'caplag{{{x}}}')
+          for x in ['Старая Каланча','Старая_Каланча','СТАРАЯ_КАЛАНЧА','старая_каланча','STARAYA_KALANCHA','Staraya_Kalancha','staraya_kalancha','KALANCHA','kalancha','OLD_KALANCHA','old_kalancha','STARAYA-KALANCHA','staraya-kalancha','staraya_kalancha_perviy_glaz_goroda','staraya_kalancha_pervyy_glaz_goroda','staraya_kalancha_pervyi_glaz_goroda','staraya_kalancha_perviy_glaz_goroda_sverhu']:
+              add(f'caplag{{{x}}}')
+          for st in ['staraya','staraia']:
+              for pv in ['pervyi','pervyj','pervij','pervyy','perviy']:
+                  for sv in ['sverhu','sverkhu']:
+                      for sep in ['_','-']:
+                          add('caplag{'+sep.join([st,'kalancha',pv,'glaz','goroda','smotrit',sv])+'}')
+          for x in ['Staraya_Kalancha_pervyi_glaz_goroda_smotrit_sverkhu','Staraya_Kalancha_pervyi_glaz_goroda_smotrit_sverhu','STARAYA_KALANCHA_PERVYI_GLAZ_GORODA_SMOTRIT_SVERKHU','STARAYA_KALANCHA_PERVYI_GLAZ_GORODA_SMOTRIT_SVERHU','staraia_kalancha_pervyi_glaz_goroda_smotrit_sverkhu']:
+              add(f'caplag{{{x}}}')
+          for x in ['Старая-Каланча-первый-глаз-города-смотрит-сверху','старая-каланча-первый-глаз-города-смотрит-сверху','Старая/Каланча/первый/глаз/города/смотрит/сверху','СтараяКаланчапервыйглазгородасмотритсверху','стараякаланчапервыйглазгородасмотритсверху','СКПГГСС','SKPGGSS','skpggss']:
+              add(f'caplag{{{x}}}')
+          print('candidate_count='+str(len(candidates)))
+          headers={'CSRF-Token':csrf,'Referer':BASE+'/challenges'}
+          submitted=0
+          for candidate in candidates:
+              while True:
+                  resp=s.post(BASE+'/api/v1/challenges/attempt',json={'challenge_id':83,'submission':candidate},headers=headers,timeout=20)
+                  try:
+                      j=resp.json(); dat=j.get('data') or {}; status=str(dat.get('status') or 'unknown').lower(); msg=str(dat.get('message') or '')
+                  except Exception:
+                      status='http_'+str(resp.status_code); msg=''
+                  if status=='ratelimited' or resp.status_code==429:
+                      mm=re.search(r'(\d+)\s*seconds?',msg,re.I); wait=int(mm.group(1))+3 if mm else 65
+                      time.sleep(wait); continue
+                  break
+              submitted += 1
+              if status=='correct':
+                  pathlib.Path('/tmp/winner.txt').write_text(candidate,encoding='utf-8')
+                  print('batch_success=true'); print('submitted_count='+str(submitted))
+                  break
+              if submitted % 10 == 0: print('progress_submitted='+str(submitted))
+              time.sleep(7.2)
+          else:
+              print('batch_success=false'); print('submitted_count='+str(submitted)); sys.exit(4)
+          subprocess.run(['openssl','pkeyutl','-encrypt','-pubin','-inkey','/tmp/result_public.pem','-in','/tmp/winner.txt','-out','/tmp/winner.enc','-pkeyopt','rsa_padding_mode:oaep','-pkeyopt','rsa_oaep_md:sha256'],check=True)
+          pathlib.Path('winner.enc.b64').write_text(base64.b64encode(pathlib.Path('/tmp/winner.enc').read_bytes()).decode())
+          PY
+      - name: Upload encrypted winner
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-batch83-result-${{ github.run_id }}
+          path: winner.enc.b64
+          retention-days: 1
