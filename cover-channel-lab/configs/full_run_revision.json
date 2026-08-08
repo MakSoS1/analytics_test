@@ -1,0 +1,15 @@
+{
+  "revision": 2,
+  "purpose": "Trigger the complete strict corpus build after integrating local HTTP/3-QUIC, generic gRPC/HTTP2, MQTT-over-WSS, MASQUE/WebTransport challenge fixtures, strict Suricata/Zeek gates, Gold leakage checks, baseline models, Hugging Face backfill, and artifact-retention safeguards.",
+  "required_stage_a_campaigns": 600,
+  "required_parser_gates": ["suricata_eve_nonempty", "zeek_conn_nonempty", "mapping_coverage_ge_0_95", "leakage_audit_passed"],
+  "storage_policy": {
+    "bronze": "raw pcap.zst plus manifests and decrypted laboratory ground truth",
+    "silver": "raw Suricata/Zeek logs plus normalized parquet",
+    "gold": "transaction, session, parser-derived and split artifacts",
+    "hf_target": "Maksim123321/cover-channel-web-protocols",
+    "hf_visibility": "private",
+    "github_artifact_fallback": true,
+    "post_run_retention_mirror_days": 90
+  }
+}
