@@ -12,42 +12,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Probe selected exact-batch units individually in Textainer
+      - name: Recover pre-migration Seaco Unit Enquiry endpoints from archives
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,re,html,urllib.parse,csv,io,concurrent.futures
-          from bs4 import BeautifulSoup
-          H={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'}
-          base='https://tex.textainer.com'; q=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
-          vals={}; n=10
-          for ch in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
-              while n%11==0:n+=1
-              vals[ch]=n;n+=1
-          def cd(serial):
-              s='SEGU'+f'{serial:06d}'; t=sum((vals[c] if c.isalpha() else int(c))*2**i for i,c in enumerate(s)); r=t%11; return 0 if r==10 else r
-          serials=[963852,963862,963870,963880,963890,963900,963910,963920,963930,963940,963942,963943,963944,963945,963946,963947,963948,963949,963950,963951]
-          units=[f'SEGU{x:06d}{cd(x)}' for x in serials]
-          print('UNITS',units)
-          def one(unit):
-              s=requests.Session(); r=s.get(q,headers=H,timeout=30); sp=BeautifulSoup(r.text,'html.parser')
-              data={t.get('name'):t.get('value','') for t in sp.find_all('input') if t.get('name') and t.get('type')=='hidden'}
-              data['ctl00$bodyContent$ucEqpIds$txtEqpId']=unit; data['ctl00$bodyContent$btnSubmit']='Preview'
-              pr=s.post(q,data=data,headers={**H,'Referer':q},timeout=45,allow_redirects=True)
-              tx=html.unescape(pr.text).replace('\\/','/')
-              ms=re.findall(r'["\'](/Reserved\.ReportViewerWebControl\.axd\?[^"\']+OpType=Export[^"\']+Format=)["\']',tx)
-              if not ms:return unit,'NO_EXPORT',pr.status_code,len(pr.content),None
-              rr=s.get(urllib.parse.urljoin(base,html.unescape(ms[0])+'CSV'),headers={**H,'Referer':pr.url},timeout=45)
-              rows=list(csv.DictReader(io.StringIO(rr.content.decode('utf-8-sig','replace')))) if rr.status_code==200 else []
-              return unit,'OK',rr.status_code,len(rr.content),rows
-          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
-              futs={ex.submit(one,u):u for u in units}
-              for f in concurrent.futures.as_completed(futs):
-                  try:
-                      unit,status,code,length,rows=f.result(); print('\nUNIT',unit,status,code,length)
-                      for row in rows or []:
-                          print('ROW',row.get('txtEqpId'),repr(row.get('txtEqpDesc')),repr(row.get('txtManufacture4')),repr(row.get('txtManufacture5')),repr(row.get('txtApproval1')),repr(row.get('txtApproval2')),repr(row.get('txtApproval3')),repr(row.get('txtApproval4')))
-                  except Exception as e: print('ERR',futs[f],repr(e))
+          import requests,json,re,urllib.parse
+          H={'User-Agent':'Mozilla/5.0'}
+          queries=[
+            'newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/*',
+            'newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV*',
+            'seaweb.seacoglobal.com/*Unit*Enquiry*',
+            'seaweb.seacoglobal.com/*',
+            'www.seacoglobal.com/*unit*enquiry*',
+          ]
+          for q in queries:
+            u='https://web.archive.org/cdx/search/cdx?url='+urllib.parse.quote(q,safe='*/:$')+'&output=json&fl=timestamp,original,statuscode,mimetype,digest&filter=statuscode:200&from=2017&to=20260630&collapse=urlkey&limit=500'
+            print('\n### CDX',q)
+            try:
+              r=requests.get(u,headers=H,timeout=60); print('STATUS',r.status_code,'LEN',len(r.content)); print(r.text[:120000])
+            except Exception as e: print('ERR',repr(e))
+          # Also ask Common Crawl index for the SAP service/app URLs.
+          for idx in ['CC-MAIN-2026-26','CC-MAIN-2026-21','CC-MAIN-2026-12','CC-MAIN-2025-47']:
+            for q in ['newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/*','newseaweb.seacoglobal.com/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV*']:
+              u=f'https://index.commoncrawl.org/{idx}-index?url='+urllib.parse.quote(q,safe='*/:$')+'&output=json&filter=status:200'
+              try:
+                r=requests.get(u,headers=H,timeout=45); print('\n### CC',idx,q,r.status_code,len(r.content)); print(r.text[:50000])
+              except Exception as e: print('CCERR',repr(e))
           PY
