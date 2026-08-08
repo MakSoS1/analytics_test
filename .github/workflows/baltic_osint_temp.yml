@@ -16,6 +16,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
           import requests,re,html,urllib.parse,json
           from bs4 import BeautifulSoup
@@ -46,15 +47,9 @@ jobs:
                       if z not in hits: hits.append(z)
                   if hits:
                       print('\nSCRIPT',su,rr.status_code,len(rr.content))
-                      for z in hits[:30]: print('HIT',z[:2000])
+                      for z in hits[:40]: print('HIT',z[:2400])
               except Exception as e: print('SCRIPT_ERR',su,repr(e))
-          # Try common endpoint candidates safely with a known public unit and our target.
-          candidates=[
-              '/tritoncontainer/unitSpecs/search',
-              '/tritoncontainer/unitSpecs/list.json',
-              '/tritoncontainer/unitSpecs/data',
-              '/tritoncontainer/unitSpecs/find',
-          ]
+          candidates=['/tritoncontainer/unitSpecs/search','/tritoncontainer/unitSpecs/list.json','/tritoncontainer/unitSpecs/data','/tritoncontainer/unitSpecs/find']
           for path in candidates:
               for method in ['get','post']:
                   try:
@@ -63,6 +58,6 @@ jobs:
                       if method=='get': kwargs['params']={'unitNumbers':'TTNU8845830\nSEGU9639460','unitNumber':'TTNU8845830'}
                       else: kwargs['data']={'unitNumbers':'TTNU8845830\nSEGU9639460','unitNumber':'TTNU8845830'}
                       q=fn(base+path,**kwargs)
-                      print('PROBE',method.upper(),path,q.status_code,q.url,q.headers.get('Content-Type'),len(q.content),q.text[:800].replace('\n',' '))
+                      print('PROBE',method.upper(),path,q.status_code,q.url,q.headers.get('Content-Type'),len(q.content),q.text[:1200].replace('\n',' '))
                   except Exception as e: print('PROBE_ERR',method,path,repr(e))
           PY
