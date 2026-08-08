@@ -1,0 +1,66 @@
+name: Cover Channel Artifact Retention
+
+on:
+  workflow_run:
+    workflows: ['Cover Channel Dataset Lab']
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  enumerate:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.artifacts.outputs.matrix }}
+      count: ${{ steps.artifacts.outputs.count }}
+    steps:
+      - id: artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          python - <<'PY' > /tmp/enumerate.py
+          import json, os, subprocess
+          repo=os.environ['GITHUB_REPOSITORY']
+          run=os.environ['SOURCE_RUN_ID']
+          raw=subprocess.check_output([
+              'gh','api',f'/repos/{repo}/actions/runs/{run}/artifacts?per_page=100'
+          ], text=True)
+          data=json.loads(raw)
+          items=[{'id':a['id'],'name':a['name']} for a in data.get('artifacts',[]) if a['name'].startswith('dataset-')]
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('matrix='+json.dumps({'include':items},separators=(',',':'))+'\n')
+              out.write('count='+str(len(items))+'\n')
+          print(f'Found {len(items)} dataset artifacts from run {run}')
+          PY
+          python /tmp/enumerate.py
+
+  mirror:
+    needs: enumerate
+    if: needs.enumerate.outputs.count != '0'
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.enumerate.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download source artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          ARTIFACT_NAME: ${{ matrix.name }}
+        shell: bash
+        run: |
+          mkdir -p payload
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT_NAME" --dir payload
+          find payload -type f -maxdepth 5 | sort | head -100
+      - name: Re-upload with 90-day retention
+        uses: actions/upload-artifact@v4
+        with:
+          name: retained-${{ matrix.name }}
+          path: payload
+          retention-days: 90
+          compression-level: 0
