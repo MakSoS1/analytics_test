@@ -10,63 +10,44 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 8
     steps:
-      - name: Query migrated Textainer specs for exact ATO batch
+      - name: Probe selected exact-batch units individually in Textainer
         shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,re,html,urllib.parse,csv,io,time
+          import requests,re,html,urllib.parse,csv,io,concurrent.futures
           from bs4 import BeautifulSoup
           H={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'}
           base='https://tex.textainer.com'; q=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
-          # BIC ISO 6346 check digit.
-          vals={}
-          n=10
+          vals={}; n=10
           for ch in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
-              while n%11==0: n+=1
-              vals[ch]=n; n+=1
-          def check(prefix,serial6):
-              s=prefix+f'{serial6:06d}'
-              total=0
-              for i,ch in enumerate(s): total += (vals[ch] if ch.isalpha() else int(ch))*(2**i)
-              r=total%11
-              return 0 if r==10 else r
-          units=[f'SEGU{x:06d}{check("SEGU",x)}' for x in range(963852,963952)]
-          print('UNITS',len(units),units[:5],units[-5:])
-          def query(chunk):
-              s=requests.Session(); r=s.get(q,headers=H,timeout=30); soup=BeautifulSoup(r.text,'html.parser')
-              data={t.get('name'):t.get('value','') for t in soup.find_all('input') if t.get('name') and t.get('type')=='hidden'}
-              data['ctl00$bodyContent$ucEqpIds$txtEqpId']='\r\n'.join(chunk)
-              data['ctl00$bodyContent$btnSubmit']='Preview'
-              pr=s.post(q,data=data,headers={**H,'Referer':q},timeout=50,allow_redirects=True)
-              txt=html.unescape(pr.text).replace('\\/','/')
-              ms=re.findall(r'["\'](/Reserved\.ReportViewerWebControl\.axd\?[^"\']+OpType=Export[^"\']+Format=)["\']',txt)
-              if not ms:
-                  print('NO_EXPORT',chunk[0],pr.status_code,len(pr.content)); return []
-              rr=s.get(urllib.parse.urljoin(base,html.unescape(ms[0])+'CSV'),headers={**H,'Referer':pr.url},timeout=60)
-              print('CHUNK',chunk[0],chunk[-1],'CSV',rr.status_code,len(rr.content))
-              if rr.status_code!=200: return []
-              return list(csv.DictReader(io.StringIO(rr.content.decode('utf-8-sig','replace'))))
-          rows=[]
-          for i in range(0,len(units),20):
-              try: rows.extend(query(units[i:i+20]))
-              except Exception as e: print('ERR_CHUNK',i,repr(e))
-              time.sleep(.5)
-          print('ROWS',len(rows))
-          print('RESULTS_BEGIN')
-          for row in rows:
-              appr=' | '.join(str(row.get(k,'')) for k in ['txtApproval1','txtApproval2','txtApproval3','txtApproval4'])
-              if 'NOT AVAILABLE' not in appr.upper() or 'TIR' not in appr.upper():
-                  print('ROW',row.get('txtEqpId'),repr(row.get('txtEqpDesc')),repr(row.get('txtManufacture4')),repr(row.get('txtManufacture5')),repr(row.get('txtApproval1')),repr(row.get('txtApproval2')),repr(row.get('txtApproval3')),repr(row.get('txtApproval4')))
-          # Always print unique approval payloads and manufacturing metadata to detect any populated neighbor.
-          uniq={}
-          for row in rows:
-              key=(row.get('txtApproval1'),row.get('txtApproval2'),row.get('txtApproval3'),row.get('txtApproval4'))
-              uniq.setdefault(key,[]).append(row.get('txtEqpId'))
-          print('UNIQUE_APPROVALS',len(uniq))
-          for k,us in uniq.items(): print('APPROVAL_SET',len(us),us[:8],repr(k))
-          print('RESULTS_END')
+              while n%11==0:n+=1
+              vals[ch]=n;n+=1
+          def cd(serial):
+              s='SEGU'+f'{serial:06d}'; t=sum((vals[c] if c.isalpha() else int(c))*2**i for i,c in enumerate(s)); r=t%11; return 0 if r==10 else r
+          serials=[963852,963862,963870,963880,963890,963900,963910,963920,963930,963940,963942,963943,963944,963945,963946,963947,963948,963949,963950,963951]
+          units=[f'SEGU{x:06d}{cd(x)}' for x in serials]
+          print('UNITS',units)
+          def one(unit):
+              s=requests.Session(); r=s.get(q,headers=H,timeout=30); sp=BeautifulSoup(r.text,'html.parser')
+              data={t.get('name'):t.get('value','') for t in sp.find_all('input') if t.get('name') and t.get('type')=='hidden'}
+              data['ctl00$bodyContent$ucEqpIds$txtEqpId']=unit; data['ctl00$bodyContent$btnSubmit']='Preview'
+              pr=s.post(q,data=data,headers={**H,'Referer':q},timeout=45,allow_redirects=True)
+              tx=html.unescape(pr.text).replace('\\/','/')
+              ms=re.findall(r'["\'](/Reserved\.ReportViewerWebControl\.axd\?[^"\']+OpType=Export[^"\']+Format=)["\']',tx)
+              if not ms:return unit,'NO_EXPORT',pr.status_code,len(pr.content),None
+              rr=s.get(urllib.parse.urljoin(base,html.unescape(ms[0])+'CSV'),headers={**H,'Referer':pr.url},timeout=45)
+              rows=list(csv.DictReader(io.StringIO(rr.content.decode('utf-8-sig','replace')))) if rr.status_code==200 else []
+              return unit,'OK',rr.status_code,len(rr.content),rows
+          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+              futs={ex.submit(one,u):u for u in units}
+              for f in concurrent.futures.as_completed(futs):
+                  try:
+                      unit,status,code,length,rows=f.result(); print('\nUNIT',unit,status,code,length)
+                      for row in rows or []:
+                          print('ROW',row.get('txtEqpId'),repr(row.get('txtEqpDesc')),repr(row.get('txtManufacture4')),repr(row.get('txtManufacture5')),repr(row.get('txtApproval1')),repr(row.get('txtApproval2')),repr(row.get('txtApproval3')),repr(row.get('txtApproval4')))
+                  except Exception as e: print('ERR',futs[f],repr(e))
           PY
