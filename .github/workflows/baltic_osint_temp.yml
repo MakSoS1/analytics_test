@@ -10,29 +10,21 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Probe public Fontanka image resize variants
+      - name: Extract final public PPA frames
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq imagemagick >/dev/null
-          mkdir -p /tmp/probe
+          sudo apt-get install -y -qq ffmpeg >/dev/null
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          BASE='https://n1s1.hsmedia.ru/f0/9b/5f/f09b5f164ff1c9662b6d675a01eeb142/'
-          TAIL='dd1cf474d3e32dc9e31c8bad795d810c%40957x1280_0xN6eWt5zy_4107125146580789640.jpg.webp'
-          for pref in '600x600_21_' '957x1280_21_' '957x1280_0_' '1200x1600_21_' '1200x1600_0_' '1920x2560_21_' '1920x2560_0_' ''; do
-            safe=$(printf '%s' "$pref" | tr '/ ' '__')
-            [ -n "$safe" ] || safe=none
-            u="${BASE}${pref}${TAIL}"
-            echo "TRY $pref"
-            if curl -L --fail --compressed -A "$UA" -H 'Referer: https://www.fontanka.ru/' "$u" -o "/tmp/probe/${safe}.webp"; then
-              identify "/tmp/probe/${safe}.webp" || true
-            fi
-          done
+          V='https://vod.err.ee/file/uudised/649008ff0277d6873f8e91b37a661cc6.mp4'
+          curl -L --fail --compressed -A "$UA" -H 'Referer: https://news.err.ee/' "$V" -o /tmp/baltic.mp4
+          mkdir -p /tmp/final
+          ffmpeg -hide_banner -loglevel error -ss 99 -i /tmp/baltic.mp4 -t 19 -vf 'fps=10' -q:v 1 /tmp/final/f_%03d.jpg
       - uses: actions/upload-artifact@v4
         with:
-          name: fontanka-dimension-probe
-          path: /tmp/probe/*
+          name: baltic-final-99-118
+          path: /tmp/final/*.jpg
           retention-days: 1
