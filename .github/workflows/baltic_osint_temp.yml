@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Query adjacent Seaco units from public Textainer inquiry
+      - name: Query public Seaco reference units in Textainer
         shell: bash
         run: |
           set -euo pipefail
@@ -20,33 +20,19 @@ jobs:
           python3 - <<'PY'
           import requests,re,html,urllib.parse,csv,io
           from bs4 import BeautifulSoup
-          base='https://tex.textainer.com'
-          u=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
-          units=['SEGU9639408','SEGU9639413','SEGU9639429','SEGU9639434','SEGU9639440','SEGU9639455','SEGU9639460','SEGU9639476','SEGU9639481','SEGU9639497']
+          base='https://tex.textainer.com'; u=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
+          units=['SEGU9639460','SEGU9720021','SEGU9566394']
           s=requests.Session(); h={'User-Agent':'Mozilla/5.0'}
           r=s.get(u,headers=h,timeout=20); soup=BeautifulSoup(r.text,'html.parser')
           data={t.get('name'):t.get('value','') for t in soup.find_all('input') if t.get('name') and t.get('type')=='hidden'}
-          data['ctl00$bodyContent$ucEqpIds$txtEqpId']='\r\n'.join(units)
-          data['ctl00$bodyContent$btnSubmit']='Preview'
+          data['ctl00$bodyContent$ucEqpIds$txtEqpId']='\r\n'.join(units); data['ctl00$bodyContent$btnSubmit']='Preview'
           pr=s.post(u,data=data,headers={**h,'Referer':u},timeout=30,allow_redirects=True)
-          txt=html.unescape(pr.text).replace('\\/','/')
-          ms=re.findall(r'["\'](/Reserved\.ReportViewerWebControl\.axd\?[^"\']+OpType=Export[^"\']+Format=)["\']',txt)
+          txt=html.unescape(pr.text).replace('\\/','/'); ms=re.findall(r'["\'](/Reserved\.ReportViewerWebControl\.axd\?[^"\']+OpType=Export[^"\']+Format=)["\']',txt)
           if not ms: raise SystemExit('export base not found')
-          exp=html.unescape(ms[0])
-          url=urllib.parse.urljoin(base,exp+'CSV')
-          rr=s.get(url,headers={**h,'Referer':pr.url},timeout=40)
-          print('STATUS',rr.status_code,'LEN',len(rr.content))
-          text=rr.content.decode('utf-8-sig','replace')
-          rows=list(csv.DictReader(io.StringIO(text)))
-          for row in rows:
+          rr=s.get(urllib.parse.urljoin(base,html.unescape(ms[0])+'CSV'),headers={**h,'Referer':pr.url},timeout=40)
+          for row in csv.DictReader(io.StringIO(rr.content.decode('utf-8-sig','replace'))):
               print('UNIT',row.get('txtEqpId'))
-              print('DESC',repr(row.get('txtEqpDesc')))
-              print('MFG_LABEL',repr(row.get('txtManufacture2')))
-              print('MFG_VAL',repr(row.get('txtManufacture5')))
-              print('FACTORY',repr(row.get('txtManufacture4')))
-              print('TIR_LABEL',repr(row.get('txtApproval1')))
-              print('TIR_VAL',repr(row.get('txtApproval2')))
-              print('CSC_LABEL',repr(row.get('txtApproval3')))
-              print('CSC_VAL',repr(row.get('txtApproval4')))
+              for k in ['txtEqpDesc','txtManufacture4','txtManufacture5','txtRate2','txtRate4','txtMaterial2','txtMaterial4','txtMaterial6','txtApproval2','txtApproval4']:
+                  print(k,repr(row.get(k)))
               print('---')
           PY
