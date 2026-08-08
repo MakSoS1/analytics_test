@@ -12,62 +12,63 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Inspect ATO search postback and query target
+      - name: Open exact ATO batch certificate details
         shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,re
+          import requests,re,urllib.parse
           from bs4 import BeautifulSoup
           U='https://www.reefertransport.nl/Certified.aspx'; H={'User-Agent':'Mozilla/5.0'}
           s=requests.Session(); r=s.get(U,headers=H,timeout=30); soup=BeautifulSoup(r.text,'html.parser')
-          print('SEARCH_MARKUP_BEGIN')
-          for tag in soup.find_all(True):
-              text=tag.get_text(' ',strip=True)
-              attrs=' '.join(f'{k}={v!r}' for k,v in tag.attrs.items())
-              if 'search' in (text+' '+attrs).lower() or 'prefixComboBox' in attrs or 'numberTextBox' in attrs:
-                  if tag.name in ('a','input','button','span','div','td'):
-                      print(str(tag)[:3000])
-          print('SEARCH_MARKUP_END')
-          # Construct ASP.NET/Telerik postback from concrete control names.
-          data={x.get('name'):x.get('value','') for x in soup.find_all('input') if x.get('name') and (x.get('type') or '').lower()=='hidden'}
-          pfx='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$prefixComboBox'
-          num='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$numberTextBox'
-          data[pfx]='SEGU'; data[num]='9639460'
-          # Set Telerik client state for exact prefix selection if present.
-          pstate='ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_prefixComboBox_ClientState'
-          data[pstate]='{"logEntries":[],"value":"SEGU","text":"SEGU","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}'
-          nstate='ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_numberTextBox_ClientState'
-          data[nstate]='{"enabled":true,"emptyMessage":"number","validationText":"9639460","valueAsString":"9639460","lastSetTextBoxValue":"9639460"}'
-          # Discover the Search anchor's __doPostBack target.
-          target=None
-          for a in soup.find_all('a',href=True):
-              if 'search' in a.get_text(' ',strip=True).lower():
-                  print('SEARCH_A',a.get_text(' ',strip=True),a['href'],a.get('id'))
-                  m=re.search(r"__doPostBack\('([^']+)'",a['href'])
-                  if m: target=m.group(1); break
-          if not target:
-              # Telerik WebForms buttons can use WebForm_DoPostBackWithOptions.
-              m=re.search(r"WebForm_DoPostBackWithOptions\(new WebForm_PostBackOptions\(&quot;([^&]+)&quot;|WebForm_DoPostBackWithOptions\(new WebForm_PostBackOptions\('([^']+)'",r.text)
-              if m: target=next(x for x in m.groups() if x)
-          print('POSTBACK_TARGET',target)
-          if target:
-              data['__EVENTTARGET']=target; data['__EVENTARGUMENT']=''
-          pr=s.post(U,data=data,headers={**H,'Referer':U},timeout=30,allow_redirects=True)
-          print('POST',pr.status_code,len(pr.content),pr.url)
-          ps=BeautifulSoup(pr.text,'html.parser')
-          print('RESULT_BEGIN')
+          def hidden(sp):
+              return {x.get('name'):x.get('value','') for x in sp.find_all('input') if x.get('name') and (x.get('type') or '').lower()=='hidden'}
+          data=hidden(soup)
+          pfx='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$prefixComboBox'; num='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$numberTextBox'
+          data[pfx]='SEGU'; data[num]='963946'
+          data['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_prefixComboBox_ClientState']='{"logEntries":[],"value":"SEGU","text":"SEGU","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}'
+          data['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_numberTextBox_ClientState']='{"enabled":true,"emptyMessage":"number","validationText":"963946","valueAsString":"963946","lastSetTextBoxValue":"963946"}'
+          data['__EVENTTARGET']='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$searchButton'; data['__EVENTARGUMENT']=''
+          pr=s.post(U,data=data,headers={**H,'Referer':U},timeout=30); ps=BeautifulSoup(pr.text,'html.parser')
+          print('SEARCH_ROWS')
           for tr in ps.find_all('tr'):
               t=' | '.join(x.get_text(' ',strip=True) for x in tr.find_all(['td','th']))
-              if t.strip(): print(t[:3000])
-          print('BODY_RELEVANT')
-          lines=[re.sub(r'\s+',' ',x).strip() for x in ps.get_text('\n',strip=True).splitlines() if x.strip()]
-          for i,x in enumerate(lines):
-              if any(k in x.lower() for k in ['segu','963946','certificate','manufacturer','model','machinery','serial','commission','class society','ato qualification','no results','not found']):
-                  print(' || '.join(lines[max(0,i-3):min(len(lines),i+10)]))
+              if t.strip(): print(t)
+          cert=None
           for a in ps.find_all('a',href=True):
-              z=(a.get_text(' ',strip=True)+' '+a['href']).lower()
-              if any(k in z for k in ['pdf','certif','segu','963946']): print('LINK',a.get_text(' ',strip=True),a['href'])
-          print('RESULT_END')
+              if a.get_text(' ',strip=True).lower()=='certified':
+                  m=re.search(r"__doPostBack\('([^']+)'",a['href'])
+                  if m: cert=m.group(1); print('CERT_TARGET',cert); break
+          if not cert: raise SystemExit('certificate postback not found')
+          data2=hidden(ps)
+          # preserve visible values and Telerik state on second postback
+          data2[pfx]='SEGU'; data2[num]='963946'
+          for k in ['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_prefixComboBox_ClientState','ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_numberTextBox_ClientState']:
+              node=ps.find('input',{'name':k});
+              if node is not None: data2[k]=node.get('value','')
+          data2['__EVENTTARGET']=cert; data2['__EVENTARGUMENT']=''
+          cr=s.post(U,data=data2,headers={**H,'Referer':U},timeout=30,allow_redirects=True)
+          print('DETAIL_POST',cr.status_code,len(cr.content),cr.url)
+          cs=BeautifulSoup(cr.text,'html.parser')
+          print('DETAIL_TEXT_BEGIN')
+          # Print all meaningful detail/modal text: expected page is small enough after nav/footer filtering.
+          for tr in cs.find_all('tr'):
+              vals=[re.sub(r'\s+',' ',x.get_text(' ',strip=True)).strip() for x in tr.find_all(['td','th'])]
+              if any(vals): print(' | '.join(vals)[:5000])
+          lines=[re.sub(r'\s+',' ',x).strip() for x in cs.get_text('\n',strip=True).splitlines() if x.strip()]
+          needles=['19164','SEGU','963852','963951','manufacturer','machinery','reefer','model','commission','owner','society','certificate','certified','test','profile','vent','circulation','classification','ABS','Bureau','CCS','Lloyd','RINA','date']
+          for i,x in enumerate(lines):
+              if any(n.lower() in x.lower() for n in needles):
+                  print('CTX',' || '.join(lines[max(0,i-4):min(len(lines),i+12)]))
+          print('DETAIL_TEXT_END')
+          print('DETAIL_LINKS_BEGIN')
+          for a in cs.find_all('a',href=True):
+              h=a['href']; t=a.get_text(' ',strip=True); z=(h+' '+t).lower()
+              if any(n in z for n in ['pdf','cert','download','19164','report']):
+                  print('LINK',repr(t),repr(h))
+                  if h.lower().endswith('.pdf') or '.pdf?' in h.lower():
+                      rr=s.get(urllib.parse.urljoin(cr.url,h),headers={**H,'Referer':cr.url},timeout=30)
+                      print('PDF_FETCH',rr.status_code,rr.headers.get('Content-Type'),len(rr.content),rr.content[:12].hex())
+          print('DETAIL_LINKS_END')
           PY
