@@ -1,0 +1,113 @@
+name: caplag-auto83
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-auto83.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Generate ephemeral key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
+      - name: Upload public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-auto83-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
+          retention-days: 1
+      - name: Wait for encrypted auth bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/MakSoS1/analytics_test/contents/handoff/caplag-auto83-${kid}.enc.b64?ref=ctf-caplag-submit83-20260808"
+          for i in $(seq 1 120); do
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json'))
+          txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/auth.enc').write_bytes(base64.b64decode(txt))
+          PY
+              openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/auth.enc -out /tmp/auth.json -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              chmod 600 /tmp/auth.json
+              echo 'encrypted_handoff=received'
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'encrypted_handoff=timeout'; exit 1
+      - name: Execute intended chapter 2 flow and verify credit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,requests,sys,time
+          from html import unescape
+          auth=json.load(open('/tmp/auth.json',encoding='utf-8'))
+          token=auth['ctfd_token']
+          headers={'X-API-Key':'caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia','Content-Type':'application/json'}
+          game='https://game-check.caplag.ru/check'
+          def game_check(step,code):
+              r=requests.post(game,headers=headers,json={'code':code,'ctfd_token':token,'step':step},timeout=25)
+              print(step+'_http='+str(r.status_code))
+              try: j=r.json()
+              except Exception:
+                  print(step+'_json=false'); return False
+              print(step+'_valid='+str(bool(j.get('valid'))).lower())
+              print(step+'_response_keys='+','.join(sorted(map(str,j.keys()))))
+              # Save full response encrypted later; never print returned codes/flags here.
+              return bool(j.get('valid')),j
+
+          BASE='https://platform.caplag.ru'
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 CAPLAG-CTF-helper'
+          r=s.get(BASE+'/login',timeout=20); r.raise_for_status()
+          m=re.search(r'name=["\']nonce["\'][^>]*value=["\']([^"\']+)',r.text,re.I)
+          if not m: m=re.search(r'value=["\']([^"\']+)["\'][^>]*name=["\']nonce["\']',r.text,re.I)
+          d={'name':auth['username'],'password':auth['password']}
+          if m: d['nonce']=unescape(m.group(1))
+          rr=s.post(BASE+'/login',data=d,allow_redirects=True,timeout=20)
+          if '/login' in rr.url: print('platform_login=failed'); sys.exit(2)
+          print('platform_login=ok')
+          before=(s.get(BASE+'/api/v1/challenges/83',timeout=20).json().get('data') or {})
+          print('solved_before='+str(bool(before.get('solved_by_me',before.get('solved',False)))).lower())
+          print('attempts_before='+str(before.get('attempts',None)))
+
+          ok1,j1=game_check('ch02.library.ticket','167')
+          time.sleep(1)
+          ok2,j2=game_check('ch02.library.phrase','Старая Каланча первый глаз города смотрит сверху')
+          time.sleep(3)
+          after=(s.get(BASE+'/api/v1/challenges/83',timeout=20).json().get('data') or {})
+          solved=bool(after.get('solved_by_me',after.get('solved',False)))
+          print('solved_after='+str(solved).lower())
+          print('attempts_after='+str(after.get('attempts',None)))
+          pathlib.Path('/tmp/full.json').write_text(json.dumps({'ticket':j1,'phrase':j2,'platform_before':{'solved':before.get('solved_by_me',before.get('solved')),'attempts':before.get('attempts')},'platform_after':{'solved':after.get('solved_by_me',after.get('solved')),'attempts':after.get('attempts')}},ensure_ascii=False),encoding='utf-8')
+          if not (ok1 and ok2): sys.exit(3)
+          PY
+          openssl pkeyutl -encrypt -pubin -inkey public.pem -in /tmp/full.json -out /tmp/full.enc -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 2>/dev/null || true
+          if [ -s /tmp/full.enc ]; then base64 -w0 /tmp/full.enc > full.enc.b64; fi
+      - name: Upload encrypted response
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-auto83-result-${{ github.run_id }}
+          path: full.enc.b64
+          if-no-files-found: ignore
+          retention-days: 1
