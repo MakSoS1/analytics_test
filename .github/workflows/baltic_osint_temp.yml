@@ -10,20 +10,53 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Probe public retired Seaco UI5 app metadata
+      - name: Query public unit approval sources
         shell: bash
         run: |
-          set -u
-          B='https://newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17'
-          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'
-          for p in index.html manifest.json Component.js controller/App.controller.js controller/View1.controller.js controller/Home.controller.js; do
-            echo "===== $p ====="
-            rm -f /tmp/h /tmp/b
-            curl -k -L --connect-timeout 8 --max-time 20 -A "$UA" -sS -D /tmp/h "$B/$p" -o /tmp/b || true
-            head -20 /tmp/h 2>/dev/null || true
-            wc -c /tmp/b 2>/dev/null || true
-            grep -Ei 'odata|serviceUrl|datasource|TIR|unit|equipment|zseaco|sap/opu' /tmp/b 2>/dev/null | head -100 || true
-            head -c 6000 /tmp/b 2>/dev/null | tr '\n' ' '; echo
-          done
+          set -euo pipefail
+          python3 -m pip install -q beautifulsoup4
+          python3 - <<'PY'
+          import requests,re,html,urllib.parse,csv,io
+          from bs4 import BeautifulSoup
+          H={'User-Agent':'Mozilla/5.0'}
+
+          print('=== CAI PUBLIC UNIT LOOKUPS ===')
+          for unit in ['SEGU9639460','SEKU9334912']:
+              u='https://www.capps.com/cgi-bin/publicUnitInfo?UNIT='+unit
+              try:
+                  r=requests.get(u,headers=H,timeout=25)
+                  txt=BeautifulSoup(r.text,'html.parser').get_text(' ',strip=True)
+                  print(unit,'STATUS',r.status_code,'LEN',len(r.content))
+                  for pat in ['TIR','CSC','Manufactured','Manufacturer','Location','ISO']:
+                      m=re.search(r'(.{0,120}\b'+re.escape(pat)+r'\b.{0,220})',txt,re.I)
+                      if m: print(m.group(1))
+              except Exception as e: print(unit,'ERR',repr(e))
+
+          print('=== USDA CPHST RAW TARGET ROW ===')
+          try:
+              r=requests.get('https://vessels.cphst.org/containerList.cfm',headers=H,timeout=25)
+              lines=r.text.splitlines()
+              for i,line in enumerate(lines):
+                  if '963652' in line or '>6986<' in line:
+                      print('LINE',i,BeautifulSoup(line,'html.parser').get_text(' ',strip=True))
+                      print('RAW',line[:2000])
+          except Exception as e: print('CPHST ERR',repr(e))
+
+          print('=== TEXTAINER TARGET + REFERENCE ===')
+          base='https://tex.textainer.com'; q=base+'/Equipment/StatusAndSpecificationsInquiry.aspx?DelFileTypes=CS-EX'
+          units=['SEGU9639460','SEKU9334912']
+          s=requests.Session(); r=s.get(q,headers=H,timeout=20); soup=BeautifulSoup(r.text,'html.parser')
+          data={t.get('name'):t.get('value','') for t in soup.find_all('input') if t.get('name') and t.get('type')=='hidden'}
+          data['ctl00$bodyContent$ucEqpIds$txtEqpId']='\r\n'.join(units); data['ctl00$bodyContent$btnSubmit']='Preview'
+          pr=s.post(q,data=data,headers={**H,'Referer':q},timeout=30,allow_redirects=True)
+          txt=html.unescape(pr.text).replace('\\/','/')
+          ms=re.findall(r'["\'](/Reserved\.ReportViewerWebControl\.axd\?[^"\']+OpType=Export[^"\']+Format=)["\']',txt)
+          if ms:
+              rr=s.get(urllib.parse.urljoin(base,html.unescape(ms[0])+'CSV'),headers={**H,'Referer':pr.url},timeout=40)
+              for row in csv.DictReader(io.StringIO(rr.content.decode('utf-8-sig','replace'))):
+                  print('UNIT',row.get('txtEqpId'))
+                  for k in ['txtEqpDesc','txtManufacture4','txtManufacture5','txtRate2','txtRate4','txtApproval1','txtApproval2','txtApproval3','txtApproval4']:
+                      print(k,repr(row.get(k)))
+          PY
