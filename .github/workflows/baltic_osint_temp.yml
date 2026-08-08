@@ -10,40 +10,57 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     steps:
-      - name: Query close 2018 Fuwa reefer approval records
+      - name: Recover archived Triton RJCU2019190 approvals
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,re,json
-          from bs4 import BeautifulSoup
-          H={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/139 Safari/537.36'}
-          base='https://tools.tritoncontainer.com/tritoncontainer/unitSpecs/show/'
-          units=['RJCU2019190','TTNU8845830','SEGU9639460']
-          for unit in units:
-              r=requests.get(base+unit,headers=H,timeout=30)
-              soup=BeautifulSoup(r.text,'html.parser')
-              text='\n'.join(x.strip() for x in soup.stripped_strings)
-              print('\nUNIT',unit,'STATUS',r.status_code,'URL',r.url,'LEN',len(r.content))
-              # Print only compact specification labels; no page instructions or unrelated text.
-              lines=[x.strip() for x in soup.stripped_strings]
-              for i,x in enumerate(lines):
-                  if x in ['Manufacturer','Manufacture Date','ISO Code','CSC','TIR','Box builder:']:
-                      print(x, '=>', lines[i+1] if i+1 < len(lines) else '')
-              for pat in [r'F/BV/\d+/\d+',r'GB/C\s+\d+\s+BV/\d{4}',r'LB4026THD[-\s]\d+']:
-                  vals=sorted(set(re.findall(pat,text,re.I)))
-                  if vals: print('MATCH',pat,vals)
-          # Use the actual public search form as a fallback for RJCU and target.
-          s=requests.Session(); listurl='https://tools.tritoncontainer.com/tritoncontainer/unitSpecs/list'
-          s.get(listurl,headers=H,timeout=30)
-          for val in ['RJCU2019190','SEGU9639460']:
-              q=s.post('https://tools.tritoncontainer.com/tritoncontainer/unitSpecs/refreshTable',data={'unitNumberText':val},headers={**H,'Referer':listurl,'X-Requested-With':'XMLHttpRequest'},timeout=30)
-              print('\nREFRESH',val,q.status_code,q.headers.get('Content-Type'),len(q.content))
-              body=q.text
-              for pat in [r'[A-Z]{4}\d{7}',r'F/BV/\d+/\d+',r'GB/C\s+\d+\s+BV/\d{4}',r'LB4026THD[-\s]\d+']:
-                  vals=sorted(set(re.findall(pat,body,re.I)))
-                  if vals: print('R',pat,vals[:30])
+          import requests,re,json,urllib.parse
+          H={'User-Agent':'Mozilla/5.0'}
+          targets=[
+            'tools.tritoncontainer.com/tritoncontainer/unitSpecs/show/RJCU2019190',
+            'tools.tritoncontainer.com/tritoncontainer/unitSpecs/print/RJCU2019190',
+            'www.tritoncontainer.com/tritoncontainer/unitSpecs/show/RJCU2019190',
+            'www.tritoncontainer.com/unitSpecs/show/RJCU2019190',
+            'tritoncontainer.com/tritoncontainer/unitSpecs/show/RJCU2019190',
+            'www.ticoncontainers.com/*RJCU2019190*',
+            'ticoncontainers.com/*RJCU2019190*',
+          ]
+          cdx='https://web.archive.org/cdx/search/cdx'
+          captures=[]
+          for target in targets:
+              p={'url':target,'output':'json','fl':'timestamp,original,statuscode,mimetype,digest','filter':'statuscode:200','from':'2017','to':'2025','collapse':'digest','limit':'200'}
+              try:
+                  r=requests.get(cdx,params=p,headers=H,timeout=60)
+                  print('CDX',target,r.status_code,len(r.text))
+                  arr=r.json() if r.text.strip().startswith('[') else []
+                  for row in arr[1:]:
+                      print('CAP',row[0],row[1])
+                      captures.append((row[0],row[1]))
+              except Exception as e: print('CDXERR',target,type(e).__name__)
+          # fetch snapshots and emit only approval-shaped values and compact spec metadata
+          seen=set()
+          for ts,orig in captures:
+              key=(ts,orig)
+              if key in seen: continue
+              seen.add(key)
+              u='https://web.archive.org/web/'+ts+'id_/'+orig
+              try:
+                  r=requests.get(u,headers=H,timeout=60)
+                  text=r.text
+                  print('SNAP',ts,orig,r.status_code,len(text))
+                  pats={
+                    'TIR':r'(?:TIR|Customs(?:\s+Approval)?)[^A-Z0-9]{0,80}((?:GB|L|NL|F)/[A-Z]+(?:\s|&nbsp;)+\d+(?:\s|&nbsp;)+[A-Z]+/\d{2,4}|GB/C(?:\s|&nbsp;)+\d+(?:\s|&nbsp;)+BV/\d{4})',
+                    'CSC':r'(?:CSC|Safety Approval(?: Reference)?)[^A-Z0-9]{0,80}((?:F|GB)/[A-Z]+/\d+/\d{2,4})',
+                    'MODEL':r'(LB4026THD[-\s]0*0026)',
+                  }
+                  for k,p in pats.items():
+                      vals=sorted(set(' '.join(x.split()) for x in re.findall(p,text,re.I)))
+                      if vals: print(k,vals)
+                  for p in [r'GB/C\s*\d+\s*BV/\d{4}',r'F/BV/\d+/\d{2,4}',r'L/[A-Z]+/\d+/\d{4}']:
+                      vals=sorted(set(re.findall(p,text,re.I)))
+                      if vals: print('RAW',vals)
+              except Exception as e: print('SNAPERR',ts,orig,type(e).__name__)
           PY
