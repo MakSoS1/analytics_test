@@ -1,0 +1,104 @@
+name: caplag-exactflow83
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-exactflow83.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Generate ephemeral key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
+      - name: Upload public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-exactflow83-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
+          retention-days: 1
+      - name: Wait for encrypted auth bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/MakSoS1/analytics_test/contents/handoff/caplag-exactflow83-${kid}.enc.b64?ref=ctf-caplag-submit83-20260808"
+          for i in $(seq 1 150); do
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json')); txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/auth.enc').write_bytes(base64.b64decode(txt))
+          PY
+              openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/auth.enc -out /tmp/auth.json -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              chmod 600 /tmp/auth.json
+              echo encrypted_handoff=received; exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Run exact game session then verify challenge 83
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,requests,sys,time
+          from html import unescape
+          a=json.load(open('/tmp/auth.json'))
+          token=a['ctfd_token']
+          G='https://game-check.caplag.ru'
+          gh={'X-API-Key':'caplag-local-dev-keyjdi2odk2j1ljkd12od1jdia','Content-Type':'application/json'}
+          gs=requests.Session(); gs.headers.update(gh)
+
+          # platform session, used only to verify solve state before/after
+          P='https://platform.caplag.ru'; ps=requests.Session(); ps.headers['User-Agent']='Mozilla/5.0 CAPLAG-CTF-helper'
+          r=ps.get(P+'/login',timeout=20); r.raise_for_status()
+          m=re.search(r'name=["\']nonce["\'][^>]*value=["\']([^"\']+)',r.text,re.I) or re.search(r'value=["\']([^"\']+)["\'][^>]*name=["\']nonce["\']',r.text,re.I)
+          d={'name':a['username'],'password':a['password']}
+          if m: d['nonce']=unescape(m.group(1))
+          rr=ps.post(P+'/login',data=d,allow_redirects=True,timeout=20)
+          if '/login' in rr.url: print('platform_login=failed'); sys.exit(2)
+          before=(ps.get(P+'/api/v1/challenges/83',timeout=20).json().get('data') or {})
+          print('solved_before='+str(bool(before.get('solved_by_me',False))).lower())
+          print('attempts_before='+str(before.get('attempts',None)))
+
+          # Exact intended game initialization. Try documented client field first.
+          ir=gs.post(G+'/init',json={'ctfd_token':token},timeout=25)
+          print('init_http='+str(ir.status_code))
+          try: ij=ir.json()
+          except Exception: print('init_json=false'); sys.exit(3)
+          print('init_ok='+str(bool(ij.get('ok',ij.get('valid',False)))).lower())
+          print('init_safe_keys='+','.join(sorted(k for k in ij.keys() if not any(w in k.lower() for w in ['token','code','flag','secret']))))
+          print('game_cookie_count='+str(len(gs.cookies)))
+
+          def check(step,code):
+              q=gs.post(G+'/check',json={'code':code,'ctfd_token':token,'step':step},timeout=25)
+              try:j=q.json()
+              except Exception:j={}
+              print(step+'_http='+str(q.status_code))
+              print(step+'_valid='+str(bool(j.get('valid',False))).lower())
+              print(step+'_cookie_count='+str(len(gs.cookies)))
+              return bool(j.get('valid',False))
+
+          ok1=check('ch02.library.ticket','167')
+          time.sleep(1.5)
+          ok2=check('ch02.library.phrase','Старая Каланча первый глаз города смотрит сверху')
+          time.sleep(5)
+          after=(ps.get(P+'/api/v1/challenges/83',timeout=20).json().get('data') or {})
+          print('solved_after='+str(bool(after.get('solved_by_me',False))).lower())
+          print('attempts_after='+str(after.get('attempts',None)))
+          if not (ok1 and ok2): sys.exit(4)
+          PY
