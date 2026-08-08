@@ -12,65 +12,53 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
-      - name: Fetch current WebGL build metadata and data file
+      - name: Extract serialized Unity scene files
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out
-          BASE='https://cyberkomi.caplag.ru'
-          curl -fsSL --connect-timeout 10 --max-time 60 "$BASE/" -o out/index.html
+          mkdir -p out/extracted
+          URL='https://cyberkomi.caplag.ru/Build/build.data.br'
+          # curl decodes Content-Encoding: br when --compressed is enabled.
+          curl -fsSL --compressed --connect-timeout 10 --max-time 240 "$URL" -o /tmp/build.data
           python3 - <<'PY'
-          import re, pathlib, urllib.parse, subprocess, json
-          base='https://cyberkomi.caplag.ru/'
-          html=pathlib.Path('out/index.html').read_text(errors='ignore')
-          urls=[]
-          for pat in [r'<script[^>]+src=["\']([^"\']+)', r'<link[^>]+href=["\']([^"\']+)']:
-              urls += re.findall(pat, html, re.I)
-          meta={'html_urls':urls}
-          pathlib.Path('out/urls.json').write_text(json.dumps(meta,indent=2))
-          loader=None
-          for u in urls:
-              if 'loader' in u.lower() and u.lower().endswith('.js'):
-                  loader=urllib.parse.urljoin(base,u); break
-          if not loader:
-              m=re.search(r'loaderUrl\s*=\s*["\']([^"\']+)',html)
-              if m: loader=urllib.parse.urljoin(base,m.group(1))
-          if loader:
-              subprocess.run(['curl','-fsSL','--connect-timeout','10','--max-time','60',loader,'-o','out/loader.js'],check=True)
-          # Extract build asset URLs from HTML, then loader if any.
-          text=html+'\n'+(pathlib.Path('out/loader.js').read_text(errors='ignore') if pathlib.Path('out/loader.js').exists() else '')
-          candidates=[]
-          for ext in ['data','data.unityweb','wasm','wasm.unityweb','framework.js','framework.js.unityweb']:
-              for m in re.finditer(r'["\']([^"\']*'+re.escape(ext)+r')["\']',text,re.I):
-                  candidates.append(m.group(1))
-          # Parse common Unity config expressions directly from HTML.
-          buildm=re.search(r'buildUrl\s*=\s*["\']([^"\']+)',html)
-          build=buildm.group(1) if buildm else 'Build'
-          for key in ['dataUrl','frameworkUrl','codeUrl']:
-              m=re.search(key+r'\s*:\s*buildUrl\s*\+\s*["\']([^"\']+)',html)
-              if m: candidates.append(build+m.group(1))
-              m=re.search(key+r'\s*:\s*["\']([^"\']+)',html)
-              if m: candidates.append(m.group(1))
-          resolved=[]
-          for c in candidates:
-              u=urllib.parse.urljoin(base,c)
-              if u not in resolved: resolved.append(u)
-          pathlib.Path('out/build_urls.txt').write_text('\n'.join(resolved))
-          # HEAD first; download only the data asset, which contains serialized scene objects.
-          heads=[]
-          for u in resolved:
-              cp=subprocess.run(['curl','-sSIL','--connect-timeout','10','--max-time','60',u],capture_output=True,text=True)
-              heads.append('URL '+u+'\n'+cp.stdout+'\n')
-              if re.search(r'\.data(?:\.unityweb)?(?:\?|$)',u,re.I):
-                  subprocess.run(['curl','-fsSL','--connect-timeout','10','--max-time','180',u,'-o','out/game.data'],check=True)
-          pathlib.Path('out/heads.txt').write_text('\n'.join(heads))
+          import pathlib,struct,json,re,hashlib
+          p=pathlib.Path('/tmp/build.data')
+          b=p.read_bytes()
+          meta={'size':len(b),'sha256':hashlib.sha256(b).hexdigest(),'prefix_hex':b[:64].hex(),'prefix_ascii':b[:64].decode('latin1','replace')}
+          entries=[]
+          magic=b'UnityWebData1.0\x00'
+          if not b.startswith(magic):
+              pathlib.Path('out/meta.json').write_text(json.dumps(meta,indent=2))
+              raise SystemExit('unexpected data magic')
+          pos=len(magic)
+          header_len=struct.unpack_from('<I',b,pos)[0]; pos+=4
+          meta['header_len']=header_len
+          while pos < header_len:
+              off,length,path_len=struct.unpack_from('<III',b,pos); pos+=12
+              path=b[pos:pos+path_len].decode('utf-8','replace'); pos+=path_len
+              entries.append({'path':path,'offset':off,'length':length})
+          meta['entries']=len(entries)
+          pathlib.Path('out/meta.json').write_text(json.dumps(meta,indent=2))
+          pathlib.Path('out/file_table.json').write_text(json.dumps(entries,indent=2,ensure_ascii=False))
+          lines=[]
+          for e in entries:
+              lines.append(f"{e['offset']:12d} {e['length']:12d} {e['path']}")
+              name=e['path'].split('/')[-1]
+              if (re.fullmatch(r'level\d+',name,re.I) or
+                  'globalgamemanagers' in name.lower() or
+                  'sharedassets' in name.lower() or
+                  name.lower().endswith('.assets')):
+                  out=pathlib.Path('out/extracted')/name
+                  out.write_bytes(b[e['offset']:e['offset']+e['length']])
+          pathlib.Path('out/file_table.txt').write_text('\n'.join(lines))
           PY
-          ls -lah out > out/listing.txt
-      - name: Upload static build slice
+          ls -lah out/extracted > out/listing.txt
+          du -sh out/extracted >> out/listing.txt
+      - name: Upload scene slice
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-static-build
+          name: cyberkomi-scene-files
           path: out
           retention-days: 1
