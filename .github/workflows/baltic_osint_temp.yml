@@ -12,63 +12,67 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 7
     steps:
-      - name: Probe archived Seaco Unit Enquiry
+      - name: Recover archived Seaco OData query schema and probe backend
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import requests,re,json,urllib.parse,html
+          import requests,re,time,html,urllib.parse
           H={'User-Agent':'Mozilla/5.0'}
-          roots=[
-            'https://newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/index.html',
-            'https://newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/manifest.json',
-            'https://newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/Component.js',
+          base='https://newseaweb.seacoglobal.com'
+          svc=base+'/sap/opu/odata/sap/ZNW_SEACO_PUBLIC_UE_PGW_SRV'
+          print('=== LIVE ODATA ===')
+          for path in ['/$metadata','/']:
+              try:
+                  r=requests.get(svc+path,headers={**H,'Accept':'application/xml,application/json'},timeout=25,verify=False,allow_redirects=True)
+                  print('LIVE',path,r.status_code,r.url,r.headers.get('Content-Type'),len(r.content))
+                  print(r.text[:30000])
+              except Exception as e: print('LIVE_ERR',path,repr(e))
+
+          print('=== ARCHIVED JS ===')
+          files=[
+            ('20231103030901','js/UnitEnquiry/UnitEnquiry.js'),
+            ('20231103032542','js/UnitEnquiry/ContainerDetails.js'),
+            ('20260209130559','js/UnitEnquiry/UnitEnquirySpecifications.js'),
+            ('20260209130559','js/UnitEnquiry/FullSpecificationReefers.js'),
           ]
-          print('CDX_EXACT_BEGIN')
-          captures=[]
-          for u in roots:
-              try:
-                  r=requests.get('https://web.archive.org/cdx/search/cdx',params={'url':u,'output':'json','filter':'statuscode:200','filter':'mimetype:text/html|application/json|application/javascript','fl':'timestamp,original,statuscode,mimetype,digest','collapse':'digest'},headers=H,timeout=45)
-                  print('CDX',u,r.status_code,len(r.content),r.text[:1500].replace('\n',' '))
-                  try:
-                      arr=r.json()
-                      for row in arr[1:]: captures.append((row[0],row[1]))
-                  except Exception: pass
-              except Exception as e: print('CDX_ERR',u,repr(e))
-          print('CDX_EXACT_END')
-          # wildcard through alternate CDX index format
-          target='newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/*'
-          try:
-              r=requests.get('https://web.archive.org/cdx/search/cdx',params={'url':target,'output':'json','filter':'statuscode:200','fl':'timestamp,original,statuscode,mimetype','collapse':'urlkey','limit':'500'},headers=H,timeout=60)
-              print('WILDCARD',r.status_code,len(r.content))
-              print(r.text[:30000])
-              try:
-                  arr=r.json()
-                  for row in arr[1:]: captures.append((row[0],row[1]))
-              except Exception: pass
-          except Exception as e: print('WILDCARD_ERR',repr(e))
-          print('FETCH_CAPTURES_BEGIN')
-          seen=set()
-          for ts,u in captures:
-              key=(ts,u)
-              if key in seen: continue
-              seen.add(key)
-              au='https://web.archive.org/web/'+ts+'id_/'+u
-              try:
-                  rr=requests.get(au,headers=H,timeout=45,allow_redirects=True)
-                  print('\nCAP',ts,u,'=>',rr.status_code,rr.url,rr.headers.get('Content-Type'),len(rr.content))
-                  text=rr.text if len(rr.content)<1000000 else rr.text[:1000000]
-                  # Print service/OData related lines only.
-                  for line in text.splitlines():
-                      l=line.lower()
-                      if any(k in l for k in ['odata','datasource','serviceurl','serviceuri','sap/opu','unit','equipment','tir','csc','certificate','approval','model']):
-                          print(line[:5000])
-              except Exception as e: print('CAP_ERR',au,repr(e))
-          print('FETCH_CAPTURES_END')
-          # Memento availability API can work when CDX is blocked.
-          for u in roots:
-              try:
-                  rr=requests.get('https://archive.org/wayback/available',params={'url':u,'timestamp':'20200101'},headers=H,timeout=30)
-                  print('AVAILABLE',u,rr.status_code,rr.text[:3000])
-              except Exception as e: print('AVAILABLE_ERR',repr(e))
+          root='https://newseaweb.seacoglobal.com/sap/bc/ui5_ui5/sap/zseaco_ue17/'
+          alltext=''
+          for ts,path in files:
+              original=root+path
+              urls=[
+                'https://web.archive.org/web/'+ts+'id_/'+original,
+                'http://web.archive.org/web/'+ts+'id_/'+original,
+              ]
+              text=None
+              for attempt in range(4):
+                  for u in urls:
+                      try:
+                          rr=requests.get(u,headers=H,timeout=35,allow_redirects=True)
+                          print('ARCH',path,'TRY',attempt,rr.status_code,len(rr.content),rr.url)
+                          if rr.status_code==200 and len(rr.content)>100:
+                              text=rr.text; break
+                      except Exception as e: print('ARCH_ERR',path,attempt,type(e).__name__)
+                  if text is not None: break
+                  time.sleep(2+attempt)
+              if text is None: continue
+              alltext+='\n/* '+path+' */\n'+text
+              print('\n---',path,'RELEVANT---')
+              for line in text.splitlines():
+                  l=line.lower()
+                  if any(k in l for k in ['.read(','.read(','serviceurl','entity','filter','unitno','equipment','tir','csc','approval','specif','container','eqp','unitid','unit_id']):
+                      print(line[:7000])
+          print('=== ALL ODATA PATH LITERALS ===')
+          # Extract likely model.read/create/remove entity-set paths and property-ish tokens near TIR/CSC.
+          for m in re.finditer(r'["\'](/[^"\']{1,180})["\']',alltext):
+              z=m.group(1)
+              if any(k in z.lower() for k in ['unit','spec','container','equip','detail','reefer','enquir']): print('PATH',z)
+          for key in ['tir','csc','approval','certificate']:
+              print('\nCONTEXT_KEY',key)
+              low=alltext.lower(); pos=0; n=0
+              while n<30:
+                  i=low.find(key,pos)
+                  if i<0: break
+                  print(re.sub(r'\s+',' ',alltext[max(0,i-500):i+1000])[:1600])
+                  pos=i+len(key); n+=1
           PY
