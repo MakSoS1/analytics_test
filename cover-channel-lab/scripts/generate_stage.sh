@@ -3,6 +3,7 @@ set -euo pipefail
 if [[ $# -lt 5 ]]; then echo "usage: $0 STAGE SHARD SHARDS OUT_DIR CAPTURE_FILE" >&2; exit 2; fi
 STAGE="$1" SHARD="$2" SHARDS="$3" OUT="$4" PCAP="$5"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON_BIN="$(command -v python)"
 rm -f /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock
 mkdir -p "$OUT" "$(dirname "$PCAP")"
 rm -f "$PCAP"
@@ -20,7 +21,7 @@ for idx in 0 1 2 3; do
   sudo ip netns exec "$ns" runuser -u "$USER" -- env \
     PYTHONPATH="$ROOT/src" GITHUB_SHA="${GITHUB_SHA:-local}" COVERLAB_GO_CLIENT=/tmp/coverlab-go-client COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs" \
     NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
-    python -m coverlab.orchestrate --stage "$STAGE" --shard "$SHARD" --shards "$SHARDS" \
+    "$PYTHON_BIN" -m coverlab.orchestrate --stage "$STAGE" --shard "$SHARD" --shards "$SHARDS" \
       --persona-index "$idx" --out "$pdir" --capture-file "$(basename "$PCAP")" &
   WORKER_PIDS+=("$!")
 done

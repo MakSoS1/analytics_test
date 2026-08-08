@@ -3,6 +3,7 @@ set -euo pipefail
 if [[ $# -ne 3 ]]; then echo "usage: $0 MIXED_INDEX OUT_DIR CAPTURE_FILE" >&2; exit 2; fi
 IDX="$1" OUT="$2" PCAP="$3"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON_BIN="$(command -v python)"
 DURATION=$(( 60 + (IDX % 3) * 30 ))
 FLOWS=$(( 3000 + IDX * 400 )); (( FLOWS > 15000 )) && FLOWS=15000
 rm -f /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock
@@ -19,7 +20,7 @@ for pidx in 0 1 2 3; do
   sudo ip netns exec "$ns" runuser -u "$USER" -- env \
     PYTHONPATH="$ROOT/src" GITHUB_SHA="${GITHUB_SHA:-local}" COVERLAB_GO_CLIENT=/tmp/coverlab-go-client COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs" \
     NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
-    python -m coverlab.orchestrate --stage mixed --mixed-index "$IDX" --duration-minutes "$DURATION" --flow-count "$FLOWS" \
+    "$PYTHON_BIN" -m coverlab.orchestrate --stage mixed --mixed-index "$IDX" --duration-minutes "$DURATION" --flow-count "$FLOWS" \
       --persona-index "$pidx" --out "$pdir" --capture-file "$(basename "$PCAP")" &
   PIDS+=("$!")
 done
