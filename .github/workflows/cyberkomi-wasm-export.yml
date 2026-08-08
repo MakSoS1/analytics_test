@@ -1,0 +1,34 @@
+name: cyberkomi-wasm-export
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/cyberkomi-wasm-export.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Fetch current WASM
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --compressed --connect-timeout 15 --max-time 300 'https://cyberkomi.caplag.ru/Build/build.wasm.br' -o build.wasm
+          python3 - <<'PY'
+          from pathlib import Path
+          b=Path('build.wasm').read_bytes()
+          print('wasm_size='+str(len(b)))
+          print('wasm_magic_ok='+str(b[:4]==b'\x00asm').lower())
+          if b[:4]!=b'\x00asm': raise SystemExit(2)
+          PY
+      - name: Upload WASM
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberkomi-current-wasm
+          path: build.wasm
+          retention-days: 1
