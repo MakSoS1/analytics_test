@@ -12,43 +12,48 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Query public reefer unit specifications
+      - name: Query ATO certified reefer rows
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m pip install -q beautifulsoup4
           python3 - <<'PY'
-          import requests,re,json,html
+          import requests,re,json
+          from bs4 import BeautifulSoup
 
-          units=['TTNU8845830','RJCU2019190','SEGU9720021','SEGU9639460','SEKU9169910','SEKU9154037']
-          H={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/139 Safari/537.36'}
+          U='https://www.reefertransport.nl/Certified.aspx'
+          H={'User-Agent':'Mozilla/5.0'}
+          queries=[('SEGU','963946'),('SEGU','972002'),('RJCU','201919')]
+
+          def hidden(sp):
+              return {x.get('name'):x.get('value','') for x in sp.find_all('input')
+                      if x.get('name') and (x.get('type') or '').lower()=='hidden'}
+
+          def search(prefix,number):
+              s=requests.Session()
+              first=s.get(U,headers=H,timeout=30)
+              soup=BeautifulSoup(first.text,'html.parser')
+              pfx='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$prefixComboBox'
+              num='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$numberTextBox'
+              d=hidden(soup)
+              d[pfx]=prefix; d[num]=number
+              d['__EVENTTARGET']='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$searchButton'
+              d['__EVENTARGUMENT']=''
+              d['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_prefixComboBox_ClientState']=json.dumps({'logEntries':[],'value':prefix,'text':prefix,'enabled':True,'checkedIndices':[],'checkedItemsTextOverflows':False},separators=(',',':'))
+              d['ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_numberTextBox_ClientState']=json.dumps({'enabled':True,'emptyMessage':'number','validationText':number,'valueAsString':number,'lastSetTextBoxValue':number},separators=(',',':'))
+              r=s.post(U,data=d,headers={**H,'Referer':U},timeout=30)
+              ss=BeautifulSoup(r.text,'html.parser')
+              rows=[]
+              for tr in ss.find_all('tr'):
+                  cells=[' '.join(td.stripped_strings) for td in tr.find_all(['td','th'])]
+                  joined=' | '.join(cells)
+                  if cells and (prefix.lower() in joined.lower() or number in joined):
+                      rows.append(cells)
+              return {'query':prefix+number,'status':r.status_code,'rows':rows[:10]}
+
           out=[]
-          for unit in units:
-              url='https://tools.tritoncontainer.com/tritoncontainer/unitSpecs/show/'+unit
-              rec={'unit':unit,'url':url}
-              try:
-                  r=requests.get(url,headers=H,timeout=40,allow_redirects=True)
-                  rec.update(status=r.status_code,final=r.url,length=len(r.content))
-                  text=re.sub(r'(?is)<script.*?</script>|<style.*?</style>',' ',r.text)
-                  text=re.sub(r'(?i)<br\s*/?>|</(?:div|p|tr|td|th|li|h[1-6]|dt|dd)>','\n',text)
-                  text=html.unescape(re.sub(r'(?s)<[^>]+>',' ',text))
-                  text='\n'.join(re.sub(r'[ \t]+',' ',x).strip() for x in text.splitlines() if x.strip())
-                  fields={
-                    'manufacturer':r'Manufacturer\s*\n\s*([^\n]{2,120})',
-                    'manufacture_date':r'Manufacture Date\s*\n\s*([^\n]{2,40})',
-                    'iso':r'ISO Code\s*\n\s*([^\n]{2,40})',
-                    'csc':r'CSC\s*\n\s*([^\n]{2,80})',
-                    'tir':r'TIR\s*\n\s*([^\n]{2,80})',
-                    'box_builder':r'Box builder:\s*\n?\s*([^\n]{2,80})',
-                    'max_gross':r'Max gross weight:\s*\n?\s*([^\n]{2,60})',
-                    'tare':r'Tare weight:\s*\n?\s*([^\n]{2,60})',
-                    'payload':r'Max payload:\s*\n?\s*([^\n]{2,60})',
-                    'cube':r'Cubic capacity:\s*\n?\s*([^\n]{2,60})',
-                  }
-                  for key,p in fields.items():
-                      m=re.search(p,text,re.I)
-                      if m: rec[key]=m.group(1).strip()
-              except Exception as e:
-                  rec['error']=type(e).__name__+': '+str(e)[:160]
-              out.append(rec)
+          for p,n in queries:
+              try: out.append(search(p,n))
+              except Exception as e: out.append({'query':p+n,'error':type(e).__name__+': '+str(e)[:160]})
           print(json.dumps(out,ensure_ascii=False,indent=2))
           PY
