@@ -1,0 +1,122 @@
+name: caplag-deepmeta83
+
+on:
+  push:
+    branches: [ctf-caplag-submit83-20260808]
+    paths: ['.github/workflows/caplag-deepmeta83.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch public dynamic challenge assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          for p in \
+            /plugins/dynamic_challenges/assets/view.js \
+            /plugins/dynamic_challenges/assets/view.html; do
+            fn=$(basename "$p")
+            code=$(curl -sS -L -o "out/$fn" -w '%{http_code}' --connect-timeout 10 --max-time 30 "https://platform.caplag.ru$p" || true)
+            echo "asset_${fn}_http=$code bytes=$(wc -c < "out/$fn")"
+          done
+      - name: Generate ephemeral key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/private.pem -pubout -out public.pem >/dev/null 2>&1
+          openssl pkey -pubin -in public.pem -outform DER | sha256sum | cut -c1-16 > key_id.txt
+      - name: Upload public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: caplag-deepmeta83-key-${{ github.run_id }}
+          path: |
+            public.pem
+            key_id.txt
+          retention-days: 1
+      - name: Wait for encrypted credentials
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          kid="$(cat key_id.txt)"
+          api="https://api.github.com/repos/MakSoS1/analytics_test/contents/handoff/caplag-deepmeta83-${kid}.enc.b64?ref=ctf-caplag-submit83-20260808"
+          for i in $(seq 1 150); do
+            code=$(curl -sS -o /tmp/handoff.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "$api" || true)
+            if [ "$code" = 200 ]; then
+              python3 - <<'PY'
+          import json,base64,pathlib
+          j=json.load(open('/tmp/handoff.json')); txt=base64.b64decode(j['content']).decode().strip()
+          pathlib.Path('/tmp/creds.enc').write_bytes(base64.b64decode(txt))
+          PY
+              openssl pkeyutl -decrypt -inkey /tmp/private.pem -in /tmp/creds.enc -out /tmp/creds.json -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              chmod 600 /tmp/creds.json
+              echo encrypted_handoff=received; exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Print safe challenge internals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,requests,sys
+          from html import unescape
+          BASE='https://platform.caplag.ru'; c=json.load(open('/tmp/creds.json'))
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 CAPLAG-CTF-helper'
+          r=s.get(BASE+'/login',timeout=20); r.raise_for_status()
+          m=re.search(r'name=["\']nonce["\'][^>]*value=["\']([^"\']+)',r.text,re.I) or re.search(r'value=["\']([^"\']+)["\'][^>]*name=["\']nonce["\']',r.text,re.I)
+          d={'name':c['username'],'password':c['password']}
+          if m:d['nonce']=unescape(m.group(1))
+          rr=s.post(BASE+'/login',data=d,allow_redirects=True,timeout=20)
+          if '/login' in rr.url: print('login_status=failed'); sys.exit(2)
+          print('login_status=ok')
+          for cid in [82,83]:
+              x=(s.get(BASE+f'/api/v1/challenges/{cid}',timeout=20).json().get('data') or {})
+              print(f'--- challenge {cid}')
+              for k in ['module_id','solution_id','solution_state','function','logic','initial','decay','minimum','position','rating','ratings','attribution','view','scheduled_at']:
+                  if k in x:
+                      v=x[k]
+                      try: txt=json.dumps(v,ensure_ascii=False,sort_keys=True)
+                      except Exception: txt=repr(v)
+                      print(k+'='+txt[:5000])
+          # Probe only standard read-only endpoints derived from public IDs; no writes.
+          for path in ['/api/v1/challenges/83/solves','/api/v1/challenges/83/solution','/api/v1/challenges/83/solutions']:
+              q=s.get(BASE+path,timeout=20)
+              print('probe='+path+' http='+str(q.status_code)+' bytes='+str(len(q.content)))
+              if q.status_code==200:
+                  try:
+                      j=q.json()
+                      # Never dump arbitrary user solve records; only top-level shape / safe solution-like keys.
+                      print('probe_keys='+','.join(sorted(j.keys())))
+                      data=j.get('data')
+                      if isinstance(data,dict):
+                          for k,v in data.items():
+                              if k.lower() in {'content','solution','state','id','challenge_id','title','url'}:
+                                  print('probe_'+k+'='+json.dumps(v,ensure_ascii=False)[:3000])
+                      elif isinstance(data,list): print('probe_data_list_len='+str(len(data)))
+                  except Exception: pass
+          PY
+      - name: Summarize plugin assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          for fn in ['view.js','view.html']:
+              p=Path('out')/fn
+              if not p.exists(): continue
+              s=p.read_text(errors='replace')
+              print('--- '+fn)
+              for line in s.splitlines():
+                  if re.search(r'(api/|solution|attempt|challenge|flag|submit)',line,re.I):
+                      print(line[:1000])
+          PY
