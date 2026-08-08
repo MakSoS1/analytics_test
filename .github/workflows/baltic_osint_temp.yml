@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Query official ATO certified reefer database
+      - name: Inspect ATO search postback and query target
         shell: bash
         run: |
           set -euo pipefail
@@ -20,51 +20,54 @@ jobs:
           python3 - <<'PY'
           import requests,re
           from bs4 import BeautifulSoup
-          U='https://www.reefertransport.nl/Certified.aspx'
-          H={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/139.0 Safari/537.36'}
-          s=requests.Session()
-          r=s.get(U,headers=H,timeout=30)
-          print('GET',r.status_code,len(r.content),r.url)
-          soup=BeautifulSoup(r.text,'html.parser')
-          print('FORM',[(f.get('id'),f.get('action'),f.get('method')) for f in soup.find_all('form')])
-          print('INPUTS_BEGIN')
-          for x in soup.find_all(['input','select','button']):
-              print(x.name,'name=',repr(x.get('name')),'id=',repr(x.get('id')),'type=',repr(x.get('type')),'value=',repr(x.get('value')),'text=',repr(x.get_text(' ',strip=True)[:80]))
-          print('INPUTS_END')
-          data={x.get('name'):x.get('value','') for x in soup.find_all('input') if x.get('name') and x.get('type') in (None,'hidden')}
-          # identify likely text/search input and search button from actual markup
-          texts=[x for x in soup.find_all('input') if x.get('name') and (x.get('type') or '').lower() in ('text','search','')]
-          buttons=[x for x in soup.find_all(['input','button']) if x.get('name') and ((x.get('type') or '').lower() in ('submit','button') or 'search' in (x.get('value') or x.get_text()).lower())]
-          print('TEXT_CANDIDATES',[(x.get('name'),x.get('id')) for x in texts])
-          print('BUTTON_CANDIDATES',[(x.get('name'),x.get('value'),x.get('id')) for x in buttons])
+          U='https://www.reefertransport.nl/Certified.aspx'; H={'User-Agent':'Mozilla/5.0'}
+          s=requests.Session(); r=s.get(U,headers=H,timeout=30); soup=BeautifulSoup(r.text,'html.parser')
+          print('SEARCH_MARKUP_BEGIN')
+          for tag in soup.find_all(True):
+              text=tag.get_text(' ',strip=True)
+              attrs=' '.join(f'{k}={v!r}' for k,v in tag.attrs.items())
+              if 'search' in (text+' '+attrs).lower() or 'prefixComboBox' in attrs or 'numberTextBox' in attrs:
+                  if tag.name in ('a','input','button','span','div','td'):
+                      print(str(tag)[:3000])
+          print('SEARCH_MARKUP_END')
+          # Construct ASP.NET/Telerik postback from concrete control names.
+          data={x.get('name'):x.get('value','') for x in soup.find_all('input') if x.get('name') and (x.get('type') or '').lower()=='hidden'}
+          pfx='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$prefixComboBox'
+          num='ctl00$ctl00$ContentPlaceHolder$ContentPlaceHolder$numberTextBox'
+          data[pfx]='SEGU'; data[num]='9639460'
+          # Set Telerik client state for exact prefix selection if present.
+          pstate='ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_prefixComboBox_ClientState'
+          data[pstate]='{"logEntries":[],"value":"SEGU","text":"SEGU","enabled":true,"checkedIndices":[],"checkedItemsTextOverflows":false}'
+          nstate='ctl00_ctl00_ContentPlaceHolder_ContentPlaceHolder_numberTextBox_ClientState'
+          data[nstate]='{"enabled":true,"emptyMessage":"number","validationText":"9639460","valueAsString":"9639460","lastSetTextBoxValue":"9639460"}'
+          # Discover the Search anchor's __doPostBack target.
           target=None
-          for x in texts:
-              key=((x.get('name') or '')+' '+(x.get('id') or '')).lower()
-              if 'container' in key or 'search' in key or 'number' in key: target=x; break
-          if target is None and texts: target=texts[0]
-          if not target: raise SystemExit('no text input found')
-          data[target.get('name')]='SEGU9639460'
-          if buttons:
-              b=buttons[0]; data[b.get('name')]=b.get('value') or 'Search'
-          # ASP.NET postback needs all relevant hidden state; preserve cookies/referer.
+          for a in soup.find_all('a',href=True):
+              if 'search' in a.get_text(' ',strip=True).lower():
+                  print('SEARCH_A',a.get_text(' ',strip=True),a['href'],a.get('id'))
+                  m=re.search(r"__doPostBack\('([^']+)'",a['href'])
+                  if m: target=m.group(1); break
+          if not target:
+              # Telerik WebForms buttons can use WebForm_DoPostBackWithOptions.
+              m=re.search(r"WebForm_DoPostBackWithOptions\(new WebForm_PostBackOptions\(&quot;([^&]+)&quot;|WebForm_DoPostBackWithOptions\(new WebForm_PostBackOptions\('([^']+)'",r.text)
+              if m: target=next(x for x in m.groups() if x)
+          print('POSTBACK_TARGET',target)
+          if target:
+              data['__EVENTTARGET']=target; data['__EVENTARGUMENT']=''
           pr=s.post(U,data=data,headers={**H,'Referer':U},timeout=30,allow_redirects=True)
           print('POST',pr.status_code,len(pr.content),pr.url)
           ps=BeautifulSoup(pr.text,'html.parser')
-          txt=ps.get_text('\n',strip=True)
-          print('RESULT_TEXT_BEGIN')
-          # only print lines near target / certificate/specification vocabulary
-          lines=[re.sub(r'\s+',' ',z).strip() for z in txt.splitlines() if z.strip()]
-          hits=[]
-          keys=['SEGU','963946','certificate','certified','manufacturer','machinery','container','commission','classification','date','serial','owner','type','model','ato','ABS','Bureau','Lloyd','RINA','CCS']
-          for i,line in enumerate(lines):
-              if any(k.lower() in line.lower() for k in keys):
-                  for j in range(max(0,i-3),min(len(lines),i+8)):
-                      if lines[j] not in hits: hits.append(lines[j])
-          for z in hits[:300]: print(z)
-          print('RESULT_TEXT_END')
-          print('LINKS_BEGIN')
+          print('RESULT_BEGIN')
+          for tr in ps.find_all('tr'):
+              t=' | '.join(x.get_text(' ',strip=True) for x in tr.find_all(['td','th']))
+              if t.strip(): print(t[:3000])
+          print('BODY_RELEVANT')
+          lines=[re.sub(r'\s+',' ',x).strip() for x in ps.get_text('\n',strip=True).splitlines() if x.strip()]
+          for i,x in enumerate(lines):
+              if any(k in x.lower() for k in ['segu','963946','certificate','manufacturer','model','machinery','serial','commission','class society','ato qualification','no results','not found']):
+                  print(' || '.join(lines[max(0,i-3):min(len(lines),i+10)]))
           for a in ps.find_all('a',href=True):
-              h=a['href']; t=a.get_text(' ',strip=True)
-              if any(k in (h+' '+t).lower() for k in ['cert','pdf','963946','segu']): print(repr(t),repr(h))
-          print('LINKS_END')
+              z=(a.get_text(' ',strip=True)+' '+a['href']).lower()
+              if any(k in z for k in ['pdf','certif','segu','963946']): print('LINK',a.get_text(' ',strip=True),a['href'])
+          print('RESULT_END')
           PY
