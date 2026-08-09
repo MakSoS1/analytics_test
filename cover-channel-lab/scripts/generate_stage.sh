@@ -4,7 +4,8 @@ if [[ $# -lt 5 ]]; then echo "usage: $0 STAGE SHARD SHARDS OUT_DIR CAPTURE_FILE"
 STAGE="$1" SHARD="$2" SHARDS="$3" OUT="$4" PCAP="$5"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON_BIN="$(command -v python)"
-rm -f /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock /tmp/coverlab_wss_trace.jsonl
+WSS_LOCK=/tmp/coverlab_wss_client.lock
+rm -f /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock /tmp/coverlab_wss_trace.jsonl "$WSS_LOCK"
 mkdir -p "$OUT" "$(dirname "$PCAP")"
 rm -f "$PCAP"
 
@@ -20,14 +21,22 @@ for idx in 0 1 2 3; do
   ns="${NAMESPACES[$idx]}"; pdir="$OUT/persona-$idx"; mkdir -p "$pdir"
   sudo ip netns exec "$ns" runuser -u "$USER" -- env \
     PYTHONPATH="$ROOT/src" GITHUB_SHA="${GITHUB_SHA:-local}" COVERLAB_GO_CLIENT=/tmp/coverlab-go-client COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs" \
+    COVERLAB_WSS_CLIENT_LOCK="$WSS_LOCK" \
     NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
     "$PYTHON_BIN" -m coverlab.orchestrate --stage "$STAGE" --shard "$SHARD" --shards "$SHARDS" \
       --persona-index "$idx" --out "$pdir" --capture-file "$(basename "$PCAP")" &
   WORKER_PIDS+=("$!")
 done
-for pid in "${WORKER_PIDS[@]}"; do wait "$pid"; done
+worker_rc=0
+for pid in "${WORKER_PIDS[@]}"; do
+  if ! wait "$pid"; then worker_rc=1; fi
+done
 cleanup_capture
 trap - EXIT
+if [[ "$worker_rc" -ne 0 ]]; then
+  echo "one or more persona workers failed for stage=$STAGE shard=$SHARD" >&2
+  exit 1
+fi
 
 mkdir -p "$OUT/manifests"
 : > "$OUT/manifests/campaigns.jsonl"; : > "$OUT/manifests/events.jsonl"
