@@ -10,8 +10,14 @@ from types import SimpleNamespace
 # Importing the package installs the safe protocol dispatch wrappers and extends
 # the base catalog with future H3/CONNECT/WebTransport scenarios.
 import coverlab  # noqa: F401
-from coverlab.run_campaign import run
+from coverlab.browser_runtime import install as install_browser_runtime
 from coverlab.scenarios import SCENARIOS
+
+# The catalog smoke must exercise the same bounded Chrome cold-start behavior as
+# production orchestration; otherwise a runner-only Chrome startup flake can
+# remain invisible until the main recovery job.
+install_browser_runtime()
+from coverlab.run_campaign import run  # noqa: E402
 
 
 def client_for(s) -> str:
