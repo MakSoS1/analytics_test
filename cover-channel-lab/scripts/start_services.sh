@@ -58,16 +58,14 @@ run_in_c2() {
 }
 run_in_c2 "$PYTHON_BIN" -m hypercorn coverlab.server:app --bind 10.20.0.20:8080 --workers 1 >"$LOGDIR/http.log" 2>&1 & echo $! > "$LOGDIR/http.pid"
 run_in_c2 "$PYTHON_BIN" -m hypercorn coverlab.server:app --bind 10.20.0.20:8443 --certfile "$CERTDIR/server.crt" --keyfile "$CERTDIR/server.key" --workers 1 >"$LOGDIR/https.log" 2>&1 & echo $! > "$LOGDIR/https.pid"
+# Keep WSS local and synthetic, but give it a dedicated listener so WebSocket
+# upgrades don't depend on Hypercorn's shared HTTPS listener on hosted runners.
+run_in_c2 "$PYTHON_BIN" -m coverlab.wss_server --host 10.20.0.21 --port 8443 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/wss.log" 2>&1 & echo $! > "$LOGDIR/wss.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.grpc_server --bind 10.20.0.20:50051 >"$LOGDIR/grpc.log" 2>&1 & echo $! > "$LOGDIR/grpc.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.h3_fixture server --host 10.20.0.20 --port 8444 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/h3.log" 2>&1 & echo $! > "$LOGDIR/h3.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.connect_server --host 10.20.0.20 --port 8082 >"$LOGDIR/connect.log" 2>&1 & echo $! > "$LOGDIR/connect.pid"
 run_in_c2 mosquitto -c "$CERTDIR/mosquitto.conf" -v >"$LOGDIR/mqtt.log" 2>&1 & echo $! > "$LOGDIR/mqtt.pid"
 
-# Stage A validates the core HTTP/HTTPS/H2/WSS capture+parser path. Optional
-# future-protocol services must not make that core validation impossible merely
-# because one higher-level health handshake is flaky on a hosted runner. Each
-# protocol is still exercised by its own H/G corpus shard, where a real client
-# failure is fatal and therefore cannot silently enter the dataset.
 CORE_READY=false
 for _ in $(seq 1 80); do
   if sudo ip netns exec cc-dev curl --noproxy '*' -fsS http://cover-api.test:8080/healthz >/dev/null 2>&1; then
@@ -79,6 +77,23 @@ done
 if [[ "$CORE_READY" != true ]]; then
   echo "core HTTP service did not become ready" >&2
   cat "$LOGDIR/http.log" "$LOGDIR/https.log" >&2 || true
+  exit 1
+fi
+
+# WSS is part of the core dataset path, so validate an actual RFC6455 handshake
+# and request/reply here instead of discovering a broken listener minutes later.
+wss_probe='import json,ssl; from websockets.sync.client import connect; x=ssl.create_default_context(); x.check_hostname=False; x.verify_mode=ssl.CERT_NONE; w=connect("wss://cover-ws.test:8443/ws",ssl=x,open_timeout=5,proxy=None,compression=None); w.send(json.dumps({"action":"recv","container":"HEALTH","target":"LAB","sender":"fixture","message":"STATUS"})); r=w.recv(); w.close(); raise SystemExit(0 if r else 1)'
+WSS_READY=false
+for _ in $(seq 1 40); do
+  if timeout 8s sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' "$PYTHON_BIN" -c "$wss_probe" >/dev/null 2>&1; then
+    WSS_READY=true
+    break
+  fi
+  sleep .25
+done
+if [[ "$WSS_READY" != true ]]; then
+  echo "core WSS service did not become ready" >&2
+  cat "$LOGDIR/wss.log" >&2 || true
   exit 1
 fi
 
