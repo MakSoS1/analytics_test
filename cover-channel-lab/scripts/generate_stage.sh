@@ -9,7 +9,12 @@ rm -f /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock /tm
 mkdir -p "$OUT" "$(dirname "$PCAP")"
 rm -f "$PCAP"
 
-sudo tcpdump -i ccbr0 -s 0 -U -w "$PCAP" 'net 10.20.0.0/24' >"$OUT/tcpdump.log" 2>&1 &
+# Capture on the host-side peer of the server namespace. Every synthetic client
+# exchange to 10.20.0.20/10.20.0.21 crosses v-c2 exactly once; the bridge master
+# can miss switched veth frames even when tcpdump reports zero kernel drops.
+CAPTURE_IF="${COVERLAB_CAPTURE_IF:-v-c2}"
+sudo ip link show "$CAPTURE_IF" >/dev/null
+sudo tcpdump -i "$CAPTURE_IF" -s 0 -U -w "$PCAP" 'net 10.20.0.0/24' >"$OUT/tcpdump.log" 2>&1 &
 TCPDUMP_PID=$!
 cleanup_capture() { sudo kill -INT "$TCPDUMP_PID" 2>/dev/null || true; wait "$TCPDUMP_PID" 2>/dev/null || true; }
 trap cleanup_capture EXIT
@@ -88,5 +93,5 @@ python - <<PY
 import json
 from pathlib import Path
 p=Path('$OUT/manifests/campaigns.jsonl'); e=Path('$OUT/manifests/events.jsonl')
-print(json.dumps({'stage':'$STAGE','shard':$SHARD,'campaigns':sum(1 for _ in p.open()),'events':sum(1 for _ in e.open()),'pcap_bytes':Path('$PCAP').stat().st_size}))
+print(json.dumps({'stage':'$STAGE','shard':$SHARD,'campaigns':sum(1 for _ in p.open()),'events':sum(1 for _ in e.open()),'pcap_bytes':Path('$PCAP').stat().st_size,'capture_if':'$CAPTURE_IF'}))
 PY
