@@ -3,4 +3,4 @@ trusted-background-v1
 mqtt-routing-v1
 h3-connect-lifecycle-v2
 required-probes-v1
-retire-stale-run-v1
+retire-stale-run-v2-concurrency
