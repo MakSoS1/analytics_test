@@ -29,7 +29,7 @@ for pidx in 0 1 2 3; do
     PYTHONPATH="$ROOT/src" GITHUB_SHA="${GITHUB_SHA:-local}" COVERLAB_GO_CLIENT=/tmp/coverlab-go-client COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs" \
     COVERLAB_WSS_CLIENT_LOCK="$WSS_LOCK" \
     NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
-    "$PYTHON_BIN" -m coverlab.orchestrate --stage mixed --mixed-index "$IDX" --duration-minutes "$DURATION" --flow-count "$FLOWS" \
+    "$PYTHON_BIN" -m coverlab.orchestrate_v2 --stage mixed --mixed-index "$IDX" --duration-minutes "$DURATION" --flow-count "$FLOWS" \
       --persona-index "$pidx" --out "$pdir" --capture-file "$(basename "$PCAP")" &
   PIDS+=("$!")
 done
@@ -52,4 +52,5 @@ cp "$OUT/manifests/campaigns.jsonl" "$OUT/campaigns.jsonl"; cp "$OUT/manifests/e
 : > "$OUT/manifests/decrypted_transactions.jsonl"
 [[ -f /tmp/coverlab_server_trace.jsonl ]] && cat /tmp/coverlab_server_trace.jsonl >> "$OUT/manifests/decrypted_transactions.jsonl"
 [[ -f /tmp/coverlab_wss_trace.jsonl ]] && cat /tmp/coverlab_wss_trace.jsonl >> "$OUT/manifests/decrypted_transactions.jsonl"
+PYTHONPATH="$ROOT/src" python -m coverlab.validate_dataset_contract --stage-dir "$OUT" --out "$OUT/manifests/dataset_contract.json"
 echo "mixed capture $IDX complete: duration=${DURATION}m flows=$FLOWS pcap=$(stat -c%s "$PCAP") capture_if=$CAPTURE_IF"
