@@ -25,10 +25,18 @@ create_ns() {
 create_ns cc-office 10.20.0.10
 create_ns cc-dev 10.20.0.11
 create_ns cc-c2 10.20.0.20
+# Dedicated WSS fixture address. It remains on the same isolated lab segment and
+# has no forwarding role; separating it avoids sharing Hypercorn's TLS listener.
+sudo ip netns exec cc-c2 ip addr add 10.20.0.21/24 dev eth0
 create_ns cc-devops 10.20.0.30
 create_ns cc-soc 10.20.0.31
 
-HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-ws.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-tunnel.test lots-bucket.test mqtt-broker.test dyndns-relay.test benign-devtunnel.test doh-relay.test synthetic-api.test echo.test)
+# Remove stale cover-ws.test entries if this script is re-run on the same host,
+# then pin WSS to its dedicated local-only address.
+sudo sed -i -E '/[[:space:]]cover-ws\.test([[:space:]]|$)/d' /etc/hosts
+echo "10.20.0.21 cover-ws.test" | sudo tee -a /etc/hosts >/dev/null
+
+HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-tunnel.test lots-bucket.test mqtt-broker.test dyndns-relay.test benign-devtunnel.test doh-relay.test synthetic-api.test echo.test)
 for h in "${HOSTS[@]}"; do
   if ! grep -qE "(^|[[:space:]])${h//./\\.}([[:space:]]|$)" /etc/hosts; then
     echo "10.20.0.20 $h" | sudo tee -a /etc/hosts >/dev/null
