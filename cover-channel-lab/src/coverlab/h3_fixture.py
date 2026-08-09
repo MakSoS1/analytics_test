@@ -47,7 +47,12 @@ class LabH3Server(QuicConnectionProtocol):
                 self.respond(event.stream_id)
         elif isinstance(event, DataReceived):
             self.body[event.stream_id].extend(event.data)
-            if event.stream_ended:
+            headers = self.headers.get(event.stream_id, {})
+            is_connect = headers.get(b":method") == b"CONNECT"
+            # CONNECT already received its 200 response when the session was
+            # established. Closing the request stream must not generate a second
+            # response header block on the same H3 stream.
+            if event.stream_ended and not is_connect:
                 self.respond(event.stream_id)
         elif isinstance(event, DatagramReceived):
             self.h3.send_datagram(event.stream_id, event.data)
