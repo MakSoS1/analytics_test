@@ -13,7 +13,7 @@ write_status() {
   local reused="$1"
   local qdir="$RELEASE/quality/$NAME"
   mkdir -p "$qdir"
-  printf '{"mode":"%s","shard":"%s","reused":%s,"source_release":"%s","recovery_contract_revision":2}\n' \
+  printf '{"mode":"%s","shard":"%s","reused":%s,"source_release":"%s","recovery_contract_revision":2,"reuse_policy_revision":3}\n' \
     "$MODE" "$NAME" "$reused" "$SOURCE_RELEASE" | tee "$WORK/recovery_status.json" > "$qdir/recovery_status.json"
 }
 
@@ -23,7 +23,10 @@ if [[ -n "$SOURCE_RELEASE" && -n "${HF_TOKEN:-}" ]]; then
 fi
 
 if [[ "$try_reuse" == true ]]; then
-  python -m pip install -q 'huggingface_hub[hf_xet]>=1.0.0'
+  # Reuse validation decompresses the retained PCAP and rechecks hashes/tail.
+  # Install only the lightweight dependencies needed for that path; expensive
+  # traffic-generation fixtures are installed only when reuse is rejected.
+  python -m pip install -q 'huggingface_hub[hf_xet]>=1.0.0' 'zstandard>=0.23.0'
   if PYTHONPATH="$ROOT/src" python "$ROOT/scripts/reuse_hf_shard.py" \
       --repo "${HF_DATASET_REPO:-Maksim123321/cover-channel-web-protocols}" \
       --source-release "$SOURCE_RELEASE" \
@@ -34,7 +37,7 @@ if [[ "$try_reuse" == true ]]; then
     echo "reused validated shard: $NAME from $SOURCE_RELEASE"
     exit 0
   fi
-  echo "source shard $NAME is missing/invalid under contract revision 2; regenerating"
+  echo "source shard $NAME is missing/invalid under contract revision 2/reuse policy 3; regenerating"
 fi
 
 "$ROOT/scripts/install_runner.sh"
