@@ -1,8 +1,8 @@
 {
-  "triggered_at_utc": "2026-08-09T09:48:14Z",
-  "smoke_run_id": 31306486415,
-  "smoke_commit": "a9951bf2db04122d42f20cbaf47192b855983cc7",
-  "smoke_artifact_id": 9036180831,
+  "triggered_at_utc": "2026-08-09T10:17:05Z",
+  "smoke_run_id": 31307602606,
+  "smoke_commit": "81497047e6cec1be5b94ccb3469bd6de6d5940ed",
+  "smoke_artifact_id": 9036510724,
   "smoke_status": "pass",
   "scenario_catalog_size": 158,
   "smoke_campaigns": 317,
@@ -11,6 +11,8 @@
   "suricata_exit_zero": true,
   "zeek_exit_zero": true,
   "leakage_audit_passed": true,
+  "wss_native_sigsegv_regression_fixed": true,
+  "wss_production_cross_process_serialization": true,
   "full_corpus_requested": true,
   "stage_g_role": "trusted_service_hard_negative_background"
 }
