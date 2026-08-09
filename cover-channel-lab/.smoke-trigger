@@ -1,5 +1,6 @@
 wss-lifecycle-v2
 trusted-background-v1
 mqtt-routing-v1
-h3-connect-lifecycle-v1
+h3-connect-lifecycle-v2
 required-probes-v1
+retire-stale-run-v1
