@@ -54,7 +54,7 @@ jobs:
         run: |
           if [[ -n "$HF_TOKEN" ]]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
       - name: Initialize private Hugging Face dataset card when authorized
-        if: steps.hf.outputs.enabled == 'true'
+        if: steps.hf.outputs.enabled == 'true' && steps.mode.outputs.full == 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
@@ -72,8 +72,43 @@ jobs:
             echo "HF_TOKEN is absent: every complete release shard will still be retained as a GitHub Actions artifact for 90 days and can later be imported with Cover Channel HF Sync."
           fi
 
-  parser-validation:
+  smoke-gate:
     needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: cover-channel-lab/requirements.txt
+      - name: Install smoke dependencies and protocol fixtures
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Unit and contract tests
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        run: pytest -q
+      - name: Comprehensive transport, scenario, PCAP, parser and Gold smoke
+        working-directory: cover-channel-lab
+        run: bash ./scripts/transport_smoke_ci.sh
+      - name: Retain smoke PCAP, manifests, parser output, Gold and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-gate-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/coverlab-smoke-gate
+            ${{ runner.temp }}/coverlab-services
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 0
+
+  parser-validation:
+    needs: [preflight, smoke-gate]
+    if: needs.preflight.outputs.full_requested == 'true' && needs.smoke-gate.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -81,14 +116,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: cover-channel-lab/requirements.txt
       - name: Install runner dependencies
         working-directory: cover-channel-lab
         run: ./scripts/install_runner.sh
-      - name: Unit tests
-        working-directory: cover-channel-lab
-        env:
-          PYTHONPATH: src
-        run: pytest -q
       - name: Generate, parse and validate Stage A — 600 sessions
         working-directory: cover-channel-lab
         run: ./scripts/run_shard_ci.sh parser 0 1 "$RUNNER_TEMP/coverlab" A-parser-00
@@ -108,7 +140,7 @@ jobs:
 
   full-shards:
     needs: [preflight, parser-validation]
-    if: needs.preflight.outputs.full_requested == 'true'
+    if: needs.preflight.outputs.full_requested == 'true' && needs.parser-validation.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     strategy:
@@ -132,10 +164,10 @@ jobs:
           - {stage: challenge, shard: 3, shards: 6, name: challenge-03}
           - {stage: challenge, shard: 4, shards: 6, name: challenge-04}
           - {stage: challenge, shard: 5, shards: 6, name: challenge-05}
-          - {stage: lots, shard: 0, shards: 4, name: lots-00}
-          - {stage: lots, shard: 1, shards: 4, name: lots-01}
-          - {stage: lots, shard: 2, shards: 4, name: lots-02}
-          - {stage: lots, shard: 3, shards: 4, name: lots-03}
+          - {stage: lots, shard: 0, shards: 4, name: trusted-bg-00}
+          - {stage: lots, shard: 1, shards: 4, name: trusted-bg-01}
+          - {stage: lots, shard: 2, shards: 4, name: trusted-bg-02}
+          - {stage: lots, shard: 3, shards: 4, name: trusted-bg-03}
           - {stage: future, shard: 0, shards: 4, name: future-00}
           - {stage: future, shard: 1, shards: 4, name: future-01}
           - {stage: future, shard: 2, shards: 4, name: future-02}
@@ -145,6 +177,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: cover-channel-lab/requirements.txt
       - name: Install runner dependencies
         working-directory: cover-channel-lab
         run: ./scripts/install_runner.sh
@@ -251,7 +285,7 @@ jobs:
 
   mixed-captures:
     needs: [preflight, parser-validation]
-    if: needs.preflight.outputs.full_requested == 'true'
+    if: needs.preflight.outputs.full_requested == 'true' && needs.parser-validation.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     strategy:
@@ -264,6 +298,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: cover-channel-lab/requirements.txt
       - name: Install runner dependencies
         working-directory: cover-channel-lab
         run: ./scripts/install_runner.sh
@@ -291,7 +327,7 @@ jobs:
           compression-level: 0
 
   finalize:
-    needs: [preflight, parser-validation, full-shards, baseline-models, adversarial-holdout, mixed-captures]
+    needs: [preflight, smoke-gate, parser-validation, full-shards, baseline-models, adversarial-holdout, mixed-captures]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -301,6 +337,7 @@ jobs:
           python-version: '3.12'
       - name: Build release status
         env:
+          SMOKE_RESULT: ${{ needs.smoke-gate.result }}
           PARSER_RESULT: ${{ needs.parser-validation.result }}
           FULL_RESULT: ${{ needs.full-shards.result }}
           MODEL_RESULT: ${{ needs.baseline-models.result }}
@@ -308,6 +345,7 @@ jobs:
           MIXED_RESULT: ${{ needs.mixed-captures.result }}
           RELEASE_ID: ${{ needs.preflight.outputs.release_id }}
           HF_ENABLED: ${{ needs.preflight.outputs.hf_enabled }}
+          FULL_REQUESTED: ${{ needs.preflight.outputs.full_requested }}
         run: |
           mkdir -p /tmp/release-status
           python - <<'PY2'
@@ -316,18 +354,20 @@ jobs:
             'release_id':os.environ.get('RELEASE_ID',''),
             'github_sha':os.environ['GITHUB_SHA'],
             'github_run_id':os.environ['GITHUB_RUN_ID'],
+            'smoke_gate':os.environ.get('SMOKE_RESULT',''),
             'parser_validation':os.environ.get('PARSER_RESULT',''),
             'full_shards':os.environ.get('FULL_RESULT',''),
             'baseline_models':os.environ.get('MODEL_RESULT',''),
             'adversarial_holdout':os.environ.get('ADV_RESULT',''),
             'mixed_captures':os.environ.get('MIXED_RESULT',''),
             'hf_enabled':os.environ.get('HF_ENABLED','false') == 'true',
+            'full_requested':os.environ.get('FULL_REQUESTED','false') == 'true',
             'finished_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
           }
           open('/tmp/release-status/release.json','w').write(json.dumps(obj,indent=2))
           PY2
       - name: Publish release status to Hugging Face
-        if: needs.preflight.outputs.hf_enabled == 'true'
+        if: needs.preflight.outputs.hf_enabled == 'true' && needs.preflight.outputs.full_requested == 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           RELEASE_ID: ${{ needs.preflight.outputs.release_id }}
