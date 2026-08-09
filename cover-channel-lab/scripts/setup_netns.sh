@@ -31,12 +31,16 @@ sudo ip netns exec cc-c2 ip addr add 10.20.0.21/24 dev eth0
 create_ns cc-devops 10.20.0.30
 create_ns cc-soc 10.20.0.31
 
-# Remove stale cover-ws.test entries if this script is re-run on the same host,
-# then pin WSS to its dedicated local-only address.
-sudo sed -i -E '/[[:space:]]cover-ws\.test([[:space:]]|$)/d' /etc/hosts
-echo "10.20.0.21 cover-ws.test" | sudo tee -a /etc/hosts >/dev/null
+# Every hostname used by a WSS scenario must resolve to the dedicated RFC6455
+# listener. Keep the distinct synthetic hostnames for corpus diversity while
+# routing them to the same isolated local fixture address.
+WSS_HOSTS=(cover-ws.test lots-tunnel.test dyndns-relay.test mqtt-broker.test)
+for h in "${WSS_HOSTS[@]}"; do
+  sudo sed -i -E "/[[:space:]]${h//./\\.}([[:space:]]|$)/d" /etc/hosts
+  echo "10.20.0.21 $h" | sudo tee -a /etc/hosts >/dev/null
+done
 
-HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-tunnel.test lots-bucket.test mqtt-broker.test dyndns-relay.test benign-devtunnel.test doh-relay.test synthetic-api.test echo.test)
+HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-bucket.test benign-devtunnel.test doh-relay.test synthetic-api.test echo.test)
 for h in "${HOSTS[@]}"; do
   if ! grep -qE "(^|[[:space:]])${h//./\\.}([[:space:]]|$)" /etc/hosts; then
     echo "10.20.0.20 $h" | sudo tee -a /etc/hosts >/dev/null
