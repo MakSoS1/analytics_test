@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 import time as _time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from websockets.exceptions import InvalidMessage
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 # aioquic 1.2.x exposes SNI through QuicConfiguration.server_name; its
 # asyncio.connect() does not accept a server_name keyword. Keep compatibility in
@@ -53,9 +55,31 @@ _run_campaign.encoded_value = _nuisance.encoded_value
 _run_campaign.entropy_blob = _nuisance.entropy_blob
 
 # A corpus shard opens hundreds of short WSS connections from four isolated
-# personas. A transient accept/backlog delay must not discard a whole shard, but
-# retries must remain bounded so a genuinely dead fixture still fails loudly.
+# personas. The GitHub-hosted runner has shown a native OpenSSL/websockets
+# SIGSEGV when several Python processes churn TLS handshakes at the same time.
+# Serialize only Python WSS connection lifetimes across persona workers; all
+# HTTP/H2/H3/gRPC/MQTT work remains parallel. This is a reliability guard for
+# the client runtime, not a change to labels, payloads, or server behavior.
 _ws_connect_raw = _run_campaign.ws_connect
+_WS_CLIENT_LOCK = Path(os.environ.get("COVERLAB_WSS_CLIENT_LOCK", "/tmp/coverlab_wss_client.lock"))
+
+
+class _LockedWsConnection:
+    def __init__(self, conn, lock_file):
+        self._conn = conn
+        self._lock_file = lock_file
+
+    def __enter__(self):
+        return self._conn.__enter__()
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            return self._conn.__exit__(exc_type, exc, tb)
+        finally:
+            try:
+                fcntl.flock(self._lock_file, fcntl.LOCK_UN)
+            finally:
+                self._lock_file.close()
 
 
 def _ws_connect_resilient(*args, **kwargs):
@@ -64,13 +88,23 @@ def _ws_connect_resilient(*args, **kwargs):
     kwargs.setdefault("open_timeout", 6)
     kwargs.setdefault("close_timeout", 2)
     last = None
+    _WS_CLIENT_LOCK.parent.mkdir(parents=True, exist_ok=True)
     for attempt in range(3):
+        lock_file = _WS_CLIENT_LOCK.open("a+")
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
         try:
-            return _ws_connect_raw(*args, **kwargs)
+            conn = _ws_connect_raw(*args, **kwargs)
+            return _LockedWsConnection(conn, lock_file)
         except (TimeoutError, OSError, InvalidMessage) as exc:
             last = exc
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+            lock_file.close()
             if attempt < 2:
                 _time.sleep((0.10, 0.30)[attempt])
+        except BaseException:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+            lock_file.close()
+            raise
     assert last is not None
     raise last
 
