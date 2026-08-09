@@ -68,12 +68,36 @@ COMMON_ENV=(
 sudo ip netns exec cc-dev runuser -u "$USER" -- env "${COMMON_ENV[@]}" \
   "$PY" "$ROOT/scripts/scenario_smoke.py" --out "$STAGE/manifests"
 
-# 2) Deterministic bounded WSS soak across every persona. A previous GitHub
-# runner reproduced a native CPython/OpenSSL SIGSEGV only when four independent
-# WSS stress processes churned handshakes concurrently. The production runner
-# now serializes Python WSS lifetimes with a cross-process lock, so the gate uses
-# the same bounded concurrency policy instead of intentionally re-triggering a
-# native-library race. Each source namespace is still exercised on the wire.
+# 2) Exact regression for the scale-only failure seen in sequence-03: four
+# persona processes execute real 60-transaction Stage-C campaigns concurrently.
+# HTTP phases remain concurrent; the production asyncio WSS path owns the shared
+# lifecycle lock for connect/send/recv/close. All four manifests are folded into
+# this smoke's parser/Gold validation below.
+SEQ_NAMESPACES=(cc-office cc-dev cc-devops cc-soc)
+seq_pids=()
+for idx in 0 1 2 3; do
+  seq_out="$WORK/sequence-persona-$idx"
+  mkdir -p "$seq_out"
+  sudo ip netns exec "${SEQ_NAMESPACES[$idx]}" runuser -u "$USER" -- env "${COMMON_ENV[@]}" \
+    "$PY" "$ROOT/scripts/sequence_concurrency_smoke.py" --persona-index "$idx" --out "$seq_out" &
+  seq_pids+=("$!")
+done
+seq_rc=0
+for pid in "${seq_pids[@]}"; do
+  if ! wait "$pid"; then seq_rc=1; fi
+done
+if [[ "$seq_rc" -ne 0 ]]; then
+  echo 'four-persona Stage-C concurrency regression failed' >&2
+  exit 1
+fi
+for idx in 0 1 2 3; do
+  cat "$WORK/sequence-persona-$idx/campaigns.jsonl" >> "$STAGE/manifests/campaigns.jsonl"
+  cat "$WORK/sequence-persona-$idx/events.jsonl" >> "$STAGE/manifests/events.jsonl"
+done
+
+# 3) Bounded WSS server soak across every persona. This is intentionally
+# sequential because production Python WSS lifetimes are serialized; the
+# preceding Stage-C block is the true four-process concurrency regression.
 for ns in cc-office cc-dev cc-devops cc-soc; do
   echo "WSS soak persona: $ns"
   sudo ip netns exec "$ns" runuser -u "$USER" -- env "${COMMON_ENV[@]}" \
@@ -81,8 +105,7 @@ for ns in cc-office cc-dev cc-devops cc-soc; do
       --connections 40 --attempts 3 --open-timeout 8 --inter-delay 0.008
 done
 
-# 3) Recheck advanced QUIC transports after catalog + WSS churn. This catches
-# lifecycle/resource leakage that a startup readiness probe cannot see.
+# 4) Recheck advanced QUIC transports after catalog + sequence + WSS churn.
 for mode in request connect-udp webtransport; do
   extra=()
   if [[ "$mode" != request ]]; then extra=(--mode "$mode" --body "post-smoke-$mode"); fi
@@ -104,7 +127,7 @@ cleanup_capture
 cp "$STAGE/manifests/campaigns.jsonl" "$STAGE/campaigns.jsonl"
 cp "$STAGE/manifests/events.jsonl" "$STAGE/events.jsonl"
 
-# 4) Parser + feature smoke. Both parsers must succeed and package_layers must
+# 5) Parser + feature smoke. Both parsers must succeed and package_layers must
 # pass the same campaign mapping, leakage and Bronze/Silver/Gold quality gates
 # used by full shards.
 "$ROOT/scripts/process_parsers.sh" "$PCAP" "$STAGE" "$PARSER"
