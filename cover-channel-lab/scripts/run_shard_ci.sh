@@ -14,7 +14,7 @@ trap cleanup EXIT
 # WebTransport, gRPC, or trusted-background labeling is bad, the workflow stops
 # here and no expensive Stage B/C/D/F/G/H matrix is started.
 if [[ "$STAGE" == "parser" ]]; then
-  "$ROOT/scripts/transport_smoke_ci.sh"
+  bash "$ROOT/scripts/transport_smoke_ci.sh"
 fi
 
 "$ROOT/scripts/setup_netns.sh"
