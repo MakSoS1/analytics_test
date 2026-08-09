@@ -2,16 +2,18 @@ from __future__ import annotations
 
 """Model-pipeline correctness overlay.
 
-Keeps the existing LightGBM/calibration implementation, but removes laboratory
-features, preserves missingness explicitly, feeds field-level content into B1,
-and gives B2 order-sensitive temporal features instead of only bag-of-events
-statistics.
+Removes laboratory/rule leakage, preserves telemetry missingness, feeds
+field-level content into B1, gives B2 order-sensitive temporal features, and
+separates probability calibration from threshold selection.
 """
 
+import hashlib
+import json
 import math
 from collections import Counter
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -26,6 +28,10 @@ FORBIDDEN_MODEL_FEATURES = {
     "configuration_id",
     "mixed_capture_index",
     "logical_capture_minutes",
+    # Signature/rule output is intentionally excluded from the ML-only experts.
+    # A rule+ML hybrid can be evaluated separately without contaminating the
+    # baseline claim.
+    "suricata_alerts",
 }
 
 
@@ -52,7 +58,7 @@ def numeric_matrix(df: pd.DataFrame, feature_cols: list[str] | None = None):
 
     forbidden_leak = sorted(set(feature_cols) & FORBIDDEN_MODEL_FEATURES)
     if forbidden_leak:
-        raise RuntimeError(f"forbidden laboratory features reached model matrix: {forbidden_leak}")
+        raise RuntimeError(f"forbidden laboratory/rule features reached model matrix: {forbidden_leak}")
     return raw[feature_cols], feature_cols
 
 
@@ -137,15 +143,13 @@ def _field_aggregate(root: Path) -> pd.DataFrame:
     f["field_is_custom_header"] = (role.eq("request_header") & name.str.startswith("x-")).astype(int)
     f["field_is_body"] = role.eq("request_body").astype(int)
     numeric = [
-        c
-        for c in (
+        c for c in (
             "raw_length", "byte_length", "entropy", "printable_ratio", "unique_char_ratio",
             "digit_ratio", "alpha_ratio", "hex_ratio", "b64_ratio", "b64url_ratio",
             "delimiter_ratio", "uuid_like", "jwt_like", "etag_like", "encoded_token_like",
             "field_is_authorization", "field_is_cookie", "field_is_etag", "field_is_range",
             "field_is_referer", "field_is_custom_header", "field_is_body",
-        )
-        if c in f.columns
+        ) if c in f.columns
     ]
     keys = ["campaign_id"] + (["ts"] if "ts" in f.columns else [])
     agg = f.groupby(keys)[numeric].agg(["mean", "max", "sum"])
@@ -153,14 +157,19 @@ def _field_aggregate(root: Path) -> pd.DataFrame:
     return agg.reset_index()
 
 
+def _series_or_default(df: pd.DataFrame, column: str, default: str | int | float) -> pd.Series:
+    if column in df:
+        return df[column]
+    return pd.Series([default] * len(df), index=df.index)
+
+
 def _availability_flags(session: pd.DataFrame) -> pd.DataFrame:
     s = session.copy()
-    s["availability_encrypted"] = s.get("visibility_mode", "").astype(str).str.contains("opaque|encrypted", case=False, regex=True).astype(int)
-    s["availability_inspection_bypassed"] = s.get("inspection_policy", "").astype(str).eq("bypass").astype(int)
-    s["availability_sni_hidden"] = ~s.get("sni_visibility", "clear").astype(str).str.lower().isin(["clear", "visible"])
-    s["availability_sni_hidden"] = s["availability_sni_hidden"].astype(int)
-    suri = pd.to_numeric(s.get("suricata_events", 0), errors="coerce").fillna(0)
-    zeek = pd.to_numeric(s.get("zeek_events", 0), errors="coerce").fillna(0)
+    s["availability_encrypted"] = _series_or_default(s, "visibility_mode", "").astype(str).str.contains("opaque|encrypted", case=False, regex=True).astype(int)
+    s["availability_inspection_bypassed"] = _series_or_default(s, "inspection_policy", "").astype(str).eq("bypass").astype(int)
+    s["availability_sni_hidden"] = (~_series_or_default(s, "sni_visibility", "clear").astype(str).str.lower().isin(["clear", "visible"])).astype(int)
+    suri = pd.to_numeric(_series_or_default(s, "suricata_events", 0), errors="coerce").fillna(0)
+    zeek = pd.to_numeric(_series_or_default(s, "zeek_events", 0), errors="coerce").fillna(0)
     s["availability_parser_any"] = ((suri + zeek) > 0).astype(int)
     return s
 
@@ -190,8 +199,7 @@ def build_frames(root: Path):
         b2 = session.merge(agg, on="campaign_id", how="left").merge(temporal, on="campaign_id", how="left")
         b1 = tx_enriched.merge(
             session[["campaign_id", "label_binary", "split"]].drop_duplicates("campaign_id"),
-            on="campaign_id",
-            how="inner",
+            on="campaign_id", how="inner",
         )
     else:
         b2 = session.copy()
@@ -210,8 +218,130 @@ def build_frames(root: Path):
     return {"B1-content": b1, "B2-session": b2, "B3-opaque": session[b3_cols].copy()}
 
 
+def _validation_parts(val: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Split validation by campaign, stratified by label, into calibration/tuning."""
+    if val.empty:
+        return val.copy(), val.copy()
+    camp = val[["campaign_id", "label_binary"]].drop_duplicates("campaign_id").copy()
+    cal_ids: set[str] = set()
+    tune_ids: set[str] = set()
+    for _label, group in camp.groupby("label_binary"):
+        ids = sorted(
+            group.campaign_id.astype(str).tolist(),
+            key=lambda cid: hashlib.sha256(("calibration-v1:" + cid).encode()).hexdigest(),
+        )
+        for idx, cid in enumerate(ids):
+            (cal_ids if idx % 2 == 0 else tune_ids).add(cid)
+    cal = val[val.campaign_id.astype(str).isin(cal_ids)].copy()
+    tune = val[val.campaign_id.astype(str).isin(tune_ids)].copy()
+    return cal, tune
+
+
+def fit_one(name: str, df: pd.DataFrame, out: Path, seed: int) -> dict:
+    if df.empty:
+        return {"name": name, "status": "empty"}
+    if "split" not in df or "label_binary" not in df:
+        return {"name": name, "status": "missing_split_or_label"}
+    train = df[df.split == "train"].copy()
+    val = df[df.split == "validation"].copy()
+    test = df[df.split == "test"].copy()
+    challenge = df[df.split == "challenge"].copy()
+    if train.empty or len(train.label_binary.unique()) < 2:
+        return {"name": name, "status": "insufficient_train"}
+
+    x_train, cols = numeric_matrix(train)
+    y_train = train.label_binary.astype(int).to_numpy()
+    model = _base.LGBMClassifier(
+        n_estimators=350, learning_rate=.04, num_leaves=31, subsample=.85,
+        colsample_bytree=.85, reg_lambda=1.0, class_weight="balanced",
+        random_state=seed, n_jobs=-1, verbosity=-1,
+    )
+    model.fit(x_train, y_train)
+
+    calibrator = None
+    threshold = .5
+    calibration_metrics: dict = {"rows": 0}
+    threshold_metrics: dict = {"rows": 0}
+    cal, tune = _validation_parts(val)
+
+    if not cal.empty and len(cal.label_binary.unique()) > 1:
+        x_cal, _ = numeric_matrix(cal, cols)
+        y_cal = cal.label_binary.astype(int).to_numpy()
+        raw_cal = model.predict_proba(x_cal)[:, 1]
+        calibrator = _base.IsotonicRegression(out_of_bounds="clip")
+        calibrator.fit(raw_cal, y_cal)
+        p_cal = calibrator.predict(raw_cal)
+        calibration_metrics = _base.metrics(y_cal, p_cal, .5)
+
+    if not tune.empty and len(tune.label_binary.unique()) > 1:
+        x_tune, _ = numeric_matrix(tune, cols)
+        y_tune = tune.label_binary.astype(int).to_numpy()
+        raw_tune = model.predict_proba(x_tune)[:, 1]
+        p_tune = calibrator.predict(raw_tune) if calibrator is not None else raw_tune
+        threshold = _base.threshold_for_recall(y_tune, p_tune, .95)
+        threshold_metrics = _base.metrics(y_tune, p_tune, threshold)
+
+    def score(part: pd.DataFrame) -> dict:
+        if part.empty:
+            return {"rows": 0}
+        x, _ = numeric_matrix(part, cols)
+        raw = model.predict_proba(x)[:, 1]
+        p = calibrator.predict(raw) if calibrator is not None else raw
+        return _base.metrics(part.label_binary.astype(int).to_numpy(), p, threshold)
+
+    importance = sorted(
+        [{"feature": c, "gain": float(v)} for c, v in zip(cols, model.booster_.feature_importance(importance_type="gain"))],
+        key=lambda x: x["gain"], reverse=True,
+    )
+    bundle = {
+        "model": model, "calibrator": calibrator, "threshold": threshold,
+        "features": cols, "name": name,
+        "calibration_policy": "validation_campaign_stratified_half",
+        "threshold_policy": "disjoint_validation_campaign_half_target_recall_0.95",
+        "ml_only": True,
+        "forbidden_features": sorted(FORBIDDEN_MODEL_FEATURES),
+    }
+    joblib.dump(bundle, out / f"{name}.joblib")
+    (out / f"{name}_feature_importance.json").write_text(json.dumps(importance[:100], indent=2))
+
+    shap_summary = []
+    try:
+        import shap
+        sample = train.sample(min(1000, len(train)), random_state=seed)
+        sx, _ = numeric_matrix(sample, cols)
+        values = shap.TreeExplainer(model).shap_values(sx)
+        values = values[-1] if isinstance(values, list) else values
+        mean_abs = np.abs(np.asarray(values)).mean(axis=0)
+        shap_summary = sorted(
+            [{"feature": c, "mean_abs_shap": float(v)} for c, v in zip(cols, mean_abs)],
+            key=lambda x: x["mean_abs_shap"], reverse=True,
+        )[:100]
+        (out / f"{name}_shap.json").write_text(json.dumps(shap_summary, indent=2))
+    except Exception as exc:
+        (out / f"{name}_shap_error.txt").write_text(str(exc))
+
+    return {
+        "name": name,
+        "status": "ok",
+        "features": len(cols),
+        "train": {"rows": len(train), "positives": int(train.label_binary.sum())},
+        "calibration": calibration_metrics,
+        "threshold_selection": threshold_metrics,
+        # Keep a compact compatibility summary while making it explicit that
+        # validation is not final evidence.
+        "validation": {"rows": int(len(val)), "role": "calibration_and_threshold_selection_disjoint_by_campaign"},
+        "test": score(test),
+        "challenge": score(challenge),
+        "threshold": threshold,
+        "top_features": importance[:20],
+        "top_shap": shap_summary[:20],
+        "ml_only": True,
+    }
+
+
 _base.numeric_matrix = numeric_matrix
 _base.build_frames = build_frames
+_base.fit_one = fit_one
 
 
 if __name__ == "__main__":
