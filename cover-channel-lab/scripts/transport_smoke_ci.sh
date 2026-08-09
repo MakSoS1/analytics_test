@@ -137,6 +137,27 @@ HEALTH="$RELEASE/quality/smoke-gate/capture_health.json"
 [[ -s "$HEALTH" ]]
 jq -e '.passed == true and .suricata_exit_zero == true and .zeek_exit_zero == true and .mapping_coverage_ge_0_95 == true' "$HEALTH" >/dev/null
 
+# 6) Exact future-02 regression. The previous full corpus produced all 350
+# campaigns and 1,400 events successfully but only 0.948571 packet mapping.
+# Re-run that exact shard under the smoke gate so sub-threshold H3/QUIC/OHTTP
+# campaign attribution can never reach the expensive full fan-out again.
+FUTURE_WORK="$WORK/future02-regression"
+FUTURE_STAGE="$FUTURE_WORK/stage"
+FUTURE_PARSER="$FUTURE_WORK/parsers"
+FUTURE_RELEASE="$FUTURE_WORK/release"
+FUTURE_PCAP="$FUTURE_WORK/future-02.pcap"
+mkdir -p "$FUTURE_WORK"
+"$ROOT/scripts/generate_stage.sh" future 2 4 "$FUTURE_STAGE" "$FUTURE_PCAP"
+"$ROOT/scripts/process_parsers.sh" "$FUTURE_PCAP" "$FUTURE_STAGE" "$FUTURE_PARSER"
+"$ROOT/scripts/package_layers.sh" "$FUTURE_STAGE" "$FUTURE_PCAP" "$FUTURE_PARSER" "$FUTURE_RELEASE" future-02-regression
+
+FUTURE_HEALTH="$FUTURE_RELEASE/quality/future-02-regression/capture_health.json"
+[[ -s "$FUTURE_HEALTH" ]]
+jq -e '.campaign_count == 350 and .event_count == 1400 and .passed == true and .suricata_exit_zero == true and .zeek_exit_zero == true and .mapping_coverage_ge_0_95 == true' "$FUTURE_HEALTH" >/dev/null
+
+echo 'future-02 exact mapping regression: PASS'
+cat "$FUTURE_HEALTH"
+
 FAILED=0
 "$ROOT/scripts/stop_services.sh" || true
 trap - EXIT
