@@ -8,6 +8,7 @@ PARSER="$WORK/parsers"
 RELEASE="$WORK/release"
 PCAP="$WORK/smoke.pcap"
 TCPDUMP_PID=""
+CAPTURE_DRAIN_SECONDS="${COVERLAB_CAPTURE_DRAIN_SECONDS:-1.0}"
 FAILED=1
 
 rm -rf "$WORK"
@@ -19,6 +20,14 @@ cleanup_capture() {
     sudo kill -INT "$TCPDUMP_PID" 2>/dev/null || true
     wait "$TCPDUMP_PID" 2>/dev/null || true
     TCPDUMP_PID=""
+  fi
+}
+
+drain_capture() {
+  if [[ -n "${TCPDUMP_PID:-}" ]]; then
+    sleep "$CAPTURE_DRAIN_SECONDS"
+    sudo kill -USR2 "$TCPDUMP_PID" 2>/dev/null || true
+    sleep 0.20
   fi
 }
 
@@ -46,12 +55,10 @@ trap cleanup EXIT
 "$ROOT/scripts/setup_netns.sh"
 "$ROOT/scripts/start_services.sh"
 
-# Capture the complete smoke path at the canonical server-side veth. Every
-# synthetic exchange to 10.20.0.20/10.20.0.21 crosses this interface exactly
-# once, unlike the bridge master which can miss switched frames.
+# Capture the complete smoke path at the canonical server-side veth.
 CAPTURE_IF="${COVERLAB_CAPTURE_IF:-v-c2}"
 sudo ip link show "$CAPTURE_IF" >/dev/null
-sudo tcpdump -i "$CAPTURE_IF" -s 0 -U -w "$PCAP" 'net 10.20.0.0/24' >"$WORK/tcpdump.log" 2>&1 &
+sudo tcpdump -i "$CAPTURE_IF" -B 8192 -s 0 -U -w "$PCAP" 'net 10.20.0.0/24' >"$WORK/tcpdump.log" 2>&1 &
 TCPDUMP_PID=$!
 sleep .4
 
@@ -62,21 +69,17 @@ COMMON_ENV=(
   COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs"
   COVERLAB_WSS_CLIENT_LOCK=/tmp/coverlab_wss_client.lock
   COVERLAB_CAPTURE_IF="$CAPTURE_IF"
+  COVERLAB_CAPTURE_DRAIN_SECONDS="$CAPTURE_DRAIN_SECONDS"
   NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1'
   no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1'
 )
 
-# 1) Functional catalog smoke: every scenario ID, benign/suspicious semantics
-# where applicable, every generic client stack, one 60-step Stage-C sequence,
-# and Stage-G background-only contract checks.
+# 1) Functional catalog smoke: every scenario ID, benign/suspicious semantics,
+# every generic client stack, one Stage-C sequence, and Stage-G contract checks.
 sudo ip netns exec cc-dev runuser -u "$USER" -- env "${COMMON_ENV[@]}" \
   "$PY" "$ROOT/scripts/scenario_smoke.py" --out "$STAGE/manifests"
 
-# 2) Exact regression for the scale-only failure seen in sequence-03: four
-# persona processes execute real 60-transaction Stage-C campaigns concurrently.
-# HTTP phases remain concurrent; the production asyncio WSS path owns the shared
-# lifecycle lock for connect/send/recv/close. All four manifests are folded into
-# this smoke's parser/Gold validation below.
+# 2) Exact Stage-C four-persona concurrency regression.
 SEQ_NAMESPACES=(cc-office cc-dev cc-devops cc-soc)
 seq_pids=()
 for idx in 0 1 2 3; do
@@ -99,9 +102,7 @@ for idx in 0 1 2 3; do
   cat "$WORK/sequence-persona-$idx/events.jsonl" >> "$STAGE/manifests/events.jsonl"
 done
 
-# 3) Bounded WSS server soak across every persona. This is intentionally
-# sequential because production Python WSS lifetimes are serialized; the
-# preceding Stage-C block is the true four-process concurrency regression.
+# 3) Bounded WSS server soak across every persona.
 for ns in cc-office cc-dev cc-devops cc-soc; do
   echo "WSS soak persona: $ns"
   sudo ip netns exec "$ns" runuser -u "$USER" -- env "${COMMON_ENV[@]}" \
@@ -122,6 +123,9 @@ done
 sudo ip netns exec cc-dev runuser -u "$USER" -- env "${COMMON_ENV[@]}" \
   "$PY" "$ROOT/scripts/wss_stress_smoke.py" --connections 20 --inter-delay 0.01
 
+# Give libpcap time to consume and flush packets from the final application
+# exchanges before SIGINT. The exact future-02 regression below guards this.
+drain_capture
 cleanup_capture
 
 # Assemble the same ground-truth shape used by real shards.
@@ -131,9 +135,7 @@ cleanup_capture
 cp "$STAGE/manifests/campaigns.jsonl" "$STAGE/campaigns.jsonl"
 cp "$STAGE/manifests/events.jsonl" "$STAGE/events.jsonl"
 
-# 5) Parser + feature smoke. Both parsers must succeed and package_layers must
-# pass the same campaign mapping, leakage and Bronze/Silver/Gold quality gates
-# used by full shards.
+# 5) Parser + feature smoke.
 "$ROOT/scripts/process_parsers.sh" "$PCAP" "$STAGE" "$PARSER"
 "$ROOT/scripts/package_layers.sh" "$STAGE" "$PCAP" "$PARSER" "$RELEASE" smoke-gate
 
@@ -141,18 +143,20 @@ HEALTH="$RELEASE/quality/smoke-gate/capture_health.json"
 [[ -s "$HEALTH" ]]
 jq -e '.passed == true and .suricata_exit_zero == true and .zeek_exit_zero == true and .mapping_coverage_ge_0_95 == true' "$HEALTH" >/dev/null
 
-# 6) Exact future-02 regression. The previous bridge-master capture produced all
-# 350 campaigns and 1,400 events but stopped before the final 18 DevOps sessions,
-# yielding 0.948571 mapping despite zero tcpdump kernel drops. Re-run that exact
-# shard through the server-veth capture point and require the unchanged >=0.95
-# quality gate before a full corpus can start.
+# 6) Exact future-02 regression. Two independent runs previously completed all
+# 350 campaigns and 1,400 events while their PCAP ended just before the final 18
+# DevOps campaigns. tcpdump reported zero kernel drops but had received more
+# packets than it had written when SIGINT arrived. The production generator now
+# has a bounded drain+flush window; this regression keeps the quality threshold
+# unchanged at >=0.95 and fails if capture teardown truncates the tail again.
 FUTURE_WORK="$WORK/future02-regression"
 FUTURE_STAGE="$FUTURE_WORK/stage"
 FUTURE_PARSER="$FUTURE_WORK/parsers"
 FUTURE_RELEASE="$FUTURE_WORK/release"
 FUTURE_PCAP="$FUTURE_WORK/future-02.pcap"
 mkdir -p "$FUTURE_WORK"
-COVERLAB_CAPTURE_IF="$CAPTURE_IF" "$ROOT/scripts/generate_stage.sh" future 2 4 "$FUTURE_STAGE" "$FUTURE_PCAP"
+COVERLAB_CAPTURE_IF="$CAPTURE_IF" COVERLAB_CAPTURE_DRAIN_SECONDS="$CAPTURE_DRAIN_SECONDS" \
+  "$ROOT/scripts/generate_stage.sh" future 2 4 "$FUTURE_STAGE" "$FUTURE_PCAP"
 "$ROOT/scripts/process_parsers.sh" "$FUTURE_PCAP" "$FUTURE_STAGE" "$FUTURE_PARSER"
 "$ROOT/scripts/package_layers.sh" "$FUTURE_STAGE" "$FUTURE_PCAP" "$FUTURE_PARSER" "$FUTURE_RELEASE" future-02-regression
 
