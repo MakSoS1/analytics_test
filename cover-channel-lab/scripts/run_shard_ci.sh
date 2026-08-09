@@ -7,6 +7,16 @@ STAGE_DIR="$WORK/stage"; PARSER_DIR="$WORK/parsers"; RELEASE_DIR="$WORK/release"
 mkdir -p "$WORK"
 cleanup(){ "$ROOT/scripts/stop_services.sh" || true; }
 trap cleanup EXIT
+
+# Stage A is the fan-out gate for the entire corpus. Before generating its 600
+# parser-validation sessions, reproduce the transport failure modes that broke
+# the previous full run. If WSS lifecycle, MQTT routing, H3 CONNECT-UDP,
+# WebTransport, gRPC, or trusted-background labeling is bad, the workflow stops
+# here and no expensive Stage B/C/D/F/G/H matrix is started.
+if [[ "$STAGE" == "parser" ]]; then
+  bash "$ROOT/scripts/transport_smoke_ci.sh"
+fi
+
 "$ROOT/scripts/setup_netns.sh"
 "$ROOT/scripts/start_services.sh"
 "$ROOT/scripts/generate_stage.sh" "$STAGE" "$SHARD" "$SHARDS" "$STAGE_DIR" "$PCAP"

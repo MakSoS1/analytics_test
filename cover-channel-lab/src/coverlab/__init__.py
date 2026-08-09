@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import json
+import time as _time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-__version__ = "1.2.1"
+from websockets.exceptions import InvalidMessage
+
+__version__ = "1.3.0"
 
 # aioquic 1.2.x exposes SNI through QuicConfiguration.server_name; its
 # asyncio.connect() does not accept a server_name keyword. Keep compatibility in
 # one place because both the readiness client and the H3 scenario dispatcher use
-# the same helper. This wrapper can be removed when the callers no longer pass
-# the legacy keyword.
+# the same helper.
 import aioquic.asyncio.client as _aioquic_client
 from aioquic.quic.configuration import QuicConfiguration as _QuicConfiguration
 
@@ -50,6 +52,31 @@ _original_run = _run_campaign.run
 _run_campaign.encoded_value = _nuisance.encoded_value
 _run_campaign.entropy_blob = _nuisance.entropy_blob
 
+# A corpus shard opens hundreds of short WSS connections from four isolated
+# personas. A transient accept/backlog delay must not discard a whole shard, but
+# retries must remain bounded so a genuinely dead fixture still fails loudly.
+_ws_connect_raw = _run_campaign.ws_connect
+
+
+def _ws_connect_resilient(*args, **kwargs):
+    kwargs.setdefault("proxy", None)
+    kwargs.setdefault("compression", None)
+    kwargs.setdefault("open_timeout", 6)
+    kwargs.setdefault("close_timeout", 2)
+    last = None
+    for attempt in range(3):
+        try:
+            return _ws_connect_raw(*args, **kwargs)
+        except (TimeoutError, OSError, InvalidMessage) as exc:
+            last = exc
+            if attempt < 2:
+                _time.sleep((0.10, 0.30)[attempt])
+    assert last is not None
+    raise last
+
+
+_run_campaign.ws_connect = _ws_connect_resilient
+
 _TLS_FIDELITY = {
     "CC_TLS_01": "wire_real_default_tls_stack",
     "CC_TLS_02": "browser_like_http_headers_with_script_tls_not_utls_parroting",
@@ -82,6 +109,23 @@ def _decorate_last_manifest(path: str, campaign_id: str, updates: dict) -> None:
 
 
 def _run_with_transport_dispatch(args):
+    campaign_id = str(args.campaign_id)
+
+    # The original source plan called Stage G "LOTS-inspired". For a Cover
+    # Channel detector that traffic must never be a positive target merely
+    # because it uses a trusted service. Keep the slice as benign hard-negative
+    # background and preserve its value for false-positive testing.
+    if campaign_id.startswith("g-"):
+        args.variant = "benign"
+
+    # Mixed captures may still draw a LOTS-family scenario as ambient traffic.
+    # If the selected prevalence point is positive, use an actual WSS covert
+    # carrier instead; otherwise we would silently teach LOTS == cover channel.
+    selected = _base_scenarios.BY_ID[args.scenario]
+    if campaign_id.startswith("d-") and getattr(args, "variant", "") == "suspicious" and selected.family == "lots":
+        args.scenario = "CC_WS_09"
+        selected = _base_scenarios.BY_ID[args.scenario]
+
     token = _nuisance.push(args.campaign_id)
     try:
         nuisance_fields = _nuisance.current()
@@ -89,7 +133,7 @@ def _run_with_transport_dispatch(args):
         # Stage C campaign IDs are c-<profile>-<rep>. A sequence is generated as
         # one campaign with 60 actual multi-phase transactions, not 60 repeats of
         # one carrier. The parent ID is kept in server state and decrypted traces.
-        if str(args.campaign_id).startswith("c-") and int(getattr(args, "events", 0)) == 60:
+        if campaign_id.startswith("c-") and int(getattr(args, "events", 0)) == 60:
             from .sequence_campaign import run_sequence
 
             record = run_sequence(args, _original_run)
@@ -97,7 +141,7 @@ def _run_with_transport_dispatch(args):
             _decorate_last_manifest(args.manifest, args.campaign_id, nuisance_fields)
             return record
 
-        scenario = _base_scenarios.BY_ID[args.scenario]
+        scenario = selected
         from . import protocol_dispatch as _protocol_dispatch
 
         # H3/gRPC/MQTT clients construct their message bytes outside
@@ -113,6 +157,12 @@ def _run_with_transport_dispatch(args):
 
         record = _original_run(args)
         updates = dict(nuisance_fields)
+        if campaign_id.startswith("g-"):
+            updates.update({
+                "dataset_role": "hard_negative",
+                "source_family": "trusted_site_inspired",
+                "target_task": "cover_channel_detection",
+            })
         if scenario.scenario_id in _TLS_FIDELITY:
             updates["implementation_fidelity"] = _TLS_FIDELITY[scenario.scenario_id]
         elif scenario.family == "browser" and getattr(args, "client_impl", "") == "browser_chromium":

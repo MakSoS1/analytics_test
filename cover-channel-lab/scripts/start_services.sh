@@ -5,7 +5,7 @@ PYTHON_BIN="$(command -v python)"
 CERTDIR="${RUNNER_TEMP:-/tmp}/coverlab-certs"
 LOGDIR="${RUNNER_TEMP:-/tmp}/coverlab-services"
 mkdir -p "$CERTDIR" "$LOGDIR"
-rm -f /tmp/coverlab_server_state.json /tmp/coverlab_server_state.json.lock /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock
+rm -f /tmp/coverlab_server_state.json /tmp/coverlab_server_state.json.lock /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock /tmp/coverlab_wss_trace.jsonl
 go build -o /tmp/coverlab-go-client "$ROOT/clients/go_client.go"
 chmod 755 /tmp/coverlab-go-client
 
@@ -99,21 +99,36 @@ fi
 
 echo "coverlab core HTTP/HTTPS/H2/WSS services ready"
 
-probe() {
-  local name="$1"; shift
-  if timeout 10s "$@" >/dev/null 2>&1; then
-    echo "optional service probe: $name=ready"
-  else
-    echo "optional service probe: $name=deferred_to_own_shard" >&2
+required_probe() {
+  local name="$1" logfile="$2"; shift 2
+  local ok=false
+  for _ in $(seq 1 12); do
+    if timeout 15s "$@" >/dev/null 2>&1; then
+      ok=true
+      break
+    fi
+    sleep .25
+  done
+  if [[ "$ok" == true ]]; then
+    echo "required service probe: $name=ready"
+    return 0
   fi
+  echo "required service probe failed: $name" >&2
+  [[ -f "$logfile" ]] && tail -n 120 "$logfile" >&2 || true
+  return 1
 }
 
 grpc_probe='import grpc; c=grpc.insecure_channel("cover-h2.test:50051"); grpc.channel_ready_future(c).result(timeout=4); c.close()'
-mqtt_probe='import ssl,time,paho.mqtt.client as mqtt; c=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,client_id="health-probe",protocol=mqtt.MQTTv5,transport="websockets"); x=ssl.create_default_context(); x.check_hostname=False; x.verify_mode=ssl.CERT_NONE; c.tls_set_context(x); c.ws_set_options(path="/mqtt"); c.connect("mqtt-broker.test",9443,keepalive=5); c.loop_start(); end=time.time()+4;\nwhile time.time()<end and not c.is_connected(): time.sleep(.05)\nok=c.is_connected(); c.disconnect(); c.loop_stop(); raise SystemExit(0 if ok else 1)'
+mqtt_probe='import ssl,time,paho.mqtt.client as mqtt; c=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,client_id="health-probe",protocol=mqtt.MQTTv5,transport="websockets"); x=ssl.create_default_context(); x.check_hostname=False; x.verify_mode=ssl.CERT_NONE; c.tls_set_context(x); c.ws_set_options(path="/mqtt"); c.connect("mqtt-broker.test",9443,keepalive=5); c.loop_start(); time.sleep(1.0); ok=c.is_connected(); c.disconnect(); c.loop_stop(); raise SystemExit(0 if ok else 1)'
 
-probe h3 sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.h3_fixture client --host cover-h3.test --port 8444 --path /healthz
-probe grpc sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$grpc_probe"
-probe mqtt sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$mqtt_probe"
+COMMON_ENV=(env PYTHONPATH="$ROOT/src" NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1')
+required_probe h3-request "$LOGDIR/h3.log" sudo ip netns exec cc-dev runuser -u "$USER" -- "${COMMON_ENV[@]}" "$PYTHON_BIN" -m coverlab.h3_fixture client --host cover-h3.test --port 8444 --path /healthz
+required_probe h3-connect-udp "$LOGDIR/h3.log" sudo ip netns exec cc-dev runuser -u "$USER" -- "${COMMON_ENV[@]}" "$PYTHON_BIN" -m coverlab.h3_fixture client --host cover-h3.test --port 8444 --mode connect-udp --body health-datagram
+required_probe h3-webtransport "$LOGDIR/h3.log" sudo ip netns exec cc-dev runuser -u "$USER" -- "${COMMON_ENV[@]}" "$PYTHON_BIN" -m coverlab.h3_fixture client --host cover-h3.test --port 8444 --mode webtransport --body health-webtransport
+required_probe grpc "$LOGDIR/grpc.log" sudo ip netns exec cc-dev runuser -u "$USER" -- "${COMMON_ENV[@]}" "$PYTHON_BIN" -c "$grpc_probe"
+required_probe mqtt-wss "$LOGDIR/mqtt.log" sudo ip netns exec cc-dev runuser -u "$USER" -- "${COMMON_ENV[@]}" "$PYTHON_BIN" -c "$mqtt_probe"
+
+echo "coverlab H3/CONNECT-UDP/WebTransport/gRPC/MQTT fixtures ready"
 
 # Socket-level diagnostics make a later protocol-shard failure actionable.
 sudo ip netns exec cc-c2 ss -lntup 2>/dev/null | grep -E ':(8080|8443|50051|8082|9443)\b' || true

@@ -4,12 +4,23 @@ import argparse
 import asyncio
 import base64
 import json
+import os
 import ssl
+from pathlib import Path
 
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
-from .server import append_trace, body_record, read_state, token
+from .server import body_record, read_state, token
+
+# WSS used to share the HTTP fixture's cross-process trace file. Under sustained
+# multi-persona workloads, hundreds of short-lived WSS handlers could queue on
+# the same flock as the HTTP server and remain alive long enough to exhaust the
+# listener backlog. Keep WSS ground truth in a dedicated local file and merge it
+# into the release after capture. This preserves all ground truth without making
+# protocol availability depend on logging contention.
+WSS_TRACE = Path(os.environ.get("COVERLAB_WSS_TRACE", "/tmp/coverlab_wss_trace.jsonl"))
+_TRACE_LOCK: asyncio.Lock | None = None
 
 
 def _client_ip(ws) -> str | None:
@@ -19,17 +30,24 @@ def _client_ip(ws) -> str | None:
     return None
 
 
+def _write_trace(record: dict) -> None:
+    WSS_TRACE.parent.mkdir(parents=True, exist_ok=True)
+    with WSS_TRACE.open("a", encoding="utf-8") as out:
+        out.write(json.dumps(record, separators=(",", ":"), default=str) + "\n")
+
+
 async def _append_trace(record: dict) -> None:
-    # append_trace uses a cross-process flock because HTTP and WSS fixtures share
-    # one trace file. Never wait on that blocking lock in the asyncio event loop:
-    # challenge/mixed workloads can otherwise stall new TLS/RFC6455 handshakes.
-    await asyncio.to_thread(append_trace, record)
+    global _TRACE_LOCK
+    if _TRACE_LOCK is None:
+        _TRACE_LOCK = asyncio.Lock()
+    # One WSS process owns this file, so an asyncio lock is sufficient. File I/O
+    # is moved off-loop to keep accept/TLS/RFC6455 handshakes responsive.
+    async with _TRACE_LOCK:
+        await asyncio.to_thread(_write_trace, record)
 
 
 async def handler(ws) -> None:
     client_ip = _client_ip(ws)
-    # State is a small local file, but keep filesystem access off the event loop
-    # as well so handshake/keepalive work remains responsive under shard load.
     st = await asyncio.to_thread(read_state, client_ip)
     seed = int(st.get("seed", 1))
     try:
@@ -74,7 +92,21 @@ async def handler(ws) -> None:
 async def main_async(host: str, port: int, cert: str, key: str) -> None:
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(certfile=cert, keyfile=key)
-    async with serve(handler, host, port, ssl=ctx, compression=None, max_size=1 << 20):
+    # The corpus intentionally creates many short connections from four personas.
+    # Disable idle keepalive work and use a large accept backlog so the fixture is
+    # stable under this synthetic churn rather than silently changing the corpus.
+    async with serve(
+        handler,
+        host,
+        port,
+        ssl=ctx,
+        compression=None,
+        max_size=1 << 20,
+        max_queue=128,
+        ping_interval=None,
+        close_timeout=1,
+        backlog=2048,
+    ):
         await asyncio.Future()
 
 
