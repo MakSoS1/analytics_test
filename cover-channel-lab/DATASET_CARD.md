@@ -19,7 +19,9 @@ tags:
 
 # Cover Channel Web Protocols Synthetic Network Dataset
 
-This private research dataset contains safely generated network traffic for network-only detection of covert storage/timing channels, Web-C2 mimicry, WebSocket/WSS tunnels, HTTP/2 and HTTP/3 challenge traffic, local LOTS analogues, MQTT-over-WSS, gRPC and matched benign hard negatives.
+This private research dataset contains safely generated network traffic for network-only detection of covert storage/timing channels, Web-C2 mimicry, WebSocket/WSS tunnels, HTTP/2 and HTTP/3 challenge traffic, MQTT-over-WSS, gRPC and matched benign hard negatives.
+
+Trusted-site / LOTS-inspired traffic is **not a positive Cover Channel class**. It is retained only as a benign `hard_negative` background slice (`G_trusted_background`) so a detector does not learn the invalid shortcut “trusted service usage = covert channel”. Any suspicious sample in a mixed capture must use an actual Cover Channel carrier; trusted-site-inspired traffic may only contribute benign/background context.
 
 ## Layers and rollback
 
@@ -33,7 +35,9 @@ Content-visible and opaque branches are intentionally separated. Laboratory decr
 
 ## Labels and provenance
 
-Important fields include `label_binary`, `label_family`, `label_intent`, `carrier`, `attack_mapping`, `visibility_mode`, `inspection_policy`, `inspection_outcome`, `sni_visibility`, `client_impl`, `configured_client_impl`, `persona`, `infra_category`, `generator_name`, `generator_version`, `generator_commit`, `campaign_id`, `configuration_id`, `experiment_stage` and `implementation_fidelity`.
+Important fields include `label_binary`, `label_family`, `label_intent`, `carrier`, `attack_mapping`, `visibility_mode`, `inspection_policy`, `inspection_outcome`, `sni_visibility`, `client_impl`, `configured_client_impl`, `persona`, `infra_category`, `generator_name`, `generator_version`, `generator_commit`, `campaign_id`, `configuration_id`, `experiment_stage`, `dataset_role`, `source_family`, `target_task` and `implementation_fidelity`.
+
+For trusted-site-inspired hard negatives the expected contract is `label_binary=0`, `label_family=benign`, `label_intent=benign`, `attack_mapping=[]`, `experiment_stage=G_trusted_background`, `dataset_role=hard_negative`, `source_family=trusted_site_inspired`, `target_task=cover_channel_detection`.
 
 `implementation_fidelity` is intentionally explicit. Examples:
 
@@ -51,9 +55,11 @@ This prevents downstream evaluation from treating a scenario label as proof that
 
 Every accepted shard must contain a non-empty PCAP, successful Suricata offline output with `eve.json`, successful pinned Zeek 8.2.1 output with `conn.log`, campaign-to-packet coverage of at least 0.95, checksums and a passing leakage audit. JA4/JA4S/JA4H/JA4T/JA4L are retained when the parser exports them.
 
+Transport fixtures are fail-fast prerequisites. A shard starts only after real request/reply probes succeed for HTTP/HTTPS/H2/WSS, HTTP/3 request traffic, H3 CONNECT-UDP DATAGRAM, WebTransport, gRPC and MQTT-over-WSS. This prevents a partially available fixture from silently creating an incomplete corpus.
+
 ## Split methodology
 
-Rows are never randomly split across the same campaign. Browser/future/commodity/adversarial challenge stages are excluded from train. Selected clients, carriers and transforms are held out explicitly. Generator/client/carrier/timing dimensions remain in manifests so stricter grouped splits can be recomputed without regenerating PCAP.
+Rows are never randomly split across the same campaign. Browser/future/trusted-background/adversarial challenge stages are excluded from train where appropriate for the evaluated expert. Selected clients, carriers and transforms are held out explicitly. Generator/client/carrier/timing dimensions remain in manifests so stricter grouped splits can be recomputed without regenerating PCAP.
 
 ## Baselines and adversarial holdout
 
@@ -67,7 +73,7 @@ The post-baseline adversarial corpus contains 500 newly generated suspicious ses
 
 ## Safety and provenance
 
-All payloads are synthetic. No malware is executed. No credentials, user documents, host persistence or Internet-facing C2 endpoint is used. Client namespaces have no default route. Commodity-service scenarios are local `.test` analogues. WSS tunnel messages never obtain arbitrary forwarding. The CONNECT fixture validates a fixed allowlist and then echoes locally rather than opening the requested onward connection.
+All payloads are synthetic. No malware is executed. No credentials, user documents, host persistence or Internet-facing C2 endpoint is used. Client namespaces have no default route. Trusted-service examples are local `.test` analogues and are benign hard negatives only. WSS tunnel messages never obtain arbitrary forwarding. The CONNECT fixture validates a fixed allowlist and then echoes locally rather than opening the requested onward connection.
 
 ## Known limitations
 
