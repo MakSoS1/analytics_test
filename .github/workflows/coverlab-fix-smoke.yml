@@ -1,0 +1,75 @@
+name: Coverlab Fix Smoke
+
+on:
+  push:
+    branches: [coverlab-fix-full-run-20260809]
+    paths:
+      - 'cover-channel-lab/.smoke-trigger'
+
+permissions:
+  contents: read
+
+jobs:
+  transport-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install lab dependencies
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Build isolated topology and services
+        working-directory: cover-channel-lab
+        run: |
+          ./scripts/setup_netns.sh
+          ./scripts/start_services.sh
+      - name: Stress WSS lifecycle from all four personas
+        working-directory: cover-channel-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY="$(command -v python)"
+          ROOT="$PWD"
+          pids=()
+          for ns in cc-office cc-dev cc-devops cc-soc; do
+            sudo ip netns exec "$ns" runuser -u "$USER" -- env \
+              NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' \
+              no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
+              "$PY" "$ROOT/scripts/wss_stress_smoke.py" --connections 400 &
+            pids+=("$!")
+          done
+          for pid in "${pids[@]}"; do wait "$pid"; done
+      - name: Verify Stage G is wire-benign hard-negative
+        working-directory: cover-channel-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY="$(command -v python)"
+          ROOT="$PWD"
+          rm -f /tmp/g-smoke.jsonl /tmp/g-smoke-events.jsonl
+          code='from types import SimpleNamespace; from coverlab.run_campaign import run; import json; a=SimpleNamespace(scenario="CC_LOTS_05",variant="suspicious",seed=23,campaign_id="g-smoke",run_id="smoke",persona="Victim-2-Dev",source_ip="10.20.0.11",events=1,client_impl="python_httpx",state="/tmp/coverlab_server_state.json",manifest="/tmp/g-smoke.jsonl",events_out="/tmp/g-smoke-events.jsonl",capture_file="smoke.pcap"); r=run(a); assert r["label_binary"]==0 and r["label_intent"]=="benign" and not r["attack_mapping"], r; print(json.dumps({"label_binary":r["label_binary"],"dataset_role":r.get("dataset_role"),"status":"pass"}))'
+          sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" \
+            NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' \
+            no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
+            "$PY" -c "$code"
+      - name: Final WSS handshake after stress
+        working-directory: cover-channel-lab
+        run: |
+          PY="$(command -v python)"
+          sudo ip netns exec cc-dev runuser -u "$USER" -- env \
+            "$PY" scripts/wss_stress_smoke.py --connections 20
+      - name: Dump service diagnostics on failure
+        if: failure()
+        working-directory: cover-channel-lab
+        run: |
+          cat "${RUNNER_TEMP}/coverlab-services/wss.log" || true
+          cat "${RUNNER_TEMP}/coverlab-services/https.log" || true
+          sudo ip netns exec cc-c2 ss -s || true
+          sudo ip netns exec cc-c2 ss -lntup || true
+      - name: Stop services
+        if: always()
+        working-directory: cover-channel-lab
+        run: ./scripts/stop_services.sh || true
