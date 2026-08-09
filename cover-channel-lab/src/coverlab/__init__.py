@@ -7,6 +7,8 @@ import time as _time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from websockets.exceptions import InvalidMessage
+
 __version__ = "1.3.0"
 
 # aioquic 1.2.x exposes SNI through QuicConfiguration.server_name; its
@@ -65,7 +67,7 @@ def _ws_connect_resilient(*args, **kwargs):
     for attempt in range(3):
         try:
             return _ws_connect_raw(*args, **kwargs)
-        except (TimeoutError, OSError) as exc:
+        except (TimeoutError, OSError, InvalidMessage) as exc:
             last = exc
             if attempt < 2:
                 _time.sleep((0.10, 0.30)[attempt])
