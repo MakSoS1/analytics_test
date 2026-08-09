@@ -7,13 +7,15 @@ import fcntl
 import json
 import os
 import ssl
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from websockets.asyncio.client import connect as _async_ws_connect
 from websockets.exceptions import ConnectionClosed, InvalidMessage
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 
 # aioquic 1.2.x exposes SNI through QuicConfiguration.server_name; its
 # asyncio.connect() does not accept a server_name keyword. Keep compatibility in
@@ -55,6 +57,21 @@ from . import run_campaign as _run_campaign
 _original_run = _run_campaign.run
 _run_campaign.encoded_value = _nuisance.encoded_value
 _run_campaign.entropy_blob = _nuisance.entropy_blob
+
+
+def _precise_now_iso() -> str:
+    """Ground-truth timestamps need finer precision than fast H3/OHTTP runs.
+
+    Millisecond campaign boundaries can collapse adjacent short-lived sessions
+    onto the same timestamp and make packet-to-campaign attribution ambiguous.
+    New captures therefore record microseconds while remaining ISO-8601 UTC.
+    """
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+# Ordinary HTTP/WSS campaigns and protocol_dispatch both consume their module
+# local now_iso symbols. Patch both to one precise clock at package startup.
+_run_campaign.now_iso = _precise_now_iso
 
 # GitHub-hosted Python 3.12 runners repeatedly showed native SIGSEGV / SSLEOF
 # failures in websockets.sync during concurrent Stage-C WSS churn. Keep the wire
@@ -197,6 +214,10 @@ def _run_with_transport_dispatch(args):
         scenario = selected
         from . import protocol_dispatch as _protocol_dispatch
 
+        # Use the same microsecond clock in protocol-specific records. This is
+        # especially important for fast H3/QUIC and OHTTP future holdouts.
+        _protocol_dispatch.now_iso = _precise_now_iso
+
         # H3/gRPC/MQTT clients construct their message bytes outside
         # run_campaign.make_http, so route their synthetic payload helper through
         # the same nuisance context. This changes real frame/message content and
@@ -206,6 +227,11 @@ def _run_with_transport_dispatch(args):
         if handled is not None:
             handled.update(nuisance_fields)
             _decorate_last_manifest(args.manifest, args.campaign_id, nuisance_fields)
+            # Future holdouts contain very short adjacent sessions. A tiny quiet
+            # period prevents close/ACK packets from one campaign colliding with
+            # the next campaign boundary without changing the scenario semantics.
+            if campaign_id.startswith("h-"):
+                time.sleep(0.005)
             return handled
 
         record = _original_run(args)
