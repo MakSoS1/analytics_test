@@ -1,0 +1,47 @@
+name: Cover Channel Browser Hotfix Smoke
+
+on:
+  push:
+    branches: [coverlab-browser-hotfix]
+    paths:
+      - 'cover-channel-lab/**'
+      - '.github/workflows/cover-channel-browser-hotfix-smoke.yml'
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: cover-channel-lab/requirements.txt
+      - name: Install protocol fixtures
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Unit and correctness tests
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        run: pytest -q
+      - name: Comprehensive transport, browser, PCAP, parser, model and future-02 smoke
+        working-directory: cover-channel-lab
+        run: bash ./scripts/transport_smoke_ci.sh
+      - name: Retain diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-hotfix-smoke-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/coverlab-smoke-gate
+            ${{ runner.temp }}/coverlab-services
+          retention-days: 30
+          compression-level: 0
