@@ -1,0 +1,3 @@
+Full corpus trigger after smoke run 31308924137 PASS.
+Commit base: 8fac52b00d4abe56c4e530195088924d654a0cfa
+Regression covered: four concurrent 60-transaction Stage-C persona campaigns, asyncio WSS client, PCAP, Suricata, Zeek, Gold.
