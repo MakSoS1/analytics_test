@@ -61,13 +61,19 @@ def main() -> None:
     transport_counts: Counter[str] = Counter()
     total = 0
 
+    # These families are explicitly hard-negative/background by design. In
+    # particular CC_OHTTP_01 is an OHTTP-like privacy fixture whose purpose is
+    # to ensure opaque encrypted binary traffic isn't automatically called a
+    # covert channel. It must never be smoke-tested as a positive attack.
+    always_benign_families = {"lots", "privacy"}
+
     for idx, scenario in enumerate(SCENARIOS):
         # A single exchange is enough for storage/body/response families. Timing,
         # WebSocket and multiplexed transports get two events so the smoke also
         # exercises repeated-frame/request lifecycle.
         event_count = 2 if scenario.family in {"timing", "websocket", "http2", "grpc", "sse", "longpoll"} else 1
 
-        variants = ("benign",) if scenario.family == "lots" else ("suspicious", "benign")
+        variants = ("benign",) if scenario.family in always_benign_families else ("suspicious", "benign")
         for v_idx, variant in enumerate(variants):
             if scenario.family == "lots":
                 campaign_id = f"g-smoke-catalog-{idx:03d}-{v_idx}"
@@ -83,9 +89,11 @@ def main() -> None:
                 manifest,
                 events_out,
             )
-            if scenario.family == "lots":
+            if scenario.family in always_benign_families:
                 if result.get("label_binary") != 0 or result.get("label_intent") != "benign":
-                    raise RuntimeError(f"{scenario.scenario_id}: LOTS smoke leaked positive label: {result}")
+                    raise RuntimeError(
+                        f"{scenario.scenario_id}: hard-negative smoke leaked positive label: {result}"
+                    )
             else:
                 expected = 1 if variant == "suspicious" else 0
                 if result.get("label_binary") != expected:
@@ -152,6 +160,7 @@ def main() -> None:
         "families_exercised": sorted(family_counts),
         "transport_counts": dict(sorted(transport_counts.items())),
         "generic_clients": generic_clients,
+        "always_benign_families": sorted(always_benign_families),
         "sequence_transactions": 60,
         "stage_g_contract_cases": [s.scenario_id for s in g_candidates],
     }
