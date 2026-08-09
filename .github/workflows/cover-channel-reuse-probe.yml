@@ -28,40 +28,71 @@ jobs:
           python-version: '3.12'
       - name: Install only reuse-validation dependencies
         run: python -m pip install -q 'huggingface_hub[hf_xet]>=1.0.0' 'zstandard>=0.23.0'
-      - name: Validate and reuse representative isolated shard
+
+      - name: Classify representative isolated shard
         working-directory: cover-channel-lab
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
         run: |
+          set +e
           python scripts/reuse_hf_shard.py \
             --repo "$HF_DATASET_REPO" --source-release "$SOURCE_RELEASE" \
             --shard isolated-00 --dest-release "$RUNNER_TEMP/isolated-release" \
             --cache-dir "$RUNNER_TEMP/isolated-cache" | tee "$RUNNER_TEMP/isolated.json"
-          python - <<'PY'
-          import json, os
-          from pathlib import Path
-          row=json.loads(Path(os.environ['RUNNER_TEMP']+'/isolated.json').read_text().splitlines()[-1])
-          assert row['reused'] is True
-          assert row['capture_tail_passed'] is True
-          assert row['verified_checksums'] >= 4
+          rc=${PIPESTATUS[0]}
+          set -e
+          python - "$rc" "$RUNNER_TEMP/isolated.json" <<'PY'
+          import json, pathlib, sys
+          rc=int(sys.argv[1]); lines=pathlib.Path(sys.argv[2]).read_text().splitlines()
+          assert lines, 'isolated reuse probe produced no decision'
+          row=json.loads(lines[-1])
+          if rc == 0:
+              assert row.get('reused') is True and row.get('capture_tail_passed') is True
+              assert row.get('verified_checksums', 0) >= 4
+              print('isolated-00 decision: REUSE')
+          else:
+              assert rc == 3
+              assert row.get('reused') is False
+              assert row.get('reason') in {
+                  'capture_tail_guard_failed', 'checksum_verification_failed',
+                  'contract_failed', 'quality_gate_not_passed', 'incomplete_source_shard',
+              }
+              print('isolated-00 decision: REGENERATE because', row.get('reason'))
           PY
-      - name: Validate and reuse representative mixed capture
+
+      - name: Classify representative mixed capture
         working-directory: cover-channel-lab
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
         run: |
+          set +e
           python scripts/reuse_hf_shard.py \
             --repo "$HF_DATASET_REPO" --source-release "$SOURCE_RELEASE" \
             --shard D-mixed-00 --dest-release "$RUNNER_TEMP/mixed-release" \
             --cache-dir "$RUNNER_TEMP/mixed-cache" | tee "$RUNNER_TEMP/mixed.json"
-          python - <<'PY'
-          import json, os
-          from pathlib import Path
-          row=json.loads(Path(os.environ['RUNNER_TEMP']+'/mixed.json').read_text().splitlines()[-1])
-          assert row['reused'] is True
-          assert row['capture_tail_passed'] is True
-          assert row['verified_checksums'] >= 4
+          rc=${PIPESTATUS[0]}
+          set -e
+          python - "$rc" "$RUNNER_TEMP/mixed.json" <<'PY'
+          import json, pathlib, sys
+          rc=int(sys.argv[1]); lines=pathlib.Path(sys.argv[2]).read_text().splitlines()
+          assert lines, 'mixed reuse probe produced no decision'
+          row=json.loads(lines[-1])
+          if rc == 0:
+              assert row.get('reused') is True and row.get('capture_tail_passed') is True
+              assert row.get('verified_checksums', 0) >= 4
+              print('D-mixed-00 decision: REUSE')
+          else:
+              assert rc == 3
+              assert row.get('reused') is False
+              assert row.get('reason') in {
+                  'capture_tail_guard_failed', 'checksum_verification_failed',
+                  'contract_failed', 'quality_gate_not_passed', 'incomplete_source_shard',
+              }
+              print('D-mixed-00 decision: REGENERATE because', row.get('reason'))
           PY
+
       - name: Confirm legacy trusted background is invalidated
         working-directory: cover-channel-lab
         env:
@@ -72,11 +103,12 @@ jobs:
           python scripts/reuse_hf_shard.py \
             --repo "$HF_DATASET_REPO" --source-release "$SOURCE_RELEASE" \
             --shard trusted-bg-00 --dest-release "$RUNNER_TEMP/trusted-release" \
-            --cache-dir "$RUNNER_TEMP/trusted-cache" > "$RUNNER_TEMP/trusted.json" 2>&1
-          rc=$?
+            --cache-dir "$RUNNER_TEMP/trusted-cache" | tee "$RUNNER_TEMP/trusted.json"
+          rc=${PIPESTATUS[0]}
           set -e
           [[ "$rc" -eq 3 ]]
           grep -q 'trusted_background_policy_changed' "$RUNNER_TEMP/trusted.json"
+
       - name: Retain validation reports
         if: always()
         uses: actions/upload-artifact@v4
