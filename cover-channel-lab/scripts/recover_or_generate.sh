@@ -8,36 +8,47 @@ MODE="$1" SOURCE_RELEASE="$2" NAME="$3" WORK="$4"; shift 4
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASE="$WORK/release"
 mkdir -p "$WORK" "$RELEASE"
+REUSED_FROM=""
 
 write_status() {
   local reused="$1"
+  local source="${2:-$SOURCE_RELEASE}"
   local qdir="$RELEASE/quality/$NAME"
   mkdir -p "$qdir"
-  printf '{"mode":"%s","shard":"%s","reused":%s,"source_release":"%s","recovery_contract_revision":2,"reuse_policy_revision":3}\n' \
-    "$MODE" "$NAME" "$reused" "$SOURCE_RELEASE" | tee "$WORK/recovery_status.json" > "$qdir/recovery_status.json"
+  printf '{"mode":"%s","shard":"%s","reused":%s,"source_release":"%s","recovery_contract_revision":2,"reuse_policy_revision":4}\n' \
+    "$MODE" "$NAME" "$reused" "$source" | tee "$WORK/recovery_status.json" > "$qdir/recovery_status.json"
 }
 
-try_reuse=false
-if [[ -n "$SOURCE_RELEASE" && -n "${HF_TOKEN:-}" ]]; then
-  try_reuse=true
-fi
-
-if [[ "$try_reuse" == true ]]; then
-  # Reuse validation decompresses the retained PCAP and rechecks hashes/tail.
-  # Install only the lightweight dependencies needed for that path; expensive
-  # traffic-generation fixtures are installed only when reuse is rejected.
+if [[ -n "${HF_TOKEN:-}" ]]; then
+  # Fast path: first prefer the stable resume slot populated by any previous
+  # corrected recovery run, then fall back to the older nominated release.
+  # This makes recovery monotonic: once a shard is repaired successfully, later
+  # runs never need to regenerate it just because another shard failed.
   python -m pip install -q 'huggingface_hub[hf_xet]>=1.0.0' 'zstandard>=0.23.0'
-  if PYTHONPATH="$ROOT/src" python "$ROOT/scripts/reuse_hf_shard.py" \
-      --repo "${HF_DATASET_REPO:-Maksim123321/cover-channel-web-protocols}" \
-      --source-release "$SOURCE_RELEASE" \
-      --shard "$NAME" \
-      --dest-release "$RELEASE" \
-      --cache-dir "$WORK/reuse-cache"; then
-    write_status true
-    echo "reused validated shard: $NAME from $SOURCE_RELEASE"
-    exit 0
+  sources=(resume)
+  if [[ -n "$SOURCE_RELEASE" && "$SOURCE_RELEASE" != "resume" ]]; then
+    sources+=("$SOURCE_RELEASE")
   fi
-  echo "source shard $NAME is missing/invalid under contract revision 2/reuse policy 3; regenerating"
+  for source in "${sources[@]}"; do
+    rm -rf "$WORK/reuse-cache" "$RELEASE"
+    mkdir -p "$RELEASE"
+    echo "checking reusable shard $NAME from source=$source"
+    if PYTHONPATH="$ROOT/src" python "$ROOT/scripts/reuse_hf_shard.py" \
+        --repo "${HF_DATASET_REPO:-Maksim123321/cover-channel-web-protocols}" \
+        --source-release "$source" \
+        --shard "$NAME" \
+        --dest-release "$RELEASE" \
+        --cache-dir "$WORK/reuse-cache"; then
+      REUSED_FROM="$source"
+      write_status true "$source"
+      echo "reused validated shard: $NAME from $source"
+      exit 0
+    fi
+    echo "source=$source did not provide a reusable $NAME"
+  done
+  rm -rf "$WORK/reuse-cache" "$RELEASE"
+  mkdir -p "$RELEASE"
+  echo "no reusable source passed contract/hash/tail validation for $NAME; regenerating only this shard"
 fi
 
 "$ROOT/scripts/install_runner.sh"
@@ -58,4 +69,4 @@ case "$MODE" in
     exit 2
     ;;
 esac
-write_status false
+write_status false ""
