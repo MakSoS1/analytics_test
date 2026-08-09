@@ -11,7 +11,7 @@ from aioquic.asyncio.client import connect
 from aioquic.h3.connection import H3_ALPN, H3Connection
 from aioquic.h3.events import DataReceived, DatagramReceived, HeadersReceived, WebTransportStreamDataReceived
 from aioquic.quic.configuration import QuicConfiguration
-from aioquic.quic.events import ProtocolNegotiated
+from aioquic.quic.events import ProtocolNegotiated, StreamDataReceived
 
 
 class LabH3Server(QuicConnectionProtocol):
@@ -50,13 +50,11 @@ class LabH3Server(QuicConnectionProtocol):
             if event.stream_ended:
                 self.respond(event.stream_id)
         elif isinstance(event, DatagramReceived):
-            # HTTP/3 DATAGRAM is unreliable and must fit a QUIC packet. The
-            # client performs bounded retries / application-level chunking; the
-            # fixture simply echoes every received datagram on the same request
-            # stream, preserving a real RFC 9297 wire path.
             self.h3.send_datagram(event.stream_id, event.data)
             self.transmit()
         elif isinstance(event, WebTransportStreamDataReceived):
+            # Once the WebTransport stream prefix has established the session,
+            # both directions carry raw QUIC stream bytes. Echo them directly.
             self._quic.send_stream_data(
                 event.stream_id,
                 event.data,
@@ -94,10 +92,22 @@ class LabH3Client(QuicConnectionProtocol):
         self.header_waiters = {}
         self.datagrams = {}
         self.pending_datagrams = defaultdict(list)
+        self.webtransport_streams: set[int] = set()
         self.webtransport_waiters = {}
-        self.pending_webtransport = defaultdict(bytearray)
+        self.webtransport_buffers = defaultdict(bytearray)
 
     def quic_event_received(self, event):
+        # For a client-created bidirectional WebTransport stream, the peer's
+        # direction is raw QUIC stream data, not a second HTTP/3 frame sequence.
+        # Intercept it before H3Connection attempts request-stream parsing.
+        if isinstance(event, StreamDataReceived) and event.stream_id in self.webtransport_streams:
+            self.webtransport_buffers[event.stream_id].extend(event.data)
+            if event.end_stream:
+                fut = self.webtransport_waiters.get(event.stream_id)
+                if fut and not fut.done():
+                    fut.set_result(bytes(self.webtransport_buffers[event.stream_id]))
+            return
+
         for he in self.h3.handle_event(event):
             sid = getattr(he, "stream_id", None)
             if isinstance(he, DatagramReceived):
@@ -106,13 +116,6 @@ class LabH3Client(QuicConnectionProtocol):
                     fut.set_result(he.data)
                 else:
                     self.pending_datagrams[he.stream_id].append(he.data)
-                continue
-            if isinstance(he, WebTransportStreamDataReceived):
-                fut = self.webtransport_waiters.get(he.stream_id)
-                if fut and not fut.done():
-                    fut.set_result(he.data)
-                else:
-                    self.pending_webtransport[he.stream_id].extend(he.data)
                 continue
             if sid is not None:
                 self.events[sid].append(he)
@@ -182,9 +185,6 @@ class LabH3Client(QuicConnectionProtocol):
         return {"stream_id": sid, "status": status, "response_bytes": response_bytes}
 
     async def _datagram_roundtrip(self, sid: int, payload: bytes) -> bytes:
-        # Keep each HTTP/3 DATAGRAM comfortably below the usual path MTU. The
-        # configured QUIC max_datagram_frame_size is a receive capability, not a
-        # promise that a 64 KiB datagram can fit in a single UDP packet.
         if len(payload) > 1000:
             raise ValueError("single H3 datagram payload must be <= 1000 bytes")
         for attempt in range(3):
@@ -197,8 +197,8 @@ class LabH3Client(QuicConnectionProtocol):
             try:
                 return await asyncio.wait_for(fut, timeout=1.5 + attempt * 0.5)
             except TimeoutError:
-                # RFC 9297 DATAGRAM delivery is intentionally unreliable; a
-                # bounded retry is appropriate for a deterministic lab fixture.
+                # RFC 9297 DATAGRAM is unreliable. Bounded retry keeps the
+                # synthetic lab deterministic without changing the wire type.
                 continue
             finally:
                 self.datagrams.pop(sid, None)
@@ -258,17 +258,16 @@ class LabH3Client(QuicConnectionProtocol):
         status = await self._await_connect_headers(sid)
 
         stream_id = self.h3.create_webtransport_stream(sid, is_unidirectional=False)
+        self.webtransport_streams.add(stream_id)
         fut = asyncio.get_running_loop().create_future()
         self.webtransport_waiters[stream_id] = fut
         self._quic.send_stream_data(stream_id, payload, end_stream=True)
         self.transmit()
         try:
-            if self.pending_webtransport[stream_id]:
-                echoed = bytes(self.pending_webtransport.pop(stream_id))
-            else:
-                echoed = await asyncio.wait_for(fut, timeout=5)
+            echoed = await asyncio.wait_for(fut, timeout=5)
         finally:
             self.webtransport_waiters.pop(stream_id, None)
+            self.webtransport_streams.discard(stream_id)
         if echoed != payload:
             raise RuntimeError(
                 f"WebTransport echo mismatch: sent={len(payload)} received={len(echoed)}"
