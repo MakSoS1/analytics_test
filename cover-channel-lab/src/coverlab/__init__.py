@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import fcntl
 import json
 import os
-import time as _time
+import ssl
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from websockets.exceptions import InvalidMessage
+from websockets.asyncio.client import connect as _async_ws_connect
+from websockets.exceptions import ConnectionClosed, InvalidMessage
 
-__version__ = "1.3.1"
+__version__ = "1.4.0"
 
 # aioquic 1.2.x exposes SNI through QuicConfiguration.server_name; its
 # asyncio.connect() does not accept a server_name keyword. Keep compatibility in
@@ -54,62 +56,79 @@ _original_run = _run_campaign.run
 _run_campaign.encoded_value = _nuisance.encoded_value
 _run_campaign.entropy_blob = _nuisance.entropy_blob
 
-# A corpus shard opens hundreds of short WSS connections from four isolated
-# personas. The GitHub-hosted runner has shown a native OpenSSL/websockets
-# SIGSEGV when several Python processes churn TLS handshakes at the same time.
-# Serialize only Python WSS connection lifetimes across persona workers; all
-# HTTP/H2/H3/gRPC/MQTT work remains parallel. This is a reliability guard for
-# the client runtime, not a change to labels, payloads, or server behavior.
-_ws_connect_raw = _run_campaign.ws_connect
+# GitHub-hosted Python 3.12 runners repeatedly showed native SIGSEGV / SSLEOF
+# failures in websockets.sync during concurrent Stage-C WSS churn. Keep the wire
+# protocol real, but use the asyncio client implementation (no sync helper
+# threads) and hold one cross-process lock for the complete connect/send/recv/
+# close lifecycle. HTTP/H2/H3/gRPC/MQTT remain parallel.
 _WS_CLIENT_LOCK = Path(os.environ.get("COVERLAB_WSS_CLIENT_LOCK", "/tmp/coverlab_wss_client.lock"))
 
 
-class _LockedWsConnection:
-    def __init__(self, conn, lock_file):
-        self._conn = conn
-        self._lock_file = lock_file
+async def _ws_run_async(url, s, suspicious, r, count):
+    out = []
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    async with _async_ws_connect(
+        url,
+        ssl=ctx,
+        open_timeout=10,
+        close_timeout=2,
+        proxy=None,
+        compression=None,
+        ping_interval=None,
+        max_queue=32,
+    ) as ws:
+        for i in range(count):
+            value = _run_campaign.encoded_value(r, suspicious, 32)
+            if s.family == "mqtt_ws":
+                payload = b"\x30" + bytes([min(125, len(value) + 12)]) + b"\x00\x08lab/test" + value.encode()[:100]
+                await ws.send(payload)
+                reply = await asyncio.wait_for(ws.recv(), timeout=10)
+            elif s.family in {"tunnel"} or s.scenario_id in {"CC_LOTS_05", "CC_LOTS_06", "CC_LOTS_07"}:
+                conn = f"c{i % 3}"
+                messages = [
+                    {"type": "auth", "login": "lab", "password": "synthetic", "uuid": str(_run_campaign.uuid.uuid4())},
+                    {"type": "socks_connect", "conn_id": conn, "target_host": "synthetic-api.test", "target_port": 8081},
+                    {"type": "socks_data", "conn_id": conn, "data": _run_campaign.base64.b64encode(("HELLO_SYNTHETIC_" + value[:24]).encode()).decode()},
+                    {"type": "socks_close", "conn_id": conn},
+                ]
+                reply = ""
+                for message in messages:
+                    await ws.send(json.dumps(message, separators=(",", ":")))
+                    reply = await asyncio.wait_for(ws.recv(), timeout=10)
+            else:
+                obj = {
+                    "action": "recv" if i % 2 == 0 else "send",
+                    "container": value,
+                    "target": "LAB",
+                    "sender": "fixture",
+                    "message": "STATUS",
+                }
+                await ws.send(json.dumps(obj, separators=(",", ":")))
+                reply = await asyncio.wait_for(ws.recv(), timeout=10)
+            out.append({"index": i, "reply_len": len(reply) if hasattr(reply, "__len__") else 0})
+    return out
 
-    def __enter__(self):
-        return self._conn.__enter__()
 
-    def __exit__(self, exc_type, exc, tb):
-        try:
-            return self._conn.__exit__(exc_type, exc, tb)
-        finally:
-            try:
-                fcntl.flock(self._lock_file, fcntl.LOCK_UN)
-            finally:
-                self._lock_file.close()
-
-
-def _ws_connect_resilient(*args, **kwargs):
-    kwargs.setdefault("proxy", None)
-    kwargs.setdefault("compression", None)
-    kwargs.setdefault("open_timeout", 6)
-    kwargs.setdefault("close_timeout", 2)
-    last = None
+def _ws_run_stable(url, s, suspicious, r, count):
     _WS_CLIENT_LOCK.parent.mkdir(parents=True, exist_ok=True)
-    for attempt in range(3):
-        lock_file = _WS_CLIENT_LOCK.open("a+")
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
+    lock_file = _WS_CLIENT_LOCK.open("a+")
+    fcntl.flock(lock_file, fcntl.LOCK_EX)
+    try:
+        return asyncio.run(_ws_run_async(url, s, suspicious, r, count))
+    except (TimeoutError, OSError, InvalidMessage, ConnectionClosed) as exc:
+        # Do not silently duplicate campaign events after a mid-stream failure.
+        # A transport failure must fail the shard and be visible to the gate.
+        raise RuntimeError(f"WSS async exchange failed: {exc}") from exc
+    finally:
         try:
-            conn = _ws_connect_raw(*args, **kwargs)
-            return _LockedWsConnection(conn, lock_file)
-        except (TimeoutError, OSError, InvalidMessage) as exc:
-            last = exc
             fcntl.flock(lock_file, fcntl.LOCK_UN)
+        finally:
             lock_file.close()
-            if attempt < 2:
-                _time.sleep((0.10, 0.30)[attempt])
-        except BaseException:
-            fcntl.flock(lock_file, fcntl.LOCK_UN)
-            lock_file.close()
-            raise
-    assert last is not None
-    raise last
 
 
-_run_campaign.ws_connect = _ws_connect_resilient
+_run_campaign.ws_run = _ws_run_stable
 
 _TLS_FIDELITY = {
     "CC_TLS_01": "wire_real_default_tls_stack",
@@ -204,7 +223,7 @@ def _run_with_transport_dispatch(args):
         elif scenario.transport == "h2":
             updates["implementation_fidelity"] = "wire_real_http2_via_httpx_h2"
         elif scenario.transport == "wss":
-            updates["implementation_fidelity"] = "wire_real_websocket_over_tls"
+            updates["implementation_fidelity"] = "wire_real_websocket_over_tls_asyncio"
         elif scenario.transport in {"http", "https"}:
             updates["implementation_fidelity"] = "wire_real_http_exchange"
         record.update(updates)
