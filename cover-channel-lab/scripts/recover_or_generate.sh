@@ -9,6 +9,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASE="$WORK/release"
 mkdir -p "$WORK" "$RELEASE"
 
+write_status() {
+  local reused="$1"
+  local qdir="$RELEASE/quality/$NAME"
+  mkdir -p "$qdir"
+  printf '{"mode":"%s","shard":"%s","reused":%s,"source_release":"%s","recovery_contract_revision":2}\n' \
+    "$MODE" "$NAME" "$reused" "$SOURCE_RELEASE" | tee "$WORK/recovery_status.json" > "$qdir/recovery_status.json"
+}
+
 try_reuse=false
 if [[ -n "$SOURCE_RELEASE" && -n "${HF_TOKEN:-}" ]]; then
   try_reuse=true
@@ -22,7 +30,7 @@ if [[ "$try_reuse" == true ]]; then
       --shard "$NAME" \
       --dest-release "$RELEASE" \
       --cache-dir "$WORK/reuse-cache"; then
-    printf '{"mode":"%s","shard":"%s","reused":true,"source_release":"%s"}\n' "$MODE" "$NAME" "$SOURCE_RELEASE" > "$WORK/recovery_status.json"
+    write_status true
     echo "reused validated shard: $NAME from $SOURCE_RELEASE"
     exit 0
   fi
@@ -47,4 +55,4 @@ case "$MODE" in
     exit 2
     ;;
 esac
-printf '{"mode":"%s","shard":"%s","reused":false,"source_release":"%s"}\n' "$MODE" "$NAME" "$SOURCE_RELEASE" > "$WORK/recovery_status.json"
+write_status false
