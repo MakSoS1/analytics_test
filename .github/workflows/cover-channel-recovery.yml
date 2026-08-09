@@ -1,0 +1,410 @@
+name: Cover Channel Recovery Resume
+
+on:
+  push:
+    branches: [main, coverlab-resume-correctness]
+    paths:
+      - 'cover-channel-lab/**'
+      - '.github/workflows/cover-channel-recovery.yml'
+  workflow_dispatch:
+    inputs:
+      run_full:
+        description: 'Run resume/recovery corpus pipeline'
+        required: true
+        default: true
+        type: boolean
+      source_release:
+        description: 'Previous HF release to reuse after validation'
+        required: false
+        default: 'gh-31309279116-a1'
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: cover-channel-recovery-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    outputs:
+      full_requested: ${{ steps.mode.outputs.full }}
+      source_release: ${{ steps.mode.outputs.source_release }}
+      release_id: ${{ steps.release.outputs.id }}
+      hf_enabled: ${{ steps.hf.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: release
+        run: echo "id=gh-${{ github.run_id }}-a${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+      - id: mode
+        shell: bash
+        run: |
+          full=false
+          source_release='gh-31309279116-a1'
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            [[ "${{ inputs.run_full }}" == "true" ]] && full=true
+            source_release='${{ inputs.source_release }}'
+          elif [[ "${{ github.event.head_commit.message }}" == *"[coverlab-recovery-full]"* ]]; then
+            full=true
+          fi
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "source_release=$source_release" >> "$GITHUB_OUTPUT"
+      - id: hf
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          [[ -n "$HF_TOKEN" ]] && echo 'enabled=true' >> "$GITHUB_OUTPUT" || echo 'enabled=false' >> "$GITHUB_OUTPUT"
+      - name: Recovery plan
+        run: |
+          echo "full=${{ steps.mode.outputs.full }}"
+          echo "source_release=${{ steps.mode.outputs.source_release }}"
+          echo "new_release=${{ steps.release.outputs.id }}"
+          echo "hf_enabled=${{ steps.hf.outputs.enabled }}"
+
+  smoke-gate:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: cover-channel-lab/requirements.txt
+      - name: Install fixtures
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Unit and correctness contracts
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        run: pytest -q
+      - name: Full catalog + transports + PCAP + Suricata/Zeek + Gold smoke
+        working-directory: cover-channel-lab
+        run: bash ./scripts/transport_smoke_ci.sh
+      - name: Retain smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-smoke-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/coverlab-smoke-gate
+            ${{ runner.temp }}/coverlab-services
+          retention-days: 30
+          compression-level: 0
+
+  stage-a:
+    needs: [preflight, smoke-gate]
+    if: needs.preflight.outputs.full_requested == 'true' && needs.smoke-gate.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: cover-channel-lab/requirements.txt
+      - name: Regenerate Stage A under contract revision 2
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: bash ./scripts/recover_or_generate.sh stage-a '' A-parser-00 "$RUNNER_TEMP/coverlab"
+      - name: Upload Stage A
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/${{ needs.preflight.outputs.release_id }}/A-parser" "Recovery Stage A $GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dataset-A-parser-00-${{ github.run_id }}
+          path: ${{ runner.temp }}/coverlab/release
+          retention-days: 90
+          compression-level: 0
+
+  full-shards:
+    needs: [preflight, stage-a]
+    if: needs.preflight.outputs.full_requested == 'true' && needs.stage-a.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include:
+          - {stage: isolated, shard: 0, shards: 6, name: isolated-00}
+          - {stage: isolated, shard: 1, shards: 6, name: isolated-01}
+          - {stage: isolated, shard: 2, shards: 6, name: isolated-02}
+          - {stage: isolated, shard: 3, shards: 6, name: isolated-03}
+          - {stage: isolated, shard: 4, shards: 6, name: isolated-04}
+          - {stage: isolated, shard: 5, shards: 6, name: isolated-05}
+          - {stage: sequence, shard: 0, shards: 4, name: sequence-00}
+          - {stage: sequence, shard: 1, shards: 4, name: sequence-01}
+          - {stage: sequence, shard: 2, shards: 4, name: sequence-02}
+          - {stage: sequence, shard: 3, shards: 4, name: sequence-03}
+          - {stage: challenge, shard: 0, shards: 6, name: challenge-00}
+          - {stage: challenge, shard: 1, shards: 6, name: challenge-01}
+          - {stage: challenge, shard: 2, shards: 6, name: challenge-02}
+          - {stage: challenge, shard: 3, shards: 6, name: challenge-03}
+          - {stage: challenge, shard: 4, shards: 6, name: challenge-04}
+          - {stage: challenge, shard: 5, shards: 6, name: challenge-05}
+          - {stage: lots, shard: 0, shards: 4, name: trusted-bg-00}
+          - {stage: lots, shard: 1, shards: 4, name: trusted-bg-01}
+          - {stage: lots, shard: 2, shards: 4, name: trusted-bg-02}
+          - {stage: lots, shard: 3, shards: 4, name: trusted-bg-03}
+          - {stage: future, shard: 0, shards: 4, name: future-00}
+          - {stage: future, shard: 1, shards: 4, name: future-01}
+          - {stage: future, shard: 2, shards: 4, name: future-02}
+          - {stage: future, shard: 3, shards: 4, name: future-03}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: cover-channel-lab/requirements.txt
+      - name: Reuse validated shard or regenerate only this shard
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          bash ./scripts/recover_or_generate.sh shard \
+            "${{ needs.preflight.outputs.source_release }}" \
+            "${{ matrix.name }}" "$RUNNER_TEMP/coverlab" \
+            "${{ matrix.stage }}" "${{ matrix.shard }}" "${{ matrix.shards }}"
+      - name: Publish canonical shard into recovery release
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/${{ needs.preflight.outputs.release_id }}/${{ matrix.name }}" "Recovery ${{ matrix.name }} $GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dataset-${{ matrix.name }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/coverlab/release
+          retention-days: 90
+          compression-level: 0
+
+  mixed-captures:
+    needs: [preflight, stage-a]
+    if: needs.preflight.outputs.full_requested == 'true' && needs.stage-a.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        capture: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: cover-channel-lab/requirements.txt
+      - name: Reuse validated mixed capture or regenerate only this capture
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          idx="${{ matrix.capture }}"
+          printf -v name 'D-mixed-%02d' "$idx"
+          bash ./scripts/recover_or_generate.sh mixed \
+            "${{ needs.preflight.outputs.source_release }}" "$name" "$RUNNER_TEMP/coverlab" "$idx"
+      - name: Publish mixed capture into recovery release
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          idx="${{ matrix.capture }}"
+          printf -v name 'D-mixed-%02d' "$idx"
+          ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/${{ needs.preflight.outputs.release_id }}/$name" "Recovery $name $GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dataset-D-mixed-${{ matrix.capture }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/coverlab/release
+          retention-days: 90
+          compression-level: 0
+
+  baseline-models:
+    needs: [preflight, full-shards]
+    if: needs.preflight.outputs.full_requested == 'true' && needs.full-shards.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dataset-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/training-dataset
+          merge-multiple: false
+      - name: Keep mixed evaluation frozen out of training
+        shell: bash
+        run: find "$RUNNER_TEMP/training-dataset" -mindepth 1 -maxdepth 1 -type d -name 'dataset-D-mixed-*' -exec rm -rf {} +
+      - name: Install model dependencies
+        working-directory: cover-channel-lab
+        run: python -m pip install -r requirements.txt
+      - name: Train corrected B1/B2/B3 experts
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        run: python -m coverlab.train_baseline_v2 --dataset-root "$RUNNER_TEMP/training-dataset" --out "$RUNNER_TEMP/models" --seed 23
+      - name: Upload model bundle
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/models" "releases/${{ needs.preflight.outputs.release_id }}/models" "Corrected B1 B2 B3 $GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baseline-models-${{ github.run_id }}
+          path: ${{ runner.temp }}/models
+          retention-days: 90
+
+  mixed-evaluation:
+    needs: [preflight, baseline-models, mixed-captures]
+    if: needs.preflight.outputs.full_requested == 'true' && needs.baseline-models.result == 'success' && needs.mixed-captures.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dataset-D-mixed-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/mixed-eval
+          merge-multiple: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: baseline-models-${{ github.run_id }}
+          path: ${{ runner.temp }}/models
+      - name: Install model dependencies
+        working-directory: cover-channel-lab
+        run: python -m pip install -r requirements.txt
+      - name: Score frozen experts on Stage D only
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        run: python -m coverlab.evaluate_mixed --dataset-root "$RUNNER_TEMP/mixed-eval" --models "$RUNNER_TEMP/models" --out "$RUNNER_TEMP/evaluation/mixed_report.json"
+      - name: Build explicit model acceptance report
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m coverlab.model_acceptance \
+            --baseline-report "$RUNNER_TEMP/models/baseline_report.json" \
+            --mixed-report "$RUNNER_TEMP/evaluation/mixed_report.json" \
+            --out "$RUNNER_TEMP/evaluation/model_acceptance.json"
+      - name: Upload evaluation reports
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/evaluation" "releases/${{ needs.preflight.outputs.release_id }}/evaluation" "Stage D and model acceptance $GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-evaluation-${{ github.run_id }}
+          path: ${{ runner.temp }}/evaluation
+          retention-days: 90
+
+  adversarial-holdout:
+    needs: [preflight, baseline-models]
+    if: needs.preflight.outputs.full_requested == 'true' && needs.baseline-models.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: baseline-models-${{ github.run_id }}
+          path: ${{ runner.temp }}/models
+      - name: Install fixtures
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Generate corrected 500-session randomized nuisance holdout
+        working-directory: cover-channel-lab
+        run: bash ./scripts/run_adversarial_ci.sh "$RUNNER_TEMP/adversarial" adversarial-00
+      - name: Score against frozen B3
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m coverlab.score_adversarial \
+            --features "$RUNNER_TEMP/adversarial/release/gold/adversarial-00/session_features.parquet" \
+            --model "$RUNNER_TEMP/models/B3-opaque.joblib" \
+            --out "$RUNNER_TEMP/adversarial/release/quality/adversarial-00/adversarial_report.json"
+      - name: Upload adversarial holdout
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/adversarial/release" "releases/${{ needs.preflight.outputs.release_id }}/adversarial" "Randomized nuisance holdout $GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dataset-adversarial-00-${{ github.run_id }}
+          path: ${{ runner.temp }}/adversarial/release
+          retention-days: 90
+          compression-level: 0
+
+  finalize:
+    needs: [preflight, smoke-gate, stage-a, full-shards, mixed-captures, baseline-models, mixed-evaluation, adversarial-holdout]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build recovery release status
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/status"
+          cat > "$RUNNER_TEMP/status/release_status.json" <<JSON
+          {
+            "run_id":"${{ github.run_id }}",
+            "release_id":"${{ needs.preflight.outputs.release_id }}",
+            "source_release":"${{ needs.preflight.outputs.source_release }}",
+            "contract_revision":2,
+            "full_requested":"${{ needs.preflight.outputs.full_requested }}",
+            "smoke_result":"${{ needs.smoke-gate.result }}",
+            "stage_a_result":"${{ needs.stage-a.result }}",
+            "full_shards_result":"${{ needs.full-shards.result }}",
+            "mixed_result":"${{ needs.mixed-captures.result }}",
+            "baseline_result":"${{ needs.baseline-models.result }}",
+            "mixed_evaluation_result":"${{ needs.mixed-evaluation.result }}",
+            "adversarial_result":"${{ needs.adversarial-holdout.result }}",
+            "dataset_complete":${{ needs.stage-a.result == 'success' && needs.full-shards.result == 'success' && needs.mixed-captures.result == 'success' }},
+            "pipeline_complete":${{ needs.stage-a.result == 'success' && needs.full-shards.result == 'success' && needs.mixed-captures.result == 'success' && needs.baseline-models.result == 'success' && needs.mixed-evaluation.result == 'success' && needs.adversarial-holdout.result == 'success' }}
+          }
+          JSON
+          cat "$RUNNER_TEMP/status/release_status.json"
+      - name: Upload release status to HF
+        if: needs.preflight.outputs.hf_enabled == 'true' && needs.preflight.outputs.full_requested == 'true'
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/status" "releases/${{ needs.preflight.outputs.release_id }}/status" "Recovery release status $GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recovery-release-status-${{ github.run_id }}
+          path: ${{ runner.temp }}/status
+          retention-days: 90
