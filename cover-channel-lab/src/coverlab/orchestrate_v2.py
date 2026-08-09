@@ -11,7 +11,13 @@ events and split metadata all agree.
 """
 
 from . import orchestrate as _base
+from .browser_runtime import install as _install_browser_runtime
 from .scenarios import BY_ID
+
+# Browser families are generated through the same run_campaign module used by
+# the rest of orchestration. Install the bounded cold-start implementation once
+# before any worker begins producing campaigns.
+_install_browser_runtime()
 
 _original_invoke = _base.invoke
 
