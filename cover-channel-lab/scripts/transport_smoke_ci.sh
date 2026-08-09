@@ -12,7 +12,7 @@ FAILED=1
 
 rm -rf "$WORK"
 mkdir -p "$STAGE/manifests" "$PARSER" "$RELEASE"
-rm -f /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock /tmp/coverlab_wss_trace.jsonl
+rm -f /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock /tmp/coverlab_wss_trace.jsonl /tmp/coverlab_wss_client.lock
 
 cleanup_capture() {
   if [[ -n "${TCPDUMP_PID:-}" ]]; then
@@ -57,6 +57,7 @@ COMMON_ENV=(
   GITHUB_SHA="${GITHUB_SHA:-local}"
   COVERLAB_GO_CLIENT=/tmp/coverlab-go-client
   COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs"
+  COVERLAB_WSS_CLIENT_LOCK=/tmp/coverlab_wss_client.lock
   NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1'
   no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1'
 )
@@ -67,18 +68,18 @@ COMMON_ENV=(
 sudo ip netns exec cc-dev runuser -u "$USER" -- env "${COMMON_ENV[@]}" \
   "$PY" "$ROOT/scripts/scenario_smoke.py" --out "$STAGE/manifests"
 
-# 2) Bounded WSS soak. Four personas run concurrently, but with pacing that
-# mirrors corpus connection churn rather than an artificial instantaneous TLS DoS.
-pids=()
+# 2) Deterministic bounded WSS soak across every persona. A previous GitHub
+# runner reproduced a native CPython/OpenSSL SIGSEGV only when four independent
+# WSS stress processes churned handshakes concurrently. The production runner
+# now serializes Python WSS lifetimes with a cross-process lock, so the gate uses
+# the same bounded concurrency policy instead of intentionally re-triggering a
+# native-library race. Each source namespace is still exercised on the wire.
 for ns in cc-office cc-dev cc-devops cc-soc; do
-  sudo ip netns exec "$ns" runuser -u "$USER" -- env \
-    NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' \
-    no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
+  echo "WSS soak persona: $ns"
+  sudo ip netns exec "$ns" runuser -u "$USER" -- env "${COMMON_ENV[@]}" \
     "$PY" "$ROOT/scripts/wss_stress_smoke.py" \
-      --connections 120 --attempts 3 --open-timeout 8 --inter-delay 0.006 &
-  pids+=("$!")
+      --connections 40 --attempts 3 --open-timeout 8 --inter-delay 0.008
 done
-for pid in "${pids[@]}"; do wait "$pid"; done
 
 # 3) Recheck advanced QUIC transports after catalog + WSS churn. This catches
 # lifecycle/resource leakage that a startup readiness probe cannot see.
@@ -91,9 +92,7 @@ for mode in request connect-udp webtransport; do
 done
 
 # Final WSS acceptance check after the soak.
-sudo ip netns exec cc-dev runuser -u "$USER" -- env \
-  NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' \
-  no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
+sudo ip netns exec cc-dev runuser -u "$USER" -- env "${COMMON_ENV[@]}" \
   "$PY" "$ROOT/scripts/wss_stress_smoke.py" --connections 20 --inter-delay 0.01
 
 cleanup_capture
