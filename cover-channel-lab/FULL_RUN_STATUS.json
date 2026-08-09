@@ -1,0 +1,16 @@
+{
+  "triggered_at_utc": "2026-08-09T09:48:14Z",
+  "smoke_run_id": 31306486415,
+  "smoke_commit": "a9951bf2db04122d42f20cbaf47192b855983cc7",
+  "smoke_artifact_id": 9036180831,
+  "smoke_status": "pass",
+  "scenario_catalog_size": 158,
+  "smoke_campaigns": 317,
+  "sequence_transactions": 60,
+  "event_to_packet_mapping_coverage": 1.0,
+  "suricata_exit_zero": true,
+  "zeek_exit_zero": true,
+  "leakage_audit_passed": true,
+  "full_corpus_requested": true,
+  "stage_g_role": "trusted_service_hard_negative_background"
+}
