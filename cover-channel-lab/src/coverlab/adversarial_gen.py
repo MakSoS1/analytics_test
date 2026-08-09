@@ -25,15 +25,15 @@ def main():
         s for s in SCENARIOS
         if s.family in {
             "uri", "header", "custom_header", "body", "timing", "websocket",
-            "http2", "http3", "tunnel", "grpc", "mqtt_ws", "lots", "doh",
+            "http2", "http3", "tunnel", "grpc", "mqtt_ws", "doh",
         }
         and s.scenario_id not in {"CC_BROWSER_01", "CC_BROWSER_02", "CC_BROWSER_03"}
     ]
 
-    # 500 actual suspicious sessions. The search space mutates carrier family,
-    # independent client stack, event count, size class, transform metadata and
-    # timing family. The resulting traffic is scored by the already-trained B3
-    # model in the subsequent workflow step; no candidate is ever added to train.
+    # 500 actual suspicious sessions. This is a deterministic randomized
+    # nuisance holdout, not a model-in-the-loop black-box optimizer: candidates
+    # are generated first and scored against the frozen B3 model afterwards.
+    # LOTS/trusted-service scenarios are deliberately excluded from positives.
     for i in range(500):
         persona_idx = i % len(PERSONAS)
         if persona_idx != args.persona_index:
@@ -41,11 +41,11 @@ def main():
         scenario = candidates[(i * 23 + i // 11) % len(candidates)]
         persona, ip = PERSONAS[persona_idx]
         client = CLIENTS[(i * 5 + 1) % len(CLIENTS)]
-        events = 1 + (i % 8)
+        event_count = 1 + (i % 8)
         cid = f"adv-{i:04d}"
         config = {
             "experiment_stage": "F_adversarial_challenge",
-            "challenge_kind": "black_box_random_nuisance_search",
+            "challenge_kind": "randomized_nuisance_holdout",
             "configuration_id": f"ADV-{i:04d}",
             "adversarial_candidate_index": i,
             "transform_chain": [TRANSFORMS[(i * 3) % len(TRANSFORMS)]],
@@ -54,6 +54,7 @@ def main():
             "payload_size_class": SIZES[(i * 11) % len(SIZES)],
             "open_set": True,
             "adversarial_holdout": True,
+            "search_method": "deterministic_randomized_nuisance_no_model_feedback",
         }
         invoke(
             scenario.scenario_id,
@@ -63,7 +64,7 @@ def main():
             "run-00",
             persona,
             ip,
-            events,
+            event_count,
             manifest,
             out / "events.jsonl",
             args.capture_file,
