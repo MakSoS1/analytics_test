@@ -7,13 +7,29 @@ on:
       - 'cover-channel-lab/.smoke-trigger'
 
 permissions:
+  actions: write
   contents: read
+
+concurrency:
+  group: coverlab-fix-smoke-current
+  cancel-in-progress: true
 
 jobs:
   transport-smoke:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
+      - name: Retire stale defective corpus and superseded smoke runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set +e
+          for id in 31298483900 31303524834 31303725910 31303901084; do
+            [[ "$id" == "$GITHUB_RUN_ID" ]] && continue
+            gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/cancel" >/dev/null 2>&1 || true
+          done
+          set -e
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -21,7 +37,7 @@ jobs:
       - name: Install lab dependencies
         working-directory: cover-channel-lab
         run: ./scripts/install_runner.sh
-      - name: Build isolated topology and services
+      - name: Build isolated topology and require all transport fixtures
         working-directory: cover-channel-lab
         run: |
           ./scripts/setup_netns.sh
@@ -50,7 +66,7 @@ jobs:
           PY="$(command -v python)"
           ROOT="$PWD"
           rm -f /tmp/g-smoke.jsonl /tmp/g-smoke-events.jsonl
-          code='from types import SimpleNamespace; from coverlab.run_campaign import run; import json; a=SimpleNamespace(scenario="CC_LOTS_05",variant="suspicious",seed=23,campaign_id="g-smoke",run_id="smoke",persona="Victim-2-Dev",source_ip="10.20.0.11",events=1,client_impl="python_httpx",state="/tmp/coverlab_server_state.json",manifest="/tmp/g-smoke.jsonl",events_out="/tmp/g-smoke-events.jsonl",capture_file="smoke.pcap"); r=run(a); assert r["label_binary"]==0 and r["label_intent"]=="benign" and not r["attack_mapping"], r; print(json.dumps({"label_binary":r["label_binary"],"dataset_role":r.get("dataset_role"),"status":"pass"}))'
+          code='from types import SimpleNamespace; from coverlab.run_campaign import run; import json; a=SimpleNamespace(scenario="CC_LOTS_05",variant="suspicious",seed=23,campaign_id="g-smoke",run_id="smoke",persona="Victim-2-Dev",source_ip="10.20.0.11",events=1,client_impl="python_httpx",state="/tmp/coverlab_server_state.json",manifest="/tmp/g-smoke.jsonl",events_out="/tmp/g-smoke-events.jsonl",capture_file="smoke.pcap"); r=run(a); assert r["label_binary"]==0 and r["label_intent"]=="benign" and not r["attack_mapping"], r; assert r.get("dataset_role")=="hard_negative", r; print(json.dumps({"label_binary":r["label_binary"],"dataset_role":r.get("dataset_role"),"status":"pass"}))'
           sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" \
             NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' \
             no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
@@ -60,15 +76,30 @@ jobs:
         run: |
           PY="$(command -v python)"
           sudo ip netns exec cc-dev runuser -u "$USER" -- env \
+            NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' \
+            no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
             "$PY" scripts/wss_stress_smoke.py --connections 20
+      - name: Recheck H3 advanced transports after WSS stress
+        working-directory: cover-channel-lab
+        run: |
+          PY="$(command -v python)"
+          for mode in connect-udp webtransport; do
+            sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$PWD/src" \
+              NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' \
+              no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
+              "$PY" -m coverlab.h3_fixture client --host cover-h3.test --port 8444 --mode "$mode" --body "post-stress-$mode"
+          done
       - name: Dump service diagnostics on failure
         if: failure()
         working-directory: cover-channel-lab
         run: |
-          cat "${RUNNER_TEMP}/coverlab-services/wss.log" || true
-          cat "${RUNNER_TEMP}/coverlab-services/https.log" || true
+          for log in wss https h3 grpc mqtt connect; do
+            echo "===== $log ====="
+            tail -n 160 "${RUNNER_TEMP}/coverlab-services/$log.log" 2>/dev/null || true
+          done
           sudo ip netns exec cc-c2 ss -s || true
           sudo ip netns exec cc-c2 ss -lntup || true
+          sudo ip netns exec cc-c2 ss -lnup || true
       - name: Stop services
         if: always()
         working-directory: cover-channel-lab
