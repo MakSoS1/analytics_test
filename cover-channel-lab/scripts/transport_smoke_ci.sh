@@ -46,9 +46,12 @@ trap cleanup EXIT
 "$ROOT/scripts/setup_netns.sh"
 "$ROOT/scripts/start_services.sh"
 
-# Capture the complete smoke path so the gate validates real wire traffic plus
-# Suricata/Zeek and Gold feature construction, not only application return codes.
-sudo tcpdump -i ccbr0 -s 0 -U -w "$PCAP" 'net 10.20.0.0/24' >"$WORK/tcpdump.log" 2>&1 &
+# Capture the complete smoke path at the canonical server-side veth. Every
+# synthetic exchange to 10.20.0.20/10.20.0.21 crosses this interface exactly
+# once, unlike the bridge master which can miss switched frames.
+CAPTURE_IF="${COVERLAB_CAPTURE_IF:-v-c2}"
+sudo ip link show "$CAPTURE_IF" >/dev/null
+sudo tcpdump -i "$CAPTURE_IF" -s 0 -U -w "$PCAP" 'net 10.20.0.0/24' >"$WORK/tcpdump.log" 2>&1 &
 TCPDUMP_PID=$!
 sleep .4
 
@@ -58,6 +61,7 @@ COMMON_ENV=(
   COVERLAB_GO_CLIENT=/tmp/coverlab-go-client
   COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs"
   COVERLAB_WSS_CLIENT_LOCK=/tmp/coverlab_wss_client.lock
+  COVERLAB_CAPTURE_IF="$CAPTURE_IF"
   NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1'
   no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1'
 )
@@ -137,17 +141,18 @@ HEALTH="$RELEASE/quality/smoke-gate/capture_health.json"
 [[ -s "$HEALTH" ]]
 jq -e '.passed == true and .suricata_exit_zero == true and .zeek_exit_zero == true and .mapping_coverage_ge_0_95 == true' "$HEALTH" >/dev/null
 
-# 6) Exact future-02 regression. The previous full corpus produced all 350
-# campaigns and 1,400 events successfully but only 0.948571 packet mapping.
-# Re-run that exact shard under the smoke gate so sub-threshold H3/QUIC/OHTTP
-# campaign attribution can never reach the expensive full fan-out again.
+# 6) Exact future-02 regression. The previous bridge-master capture produced all
+# 350 campaigns and 1,400 events but stopped before the final 18 DevOps sessions,
+# yielding 0.948571 mapping despite zero tcpdump kernel drops. Re-run that exact
+# shard through the server-veth capture point and require the unchanged >=0.95
+# quality gate before a full corpus can start.
 FUTURE_WORK="$WORK/future02-regression"
 FUTURE_STAGE="$FUTURE_WORK/stage"
 FUTURE_PARSER="$FUTURE_WORK/parsers"
 FUTURE_RELEASE="$FUTURE_WORK/release"
 FUTURE_PCAP="$FUTURE_WORK/future-02.pcap"
 mkdir -p "$FUTURE_WORK"
-"$ROOT/scripts/generate_stage.sh" future 2 4 "$FUTURE_STAGE" "$FUTURE_PCAP"
+COVERLAB_CAPTURE_IF="$CAPTURE_IF" "$ROOT/scripts/generate_stage.sh" future 2 4 "$FUTURE_STAGE" "$FUTURE_PCAP"
 "$ROOT/scripts/process_parsers.sh" "$FUTURE_PCAP" "$FUTURE_STAGE" "$FUTURE_PARSER"
 "$ROOT/scripts/package_layers.sh" "$FUTURE_STAGE" "$FUTURE_PCAP" "$FUTURE_PARSER" "$FUTURE_RELEASE" future-02-regression
 
