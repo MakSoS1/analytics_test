@@ -5,6 +5,8 @@ on:
     branches: [coverlab-resume-correctness]
     paths:
       - '.github/workflows/cover-channel-reuse-probe.yml'
+      - 'cover-channel-lab/scripts/reuse_hf_shard.py'
+      - 'cover-channel-lab/scripts/recover_or_generate.sh'
   workflow_dispatch:
 
 permissions:
@@ -30,7 +32,6 @@ jobs:
         working-directory: cover-channel-lab
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          PYTHONPATH: src
         run: |
           python scripts/reuse_hf_shard.py \
             --repo "$HF_DATASET_REPO" --source-release "$SOURCE_RELEASE" \
@@ -48,7 +49,6 @@ jobs:
         working-directory: cover-channel-lab
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          PYTHONPATH: src
         run: |
           python scripts/reuse_hf_shard.py \
             --repo "$HF_DATASET_REPO" --source-release "$SOURCE_RELEASE" \
@@ -66,7 +66,6 @@ jobs:
         working-directory: cover-channel-lab
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          PYTHONPATH: src
         shell: bash
         run: |
           set +e
