@@ -19,14 +19,23 @@ def _client_ip(ws) -> str | None:
     return None
 
 
+async def _append_trace(record: dict) -> None:
+    # append_trace uses a cross-process flock because HTTP and WSS fixtures share
+    # one trace file. Never wait on that blocking lock in the asyncio event loop:
+    # challenge/mixed workloads can otherwise stall new TLS/RFC6455 handshakes.
+    await asyncio.to_thread(append_trace, record)
+
+
 async def handler(ws) -> None:
     client_ip = _client_ip(ws)
-    st = read_state(client_ip)
+    # State is a small local file, but keep filesystem access off the event loop
+    # as well so handshake/keepalive work remains responsive under shard load.
+    st = await asyncio.to_thread(read_state, client_ip)
     seed = int(st.get("seed", 1))
     try:
         async for msg in ws:
             if isinstance(msg, str):
-                append_trace({
+                await _append_trace({
                     "kind": "websocket",
                     "client_ip": client_ip,
                     "scenario_id": st.get("scenario_id"),
@@ -50,7 +59,7 @@ async def handler(ws) -> None:
                     await ws.send(json.dumps({"type": "ack", "for": mtype, "value": token(seed, 12)}))
             else:
                 data = bytes(msg)
-                append_trace({
+                await _append_trace({
                     "kind": "websocket",
                     "client_ip": client_ip,
                     "scenario_id": st.get("scenario_id"),
