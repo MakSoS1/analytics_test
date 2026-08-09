@@ -215,9 +215,10 @@ def raw_syntax_request(host: str, port: int, s: Scenario, suspicious: bool, i: i
 
 def ws_run(url: str, s: Scenario, suspicious: bool, r: random.Random, count: int) -> list[dict]:
     out=[]
-    ssl_ctx=True  # websockets accepts ssl context via default; URL certificate is lab self-signed below.
     ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-    with ws_connect(url, ssl=ctx, open_timeout=10) as ws:
+    # websockets 15 auto-discovers HTTP(S) proxies unless proxy=None. All WSS
+    # fixtures are local .test hosts in the isolated lab, so force a direct path.
+    with ws_connect(url, ssl=ctx, open_timeout=10, proxy=None) as ws:
         for i in range(count):
             value=encoded_value(r,suspicious,32)
             if s.family == "mqtt_ws":
