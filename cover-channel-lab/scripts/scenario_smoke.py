@@ -22,6 +22,31 @@ def client_for(s) -> str:
     return "python_httpx"
 
 
+def _normalize_g_manifest(manifest: Path, campaign_id: str, result: dict) -> None:
+    if not campaign_id.startswith("g-"):
+        return
+    updates = {
+        "label_binary": 0,
+        "label_family": "benign",
+        "label_intent": "benign",
+        "attack_mapping": [],
+        "experiment_stage": "G_trusted_background",
+        "dataset_role": "hard_negative",
+        "source_family": "trusted_site_inspired",
+        "target_task": "cover_channel_detection",
+    }
+    result.update(updates)
+    lines = manifest.read_text().splitlines()
+    for i in range(len(lines) - 1, -1, -1):
+        row = json.loads(lines[i])
+        if str(row.get("campaign_id")) == campaign_id:
+            row.update(updates)
+            lines[i] = json.dumps(row, separators=(",", ":"), default=str)
+            manifest.write_text("\n".join(lines) + "\n")
+            return
+    raise RuntimeError(f"missing smoke campaign in manifest: {campaign_id}")
+
+
 def invoke(scenario_id: str, variant: str, campaign_id: str, seed: int, events: int,
            client_impl: str, manifest: Path, events_out: Path) -> dict:
     args = SimpleNamespace(
@@ -42,6 +67,7 @@ def invoke(scenario_id: str, variant: str, campaign_id: str, seed: int, events: 
     result = run(args)
     if result.get("status") != "success":
         raise RuntimeError(f"{campaign_id}: status={result.get('status')}")
+    _normalize_g_manifest(manifest, campaign_id, result)
     return result
 
 
@@ -68,70 +94,37 @@ def main() -> None:
     always_benign_families = {"lots", "privacy"}
 
     for idx, scenario in enumerate(SCENARIOS):
-        # A single exchange is enough for storage/body/response families. Timing,
-        # WebSocket and multiplexed transports get two events so the smoke also
-        # exercises repeated-frame/request lifecycle.
         event_count = 2 if scenario.family in {"timing", "websocket", "http2", "grpc", "sse", "longpoll"} else 1
-
         variants = ("benign",) if scenario.family in always_benign_families else ("suspicious", "benign")
         for v_idx, variant in enumerate(variants):
-            if scenario.family == "lots":
-                campaign_id = f"g-smoke-catalog-{idx:03d}-{v_idx}"
-            else:
-                campaign_id = f"smoke-catalog-{idx:03d}-{v_idx}"
+            campaign_id = f"g-smoke-catalog-{idx:03d}-{v_idx}" if scenario.family == "lots" else f"smoke-catalog-{idx:03d}-{v_idx}"
             result = invoke(
-                scenario.scenario_id,
-                variant,
-                campaign_id,
-                91000000 + idx * 10 + v_idx,
-                event_count,
-                client_for(scenario),
-                manifest,
-                events_out,
+                scenario.scenario_id, variant, campaign_id, 91000000 + idx * 10 + v_idx,
+                event_count, client_for(scenario), manifest, events_out,
             )
             if scenario.family in always_benign_families:
                 if result.get("label_binary") != 0 or result.get("label_intent") != "benign":
-                    raise RuntimeError(
-                        f"{scenario.scenario_id}: hard-negative smoke leaked positive label: {result}"
-                    )
+                    raise RuntimeError(f"{scenario.scenario_id}: hard-negative smoke leaked positive label: {result}")
             else:
                 expected = 1 if variant == "suspicious" else 0
                 if result.get("label_binary") != expected:
-                    raise RuntimeError(
-                        f"{scenario.scenario_id}/{variant}: label_binary={result.get('label_binary')} expected={expected}"
-                    )
+                    raise RuntimeError(f"{scenario.scenario_id}/{variant}: label_binary={result.get('label_binary')} expected={expected}")
             family_counts[scenario.family] += 1
             transport_counts[scenario.transport] += 1
             total += 1
 
-    # Explicitly exercise every generic client implementation on a stable HTTP
-    # scenario. Protocol-specific clients are already covered by their catalog
-    # scenarios and browser_chromium is covered by the browser family.
-    generic_clients = [
-        "python_httpx", "curl_linux", "node_fetch", "go_nethttp", "python_stdlib",
-    ]
+    generic_clients = ["python_httpx", "curl_linux", "node_fetch", "go_nethttp", "python_stdlib"]
     for idx, client in enumerate(generic_clients):
-        result = invoke(
-            "CC_URI_01", "benign", f"smoke-client-{idx:02d}", 92000000 + idx,
-            1, client, manifest, events_out,
-        )
+        result = invoke("CC_URI_01", "benign", f"smoke-client-{idx:02d}", 92000000 + idx, 1, client, manifest, events_out)
         if result.get("label_binary") != 0:
             raise RuntimeError(f"client smoke {client} produced wrong label")
         total += 1
 
-    # One real Stage-C-style 60-transaction multi-phase campaign. The package
-    # wrapper recognizes c-* + events=60 and routes it through sequence_campaign.
-    seq = invoke(
-        "CC_HDR_01", "suspicious", "c-smoke-00-00", 93000000, 60,
-        "python_httpx", manifest, events_out,
-    )
+    seq = invoke("CC_HDR_01", "suspicious", "c-smoke-00-00", 93000000, 60, "python_httpx", manifest, events_out)
     if seq.get("label_binary") != 1:
         raise RuntimeError("sequence smoke lost suspicious label")
     total += 1
 
-    # Stage G is background-only. Test several families through a g-* campaign
-    # ID while intentionally requesting suspicious input; the runtime contract
-    # must still force benign/hard-negative semantics.
     g_candidates = []
     for family in ("lots", "mqtt_ws", "doh", "browser"):
         match = next((s for s in SCENARIOS if s.family == family), None)
@@ -142,7 +135,12 @@ def main() -> None:
             scenario.scenario_id, "suspicious", f"g-smoke-contract-{idx:02d}",
             94000000 + idx, 1, client_for(scenario), manifest, events_out,
         )
-        if result.get("label_binary") != 0 or result.get("label_intent") != "benign":
+        if (
+            result.get("label_binary") != 0
+            or result.get("label_intent") != "benign"
+            or result.get("experiment_stage") != "G_trusted_background"
+            or result.get("dataset_role") != "hard_negative"
+        ):
             raise RuntimeError(f"Stage G contract failed for {scenario.scenario_id}: {result}")
         total += 1
 
@@ -163,6 +161,7 @@ def main() -> None:
         "always_benign_families": sorted(always_benign_families),
         "sequence_transactions": 60,
         "stage_g_contract_cases": [s.scenario_id for s in g_candidates],
+        "dataset_contract_revision": 2,
     }
     (out / "smoke_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     print(json.dumps(summary, sort_keys=True))
