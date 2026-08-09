@@ -28,7 +28,7 @@ for idx in 0 1 2 3; do
     PYTHONPATH="$ROOT/src" GITHUB_SHA="${GITHUB_SHA:-local}" COVERLAB_GO_CLIENT=/tmp/coverlab-go-client COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs" \
     COVERLAB_WSS_CLIENT_LOCK="$WSS_LOCK" \
     NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
-    "$PYTHON_BIN" -m coverlab.orchestrate --stage "$STAGE" --shard "$SHARD" --shards "$SHARDS" \
+    "$PYTHON_BIN" -m coverlab.orchestrate_v2 --stage "$STAGE" --shard "$SHARD" --shards "$SHARDS" \
       --persona-index "$idx" --out "$pdir" --capture-file "$(basename "$PCAP")" &
   WORKER_PIDS+=("$!")
 done
@@ -59,10 +59,9 @@ cp "$OUT/manifests/events.jsonl" "$OUT/events.jsonl"
 [[ -f /tmp/coverlab_server_trace.jsonl ]] && cat /tmp/coverlab_server_trace.jsonl >> "$OUT/manifests/decrypted_transactions.jsonl"
 [[ -f /tmp/coverlab_wss_trace.jsonl ]] && cat /tmp/coverlab_wss_trace.jsonl >> "$OUT/manifests/decrypted_transactions.jsonl"
 
-# Stage G is retained only as a trusted-site-inspired hard-negative/background
-# slice for Cover Channels. The runtime wrapper forces these sessions benign on
-# the wire; normalize the experiment metadata so no LOTS sample becomes a
-# positive Cover Channel label by accident.
+# Stage G is generated benign on the wire by orchestrate_v2. Normalize the
+# canonical campaign metadata as a defensive idempotent step; this is no longer
+# used to turn suspicious wire traffic into benign labels.
 if [[ "$STAGE" == "lots" ]]; then
   python - "$OUT/manifests/campaigns.jsonl" <<'PY'
 import json, sys
@@ -89,6 +88,7 @@ PY
   cp "$OUT/manifests/campaigns.jsonl" "$OUT/campaigns.jsonl"
 fi
 
+PYTHONPATH="$ROOT/src" python -m coverlab.validate_dataset_contract --stage-dir "$OUT" --out "$OUT/manifests/dataset_contract.json"
 python - <<PY
 import json
 from pathlib import Path
