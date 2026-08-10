@@ -3,15 +3,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import random
 from pathlib import Path
 
 from . import orchestrate as _base
 from . import orchestrate_v2  # installs label/browser correctness patches on _base
 from . import run_campaign as _rc
+from .client_runtime_v3 import install as _install_client_runtime
 from .research_contract_v3 import BENIGN_SERVICE_PROFILES, CLIENT_STACKS, LONG_TIMING_SECONDS, NETEM_PROFILES, SERVER_STACKS
 from .scenarios import SCENARIOS
 
+_install_client_runtime()
 _ORIGINAL_SLEEP = _rc.time.sleep
 _real_timing_calls = 0
 
@@ -21,15 +22,13 @@ def _sleep_v3(seconds: float):
     raw=os.environ.get('COVERLAB_REAL_TIMING_SECONDS')
     if raw and 0.009 <= float(seconds) <= 0.20:
         _real_timing_calls += 1
-        # run_campaign historically sleeps after the final event too. For real
-        # timing evidence only N-1 inter-event gaps are required.
         gaps=int(os.environ.get('COVERLAB_REAL_TIMING_GAPS','1'))
         return _ORIGINAL_SLEEP(float(raw) if _real_timing_calls <= gaps else 0.001)
     return _ORIGINAL_SLEEP(seconds)
 
 _rc.time.sleep = _sleep_v3
 
-ACTUAL_LINUX_CLIENTS=("python_httpx","python_httpx_h2","python_stdlib","curl_linux","go_nethttp","node_fetch")
+ACTUAL_LINUX_CLIENTS=("python_httpx","python_httpx_h2","python_stdlib","curl_linux","go_nethttp","node_fetch","java_httpclient","rust_reqwest")
 
 
 def benign_stage(args, manifest: Path, events_out: Path):
