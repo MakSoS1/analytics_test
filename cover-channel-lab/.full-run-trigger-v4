@@ -1,0 +1,3 @@
+Audit V4 full corpus trigger.
+
+This marker intentionally contains no data or secrets. The workflow must pass its own smoke gate before any full corpus jobs can start.
