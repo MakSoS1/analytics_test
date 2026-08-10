@@ -40,13 +40,14 @@ def benign_stage(args, manifest: Path, events_out: Path):
         persona,ip=_base.PERSONAS[i % len(_base.PERSONAS)]
         s=candidates[(i*37 + args.shard*11) % len(candidates)]
         service=BENIGN_SERVICE_PROFILES[i % len(BENIGN_SERVICE_PROFILES)]
-        configured_stack=CLIENT_STACKS[(i//3) % len(CLIENT_STACKS)]
+        planned_stack=CLIENT_STACKS[(i//3) % len(CLIENT_STACKS)]
         actual_client=ACTUAL_LINUX_CLIENTS[(i//7) % len(ACTUAL_LINUX_CLIENTS)]
         config={
             'experiment_stage':'K_benign_diversity','dataset_role':'benign_background',
             'configuration_id':f'K-{i:06d}','benign_service_profile':service,
-            'configured_client_stack':configured_stack,'client_impl':actual_client,
-            'configured_server_stack':SERVER_STACKS[(i//13)%len(SERVER_STACKS)],
+            'planned_client_stack':planned_stack,'client_impl':actual_client,
+            'planned_server_stack':SERVER_STACKS[(i//13)%len(SERVER_STACKS)],
+            'actual_server_stack':'hypercorn_or_protocol_fixture',
             'netem_profile':NETEM_PROFILES[(i//17)%len(NETEM_PROFILES)].name,
             'training_eligible':True,'transform_chain':['benign_native'],
             'timing_profile':'native_request','payload_size_class':_base.SIZES[i%len(_base.SIZES)],
@@ -89,7 +90,12 @@ def main():
     a=p.parse_args(); out=Path(a.out); out.mkdir(parents=True,exist_ok=True)
     if a.persona_index is not None: os.environ['COVERLAB_PERSONA_INDEX']=str(a.persona_index)
     manifest=out/'campaigns.jsonl'; events=out/'events.jsonl'; manifest.touch(); events.touch()
-    fn={'benign':benign_stage,'long':long_stage}.get(a.stage,getattr(_base,a.stage+'_stage'))
+    if a.stage == 'benign':
+        fn=benign_stage
+    elif a.stage == 'long':
+        fn=long_stage
+    else:
+        fn=getattr(_base,a.stage+'_stage')
     fn(a,manifest,events)
     print(json.dumps({'stage':a.stage,'shard':a.shard,'campaigns':sum(1 for _ in manifest.open()),'events':sum(1 for _ in events.open())}))
 
