@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 from pathlib import Path
 
@@ -19,7 +18,6 @@ _real_timing_calls = 0
 
 
 def _timing_factor(mode: str, call: int) -> float:
-    """Deterministic real-time jitter/backoff patterns for Stage L."""
     phase=((call*37)%101)/100.0
     if mode=='fixed': return 1.0
     if mode=='jitter_5': return 0.95+phase*0.10
@@ -41,8 +39,7 @@ def _sleep_v3(seconds: float):
         _real_timing_calls += 1
         gaps=int(os.environ.get('COVERLAB_REAL_TIMING_GAPS','1'))
         if _real_timing_calls <= gaps:
-            mode=os.environ.get('COVERLAB_REAL_TIMING_MODE','fixed')
-            return _ORIGINAL_SLEEP(float(raw)*_timing_factor(mode,_real_timing_calls))
+            return _ORIGINAL_SLEEP(float(raw)*_timing_factor(os.environ.get('COVERLAB_REAL_TIMING_MODE','fixed'),_real_timing_calls))
         return _ORIGINAL_SLEEP(0.001)
     return _ORIGINAL_SLEEP(seconds)
 
@@ -61,10 +58,28 @@ MATCHED_ANALOGUES={
     'ide_telemetry':'telemetry_upload','ci_polling':'periodic_poll','webhook_retry':'retry_backoff',
     'api_pagination':'chunked_transfer','browser_background':'background_periodicity',
 }
+# A temporal hard-negative label must correspond to the actual wire protocol family.
+# Some business semantics (OAuth/cloud/IDE) are approximated locally, but never
+# represented as a different transport than the bytes actually generated.
+PATTERN_FAMILIES={
+    'websocket_dashboard':('websocket',),
+    'sse_feed':('sse',),
+    'long_polling':('longpoll',),
+    'grpc_telemetry':('grpc',),
+    'mqtt_telemetry':('mqtt_ws',),
+    'health_check':('timing','response'),
+    'oauth_refresh':('header','body'),
+    'cloud_sync':('body','response','timing'),
+    'software_update':('response','body'),
+    'ide_telemetry':('body','grpc','websocket'),
+    'ci_polling':('longpoll','timing'),
+    'webhook_retry':('body','timing'),
+    'api_pagination':('uri',),
+    'browser_background':('browser','timing','websocket'),
+}
 
 
 def _benign_event_count(i:int)->int:
-    """20/20/20/20/15/5 percent across matched temporal-length buckets."""
     q=i%100
     if q<20:return 1
     if q<40:return 2+(i%2)
@@ -74,19 +89,24 @@ def _benign_event_count(i:int)->int:
     return 61+(i%40)
 
 
+def _benign_scenario(pattern:str,i:int,shard:int):
+    families=set(PATTERN_FAMILIES[pattern])
+    candidates=[s for s in SCENARIOS if s.family in families and s.family!='lots']
+    if not candidates:raise RuntimeError(f'no wire-compatible benign candidates for {pattern}')
+    return candidates[(i*37+shard*11)%len(candidates)]
+
+
 def benign_stage(args, manifest: Path, events_out: Path):
-    """Stage K: 60k multi-event benign/hard-negative sessions by default."""
     total=args.sessions or int(os.environ.get('COVERLAB_BENIGN_SESSIONS','60000'))
-    candidates=[s for s in SCENARIOS if s.family not in {'lots'}]
     actual_netem=os.environ.get('COVERLAB_NETEM_PROFILE','clean')
     for i in range(total):
         if i % args.shards != args.shard: continue
         persona,ip=_base.PERSONAS[i % len(_base.PERSONAS)]
-        s=candidates[(i*37 + args.shard*11) % len(candidates)]
         service=BENIGN_SERVICE_PROFILES[i % len(BENIGN_SERVICE_PROFILES)]
         planned_stack=CLIENT_STACKS[(i//3) % len(CLIENT_STACKS)]
         actual_client=ACTUAL_LINUX_CLIENTS[(i//7) % len(ACTUAL_LINUX_CLIENTS)]
         pattern=BENIGN_PATTERNS[(i//5)%len(BENIGN_PATTERNS)]
+        s=_benign_scenario(pattern,i,args.shard)
         event_count=_benign_event_count(i)
         config={
             'experiment_stage':'K_benign_diversity','dataset_role':'benign_background',
@@ -98,6 +118,8 @@ def benign_stage(args, manifest: Path, events_out: Path):
             'timing_profile':'matched_multi_event','payload_size_class':_base.SIZES[i%len(_base.SIZES)],
             'benign_temporal_pattern':pattern,'matched_attack_analogue':MATCHED_ANALOGUES[pattern],
             'event_count_target':event_count,'temporal_negative_pair':True,
+            'wire_family_matched':True,'actual_wire_family':s.family,'actual_wire_transport':s.transport,
+            'semantic_fidelity':'wire_family_real_local_semantic_approximation',
         }
         _base.invoke(s.scenario_id,False,args.seed+90_000_000+i,f'k-{i:07d}','run-00',persona,ip,event_count,manifest,events_out,args.capture_file,config)
 
@@ -107,7 +129,6 @@ def _long_event_count(interval:int)->int:
 
 
 def long_stage(args, manifest: Path, events_out: Path):
-    """Stage L: multi-event wall-clock timing challenge. 20/60 minute profiles are intended for self-hosted evidence."""
     profiles=list(LONG_TIMING_SECONDS)
     profile_ids=[i for i in range(len(profiles)) if i % args.shards == args.shard]
     timing=[s for s in SCENARIOS if s.family=='timing']
@@ -130,8 +151,7 @@ def long_stage(args, manifest: Path, events_out: Path):
                 'transform_chain':['raw_utf8'],'timing_profile':f'real_{interval}s_multi_pattern',
                 'timing_modes_exercised':['fixed','jitter_5','jitter_20','jitter_50','burst_silence','backoff','phase_transition'],
                 'event_count_target':events,'client_impl':'python_httpx','payload_size_class':'small',
-                'netem_profile':os.environ.get('COVERLAB_NETEM_PROFILE','clean'),
-                'hosted_recommended':interval<=300,
+                'netem_profile':os.environ.get('COVERLAB_NETEM_PROFILE','clean'),'hosted_recommended':interval<=300,
             }
             _base.invoke(s.scenario_id,suspicious,args.seed+100_000_000+p*100+rep,f'l-{p:02d}-{rep:02d}',f'run-{rep:02d}',persona,ip,events,manifest,events_out,args.capture_file,config)
             for key in ('COVERLAB_REAL_TIMING_SECONDS','COVERLAB_REAL_TIMING_GAPS','COVERLAB_REAL_TIMING_MODE'):os.environ.pop(key,None)
