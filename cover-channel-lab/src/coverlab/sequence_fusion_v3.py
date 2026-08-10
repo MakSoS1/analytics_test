@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from . import train_baseline as _base
 from . import train_baseline_v2 as _v2
 from .research_contract_v3 import validation_role
-from .train_baseline_v3 import availability_flags_v3  # installs v3 baseline overlay
+from .train_baseline_v3 import availability_flags_v3
 
 MAX_SEQ_LEN = 64
 SEQ_CHANNELS = ("direction", "size", "delta_t", "protocol", "status", "transaction_type")
@@ -40,8 +40,6 @@ def _numeric(series: pd.Series | None, n: int) -> np.ndarray:
 def encode_sequence(group: pd.DataFrame, max_len: int = MAX_SEQ_LEN) -> tuple[np.ndarray, np.ndarray]:
     g = group.sort_values("ts") if "ts" in group else group.copy()
     if len(g) > max_len:
-        # Keep both beginning and end: registration/first poll and final task/result
-        # are both useful lifecycle positions.
         head = max_len // 2
         g = pd.concat([g.iloc[:head], g.iloc[-(max_len-head):]], ignore_index=True)
     n = len(g)
@@ -60,13 +58,12 @@ def encode_sequence(group: pd.DataFrame, max_len: int = MAX_SEQ_LEN) -> tuple[np
     else:
         dt = np.zeros(n, dtype=np.float64)
     delta = (np.log1p(np.maximum(dt, 0)) / math.log1p(3600)).astype(np.float32)
-    protocol = np.array([_stable_unit(v, "protocol") for v in g.get("protocol", pd.Series([""]*n))], dtype=np.float32)
-    status_raw = pd.to_numeric(g.get("response_status", pd.Series([0]*n)), errors="coerce").fillna(0).to_numpy(dtype=np.float32)
+    protocol = np.array([_stable_unit(v, "protocol") for v in g.get("protocol", pd.Series([""] * n))], dtype=np.float32)
+    status_raw = pd.to_numeric(g.get("response_status", pd.Series([0] * n)), errors="coerce").fillna(0).to_numpy(dtype=np.float32)
     status = np.clip(status_raw / 599.0, 0, 1)
-    kind = np.array([_stable_unit(v, "kind") for v in g.get("kind", pd.Series([""]*n))], dtype=np.float32)
-    vals = (direction, size, delta, protocol, status, kind)
-    for i, v in enumerate(vals):
-        out[i, :n] = v[:n]
+    kind = np.array([_stable_unit(v, "kind") for v in g.get("kind", pd.Series([""] * n))], dtype=np.float32)
+    for i, values in enumerate((direction, size, delta, protocol, status, kind)):
+        out[i, :n] = values[:n]
     mask[:n] = 1
     return out, mask
 
@@ -112,7 +109,10 @@ def build_sequence_arrays(tx: pd.DataFrame, session: pd.DataFrame, ids: Iterable
         x, m = encode_sequence(g)
         xs.append(x); ms.append(m); ys.append(int(labels[cid])); kept.append(cid)
     if not xs:
-        return np.zeros((0, len(SEQ_CHANNELS), MAX_SEQ_LEN), np.float32), np.zeros((0, MAX_SEQ_LEN), np.float32), np.zeros(0, np.int64), []
+        return (
+            np.zeros((0, len(SEQ_CHANNELS), MAX_SEQ_LEN), np.float32),
+            np.zeros((0, MAX_SEQ_LEN), np.float32), np.zeros(0, np.int64), [],
+        )
     return np.stack(xs), np.stack(ms), np.asarray(ys, np.int64), kept
 
 
@@ -123,15 +123,17 @@ def _metrics(y: np.ndarray, p: np.ndarray, threshold: float) -> dict:
         "rows": int(len(y)), "positives": int(y.sum()), "threshold": float(threshold),
         "precision": float(precision_score(y, pred, zero_division=0)),
         "recall": float(recall_score(y, pred, zero_division=0)),
-        "fpr": float(fp / max(1, fp + tn)), "fp_per_million": float(fp / max(1, fp + tn) * 1_000_000),
+        "fpr": float(fp / max(1, fp + tn)),
+        "fp_per_million": float(fp / max(1, fp + tn) * 1_000_000),
         "confusion_matrix": [[int(tn), int(fp)], [int(fn), int(tp)]],
     }
     if len(np.unique(y)) > 1:
-        out["roc_auc"] = float(roc_auc_score(y, p)); out["pr_auc"] = float(average_precision_score(y, p))
+        out["roc_auc"] = float(roc_auc_score(y, p))
+        out["pr_auc"] = float(average_precision_score(y, p))
     return out
 
 
-def _threshold_for_recall(y: np.ndarray, p: np.ndarray, target=.95) -> float:
+def _threshold_for_recall(y: np.ndarray, p: np.ndarray, target: float = .95) -> float:
     return _base.threshold_for_recall(y, p, target)
 
 
@@ -150,8 +152,8 @@ def train_sequence(root: Path, out: Path, seed: int = 23, epochs: int = 10) -> t
     if len(ytr) < 10 or len(np.unique(ytr)) < 2:
         raise RuntimeError("insufficient sequence training campaigns")
     model = TinyTCN()
-    pos = max(1, int(ytr.sum())); neg = max(1, len(ytr)-pos)
-    loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(float(neg/pos)))
+    pos = max(1, int(ytr.sum())); neg = max(1, len(ytr) - pos)
+    loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(float(neg / pos)))
     opt = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=1e-3)
     ds = TensorDataset(torch.tensor(xtr), torch.tensor(mtr), torch.tensor(ytr, dtype=torch.float32))
     loader = DataLoader(ds, batch_size=min(128, len(ds)), shuffle=True, generator=torch.Generator().manual_seed(seed))
@@ -162,22 +164,25 @@ def train_sequence(root: Path, out: Path, seed: int = 23, epochs: int = 10) -> t
 
     def raw_scores(ids):
         x, m, y, kept = build_sequence_arrays(tx, session, ids)
-        if len(y) == 0: return y, np.zeros(0), kept
+        if len(y) == 0:
+            return y, np.zeros(0), kept
         model.eval()
-        with torch.no_grad(): p = torch.sigmoid(model(torch.tensor(x), torch.tensor(m))).numpy()
+        with torch.no_grad():
+            p = torch.sigmoid(model(torch.tensor(x), torch.tensor(m))).numpy()
         return y, p, kept
 
     calibrator = None
     ycal, pcal_raw, _ = raw_scores(cal_ids)
     if len(ycal) and len(np.unique(ycal)) > 1:
         calibrator = IsotonicRegression(out_of_bounds="clip").fit(pcal_raw, ycal)
-    def calibrate(p): return calibrator.predict(p) if calibrator is not None and len(p) else p
+    def calibrate(p):
+        return calibrator.predict(p) if calibrator is not None and len(p) else p
     yt, pt_raw, _ = raw_scores(tune_ids); pt = calibrate(pt_raw)
     threshold = _threshold_for_recall(yt, pt, .95) if len(yt) and len(np.unique(yt)) > 1 else .5
 
     all_ids = session.campaign_id.astype(str).tolist()
-    ya, pa_raw, kept = raw_scores(all_ids); pa = calibrate(pa_raw)
-    score_map = {cid: float(p) for cid, p in zip(kept, pa)}
+    _, pa_raw, kept = raw_scores(all_ids); pa = calibrate(pa_raw)
+    score_map = {cid: float(prob) for cid, prob in zip(kept, pa)}
 
     def part_report(ids):
         y, p, _ = raw_scores(ids); p = calibrate(p)
@@ -198,7 +203,8 @@ def train_sequence(root: Path, out: Path, seed: int = 23, epochs: int = 10) -> t
 
 
 def _bundle_probability(bundle: dict, frame: pd.DataFrame) -> np.ndarray:
-    if frame.empty: return np.zeros(0)
+    if frame.empty:
+        return np.zeros(0)
     x, _ = _v2.numeric_matrix(frame, bundle["features"])
     raw = bundle["model"].predict_proba(x)[:, 1]
     cal = bundle.get("calibrator")
@@ -212,58 +218,62 @@ def expert_probability_table(root: Path, models: Path, sequence_scores: dict[str
     session = session.drop_duplicates("campaign_id", keep="last").merge(splits, on="campaign_id", how="left")
     session["split"] = session["split"].fillna("challenge")
     session = availability_flags_v3(session)
-    base = session[[c for c in session.columns if c in {"campaign_id","label_binary","split"} or c.startswith("availability_") or c.startswith("missing_reason_\")]].copy()
+    keep = [c for c in session.columns if c in {"campaign_id", "label_binary", "split"} or c.startswith("availability_") or c.startswith("missing_reason_")]
+    base = session[keep].copy()
     base["campaign_id"] = base.campaign_id.astype(str)
 
-    # B2/B3 are campaign-level.
     for name, col in (("B2-session", "p_b2"), ("B3-opaque", "p_b3")):
         bundle = joblib.load(models / f"{name}.joblib")
-        f = frames[name].copy(); f["campaign_id"] = f.campaign_id.astype(str)
-        f[col] = _bundle_probability(bundle, f)
-        base = base.merge(f[["campaign_id", col]], on="campaign_id", how="left")
+        frame = frames[name].copy(); frame["campaign_id"] = frame.campaign_id.astype(str)
+        frame[col] = _bundle_probability(bundle, frame)
+        base = base.merge(frame[["campaign_id", col]], on="campaign_id", how="left")
 
-    # B1 predicts transactions. Aggregate to campaign. It is disabled when payload
-    # visibility is absent rather than silently treating zero as content evidence.
     b1 = frames["B1-content"].copy()
     if not b1.empty:
         bundle = joblib.load(models / "B1-content.joblib")
         b1["p"] = _bundle_probability(bundle, b1); b1["campaign_id"] = b1.campaign_id.astype(str)
-        agg = b1.groupby("campaign_id").p.agg([("p_b1_mean","mean"),("p_b1_max","max")]).reset_index()
+        agg = b1.groupby("campaign_id").p.agg([("p_b1_mean", "mean"), ("p_b1_max", "max")]).reset_index()
         base = base.merge(agg, on="campaign_id", how="left")
     else:
         base["p_b1_mean"] = np.nan; base["p_b1_max"] = np.nan
     base["p_b2_seq"] = base.campaign_id.map(sequence_scores)
-    encrypted = base.get("availability_encrypted", pd.Series([0]*len(base))).fillna(0).astype(int).eq(1)
+    encrypted = base.get("availability_encrypted", pd.Series([0] * len(base), index=base.index)).fillna(0).astype(int).eq(1)
     base["b1_available"] = ((~encrypted) & base.p_b1_mean.notna()).astype(int)
     base.loc[base.b1_available.eq(0), ["p_b1_mean", "p_b1_max"]] = np.nan
     return base
 
 
-def train_fusion(root: Path, models: Path, out: Path, sequence_scores: dict[str, float], seed=23) -> dict:
+def train_fusion(root: Path, models: Path, out: Path, sequence_scores: dict[str, float], seed: int = 23) -> dict:
     table = expert_probability_table(root, models, sequence_scores)
     val = table[table.split.eq("validation")].copy()
     test = table[table.split.eq("test")].copy(); challenge = table[table.split.eq("challenge")].copy()
-    train_mask = val.campaign_id.map(validation_role).eq("fusion_train")
-    tune_mask = val.campaign_id.map(validation_role).eq("fusion_threshold")
-    fit = val[train_mask].copy(); tune = val[tune_mask].copy()
+    fit = val[val.campaign_id.map(validation_role).eq("fusion_train")].copy()
+    tune = val[val.campaign_id.map(validation_role).eq("fusion_threshold")].copy()
     feature_cols = [c for c in table.columns if c.startswith("p_") or c.startswith("availability_") or c.startswith("missing_reason_") or c == "b1_available"]
     if fit.empty or len(fit.label_binary.unique()) < 2:
         raise RuntimeError("insufficient disjoint validation campaigns for fusion")
 
-    medians = {c: float(pd.to_numeric(fit[c], errors="coerce").median()) if pd.to_numeric(fit[c], errors="coerce").notna().any() else 0.0 for c in feature_cols}
+    medians = {
+        c: float(pd.to_numeric(fit[c], errors="coerce").median()) if pd.to_numeric(fit[c], errors="coerce").notna().any() else 0.0
+        for c in feature_cols
+    }
     def matrix(df):
         x = df[feature_cols].apply(pd.to_numeric, errors="coerce").copy()
-        for c in feature_cols: x[c] = x[c].fillna(medians[c])
+        for c in feature_cols:
+            x[c] = x[c].fillna(medians[c])
         return x
+
     fusion = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed).fit(matrix(fit), fit.label_binary.astype(int))
     threshold = .5
     if not tune.empty and len(tune.label_binary.unique()) > 1:
         p = fusion.predict_proba(matrix(tune))[:, 1]
         threshold = _threshold_for_recall(tune.label_binary.astype(int).to_numpy(), p, .95)
     def report(df):
-        if df.empty: return {"rows": 0}
-        p = fusion.predict_proba(matrix(df))[:,1]
+        if df.empty:
+            return {"rows": 0}
+        p = fusion.predict_proba(matrix(df))[:, 1]
         return _metrics(df.label_binary.astype(int).to_numpy(), p, threshold)
+
     bundle = {
         "model": fusion, "features": feature_cols, "medians": medians, "threshold": float(threshold),
         "router_policy": "B1 excluded when encrypted/opaque; B2 engineered + B2 sequence + B3 remain available",
@@ -283,7 +293,8 @@ def main():
     fusion_report = train_fusion(root, models, out, seq_scores, args.seed)
     report = {"sequence": seq_report, "fusion": fusion_report}
     (out / "advanced_v3_report.json").write_text(json.dumps(report, indent=2))
-    print(json.dumps({"sequence":"ok","fusion":"ok","out":str(out)}))
+    print(json.dumps({"sequence": "ok", "fusion": "ok", "out": str(out)}))
 
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()
