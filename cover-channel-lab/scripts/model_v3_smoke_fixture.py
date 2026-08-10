@@ -15,14 +15,20 @@ def main(out: Path):
     for i in range(n):
         cid=f'mv3-{i:04d}';label=i%2;scenario=reps[wanted[i%len(wanted)]]
         split='train' if i<160 else 'validation' if i<256 else 'test' if i<288 else 'challenge'
-        opaque=int(scenario.transport in {'https','h2','h3','wss','quic'})
+        encrypted_transport=scenario.transport in {'https','h2','h3','wss','quic'}
+        # Each adjacent benign/suspicious pair gets the same visibility mode. This
+        # keeps visible/opaque smoke subsets label-balanced while representing a
+        # real distinction: encrypted traffic may be either inspection-bypassed
+        # (opaque) or TLS-inspected (plaintext visible to the NGFW pipeline).
+        opaque=int(encrypted_transport and ((i//2)%2==0))
+        inspection='bypass' if opaque else ('inspect' if encrypted_transport else 'not_applicable')
         sessions.append({'campaign_id':cid,'label_binary':label,'label_family':'synthetic' if label else 'benign','protocol':scenario.transport,
                          'persona':'smoke','client_impl':'python_httpx','visibility_mode':'opaque_and_ground_truth' if opaque else 'content',
-                         'inspection_policy':'bypass' if opaque else 'not_applicable','sni_visibility':'clear',
+                         'inspection_policy':inspection,'sni_visibility':'clear',
                          'packet_count':20+label*6+i%3,'byte_count':2000+label*900+i%17,'wire_duration_s':1.0+label*.35+(i%7)*.01,
                          'packet_size_mean':100+label*18,'packet_size_std':10+label*7,'interarrival_mean':.05+label*.025,
                          'interarrival_std':.01+label*.009,'up_bytes':1000+label*500,'down_bytes':1000+label*400,'tcp_packets':20,'udp_packets':0,
-                         'suricata_events':2,'zeek_events':2,'tls_parser_events':opaque,'http_parser_events':1-opaque,
+                         'suricata_events':2,'zeek_events':2,'tls_parser_events':int(encrypted_transport),'http_parser_events':int(not opaque),
                          'suricata_parser_ok':1,'zeek_parser_ok':1,'capture_tail_pass':1,'telemetry_exported':1,'opaque_packet_sequence_available':1})
         splits.append({'campaign_id':cid,'split':split})
         manifests.append({'campaign_id':cid,'scenario_id':scenario.scenario_id,'label_binary':label,'experiment_stage':'model_v3_smoke','dataset_role':'smoke','training_eligible':True,'attack_mapping':list(scenario.attack_mapping) if label else []})
