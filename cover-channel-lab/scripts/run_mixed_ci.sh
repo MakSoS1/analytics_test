@@ -7,6 +7,8 @@ STAGE_DIR="$WORK/stage"; PARSER_DIR="$WORK/parsers"; RELEASE_DIR="$WORK/release"
 mkdir -p "$WORK"
 cleanup(){ "$ROOT/scripts/stop_services.sh" || true; }
 trap cleanup EXIT
+"$ROOT/scripts/stop_services.sh" || true
+for dev in v-office v-dev v-c2 v-devops v-soc; do sudo ip link del "$dev" 2>/dev/null || true; done
 "$ROOT/scripts/setup_netns.sh"
 "$ROOT/scripts/start_services.sh"
 "$ROOT/scripts/generate_mixed.sh" "$IDX" "$STAGE_DIR" "$PCAP"
