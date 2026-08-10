@@ -24,6 +24,7 @@ def main():
     ap.add_argument("--baseline-report", required=True)
     ap.add_argument("--advanced-report")
     ap.add_argument("--mixed-report")
+    ap.add_argument("--advanced-mixed-report")
     ap.add_argument("--unseen-report")
     ap.add_argument("--framework-report")
     ap.add_argument("--ech-report")
@@ -41,6 +42,7 @@ def main():
     baseline = _load(a.baseline_report)
     advanced = _load(a.advanced_report)
     mixed = _load(a.mixed_report)
+    advanced_mixed = _load(a.advanced_mixed_report)
     unseen = _load(a.unseen_report)
     framework = _load(a.framework_report)
     ech = _load(a.ech_report)
@@ -66,6 +68,12 @@ def main():
             checks.append({"name": key, "partition": "challenge", "passed": metric_ok(m, a.min_precision, a.min_recall, 1.0), "metrics": m})
 
     mixed_accept = (mixed.get("session_acceptance") or {}).get("passed") if mixed else None
+    advanced_mixed_checks = []
+    for key in ("B2-sequence", "fusion-router"):
+        m = advanced_mixed.get(key, {}) or {}
+        if int(m.get("rows", 0)) > 0:
+            advanced_mixed_checks.append({"name": key, "partition": "D_mixed", "passed": metric_ok(m, a.min_precision, a.min_recall, a.max_fpr), "metrics": m})
+
     unseen_cells = unseen.get("leave_one_family_out") or {}
     unseen_ready = bool(unseen_cells) and all((r or {}).get("status") == "ok" for r in unseen_cells.values())
     compositional = unseen.get("compositional_holdout") or {}
@@ -99,7 +107,9 @@ def main():
     }
     nine_point_ready = all(evidence.values())
     dataset_valid = a.dataset_valid == "true"
-    model_quality = bool(checks) and all(c["passed"] for c in checks) and (mixed_accept is not False)
+    quality_checks_pass = bool(checks) and all(c["passed"] for c in checks)
+    advanced_mixed_pass = bool(advanced_mixed_checks) and all(c["passed"] for c in advanced_mixed_checks)
+    model_quality = quality_checks_pass and (mixed_accept is True) and advanced_mixed_pass
     promotion_evidence_ok = nine_point_ready if a.require_nine_point_evidence else True
     model_candidate = dataset_valid and model_quality and promotion_evidence_ok
 
@@ -117,6 +127,7 @@ def main():
         "max_fpr": a.max_fpr,
         "expert_checks": checks,
         "mixed_session_acceptance": mixed_accept,
+        "advanced_mixed_checks": advanced_mixed_checks,
         "unseen_evaluation_ready": unseen_ready,
         "compositional_holdout_ready": compositional_ready,
         "external_framework_holdout_ready": framework_ready,
