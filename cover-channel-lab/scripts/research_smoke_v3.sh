@@ -4,7 +4,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="${RUNNER_TEMP:-/tmp}/coverlab-research-v3-smoke"
 rm -rf "$WORK"; mkdir -p "$WORK"
 
-# Stage K must include the complete event-count distribution, not a one-event shortcut.
+# Stage K must include the complete event-count distribution in ACTUAL generated events,
+# not merely metadata claiming a multi-event target.
 COVERLAB_BENIGN_SESSIONS=100 COVERLAB_NETEM_PROFILE=wan_20ms \
   "$ROOT/scripts/run_shard_ci.sh" benign 0 1 "$WORK/benign" K-benign-smoke
 jq -e '.passed == true' "$WORK/benign/release/quality/K-benign-smoke/capture_health.json" >/dev/null
@@ -15,7 +16,9 @@ r=[json.loads(x) for x in open(sys.argv[1]) if x.strip()]; c=[int(x['event_count
 assert len(r)==100 and min(c)==1 and max(c)>=61
 assert all(x.get('label_binary',0)==0 for x in r)
 assert all(x.get('temporal_negative_pair') is True for x in r)
-print({'stage_k_multi_event':'pass','campaigns':len(r),'events_target':sum(c)})
+assert all(x.get('wire_family_matched') is True for x in r)
+assert all(int(x.get('expected_events',-1))==int(x.get('event_count_target',-2)) for x in r)
+print({'stage_k_multi_event':'pass','campaigns':len(r),'actual_events':sum(int(x['expected_events']) for x in r),'events_target':sum(c)})
 PY
 
 # Real, non-accelerated, multi-event 5-second timing smoke (~2.5 min wall clock).
@@ -29,8 +32,9 @@ assert rows and all(r.get('timing_acceleration')==1 for r in rows)
 assert all(r.get('training_eligible') is False for r in rows)
 assert all(float(r.get('real_interval_seconds',0))==5 for r in rows)
 assert all(int(r.get('event_count_target',0))>=30 for r in rows)
+assert all(int(r.get('expected_events',0))==int(r.get('event_count_target',-1)) for r in rows)
 assert all(len(r.get('timing_modes_exercised',[]))>=7 for r in rows)
-print({'long_timing_smoke':'pass','campaigns':len(rows)})
+print({'long_timing_smoke':'pass','campaigns':len(rows),'actual_events':sum(int(r['expected_events']) for r in rows)})
 PY
 
 MODEL="$WORK/model-fixture"; OUT="$WORK/models"; EVAL="$WORK/evaluation"; READY="$WORK/readiness-dataset"
@@ -48,8 +52,8 @@ PYTHONPATH="$ROOT/src" python -m coverlab.model_acceptance_v3 \
   --baseline-report "$OUT/baseline_report.json" --advanced-report "$OUT/advanced_v3_report.json" \
   --unseen-report "$EVAL/unseen.json" --research-readiness-report "$EVAL/research_readiness.json" \
   --framework-report "$EVAL/external/framework_status.json" --ech-report "$EVAL/external/ech_status.json" \
-  --environment-report "$EVAL/external/environment_status.json" --require-nine-point-evidence \
-  --out "$EVAL/model_acceptance_v3.json"
+  --environment-report "$EVAL/external/environment_status.json" --long-timing-report "$EVAL/external/long_timing_status.json" \
+  --require-nine-point-evidence --out "$EVAL/model_acceptance_v3.json"
 
 for f in B1-content.joblib B2-session.joblib B3-opaque.joblib B2-sequence.pt B2-opaque-sequence.pt B2-visible-sequence.pt fusion-router.joblib baseline_report.json advanced_v3_report.json; do
   [[ -s "$OUT/$f" ]] || { echo "missing advanced model artifact: $f" >&2; exit 1; }
