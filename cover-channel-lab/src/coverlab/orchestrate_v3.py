@@ -10,7 +10,7 @@ from . import orchestrate_v2  # installs label/browser correctness patches on _b
 from . import run_campaign as _rc
 from .client_runtime_v3 import install as _install_client_runtime
 from .research_contract_v3 import BENIGN_SERVICE_PROFILES, CLIENT_STACKS, LONG_TIMING_SECONDS, SERVER_STACKS
-from .scenarios import SCENARIOS
+from .scenarios import BY_ID, SCENARIOS
 
 _install_client_runtime()
 _ORIGINAL_SLEEP = _rc.time.sleep
@@ -58,24 +58,25 @@ MATCHED_ANALOGUES={
     'ide_telemetry':'telemetry_upload','ci_polling':'periodic_poll','webhook_retry':'retry_backoff',
     'api_pagination':'chunked_transfer','browser_background':'background_periodicity',
 }
-# A temporal hard-negative label must correspond to the actual wire protocol family.
-# Some business semantics (OAuth/cloud/IDE) are approximated locally, but never
-# represented as a different transport than the bytes actually generated.
-PATTERN_FAMILIES={
-    'websocket_dashboard':('websocket',),
-    'sse_feed':('sse',),
-    'long_polling':('longpoll',),
-    'grpc_telemetry':('grpc',),
-    'mqtt_telemetry':('mqtt_ws',),
-    'health_check':('timing','response'),
-    'oauth_refresh':('header','body'),
-    'cloud_sync':('body','response','timing'),
-    'software_update':('response','body'),
-    'ide_telemetry':('body','grpc','websocket'),
-    'ci_polling':('longpoll','timing'),
-    'webhook_retry':('body','timing'),
-    'api_pagination':('uri',),
-    'browser_background':('browser','timing','websocket'),
+# Explicit allowlist. Each selected scenario emits one logical event record per
+# requested event in the current wire generator. Aggregating client-stream/bidi
+# gRPC scenarios and expensive browser automation are intentionally excluded
+# from Stage K; they remain covered by their dedicated challenge stages.
+PATTERN_SCENARIOS={
+    'websocket_dashboard':('CC_WS_02','CC_WS_08','CC_WS_09'),
+    'sse_feed':('CC_SSE_01','CC_SSE_05'),
+    'long_polling':('CC_LP_01','CC_LP_02','CC_LP_03'),
+    'grpc_telemetry':('CC_GRPC_01','CC_GRPC_02','CC_GRPC_05','CC_GRPC_06','CC_GRPC_07'),
+    'mqtt_telemetry':('CC_MQTT_01','CC_MQTT_02','CC_MQTT_03'),
+    'health_check':('CC_TIME_01','CC_TIME_02','CC_RESP_09'),
+    'oauth_refresh':('CC_HDR_03','CC_HDR_09'),
+    'cloud_sync':('CC_BODY_04','CC_BODY_06','CC_TIME_03'),
+    'software_update':('CC_RESP_11','CC_RESP_12'),
+    'ide_telemetry':('CC_XHDR_04','CC_BODY_01','CC_GRPC_01'),
+    'ci_polling':('CC_LP_01','CC_TIME_01'),
+    'webhook_retry':('CC_TIME_07','CC_BODY_01'),
+    'api_pagination':('CC_URI_02',),
+    'browser_background':('CC_TIME_03','CC_TIME_06','CC_TIME_10','CC_WS_08'),
 }
 
 
@@ -90,10 +91,10 @@ def _benign_event_count(i:int)->int:
 
 
 def _benign_scenario(pattern:str,i:int,shard:int):
-    families=set(PATTERN_FAMILIES[pattern])
-    candidates=[s for s in SCENARIOS if s.family in families and s.family!='lots']
-    if not candidates:raise RuntimeError(f'no wire-compatible benign candidates for {pattern}')
-    return candidates[(i*37+shard*11)%len(candidates)]
+    ids=PATTERN_SCENARIOS[pattern]
+    sid=ids[(i*37+shard*11)%len(ids)]
+    if sid not in BY_ID:raise RuntimeError(f'unknown Stage K allowlisted scenario: {sid}')
+    return BY_ID[sid]
 
 
 def benign_stage(args, manifest: Path, events_out: Path):
@@ -119,7 +120,7 @@ def benign_stage(args, manifest: Path, events_out: Path):
             'benign_temporal_pattern':pattern,'matched_attack_analogue':MATCHED_ANALOGUES[pattern],
             'event_count_target':event_count,'temporal_negative_pair':True,
             'wire_family_matched':True,'actual_wire_family':s.family,'actual_wire_transport':s.transport,
-            'semantic_fidelity':'wire_family_real_local_semantic_approximation',
+            'semantic_fidelity':'wire_real_local_benign_analogue','stage_k_allowlisted_scenario':True,
         }
         _base.invoke(s.scenario_id,False,args.seed+90_000_000+i,f'k-{i:07d}','run-00',persona,ip,event_count,manifest,events_out,args.capture_file,config)
 
