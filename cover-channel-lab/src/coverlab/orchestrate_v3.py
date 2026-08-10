@@ -9,7 +9,7 @@ from . import orchestrate as _base
 from . import orchestrate_v2  # installs label/browser correctness patches on _base
 from . import run_campaign as _rc
 from .client_runtime_v3 import install as _install_client_runtime
-from .research_contract_v3 import BENIGN_SERVICE_PROFILES, CLIENT_STACKS, LONG_TIMING_SECONDS, NETEM_PROFILES, SERVER_STACKS
+from .research_contract_v3 import BENIGN_SERVICE_PROFILES, CLIENT_STACKS, LONG_TIMING_SECONDS, SERVER_STACKS
 from .scenarios import SCENARIOS
 
 _install_client_runtime()
@@ -35,6 +35,7 @@ def benign_stage(args, manifest: Path, events_out: Path):
     """Stage K: 60k independent benign sessions by default, real wire traffic."""
     total=args.sessions or int(os.environ.get('COVERLAB_BENIGN_SESSIONS','60000'))
     candidates=[s for s in SCENARIOS if s.family not in {'lots'}]
+    actual_netem=os.environ.get('COVERLAB_NETEM_PROFILE','clean')
     for i in range(total):
         if i % args.shards != args.shard: continue
         persona,ip=_base.PERSONAS[i % len(_base.PERSONAS)]
@@ -48,7 +49,7 @@ def benign_stage(args, manifest: Path, events_out: Path):
             'planned_client_stack':planned_stack,'client_impl':actual_client,
             'planned_server_stack':SERVER_STACKS[(i//13)%len(SERVER_STACKS)],
             'actual_server_stack':'hypercorn_or_protocol_fixture',
-            'netem_profile':NETEM_PROFILES[(i//17)%len(NETEM_PROFILES)].name,
+            'netem_profile':actual_netem,
             'training_eligible':True,'transform_chain':['benign_native'],
             'timing_profile':'native_request','payload_size_class':_base.SIZES[i%len(_base.SIZES)],
         }
@@ -75,6 +76,7 @@ def long_stage(args, manifest: Path, events_out: Path):
                 'timing_acceleration':1,'training_eligible':False,'challenge_only':True,
                 'transform_chain':['raw_utf8'],'timing_profile':f'real_{interval}s',
                 'client_impl':'python_httpx','payload_size_class':'small',
+                'netem_profile':os.environ.get('COVERLAB_NETEM_PROFILE','clean'),
             }
             _base.invoke(s.scenario_id,suspicious,args.seed+100_000_000+p*100+rep,f'l-{p:02d}-{rep:02d}',f'run-{rep:02d}',persona,ip,2,manifest,events_out,args.capture_file,config)
             os.environ.pop('COVERLAB_REAL_TIMING_SECONDS',None)
@@ -90,12 +92,9 @@ def main():
     a=p.parse_args(); out=Path(a.out); out.mkdir(parents=True,exist_ok=True)
     if a.persona_index is not None: os.environ['COVERLAB_PERSONA_INDEX']=str(a.persona_index)
     manifest=out/'campaigns.jsonl'; events=out/'events.jsonl'; manifest.touch(); events.touch()
-    if a.stage == 'benign':
-        fn=benign_stage
-    elif a.stage == 'long':
-        fn=long_stage
-    else:
-        fn=getattr(_base,a.stage+'_stage')
+    if a.stage == 'benign': fn=benign_stage
+    elif a.stage == 'long': fn=long_stage
+    else: fn=getattr(_base,a.stage+'_stage')
     fn(a,manifest,events)
     print(json.dumps({'stage':a.stage,'shard':a.shard,'campaigns':sum(1 for _ in manifest.open()),'events':sum(1 for _ in events.open())}))
 
