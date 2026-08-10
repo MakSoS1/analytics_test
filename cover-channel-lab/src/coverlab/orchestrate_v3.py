@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 
@@ -17,22 +18,64 @@ _ORIGINAL_SLEEP = _rc.time.sleep
 _real_timing_calls = 0
 
 
+def _timing_factor(mode: str, call: int) -> float:
+    """Deterministic real-time jitter/backoff patterns for Stage L."""
+    phase=((call*37)%101)/100.0
+    if mode=='fixed': return 1.0
+    if mode=='jitter_5': return 0.95+phase*0.10
+    if mode=='jitter_20': return 0.80+phase*0.40
+    if mode=='jitter_50': return 0.50+phase*1.00
+    if mode=='burst_silence': return 0.20 if call%4 in (1,2,3) else 2.40
+    if mode=='backoff': return min(3.0,0.55*(1.28**max(0,call-1)))
+    if mode=='phase_transition': return 0.65 if call%10<5 else 1.45
+    if mode=='mixed':
+        cycle=('fixed','jitter_5','jitter_20','jitter_50','burst_silence','backoff','phase_transition')
+        return _timing_factor(cycle[(call-1)%len(cycle)],call)
+    return 1.0
+
+
 def _sleep_v3(seconds: float):
     global _real_timing_calls
     raw=os.environ.get('COVERLAB_REAL_TIMING_SECONDS')
     if raw and 0.009 <= float(seconds) <= 0.20:
         _real_timing_calls += 1
         gaps=int(os.environ.get('COVERLAB_REAL_TIMING_GAPS','1'))
-        return _ORIGINAL_SLEEP(float(raw) if _real_timing_calls <= gaps else 0.001)
+        if _real_timing_calls <= gaps:
+            mode=os.environ.get('COVERLAB_REAL_TIMING_MODE','fixed')
+            return _ORIGINAL_SLEEP(float(raw)*_timing_factor(mode,_real_timing_calls))
+        return _ORIGINAL_SLEEP(0.001)
     return _ORIGINAL_SLEEP(seconds)
 
 _rc.time.sleep = _sleep_v3
 
 ACTUAL_LINUX_CLIENTS=("python_httpx","python_httpx_h2","python_stdlib","curl_linux","go_nethttp","node_fetch","java_httpclient","rust_reqwest")
+BENIGN_PATTERNS=(
+    'websocket_dashboard','sse_feed','long_polling','grpc_telemetry','mqtt_telemetry',
+    'health_check','oauth_refresh','cloud_sync','software_update','ide_telemetry',
+    'ci_polling','webhook_retry','api_pagination','browser_background',
+)
+MATCHED_ANALOGUES={
+    'websocket_dashboard':'long_lived_wss','sse_feed':'streaming_channel','long_polling':'beacon_poll',
+    'grpc_telemetry':'grpc_channel','mqtt_telemetry':'mqtt_channel','health_check':'periodic_beacon',
+    'oauth_refresh':'token_refresh_beacon','cloud_sync':'result_upload','software_update':'bulk_download',
+    'ide_telemetry':'telemetry_upload','ci_polling':'periodic_poll','webhook_retry':'retry_backoff',
+    'api_pagination':'chunked_transfer','browser_background':'background_periodicity',
+}
+
+
+def _benign_event_count(i:int)->int:
+    """20/20/20/20/15/5 percent across matched temporal-length buckets."""
+    q=i%100
+    if q<20:return 1
+    if q<40:return 2+(i%2)
+    if q<60:return 4+(i%7)
+    if q<80:return 10+(i%21)
+    if q<95:return 30+(i%31)
+    return 61+(i%40)
 
 
 def benign_stage(args, manifest: Path, events_out: Path):
-    """Stage K: 60k independent benign sessions by default, real wire traffic."""
+    """Stage K: 60k multi-event benign/hard-negative sessions by default."""
     total=args.sessions or int(os.environ.get('COVERLAB_BENIGN_SESSIONS','60000'))
     candidates=[s for s in SCENARIOS if s.family not in {'lots'}]
     actual_netem=os.environ.get('COVERLAB_NETEM_PROFILE','clean')
@@ -43,43 +86,55 @@ def benign_stage(args, manifest: Path, events_out: Path):
         service=BENIGN_SERVICE_PROFILES[i % len(BENIGN_SERVICE_PROFILES)]
         planned_stack=CLIENT_STACKS[(i//3) % len(CLIENT_STACKS)]
         actual_client=ACTUAL_LINUX_CLIENTS[(i//7) % len(ACTUAL_LINUX_CLIENTS)]
+        pattern=BENIGN_PATTERNS[(i//5)%len(BENIGN_PATTERNS)]
+        event_count=_benign_event_count(i)
         config={
             'experiment_stage':'K_benign_diversity','dataset_role':'benign_background',
             'configuration_id':f'K-{i:06d}','benign_service_profile':service,
             'planned_client_stack':planned_stack,'client_impl':actual_client,
             'planned_server_stack':SERVER_STACKS[(i//13)%len(SERVER_STACKS)],
-            'actual_server_stack':'hypercorn_or_protocol_fixture',
-            'netem_profile':actual_netem,
+            'actual_server_stack':'hypercorn_or_protocol_fixture','netem_profile':actual_netem,
             'training_eligible':True,'transform_chain':['benign_native'],
-            'timing_profile':'native_request','payload_size_class':_base.SIZES[i%len(_base.SIZES)],
+            'timing_profile':'matched_multi_event','payload_size_class':_base.SIZES[i%len(_base.SIZES)],
+            'benign_temporal_pattern':pattern,'matched_attack_analogue':MATCHED_ANALOGUES[pattern],
+            'event_count_target':event_count,'temporal_negative_pair':True,
         }
-        _base.invoke(s.scenario_id,False,args.seed+90_000_000+i,f'k-{i:07d}','run-00',persona,ip,1,manifest,events_out,args.capture_file,config)
+        _base.invoke(s.scenario_id,False,args.seed+90_000_000+i,f'k-{i:07d}','run-00',persona,ip,event_count,manifest,events_out,args.capture_file,config)
+
+
+def _long_event_count(interval:int)->int:
+    return {5:30,30:30,120:20,300:10,1200:5,3600:4}.get(interval,10)
 
 
 def long_stage(args, manifest: Path, events_out: Path):
-    """Stage L: true wall-clock timing. Each shard owns one interval profile."""
+    """Stage L: multi-event wall-clock timing challenge. 20/60 minute profiles are intended for self-hosted evidence."""
     profiles=list(LONG_TIMING_SECONDS)
     profile_ids=[i for i in range(len(profiles)) if i % args.shards == args.shard]
     timing=[s for s in SCENARIOS if s.family=='timing']
     for p in profile_ids:
         interval=profiles[p]
         reps=args.long_repetitions or int(os.environ.get('COVERLAB_LONG_REPETITIONS','2'))
+        events=_long_event_count(interval)
         for rep in range(reps):
             suspicious=rep % 2 == 0
             persona,ip=_base.PERSONAS[(p+rep)%len(_base.PERSONAS)]
             s=timing[(p+rep)%len(timing)]
             global _real_timing_calls; _real_timing_calls=0
-            os.environ['COVERLAB_REAL_TIMING_SECONDS']=str(interval); os.environ['COVERLAB_REAL_TIMING_GAPS']='1'
+            os.environ['COVERLAB_REAL_TIMING_SECONDS']=str(interval)
+            os.environ['COVERLAB_REAL_TIMING_GAPS']=str(max(1,events-1))
+            os.environ['COVERLAB_REAL_TIMING_MODE']='mixed'
             config={
                 'experiment_stage':'L_long_timing','dataset_role':'long_timing_challenge',
                 'configuration_id':f'L-{interval}-{rep}','real_interval_seconds':interval,
                 'timing_acceleration':1,'training_eligible':False,'challenge_only':True,
-                'transform_chain':['raw_utf8'],'timing_profile':f'real_{interval}s',
-                'client_impl':'python_httpx','payload_size_class':'small',
+                'transform_chain':['raw_utf8'],'timing_profile':f'real_{interval}s_multi_pattern',
+                'timing_modes_exercised':['fixed','jitter_5','jitter_20','jitter_50','burst_silence','backoff','phase_transition'],
+                'event_count_target':events,'client_impl':'python_httpx','payload_size_class':'small',
                 'netem_profile':os.environ.get('COVERLAB_NETEM_PROFILE','clean'),
+                'hosted_recommended':interval<=300,
             }
-            _base.invoke(s.scenario_id,suspicious,args.seed+100_000_000+p*100+rep,f'l-{p:02d}-{rep:02d}',f'run-{rep:02d}',persona,ip,2,manifest,events_out,args.capture_file,config)
-            os.environ.pop('COVERLAB_REAL_TIMING_SECONDS',None)
+            _base.invoke(s.scenario_id,suspicious,args.seed+100_000_000+p*100+rep,f'l-{p:02d}-{rep:02d}',f'run-{rep:02d}',persona,ip,events,manifest,events_out,args.capture_file,config)
+            for key in ('COVERLAB_REAL_TIMING_SECONDS','COVERLAB_REAL_TIMING_GAPS','COVERLAB_REAL_TIMING_MODE'):os.environ.pop(key,None)
 
 
 def main():
