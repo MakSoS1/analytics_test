@@ -13,13 +13,11 @@ def main(out: Path):
     sessions=[];splits=[];tx=[];packet_seq=[];fields=[];manifests=[]
     n=320
     for i in range(n):
-        cid=f'mv3-{i:04d}';label=i%2;scenario=reps[wanted[i%len(wanted)]]
+        # Adjacent benign/suspicious records share the same scenario family so
+        # every LOFO smoke cell can measure both attack recall and benign FPR.
+        cid=f'mv3-{i:04d}';label=i%2;scenario=reps[wanted[(i//2)%len(wanted)]]
         split='train' if i<160 else 'validation' if i<256 else 'test' if i<288 else 'challenge'
         encrypted_transport=scenario.transport in {'https','h2','h3','wss','quic'}
-        # Each adjacent benign/suspicious pair gets the same visibility mode. This
-        # keeps visible/opaque smoke subsets label-balanced while representing a
-        # real distinction: encrypted traffic may be either inspection-bypassed
-        # (opaque) or TLS-inspected (plaintext visible to the NGFW pipeline).
         opaque=int(encrypted_transport and ((i//2)%2==0))
         inspection='bypass' if opaque else ('inspect' if encrypted_transport else 'not_applicable')
         sessions.append({'campaign_id':cid,'label_binary':label,'label_family':'synthetic' if label else 'benign','protocol':scenario.transport,
@@ -37,7 +35,6 @@ def main(out: Path):
             ts=base+j*(1.0 if label else 1.7)+(0.05*(j%2) if label else 0);req=30+label*55+(j%3)*5;resp=45+(1-label)*30+(j%2)*7
             tx.append({'campaign_id':cid,'ts':ts,'kind':'poll' if j%2==0 else 'result','method':'POST' if label and j%3==0 else 'GET','protocol':scenario.transport,'request_body_length':req,'response_body_length':resp,'response_status':200 if j%5 else 204,'path_length':20+label*8,'query_length':label*16,'header_count':6+label,'header_bytes':200+label*80,'header_entropy':3.0+label*1.2,'request_body_entropy':2.0+label*2.0})
             fields.append({'campaign_id':cid,'ts':ts,'field_name':'Authorization' if label else 'Accept','field_role':'request_header','raw_length':40+label*35,'byte_length':40+label*35,'entropy':2.8+label*1.8,'printable_ratio':1.0,'unique_char_ratio':.5+label*.2,'digit_ratio':.1,'alpha_ratio':.7,'hex_ratio':.2+label*.2,'b64_ratio':.4+label*.4,'b64url_ratio':.4+label*.4,'delimiter_ratio':.05,'uuid_like':0,'jwt_like':label,'etag_like':0,'encoded_token_like':label})
-        # Deliberately independent of transaction plaintext: packet sizes/directions/timing only.
         prev=base
         for j in range(24):
             ts=base+j*(.16 if label else .23)+(0.01*((j*3)%5));direction=1 if (j%3!=1) else -1
