@@ -1,12 +1,9 @@
-import hashlib
-
-import numpy as np
 import pandas as pd
 import torch
 
 from coverlab.research_contract_v3 import (
-    FRAMEWORKS, LONG_TIMING_SECONDS, NETEM_PROFILES, framework_record,
-    validate_framework_records, validate_ech_record, validation_role,
+    FRAMEWORKS, LONG_TIMING_SECONDS, NETEM_PROFILES, NETWORK_EVIDENCE_TYPES,
+    framework_record, validate_framework_records, validate_ech_record, validation_role,
 )
 from coverlab.pipeline_v3 import assign_split
 from coverlab.sequence_fusion_v3 import TinyTCN, encode_sequence
@@ -43,10 +40,14 @@ def test_training_ineligible_is_forced_to_challenge():
     assert assign_split(row2)=='challenge'
 
 
-def test_real_timing_and_netem_contracts_are_populated():
+def test_real_timing_and_network_contracts_are_populated():
     assert LONG_TIMING_SECONDS==(5,30,120,300,1200,3600)
     names={p.name for p in NETEM_PROFILES}
-    assert {'clean','wan_20ms','lossy_wifi','constrained','partial_capture'} <= names
+    assert {'clean','wan_20ms','wan_80ms','lossy_wifi','constrained'} <= names
+    # Capture/proxy/NAT/inspection semantics require dedicated wire-real evidence
+    # and must never be represented by a delay-only tc profile.
+    assert {'partial_capture','capture_loss','nat','forward_proxy','tls_inspection','tls_bypass','connection_migration'} <= set(NETWORK_EVIDENCE_TYPES)
+    assert not ({'partial_capture','nat','forward_proxy','tls_inspection'} & names)
 
 
 def test_reason_aware_missingness():
