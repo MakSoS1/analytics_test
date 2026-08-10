@@ -12,6 +12,10 @@ from . import train_baseline as _base
 from . import train_baseline_v2 as _v2
 from .research_contract_v3 import validation_role
 
+# Keep immutable references before v3 patches the v2 module globals.
+_V2_AVAILABILITY_FLAGS = _v2._availability_flags
+_V2_VALIDATION_PARTS = _v2._validation_parts
+
 
 def _col(df: pd.DataFrame, name: str, default=0) -> pd.Series:
     if name in df:
@@ -20,7 +24,7 @@ def _col(df: pd.DataFrame, name: str, default=0) -> pd.Series:
 
 
 def availability_flags_v3(session: pd.DataFrame) -> pd.DataFrame:
-    s = _v2._availability_flags(session)
+    s = _V2_AVAILABILITY_FLAGS(session)
     visibility = _col(s, "visibility_mode", "").astype(str).str.lower()
     protocol = _col(s, "protocol", "").astype(str).str.lower()
     inspection = _col(s, "inspection_policy", "").astype(str).str.lower()
