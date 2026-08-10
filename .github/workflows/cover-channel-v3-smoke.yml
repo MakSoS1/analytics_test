@@ -33,7 +33,14 @@ jobs:
         run: ./scripts/install_runner.sh
       - name: Install advanced model dependencies
         working-directory: cover-channel-lab
-        run: python -m pip install -r requirements-model.txt
+        run: |
+          python -m pip install -r requirements-model.txt
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu 'torch==2.7.0'
+          python - <<'PY'
+          import torch
+          assert not torch.cuda.is_available()
+          print('torch', torch.__version__, 'cpu-only')
+          PY
       - name: Compile and unit contracts
         working-directory: cover-channel-lab
         env:
