@@ -35,6 +35,7 @@ for idx in 0 1 2 3; do
   ns="${NAMESPACES[$idx]}"; pdir="$OUT/persona-$idx"; mkdir -p "$pdir"
   sudo ip netns exec "$ns" runuser -u "$USER" -- env \
     PYTHONPATH="$ROOT/src" GITHUB_SHA="${GITHUB_SHA:-local}" COVERLAB_GO_CLIENT=/tmp/coverlab-go-client COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs" \
+    COVERLAB_JAVA_CLIENT_DIR=/tmp/coverlab-java-client COVERLAB_RUST_CLIENT=/tmp/coverlab-rust-client \
     COVERLAB_WSS_CLIENT_LOCK="$WSS_LOCK" \
     COVERLAB_BENIGN_SESSIONS="${COVERLAB_BENIGN_SESSIONS:-60000}" COVERLAB_LONG_REPETITIONS="${COVERLAB_LONG_REPETITIONS:-2}" \
     NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
@@ -80,10 +81,10 @@ PY
   cp "$OUT/manifests/campaigns.jsonl" "$OUT/campaigns.jsonl"
 fi
 
-PYTHONPATH="$ROOT/src" python -m coverlab.validate_dataset_contract --stage-dir "$OUT" --out "$OUT/manifests/dataset_contract.json"
+PYTHONPATH="$ROOT/src" python -m coverlab.validate_dataset_contract_v3 --stage-dir "$OUT" --out "$OUT/manifests/dataset_contract.json"
 python - <<PY
 import json
 from pathlib import Path
 p=Path('$OUT/manifests/campaigns.jsonl'); e=Path('$OUT/manifests/events.jsonl')
-print(json.dumps({'stage':'$STAGE','shard':$SHARD,'campaigns':sum(1 for _ in p.open()),'events':sum(1 for _ in e.open()),'pcap_bytes':Path('$PCAP').stat().st_size,'capture_if':'$CAPTURE_IF','capture_drain_seconds':float('$CAPTURE_DRAIN_SECONDS')}))
+print(json.dumps({'stage':'$STAGE','shard':$SHARD,'campaigns':sum(1 for _ in p.open()),'events':sum(1 for _ in e.open()),'pcap_bytes':Path('$PCAP').stat().st_size,'capture_if':'$CAPTURE_IF','capture_drain_seconds':float('$CAPTURE_DRAIN_SECONDS'),'dataset_contract_revision':3}))
 PY
