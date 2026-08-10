@@ -1,6 +1,6 @@
 import java.net.URI;
 import java.net.http.*;
-import java.net.ssl.*;
+import javax.net.ssl.*;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
