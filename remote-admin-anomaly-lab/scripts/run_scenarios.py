@@ -8,6 +8,7 @@ from ipaddress import ip_address,ip_network
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];SRC=ROOT/'src'
 if str(SRC) not in sys.path:sys.path.insert(0,str(SRC))
+from adminlab.campaign_sequences import organize_campaign_sequences
 from adminlab.config import load_yaml
 from adminlab.digital_twin import load_digital_twin_bundle,plan_digital_twin_sessions
 from adminlab.manifest import SessionRecord,write_sessions
@@ -40,9 +41,6 @@ def run_ssh(r:SessionRecord,ns:str,state_dir:Path,work_dir:Path)->None:
         for _ in range(_attempts(r)):run(scp,timeout=30)
         return
     if r.action=='bounded_proxyjump' or r.task_id=='approved_forwarding':
-        # Lab-only OpenSSH ProxyJump: source -> linux01 -> linux02. Both hops are
-        # inside 10.77/24, no SOCKS listener, no external destination and no
-        # payload execution beyond a harmless `true` on the final host.
         jump='10.77.0.21';target='10.77.0.22';assert_lab_address(jump);assert_lab_address(target)
         proxy=['ip','netns','exec',ns,'ssh','-i',str(key),'-o','BatchMode=yes','-o','StrictHostKeyChecking=no','-o','UserKnownHostsFile=/dev/null','-o','ConnectTimeout=5','-o',f'ProxyCommand=ssh -i {key} -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p root@{jump}',f'root@{target}','true']
         for _ in range(_attempts(r)):run(proxy,timeout=20)
@@ -75,7 +73,12 @@ def main()->int:
     if os.geteuid()!=0:raise SystemExit('run_scenarios.py must run as root because it uses ip netns exec')
     protocols={x.strip() for x in a.protocols.split(',') if x.strip()}
     if not protocols or not protocols<=SUPPORTED_PROTOCOLS:raise SystemExit(f'V1 core runner supports only {sorted(SUPPORTED_PROTOCOLS)}')
-    topology=load_yaml(ROOT/'configs/topology.yaml');scenarios=load_yaml(ROOT/'configs/scenarios.yaml');netem=load_yaml(ROOT/'configs/netem.yaml');bundle=load_digital_twin_bundle(ROOT/'configs');nsmap=namespace_by_host(topology);planned=plan_digital_twin_sessions(topology,scenarios,netem,bundle,seed=a.seed,count=max(a.count*12,240),stage=a.stage);records=materialize_wire_controls(select_supported(planned,a.count,protocols),bundle['behavior'],seed=a.seed);a.out.mkdir(parents=True,exist_ok=True);work=a.out/'inert-fixtures';work.mkdir(parents=True,exist_ok=True);write_sessions(records,a.out/'sessions-planned.jsonl');executed=[execute_record(r,nsmap,a.state_dir,work,netem) for r in records];write_sessions(executed,a.out/'sessions-executed.jsonl');statuses=Counter(r.status for r in executed);pc=Counter(r.protocol for r in executed);lc=Counter('suspicious' if r.label_binary else 'benign' for r in executed);success={x:sum(1 for r in executed if r.protocol==x and r.status=='success') for x in sorted(protocols)};summary={'requested':a.count,'executed':len(executed),'status_counts':dict(statuses),'protocol_counts':dict(pc),'label_counts':dict(lc),'success_by_protocol':success,'lab_network':str(LAB_NETWORK),'external_targets_allowed':False,'payload_execution_allowed':False,'planner':'digital_twin_v1','wire_controls_label_dependent':False,'simulated_timeline_preserved':True};(a.out/'summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n');print(json.dumps(summary,sort_keys=True))
+    topology=load_yaml(ROOT/'configs/topology.yaml');scenarios=load_yaml(ROOT/'configs/scenarios.yaml');netem=load_yaml(ROOT/'configs/netem.yaml');bundle=load_digital_twin_bundle(ROOT/'configs');nsmap=namespace_by_host(topology)
+    planned=plan_digital_twin_sessions(topology,scenarios,netem,bundle,seed=a.seed,count=max(a.count*12,240),stage=a.stage)
+    selected=select_supported(planned,a.count,protocols)
+    selected=organize_campaign_sequences(selected,bundle['campaigns'],seed=a.seed)
+    records=materialize_wire_controls(selected,bundle['behavior'],seed=a.seed)
+    a.out.mkdir(parents=True,exist_ok=True);work=a.out/'inert-fixtures';work.mkdir(parents=True,exist_ok=True);write_sessions(records,a.out/'sessions-planned.jsonl');executed=[execute_record(r,nsmap,a.state_dir,work,netem) for r in records];write_sessions(executed,a.out/'sessions-executed.jsonl');statuses=Counter(r.status for r in executed);pc=Counter(r.protocol for r in executed);lc=Counter('suspicious' if r.label_binary else 'benign' for r in executed);success={x:sum(1 for r in executed if r.protocol==x and r.status=='success') for x in sorted(protocols)};campaigns={r.campaign_id for r in records};multi=sum(1 for cid in campaigns if sum(1 for r in records if r.campaign_id==cid)>=3);summary={'requested':a.count,'executed':len(executed),'status_counts':dict(statuses),'protocol_counts':dict(pc),'label_counts':dict(lc),'success_by_protocol':success,'campaign_count':len(campaigns),'multi_session_campaigns':multi,'lab_network':str(LAB_NETWORK),'external_targets_allowed':False,'payload_execution_allowed':False,'planner':'digital_twin_v1','wire_controls_label_dependent':False,'simulated_timeline_preserved':True};(a.out/'summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n');print(json.dumps(summary,sort_keys=True))
     if statuses.get('success',0)!=len(executed):return 1
     if any(success.get(x,0)==0 for x in protocols):return 1
     if len(lc)<2 and a.stage!='B':return 1
