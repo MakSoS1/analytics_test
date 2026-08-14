@@ -1,0 +1,53 @@
+campaigns:
+  benign:
+    routine_maintenance:
+      intents: [approved_maintenance]
+      historical_relations: [known_pair, known_pair, known_pair, recently_added_pair]
+    deployment_wave:
+      intents: [approved_deployment]
+      historical_relations: [known_pair, known_pair, recently_added_pair]
+    scheduled_backup:
+      intents: [approved_backup]
+      historical_relations: [known_pair, known_pair]
+    incident_response:
+      intents: [approved_incident_response]
+      historical_relations: [known_pair, recently_added_pair, novel_but_ticketed]
+    helpdesk_support:
+      intents: [approved_support]
+      historical_relations: [known_pair, novel_but_ticketed]
+    emergency_offhours:
+      intents: [approved_emergency]
+      historical_relations: [known_pair, novel_but_ticketed]
+    service_automation:
+      intents: [approved_automation]
+      historical_relations: [known_pair]
+
+  suspicious:
+    valid_credentials_low_slow:
+      intents: [credential_abuse]
+      historical_relations: [novel_pair, rare_pair]
+    compromised_workstation_fanout:
+      intents: [lateral_movement]
+      historical_relations: [novel_pair, rare_pair]
+    trusted_jump_host_abuse:
+      intents: [trusted_path_abuse]
+      historical_relations: [rare_pair, novel_pair]
+    cross_protocol_chain:
+      intents: [lateral_movement_chain]
+      historical_relations: [novel_pair, rare_pair]
+    offhours_mimic:
+      intents: [credential_abuse]
+      historical_relations: [known_pair, rare_pair]
+    single_normal_session:
+      intents: [credential_abuse]
+      historical_relations: [known_pair, rare_pair]
+
+stage_policy:
+  A: {suspicious_fraction: 0.25}
+  B: {suspicious_fraction: 0.00}
+  C: {suspicious_fraction: 0.10}
+  D: {suspicious_fraction: 0.65}
+  E: {suspicious_fraction: 0.65}
+  F: {suspicious_fraction: 0.50, counterfactual: true}
+  G: {suspicious_fraction: 0.50}
+  H: {suspicious_fraction: 0.50}
