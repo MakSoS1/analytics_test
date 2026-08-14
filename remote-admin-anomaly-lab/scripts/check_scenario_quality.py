@@ -11,6 +11,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from adminlab.campaign_sequences import organize_campaign_sequences  # noqa: E402
 from adminlab.config import load_yaml  # noqa: E402
 from adminlab.digital_twin import load_digital_twin_bundle, plan_digital_twin_sessions  # noqa: E402
 from adminlab.scenario_quality import evaluate_scenario_quality  # noqa: E402
@@ -31,8 +32,11 @@ def main() -> int:
     records = plan_digital_twin_sessions(
         topology, scenarios, netem, bundle, seed=args.seed, count=args.count, stage=args.stage
     )
+    records = organize_campaign_sequences(records, bundle["campaigns"], seed=args.seed)
     report = evaluate_scenario_quality(records)
     report.update({"stage": args.stage, "seed": args.seed, "planned_rows": args.count})
+    report["multi_session_campaigns"] = len({r.campaign_id for r in records if r.campaign_size >= 3})
+    report["multi_protocol_campaigns"] = len({r.campaign_id for r in records if r.sequence_profile == "multi_protocol"})
     payload = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
