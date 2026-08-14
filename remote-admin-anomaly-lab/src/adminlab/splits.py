@@ -61,13 +61,45 @@ def _connected_group_ids(sessions: pd.DataFrame) -> list[str]:
     return result
 
 
-def _choose_holdout(values: list[str], seed: int, fraction: float = 0.10) -> set[str]:
-    unique = sorted(set(v for v in values if v))
-    if len(unique) < 3:
+def _choose_group_impact_holdout(
+    frame: pd.DataFrame,
+    column: str,
+    *,
+    seed: int,
+    target_fraction: float = 0.05,
+    max_fraction: float = 0.10,
+    min_rows: int = 3,
+) -> set[str]:
+    """Choose one unseen value by campaign-group impact, not raw frequency."""
+    if column not in frame.columns or frame.empty:
         return set()
-    count = max(1, round(len(unique) * fraction))
-    ranked = sorted(unique, key=lambda value: _hash_int(f"holdout|{value}", seed))
-    return set(ranked[:count])
+    total = len(frame)
+    candidates = [value for value in sorted(frame[column].fillna("").astype(str).unique()) if value]
+    if len(candidates) < 2:
+        return set()
+    target = max(min_rows, int(round(total * target_fraction)))
+    maximum = max(min_rows, int(round(total * max_fraction)))
+    impacts: list[tuple[str, int]] = []
+    values = frame[column].fillna("").astype(str)
+    groups_as_text = frame["group_id"].astype(str)
+    for value in candidates:
+        groups = set(groups_as_text[values == value])
+        impacted = int(frame[groups_as_text.isin(groups)].shape[0])
+        if impacted >= min_rows:
+            impacts.append((value, impacted))
+    if not impacts:
+        return set()
+    bounded = [item for item in impacts if item[1] <= maximum]
+    pool = bounded or impacts
+    value, _ = min(
+        pool,
+        key=lambda item: (
+            abs(item[1] - target),
+            item[1] > maximum,
+            _hash_int(f"impact|{column}|{item[0]}", seed),
+        ),
+    )
+    return {value}
 
 
 def _infer_heldout_implementations(frame: pd.DataFrame) -> set[str]:
@@ -85,9 +117,50 @@ def _infer_heldout_implementations(frame: pd.DataFrame) -> set[str]:
         primary = sorted(client_counts, key=lambda client: (-client_counts[client], client))[0]
         alternatives = part[part["client_stack"].fillna("").astype(str) != primary]
         heldout.update(
-            impl for impl in alternatives["implementation_id"].fillna("").astype(str).unique() if impl
+            implementation
+            for implementation in alternatives["implementation_id"].fillna("").astype(str).unique()
+            if implementation
         )
     return heldout
+
+
+def _stratified_group_assignments(frame: pd.DataFrame, eligible_groups: list[str], seed: int) -> dict[str, str]:
+    if not eligible_groups:
+        return {}
+    meta_rows: list[dict[str, Any]] = []
+    eligible_set = set(eligible_groups)
+    for gid, part in frame[frame["group_id"].astype(str).isin(eligible_set)].groupby("group_id", sort=False):
+        labels = sorted(set(part["label_binary"].astype(int))) if "label_binary" in part.columns else []
+        stratum = str(labels[0]) if len(labels) == 1 else ("mixed" if labels else "unlabeled")
+        meta_rows.append({"group_id": str(gid), "stratum": stratum, "rows": int(len(part))})
+    meta = pd.DataFrame(meta_rows)
+    assignments: dict[str, str] = {}
+    for stratum, part in meta.groupby("stratum", sort=True):
+        groups = sorted(
+            part["group_id"].astype(str).tolist(),
+            key=lambda gid: _hash_int(f"split|{stratum}|{gid}", seed),
+        )
+        n = len(groups)
+        if n == 1:
+            assignments[groups[0]] = "train"
+            continue
+        if n == 2:
+            assignments[groups[0]] = "train"
+            assignments[groups[1]] = "validation"
+            continue
+        validation_n = max(1, round(n * 0.15))
+        test_n = max(1, round(n * 0.15))
+        if validation_n + test_n >= n:
+            validation_n = 1
+            test_n = 1
+        train_n = n - validation_n - test_n
+        for gid in groups[:train_n]:
+            assignments[gid] = "train"
+        for gid in groups[train_n:train_n + validation_n]:
+            assignments[gid] = "validation"
+        for gid in groups[train_n + validation_n:]:
+            assignments[gid] = "test"
+    return assignments
 
 
 def assign_grouped_splits(sessions: pd.DataFrame, *, seed: int = 20260814) -> tuple[pd.DataFrame, dict[str, Any]]:
@@ -101,12 +174,14 @@ def assign_grouped_splits(sessions: pd.DataFrame, *, seed: int = 20260814) -> tu
     frame["host_pair"] = frame["src_host_id"].astype(str) + "->" + frame["dst_host_id"].astype(str)
     frame["_ts"] = pd.to_datetime(frame["start_ts"], utc=True)
 
-    heldout_src_hosts = _choose_holdout(frame["src_host_id"].astype(str).tolist(), seed)
-    heldout_pairs = _choose_holdout(frame["host_pair"].astype(str).tolist(), seed + 1)
-    heldout_personas = (
-        _choose_holdout(frame["persona_id"].fillna("").astype(str).tolist(), seed + 2)
-        if "persona_id" in frame.columns
-        else set()
+    heldout_src_hosts = _choose_group_impact_holdout(
+        frame, "src_host_id", seed=seed, target_fraction=0.04, max_fraction=0.08
+    )
+    heldout_pairs = _choose_group_impact_holdout(
+        frame, "host_pair", seed=seed + 1, target_fraction=0.04, max_fraction=0.08
+    )
+    heldout_personas = _choose_group_impact_holdout(
+        frame, "persona_id", seed=seed + 2, target_fraction=0.04, max_fraction=0.08
     )
     heldout_implementations = _infer_heldout_implementations(frame)
 
@@ -135,24 +210,17 @@ def assign_grouped_splits(sessions: pd.DataFrame, *, seed: int = 20260814) -> tu
             if set(part["implementation_id"].fillna("").astype(str)) & heldout_implementations:
                 group_reasons[gid].add("unseen_client_implementation")
 
-    assignments: dict[str, str] = {}
-    for gid in sorted(frame["group_id"].astype(str).unique()):
-        if group_reasons.get(gid):
-            assignments[gid] = "challenge"
-            continue
-        bucket = _hash_int(f"split|{gid}", seed) % 100
-        if bucket < 60:
-            assignments[gid] = "train"
-        elif bucket < 75:
-            assignments[gid] = "validation"
-        elif bucket < 90:
-            assignments[gid] = "test"
-        else:
-            assignments[gid] = "challenge"
-            group_reasons[gid].add("hash_challenge")
+    all_groups = sorted(frame["group_id"].astype(str).unique())
+    explicit_challenge = {gid for gid in all_groups if group_reasons.get(gid)}
+    eligible = [gid for gid in all_groups if gid not in explicit_challenge]
+    assignments = _stratified_group_assignments(frame, eligible, seed)
+    for gid in explicit_challenge:
+        assignments[gid] = "challenge"
 
     out = frame[["session_id", "group_id"]].copy()
     out["split"] = out["group_id"].map(assignments)
+    if out["split"].isna().any():
+        raise ValueError("split assignment incomplete")
     out["challenge_reason"] = out["group_id"].map(
         lambda gid: ",".join(sorted(group_reasons.get(str(gid), set())))
     )
@@ -167,6 +235,7 @@ def assign_grouped_splits(sessions: pd.DataFrame, *, seed: int = 20260814) -> tu
         "split_counts": {str(k): int(v) for k, v in out["split"].value_counts().to_dict().items()},
         "group_counts": {str(k): int(v) for k, v in out.groupby("split")["group_id"].nunique().to_dict().items()},
         "challenge_reason_counts": reason_counts,
+        "policy": "explicit group-impact-bounded challenge holdouts; remaining groups class-stratified into train/validation/test",
     }
     return out, report
 
