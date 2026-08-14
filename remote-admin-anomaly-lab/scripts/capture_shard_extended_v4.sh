@@ -25,6 +25,13 @@ if [[ "${ADMINLAB_INCLUDE_PARTIAL_WINRM:-0}" == "1" ]]; then
   fi
   EXTRA_ARGS+=(--include-partial-winrm)
 fi
+if [[ "${ADMINLAB_V2_SEMANTIC:-0}" == "1" ]]; then
+  if [[ "$STAGE" != "H" ]]; then
+    echo 'STAGE must be H when ADMINLAB_V2_SEMANTIC=1' >&2
+    exit 2
+  fi
+  EXTRA_ARGS+=(--v2-semantic --v2-counterfactual-fraction "${ADMINLAB_V2_COUNTERFACTUAL_FRACTION:-0.30}")
+fi
 PYTHONPATH="$ROOT/src" "$PYTHON_BIN" "$ROOT/scripts/run_scenarios_extended_v2.py" --stage "$STAGE" --count "$COUNT" --seed "$SEED" --core-state "$STATE_DIR/core" --out "$RUN_DIR/scenarios" "${EXTRA_ARGS[@]}"
 stop_capture; TCPDUMP_PGID=""
 [[ -s "$RAW_PCAP" ]]; tcpdump -nn -r "$RAW_PCAP" -c 1 >/dev/null 2>&1; zstd -T0 -q -9 -f "$RAW_PCAP" -o "$COMPRESSED_PCAP"; zstd -q -t "$COMPRESSED_PCAP"
@@ -33,7 +40,7 @@ PYTHONPATH="$ROOT/src" "$PYTHON_BIN" "$ROOT/scripts/package_bronze.py" --topolog
 PCAP_BYTES="$(stat -c%s "$COMPRESSED_PCAP")"; RAW_BYTES="$(stat -c%s "$RAW_PCAP")"; SESSION_COUNT="$(wc -l < "$BRONZE/manifests/sessions.jsonl")"; SUMMARY="$RUN_DIR/scenarios/summary.json"
 "$PYTHON_BIN" - "$SUMMARY" "$QUALITY/capture_health.json" "$SHARD" "$STAGE" "$SESSION_COUNT" "$RAW_BYTES" "$PCAP_BYTES" "$OUTPUT_UID" "$OUTPUT_GID" <<'PY'
 import json,sys
-s=json.load(open(sys.argv[1],encoding='utf-8')); p={'ok':s.get('status_counts',{}).get('failed',0)==0,'shard':sys.argv[3],'stage':sys.argv[4],'sessions':int(sys.argv[5]),'raw_pcap_bytes':int(sys.argv[6]),'compressed_pcap_bytes':int(sys.argv[7]),'capture_format':'pcap.zst','full_capture_retained':True,'output_owner_uid':int(sys.argv[8]),'output_owner_gid':int(sys.argv[9]),'protocol_counts':s.get('protocol_counts',{}),'label_counts':s.get('label_counts',{}),'implementation_counts':s.get('implementation_counts',{}),'protocol_balance_max_minus_min':s.get('protocol_balance_max_minus_min'),'dcerpc_train_included':False,'partial_winrm_included':s.get('partial_winrm_included',False)}
+s=json.load(open(sys.argv[1],encoding='utf-8')); p={'ok':s.get('status_counts',{}).get('failed',0)==0,'shard':sys.argv[3],'stage':sys.argv[4],'sessions':int(sys.argv[5]),'raw_pcap_bytes':int(sys.argv[6]),'compressed_pcap_bytes':int(sys.argv[7]),'capture_format':'pcap.zst','full_capture_retained':True,'output_owner_uid':int(sys.argv[8]),'output_owner_gid':int(sys.argv[9]),'protocol_counts':s.get('protocol_counts',{}),'label_counts':s.get('label_counts',{}),'implementation_counts':s.get('implementation_counts',{}),'protocol_balance_max_minus_min':s.get('protocol_balance_max_minus_min'),'dcerpc_train_included':False,'partial_winrm_included':s.get('partial_winrm_included',False),'planner':s.get('planner'),'v2_semantic':s.get('v2_semantic')}
 open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(p,indent=2,sort_keys=True)+'\n')
 if not p['ok']: raise SystemExit('scenario failures present')
 PY
