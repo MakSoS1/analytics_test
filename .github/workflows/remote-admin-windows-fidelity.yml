@@ -1,0 +1,76 @@
+name: Remote Admin Anomaly Native Windows Fidelity
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'hosted_preflight or native_lab_capture'
+        required: true
+        default: hosted_preflight
+        type: choice
+        options:
+          - hosted_preflight
+          - native_lab_capture
+
+permissions:
+  contents: read
+
+jobs:
+  hosted-preflight:
+    if: ${{ inputs.mode == 'hosted_preflight' }}
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tooling-only preflight
+        shell: pwsh
+        run: |
+          ./remote-admin-anomaly-lab/scripts/windows_fidelity_capture.ps1 `
+            -Mode preflight `
+            -Target 10.77.0.32 `
+            -OutputDir "$env:RUNNER_TEMP\remote-admin-windows"
+      - name: Assert preflight is not accepted as native remote fidelity
+        shell: pwsh
+        run: |
+          $r = Get-Content "$env:RUNNER_TEMP\remote-admin-windows\fidelity.json" -Raw | ConvertFrom-Json
+          if ($r.accepted_native_remote_fidelity) { throw 'Hosted preflight must never be promoted to native fidelity.' }
+          if ($r.rdp_full_session_accepted) { throw 'Headless hosted runner must never claim full RDP fidelity.' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: remote-admin-windows-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}\remote-admin-windows
+          retention-days: 90
+
+  native-lab-capture:
+    if: ${{ inputs.mode == 'native_lab_capture' }}
+    runs-on: [self-hosted, Windows, X64, remote-admin-client]
+    timeout-minutes: 30
+    env:
+      WINDOWS_LAB_USER: ${{ secrets.WINDOWS_LAB_USER }}
+      WINDOWS_LAB_PASSWORD: ${{ secrets.WINDOWS_LAB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture native Windows SMB WinRM DCOM evidence
+        shell: pwsh
+        run: |
+          ./remote-admin-anomaly-lab/scripts/windows_fidelity_capture.ps1 `
+            -Mode native `
+            -Target 10.77.0.32 `
+            -OutputDir "$env:RUNNER_TEMP\remote-admin-windows"
+      - name: Native fidelity contract
+        shell: pwsh
+        run: |
+          $r = Get-Content "$env:RUNNER_TEMP\remote-admin-windows\fidelity.json" -Raw | ConvertFrom-Json
+          if (-not $r.accepted_native_remote_fidelity) { throw 'Native Windows fidelity gate failed.' }
+          if ($r.rdp_full_session_accepted) { throw 'This automated workflow must not claim full interactive RDP.' }
+          foreach ($n in @('smb_admin_share','winrm_psremoting','dcom_cim_query','pktmon_capture')) {
+            if (-not $r.checks.$n.ok) { throw "Required native check failed: $n" }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: remote-admin-windows-native-${{ github.run_id }}
+          path: ${{ runner.temp }}\remote-admin-windows
+          retention-days: 90
+          compression-level: 0
