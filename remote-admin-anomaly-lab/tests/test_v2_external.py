@@ -1,6 +1,10 @@
 import pandas as pd
 
-from adminlab.v2_external import align_external_features, build_lanl_session_features
+from adminlab.v2_external import (
+    align_external_features,
+    build_lanl_session_features,
+    parse_pktmon_text_sessions,
+)
 
 
 def test_lanl_external_features_are_causal_and_network_only():
@@ -32,3 +36,31 @@ def test_align_external_features_reports_imputation_without_leaking_identity():
     assert report["derived_feature_count"] == 2
     assert report["imputed_feature_count"] == 1
     assert report["coverage_fraction"] == 2 / 3
+
+
+def test_pktmon_text_fallback_maps_real_port_evidence_to_session_like_rows():
+    text = "\n".join(
+        [
+            "[00]AAAA.BBBB::2026-08-14 19:09:36.000000000 [Microsoft-Windows-PktMon] PktGroupId 1, PktNumber 1",
+            "\tip: 127.0.0.1.50001 > 127.0.0.1.22: Flags [P.], seq 1:101, ack 1, win 1, length 100",
+            "[00]AAAA.BBBB::2026-08-14 19:09:36.100000000 [Microsoft-Windows-PktMon] PktGroupId 1, PktNumber 2",
+            "\tip: 127.0.0.1.22 > 127.0.0.1.50001: Flags [.], ack 101, win 1, length 50",
+            "[00]AAAA.BBBB::2026-08-14 19:09:37.000000000 [Microsoft-Windows-PktMon] PktGroupId 2, PktNumber 1",
+            "\tip: ::1.50002 > ::1.5985: Flags [P.], seq 1:201, ack 1, win 1, length 200",
+            "[00]AAAA.BBBB::2026-08-14 19:09:37.250000000 [Microsoft-Windows-PktMon] PktGroupId 2, PktNumber 2",
+            "\tip: ::1.5985 > ::1.50002: Flags [P.], seq 1:301, ack 201, win 1, length 300",
+            "[00]AAAA.BBBB::2026-08-14 19:09:38.000000000 [Microsoft-Windows-PktMon] PktGroupId 3, PktNumber 1",
+            "\tip: 127.0.0.1.50003 > 127.0.0.1.445: Flags [P.], seq 1:21, ack 1, win 1, length 20",
+        ]
+    )
+    frame, evidence = parse_pktmon_text_sessions(text, {"openssh", "smb", "winrm"})
+    assert len(frame) == 3
+    assert set(frame["native_protocol"].astype(str)) == {"openssh", "smb", "winrm"}
+    ssh = frame[frame["native_protocol"] == "openssh"].iloc[0]
+    assert int(ssh["src_packets"]) == 1
+    assert int(ssh["dst_packets"]) == 1
+    assert int(ssh["src_bytes"]) == 100
+    assert int(ssh["dst_bytes"]) == 50
+    assert abs(float(ssh["duration"]) - 0.1) < 1e-6
+    assert evidence["transport"] == "pktmon_formatted_text"
+    assert evidence["sessions_by_protocol"] == {"openssh": 1, "smb": 1, "winrm": 1}
