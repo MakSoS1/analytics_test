@@ -1,4 +1,4 @@
-feature_contract_version: 3
+feature_contract_version: 4
 
 production_allowlist:
   - flow_count
@@ -21,6 +21,21 @@ production_allowlist:
   - iat_cv
   - packet_size_mean
   - packet_size_std
+  - hour_sin
+  - hour_cos
+  - is_weekend
+  - connection_success
+  - connection_failure
+  - connection_outcome_known
+  - successful_connection_rate_15m
+  - failed_connection_rate_15m
+  - successful_connection_rate_1h
+  - failed_connection_rate_1h
+  - successful_connection_rate_24h
+  - failed_connection_rate_24h
+  - ssh_auth_observed
+  - ssh_auth_success
+  - ssh_auth_attempts
   - connections_1m
   - connections_5m
   - connections_15m
@@ -73,6 +88,7 @@ forbidden:
   - behavior_profile
   - campaign_type
   - historical_relation
+  - auth_outcome
   - client_stack
   - simulated_day
   - wire_attempts
