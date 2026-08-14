@@ -1,3 +1,4 @@
+import ast
 from collections import defaultdict
 from pathlib import Path
 
@@ -8,19 +9,42 @@ from adminlab.wire_controls import materialize_wire_controls
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _label_conditioned_branches(path: Path, function_names: set[str]) -> list[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    failures: list[str] = []
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name not in function_names:
+            continue
+        for child in ast.walk(node):
+            test = None
+            if isinstance(child, ast.If):
+                test = child.test
+            elif isinstance(child, ast.IfExp):
+                test = child.test
+            if test is None:
+                continue
+            attrs = [n.attr for n in ast.walk(test) if isinstance(n, ast.Attribute)]
+            names = [n.id for n in ast.walk(test) if isinstance(n, ast.Name)]
+            if "label_binary" in attrs or "label_binary" in names:
+                failures.append(f"{node.name}:{getattr(child, 'lineno', '?')}")
+    return failures
+
+
 def test_core_wire_runner_does_not_branch_on_label_for_size_or_attempts():
-    text = (ROOT / "scripts/run_scenarios.py").read_text(encoding="utf-8")
+    path = ROOT / "scripts/run_scenarios.py"
+    text = path.read_text(encoding="utf-8")
     assert ".wire_transfer_bytes" in text
     assert ".wire_attempts" in text
-    assert "if record.label_binary" not in text
-    assert "if r.label_binary" not in text
+    assert not _label_conditioned_branches(path, {"run_ssh", "run_smb"})
 
 
 def test_extended_wire_runner_does_not_branch_on_label_for_attempts():
-    text = (ROOT / "src/adminlab/extended_wire_v2.py").read_text(encoding="utf-8")
+    path = ROOT / "src/adminlab/extended_wire_v2.py"
+    text = path.read_text(encoding="utf-8")
     assert ".wire_attempts" in text
-    assert "if record.label_binary" not in text
-    assert "if r.label_binary" not in text
+    assert not _label_conditioned_branches(
+        path, {"run_rdp_session", "run_vnc_session", "run_winrm_session"}
+    )
 
 
 def test_counterfactual_pairs_get_identical_concrete_wire_controls():
