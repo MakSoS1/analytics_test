@@ -30,6 +30,12 @@ def _cv(values: list[float]) -> float:
     return 0.0 if mean == 0.0 else float(series.std(ddof=0) / mean)
 
 
+def _numeric_column(group: pd.DataFrame, name: str, default: float = 0.0) -> pd.Series:
+    if name in group.columns:
+        return pd.to_numeric(group[name], errors="coerce").fillna(default)
+    return pd.Series([default] * len(group), index=group.index, dtype=float)
+
+
 def build_campaign_gold(
     session_features: pd.DataFrame,
     session_labels: pd.DataFrame,
@@ -66,12 +72,12 @@ def build_campaign_gold(
         if len(target_progress) > 1:
             fanout_slope = float((target_progress[-1] - target_progress[0]) / max(1, len(target_progress) - 1))
 
-        new_target = pd.to_numeric(group.get("new_dst_prior", 0), errors="coerce").fillna(0.0)
-        new_protocol = pd.to_numeric(group.get("new_protocol_prior", 0), errors="coerce").fillna(0.0)
-        prior_sessions = pd.to_numeric(group.get("prior_sessions_1h", 0), errors="coerce").fillna(0.0)
-        pair_seen = pd.to_numeric(group.get("pair_seen_count_prior", 0), errors="coerce").fillna(0.0)
-        bytes_total = pd.to_numeric(group.get("session_total_bytes", 0), errors="coerce").fillna(0.0)
-        packets_total = pd.to_numeric(group.get("session_total_packets", 0), errors="coerce").fillna(0.0)
+        new_target = _numeric_column(group, "new_dst_prior")
+        new_protocol = _numeric_column(group, "new_protocol_prior")
+        prior_sessions = _numeric_column(group, "prior_sessions_1h")
+        pair_seen = _numeric_column(group, "pair_seen_count_prior")
+        bytes_total = _numeric_column(group, "session_total_bytes")
+        packets_total = _numeric_column(group, "session_total_packets")
 
         feature_rows.append(
             {
