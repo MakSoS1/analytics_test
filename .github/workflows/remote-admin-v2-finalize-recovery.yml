@@ -25,6 +25,7 @@ env:
   RELEASE_ROOT: /tmp/remote-admin-v2-recovered
   SOURCE_RUN_ID: '31831956891'
   SOURCE_GIT_SHA: 'ebe12195545f3612ef5204fe1cb505b1cb8b0e90'
+  PYTHONPATH: src
 
 jobs:
   finalize-retained-v2:
@@ -72,7 +73,6 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          import pandas as pd
           release=Path('/tmp/remote-admin-v2-recovered')
           shard='V2-1k'
           gold=release/'gold'/shard
@@ -109,8 +109,6 @@ jobs:
           PY
       - name: Score independent holdouts using tshark-or-pktmon adapter
         working-directory: remote-admin-anomaly-lab
-        env:
-          PYTHONPATH: src
         run: |
           GOLD="$RELEASE_ROOT/gold/$SHARD"
           QUALITY="$RELEASE_ROOT/quality/$SHARD"
@@ -125,8 +123,6 @@ jobs:
           cp -a /tmp/v2-external/lanl/. "$QUALITY/external/lanl/"
       - name: Finalize fail-closed research decision
         working-directory: remote-admin-anomaly-lab
-        env:
-          PYTHONPATH: src
         run: |
           GOLD="$RELEASE_ROOT/gold/$SHARD"
           QUALITY="$RELEASE_ROOT/quality/$SHARD"
