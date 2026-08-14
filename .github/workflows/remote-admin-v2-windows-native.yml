@@ -1,0 +1,47 @@
+name: Remote Admin Anomaly V2 Windows Native Holdout
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [remote-admin-anomaly-lab-v2]
+    paths:
+      - 'remote-admin-anomaly-lab/windows/**'
+      - '.github/workflows/remote-admin-v2-windows-native.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-admin-v2-windows-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-native:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      OUTPUT_DIR: ${{ runner.temp }}\remote-admin-v2-windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Capture bounded native Windows remote-administration probes
+        shell: pwsh
+        run: |
+          & .\remote-admin-anomaly-lab\windows\capture_native.ps1 -OutputDir $env:OUTPUT_DIR
+      - name: Validate fail-closed native fidelity claims
+        if: always()
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:OUTPUT_DIR 'windows_fidelity.json'
+          if (-not (Test-Path $report)) { throw 'windows_fidelity.json was not produced' }
+          python .\remote-admin-anomaly-lab\windows\validate_native.py $report --out (Join-Path $env:OUTPUT_DIR 'windows_fidelity_validation.json')
+      - name: Retain Windows native capture and fidelity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-v2-windows-native-${{ github.run_id }}
+          path: ${{ runner.temp }}\remote-admin-v2-windows
+          retention-days: 90
+          compression-level: 0
