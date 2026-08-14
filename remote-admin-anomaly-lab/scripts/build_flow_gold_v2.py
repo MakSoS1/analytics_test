@@ -19,7 +19,7 @@ from adminlab.features import map_zeek_flows_to_sessions, read_zstd_json_lines, 
 from adminlab.splits import assign_grouped_splits, audit_leakage  # noqa: E402
 from adminlab.suricata_gold import (  # noqa: E402
     attach_behavior_time,
-    build_split_isolated_suricata_features,
+    build_reference_context_suricata_features,
     map_suricata_flows_to_sessions,
     normalize_suricata_flow_events,
 )
@@ -101,7 +101,7 @@ def main() -> int:
     if mapped["split"].isna().any():
         raise SystemExit("mapped Suricata flow missing split before state computation")
 
-    production_features = build_split_isolated_suricata_features(mapped)
+    production_features = build_reference_context_suricata_features(mapped)
     if production_features.empty or len(production_features) != len(mapped):
         raise SystemExit("Suricata train/serve feature replay incomplete")
 
@@ -167,7 +167,7 @@ def main() -> int:
         "session_mapping_coverage_by_protocol": protocol_coverage,
         "uid_alignment_coverage": float(len(aligned) / len(production_features)),
         "leakage_ok": True,
-        "state_partition_policy": "fresh EveFeatureState per split",
+        "state_partition_policy": "causal prior-train reference context plus prior rows from each target split; no cross-heldout context",
         "time_policy": "Suricata flow.start for execution mapping; captured flow offset projected to simulated organization timestamp",
         "production_unit": "suricata_eve_flow",
         "production_source": "suricata_eve_flow",
