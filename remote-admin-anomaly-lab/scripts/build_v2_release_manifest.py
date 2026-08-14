@@ -25,6 +25,8 @@ def main() -> int:
     parser.add_argument("--shard", required=True)
     parser.add_argument("--decision", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--data-source-run-id", default="")
+    parser.add_argument("--data-source-git-sha", default="")
     args = parser.parse_args()
 
     release = args.release.resolve()
@@ -66,13 +68,24 @@ def main() -> int:
         layer_bytes[top] = layer_bytes.get(top, 0) + size
         files.append({"path": rel, "bytes": size, "sha256": sha256(path)})
 
+    finalize_run_id = os.environ.get("GITHUB_RUN_ID", "")
+    finalize_git_sha = os.environ.get("GITHUB_SHA", "")
+    source_run_id = str(args.data_source_run_id or finalize_run_id)
+    source_git_sha = str(args.data_source_git_sha or finalize_git_sha)
     payload = {
         "schema_version": 2,
         "dataset": "remote-admin-anomaly-v2",
         "shard": args.shard,
-        "git_sha": os.environ.get("GITHUB_SHA", ""),
-        "github_run_id": os.environ.get("GITHUB_RUN_ID", ""),
+        "git_sha": finalize_git_sha,
+        "github_run_id": finalize_run_id,
         "github_run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+        "provenance": {
+            "data_generation_run_id": source_run_id,
+            "data_generation_git_sha": source_git_sha,
+            "finalization_run_id": finalize_run_id,
+            "finalization_git_sha": finalize_git_sha,
+            "recovered_from_retained_artifact": bool(source_run_id and source_run_id != finalize_run_id),
+        },
         "dataset_release_status": decision.get("dataset_release_status"),
         "research_status": decision.get("research_status"),
         "scale_decision": decision.get("scale_decision"),
@@ -83,7 +96,7 @@ def main() -> int:
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({k: payload[k] for k in ("dataset_release_status", "research_status", "scale_decision", "file_count", "total_bytes", "layer_bytes")}, indent=2, sort_keys=True))
+    print(json.dumps({k: payload[k] for k in ("dataset_release_status", "research_status", "scale_decision", "file_count", "total_bytes", "layer_bytes", "provenance")}, indent=2, sort_keys=True))
     return 0
 
 
