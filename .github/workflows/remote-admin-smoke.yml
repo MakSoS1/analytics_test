@@ -4,11 +4,7 @@ on:
   push:
     branches: [remote-admin-anomaly-lab-v1]
     paths:
-      - 'remote-admin-anomaly-lab/configs/**'
-      - 'remote-admin-anomaly-lab/src/**'
-      - 'remote-admin-anomaly-lab/scripts/**'
-      - 'remote-admin-anomaly-lab/tests/**'
-      - 'remote-admin-anomaly-lab/requirements.txt'
+      - 'remote-admin-anomaly-lab/.smoke-trigger'
       - '.github/workflows/remote-admin-smoke.yml'
   workflow_dispatch:
 
