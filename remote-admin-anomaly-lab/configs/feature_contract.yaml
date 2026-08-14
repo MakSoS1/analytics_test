@@ -1,4 +1,4 @@
-feature_contract_version: 2
+feature_contract_version: 3
 
 production_allowlist:
   - flow_count
@@ -25,16 +25,29 @@ production_allowlist:
   - connections_5m
   - connections_15m
   - connections_1h
+  - connections_24h
+  - connections_7d
+  - connections_30d
   - unique_dst_ip_5m
   - unique_dst_ip_15m
+  - unique_dst_ip_24h
+  - unique_dst_ip_7d
+  - unique_dst_ip_30d
   - unique_protocols_1h
   - new_dst_for_src
   - new_src_dst_pair
+  - new_dst_24h
+  - new_dst_7d
+  - new_dst_30d
   - pair_seen_count
+  - pair_connections_24h
+  - pair_connections_7d
+  - pair_connections_30d
   - src_out_degree_1h
   - dst_in_degree_1h
   - new_edge_count_1h
   - protocol_entropy_1h
+  - protocol_entropy_24h
 
 training_only:
   - label_binary
@@ -53,6 +66,19 @@ forbidden:
   - ground_truth_source
   - wire_fidelity
   - semantic_fidelity
+  - persona_id
+  - task_id
+  - calendar_id
+  - intent_profile
+  - behavior_profile
+  - campaign_type
+  - historical_relation
+  - client_stack
+  - simulated_day
+  - wire_attempts
+  - wire_transfer_bytes
+  - execution_start_ts
+  - execution_end_ts
   - netem_profile
   - netem_delay_ms
   - netem_loss_pct
@@ -76,3 +102,6 @@ windows_seconds:
   connections_5m: 300
   connections_15m: 900
   connections_1h: 3600
+  connections_24h: 86400
+  connections_7d: 604800
+  connections_30d: 2592000
