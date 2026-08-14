@@ -1,5 +1,6 @@
 name: Remote Admin Anomaly V1 Implementation Final
 
+# Evidence rerun: real alternate clients + corrected Suricata mapping.
 on:
   push:
     branches: [remote-admin-anomaly-lab-v1]
@@ -81,6 +82,7 @@ jobs:
           assert leak['ok'] is True,leak
           assert not leak['heldout_client_implementations_in_train'],leak
           assert not leak['heldout_personas_in_train'],leak
+          assert all(float(v)>=.90 for v in prod['session_mapping_coverage_by_protocol'].values()),prod
           labels=pd.read_parquet(root/'gold'/shard/'production_flow_labels.parquet')
           unseen=labels[labels['challenge_reason'].fillna('').str.contains('unseen_client_implementation')]; assert not unseen.empty
           assert set(unseen['implementation_id'].astype(str))&held
