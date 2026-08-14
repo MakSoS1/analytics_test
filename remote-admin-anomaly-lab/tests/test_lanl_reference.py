@@ -16,9 +16,32 @@ def test_lanl_filter_accepts_remote_admin_source_port_and_normalizes_port_prefix
     assert int(frame.iloc[0]["src_port"]) == 445
 
 
-def test_wls_parser_keeps_network_logon_context_without_synthetic_label():
+def test_wls_parser_keeps_normalized_network_logon_context_without_synthetic_label():
     lines = ["1000,User1,Comp1,Comp2,Network,Kerberos,Success"]
     frame = parse_wls_lines(lines, max_rows=100)
     assert len(frame) == 1
     assert frame.iloc[0]["logon_type"] == "Network"
     assert "label_binary" not in frame.columns
+
+
+def test_wls_parser_accepts_official_lanl_jsonl_network_logon():
+    lines = [
+        '{"EventID":4624,"UserName":"User380010","LogonID":"0x9f17415","DomainName":"Domain002","LogonTypeDescription":"Network","Computer":"Comp966305","Source":"Comp123","AuthenticationPackage":"Kerberos","Status":"0x0","Time":2}'
+    ]
+    frame = parse_wls_lines(lines, max_rows=100)
+    assert len(frame) == 1
+    row = frame.iloc[0]
+    assert int(row["event_id"]) == 4624
+    assert row["src_device"] == "Comp123"
+    assert row["dst_device"] == "Comp966305"
+    assert row["logon_type"] == "Network"
+    assert row["status"] == "0x0"
+    assert "label_binary" not in frame.columns
+
+
+def test_wls_parser_filters_non_network_logon_json():
+    lines = [
+        '{"EventID":4624,"UserName":"User1","LogonTypeDescription":"Interactive","Computer":"Comp1","AuthenticationPackage":"Negotiate","Status":"0x0","Time":3}'
+    ]
+    frame = parse_wls_lines(lines, max_rows=100)
+    assert frame.empty
