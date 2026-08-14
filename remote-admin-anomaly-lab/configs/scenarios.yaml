@@ -1,0 +1,107 @@
+scenario_families:
+  ssh_admin:
+    protocol: ssh
+    stages: [A, B, C, F, H]
+    labels: [benign]
+    src_roles: [DomainAdmin, LinuxAdmin, JumpHost, Developer, Helpdesk, RemoteWorker]
+    dst_roles: [LinuxServer]
+    action: harmless_exec
+    wire_fidelity: real_ssh
+    semantic_fidelity: high
+
+  ssh_bulk_transfer:
+    protocol: ssh
+    stages: [B, C, D, E, F, H]
+    labels: [benign, suspicious]
+    src_roles: [LinuxAdmin, JumpHost, Developer, CompromisedWorkstation]
+    dst_roles: [LinuxServer]
+    action: inert_sftp_transfer
+    wire_fidelity: real_ssh
+    semantic_fidelity: high
+
+  ssh_repeat_connections:
+    protocol: ssh
+    stages: [C, D, E, G, H]
+    labels: [benign, suspicious]
+    src_roles: [Helpdesk, JumpHost, CompromisedWorkstation]
+    dst_roles: [LinuxServer]
+    action: repeated_login
+    wire_fidelity: real_ssh
+    semantic_fidelity: high
+
+  smb_share_access:
+    protocol: smb
+    stages: [A, B, C, F, H]
+    labels: [benign]
+    src_roles: [DomainAdmin, Helpdesk, Developer, ServiceAccount, JumpHost]
+    dst_roles: [FileServer]
+    action: list_and_fetch
+    wire_fidelity: real_smb
+    semantic_fidelity: high
+
+  smb_admin_like_transfer:
+    protocol: smb
+    stages: [C, D, E, F, G, H]
+    labels: [benign, suspicious]
+    src_roles: [DomainAdmin, ServiceAccount, JumpHost, CompromisedWorkstation]
+    dst_roles: [FileServer]
+    action: inert_marker_put
+    wire_fidelity: real_smb
+    semantic_fidelity: high
+
+  rdp_session:
+    protocol: rdp
+    stages: [A, B, C, D, E, F, H]
+    labels: [benign, suspicious]
+    src_roles: [DomainAdmin, Helpdesk, JumpHost, RegularUser, CompromisedWorkstation, RemoteWorker]
+    dst_roles: [RDPServer]
+    action: bounded_session
+    wire_fidelity: real_rdp_linux
+    semantic_fidelity: partial_windows
+
+  vnc_session:
+    protocol: vnc
+    stages: [A, B, C, D, E, H]
+    labels: [benign, suspicious]
+    src_roles: [Helpdesk, JumpHost, RegularUser, CompromisedWorkstation]
+    dst_roles: [VNCServer]
+    action: bounded_session
+    wire_fidelity: real_rfb
+    semantic_fidelity: high
+
+  dcerpc_probe:
+    protocol: dcerpc
+    stages: [A, B, C, D, E, G, H]
+    labels: [benign, suspicious]
+    src_roles: [DomainAdmin, JumpHost, CompromisedWorkstation]
+    dst_roles: [RPCServer]
+    action: rpc_query
+    wire_fidelity: real_dcerpc_samba
+    semantic_fidelity: partial_dcom
+
+  winrm_wsman:
+    protocol: winrm
+    stages: [A, B, C, D, E, H]
+    labels: [benign, suspicious]
+    src_roles: [DomainAdmin, Helpdesk, CompromisedWorkstation]
+    dst_roles: [ManagementServer]
+    action: wsman_probe
+    wire_fidelity: wsman_http
+    semantic_fidelity: partial_winrm
+
+stage_defaults:
+  A: {count: 1000, suspicious_fraction: 0.25, counterfactual_fraction: 0.10}
+  B: {count: 60000, suspicious_fraction: 0.00, counterfactual_fraction: 0.00}
+  C: {count: 40000, suspicious_fraction: 0.00, counterfactual_fraction: 0.20}
+  D: {count: 30000, suspicious_fraction: 1.00, counterfactual_fraction: 0.10}
+  E: {count: 30000, suspicious_fraction: 1.00, counterfactual_fraction: 0.25}
+  F: {count: 20000, suspicious_fraction: 0.50, counterfactual_fraction: 1.00}
+  G: {count: 10000, suspicious_fraction: 0.50, counterfactual_fraction: 0.30}
+  H: {count: 10000, suspicious_fraction: 0.50, counterfactual_fraction: 0.50}
+
+safety:
+  allowed_destination_cidr: 10.77.0.0/24
+  allow_external_targets: false
+  allow_proxy_forwarding: false
+  allow_payload_execution: false
+  inert_marker_bytes: 65536
