@@ -53,13 +53,22 @@ UsePAM no
 StrictModes no
 PrintMotd no
 LogLevel VERBOSE
+AllowTcpForwarding yes
+PermitOpen 10.77.0.21:22 10.77.0.22:22 10.77.0.23:445 10.77.0.24:3389 10.77.0.25:5900
+GatewayPorts no
+PermitTunnel no
+X11Forwarding no
 Subsystem sftp internal-sftp
 EOF
 
-  # Keep each real endpoint service in a dedicated process group so cleanup
-  # cannot signal the GitHub Actions shell or unrelated namespace processes.
   setsid ip netns exec "$ns" /usr/sbin/sshd -D -e -f "$dir/sshd_config" >"$STATE_DIR/logs/$name-sshd.log" 2>&1 &
   echo $! >"$STATE_DIR/pids/$name-sshd.pgid"
+}
+
+ensure_samba_identity() {
+  if ! id -u adminlab_smb >/dev/null 2>&1; then
+    useradd --system --no-create-home --shell /usr/sbin/nologin adminlab_smb
+  fi
 }
 
 start_samba() {
@@ -68,17 +77,21 @@ start_samba() {
   local lock="$STATE_DIR/samba/lock"
   local cache="$STATE_DIR/samba/cache"
   local state="$STATE_DIR/samba/state"
+  local conf="$STATE_DIR/samba/smb.conf"
   mkdir -p "$share" "$run" "$lock" "$cache" "$state"
-  chmod 0777 "$share"
-  printf 'adminlab benign seed file\n' >"$share/readme.txt"
-  chmod 0666 "$share/readme.txt"
+  ensure_samba_identity
+  chown adminlab_smb:adminlab_smb "$share"
+  chmod 0770 "$share"
+  printf 'adminlab authenticated SMB seed file\n' >"$share/readme.txt"
+  chown adminlab_smb:adminlab_smb "$share/readme.txt"
+  chmod 0660 "$share/readme.txt"
 
-  cat >"$STATE_DIR/samba/smb.conf" <<EOF
+  cat >"$conf" <<EOF
 [global]
 workgroup = WORKGROUP
 server role = standalone server
 security = user
-map to guest = Bad User
+map to guest = Never
 guest account = nobody
 interfaces = lo 10.77.0.23/24
 bind interfaces only = yes
@@ -90,22 +103,27 @@ pid directory = $run
 lock directory = $lock
 state directory = $state
 cache directory = $cache
+private dir = $STATE_DIR/samba/private
 log file = $STATE_DIR/logs/samba.log
 max log size = 1024
 
-[public]
+[adminlab_admin]
 path = $share
 read only = no
-guest ok = yes
-guest only = yes
-force user = nobody
-create mask = 0666
-directory mask = 0777
+guest ok = no
+valid users = adminlab_smb
+admin users = adminlab_smb
+force user = adminlab_smb
+create mask = 0660
+directory mask = 0770
 EOF
 
-  # --no-process-group keeps Samba in the dedicated setsid group instead of
-  # constructing a second group that would make bounded cleanup ambiguous.
-  setsid ip netns exec ra-file01 /usr/sbin/smbd --foreground --no-process-group --configfile="$STATE_DIR/samba/smb.conf" >"$STATE_DIR/logs/smbd-stdout.log" 2>&1 &
+  mkdir -p "$STATE_DIR/samba/private"
+  # The credentials are fixed inert lab credentials. They are intentionally
+  # scoped to the isolated namespace fixture and are not used outside 10.77/24.
+  printf 'AdminlabSMB-2026!\nAdminlabSMB-2026!\n' | smbpasswd -c "$conf" -s -a adminlab_smb >/dev/null
+
+  setsid ip netns exec ra-file01 /usr/sbin/smbd --foreground --no-process-group --configfile="$conf" >"$STATE_DIR/logs/smbd-stdout.log" 2>&1 &
   echo $! >"$STATE_DIR/pids/smbd.pgid"
 }
 
@@ -130,7 +148,13 @@ verify_services() {
       exit 1
     fi
   done
-  echo "services verified: ssh=10.77.0.21:22,10.77.0.22:22 smb=10.77.0.23:445"
+  # Verify that guest access is denied and authenticated access succeeds.
+  if ip netns exec ra-paw01 smbclient //10.77.0.23/adminlab_admin -N -c 'ls' >/dev/null 2>&1; then
+    echo 'authenticated SMB fixture unexpectedly allowed guest access' >&2
+    exit 1
+  fi
+  ip netns exec ra-paw01 smbclient //10.77.0.23/adminlab_admin -U 'adminlab_smb%AdminlabSMB-2026!' -m SMB3 -c 'ls' >/dev/null
+  echo "services verified: ssh=10.77.0.21:22,10.77.0.22:22 smb-auth=10.77.0.23:445"
 }
 
 case "$MODE" in
