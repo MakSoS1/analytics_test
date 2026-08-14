@@ -1,5 +1,6 @@
 name: Remote Admin Anomaly V1 Contract Tests
 
+# Final V1 closure verification trigger: STOP_AT_1K evidence and living docs are committed.
 on:
   push:
     branches: [remote-admin-anomaly-lab-v1]
