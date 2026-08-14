@@ -1,0 +1,20 @@
+schema_version: 2
+sessions: 1000
+validation_pr_auc_min: 0.65
+test_pr_auc_min: 0.60
+shortcut_margin_min: 0.05
+hard_benign_fpr_max: 0.05
+challenge_recall_at_fpr_1pct_min_exclusive: 0.0
+learning_curve_delta_for_scale: 0.005
+windows_external_only: true
+lanl_external_only: true
+hf_repo: Maksim123321/remote-admin-anomaly-v1
+hf_candidate_prefix: v2/candidates
+hf_quarantine_prefix: v2/quarantine
+lanl:
+  dataset: Unified Host and Network Data Set
+  year: 2017
+  netflow_day: 2
+  netflow_url: https://csr.lanl.gov/data-fence//unified-host-network-dataset-2017/netflow/netflow_day-02.bz2
+  host_url: https://csr.lanl.gov/data-fence//unified-host-network-dataset-2017/wls/wls_day-02.bz2
+  remote_admin_ports: [22, 135, 445, 3389, 5985, 5986]
