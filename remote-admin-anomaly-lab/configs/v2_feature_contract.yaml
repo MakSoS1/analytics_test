@@ -1,0 +1,56 @@
+schema_version: 2
+primary_unit: session
+external_training_environments: []
+training_environment: linux_v2
+forbidden_model_columns:
+  - label_binary
+  - label_family
+  - split
+  - challenge_reason
+  - scenario_id
+  - campaign_id
+  - session_id
+  - flow_uid
+  - pair_id
+  - campaign_type
+  - behavior_profile
+  - intent_profile
+  - historical_relation
+  - sequence_profile
+  - implementation_id
+  - environment_id
+  - generator_seed
+  - netem_profile
+  - src_host_id
+  - dst_host_id
+  - src_ip
+  - dst_ip
+  - persona_id
+  - task_id
+  - calendar_id
+  - wire_fidelity
+  - semantic_fidelity
+  - ground_truth_source
+  - client_stack
+  - server_stack
+session_required_features:
+  - flow_count
+  - session_duration_s
+  - session_total_bytes
+  - session_total_packets
+  - prior_sessions_1h
+  - prior_unique_dst_24h
+  - pair_seen_count_prior
+  - new_dst_prior
+  - new_protocol_prior
+  - source_protocol_diversity_prior
+campaign_required_features:
+  - session_count
+  - target_count
+  - protocol_count
+  - new_target_ratio
+  - protocol_transition_count
+  - protocol_entropy
+  - fanout_slope
+  - inter_session_mean_s
+  - unseen_pair_fraction
