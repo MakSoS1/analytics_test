@@ -14,7 +14,7 @@ QUALITY="$RELEASE/quality/$SHARD"
 WORK="${RUNNER_TEMP:-/tmp}/adminlab-rules-$SHARD"
 RULES="$ROOT/rules/remote-admin.rules"
 rm -rf "$WORK"
-mkdir -p "$WORK" "$OUT" "$QUALITY"
+mkdir -p "$WORK" "$WORK/out" "$OUT" "$QUALITY"
 
 [[ -s "$PCAP_ZST" ]]
 suricata -T -c /etc/suricata/suricata.yaml -S "$RULES" --set vars.address-groups.HOME_NET='[10.77.0.0/24]'
