@@ -8,6 +8,7 @@ challenge_recall_at_fpr_1pct_min_exclusive: 0.0
 learning_curve_delta_for_scale: 0.005
 windows_external_only: true
 lanl_external_only: true
+legacy_v1_workflow_archived: true
 hf_repo: Maksim123321/remote-admin-anomaly-v1
 hf_candidate_prefix: v2/candidates
 hf_quarantine_prefix: v2/quarantine
