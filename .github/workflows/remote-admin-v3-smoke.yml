@@ -1,0 +1,160 @@
+name: Remote Admin Anomaly V3 Real-Wire Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [remote-admin-anomaly-lab-v3]
+    paths:
+      - 'remote-admin-anomaly-lab/src/adminlab/v3_*.py'
+      - 'remote-admin-anomaly-lab/src/adminlab/pcap_slicing.py'
+      - 'remote-admin-anomaly-lab/src/adminlab/session_gold.py'
+      - 'remote-admin-anomaly-lab/scripts/capture_shard_v3.sh'
+      - 'remote-admin-anomaly-lab/scripts/finalize_v3_bronze.py'
+      - 'remote-admin-anomaly-lab/scripts/build_hierarchical_gold_v3.py'
+      - 'remote-admin-anomaly-lab/scripts/run_scenarios_extended_v2.py'
+      - 'remote-admin-anomaly-lab/configs/v3_*.yaml'
+      - '.github/workflows/remote-admin-v3-smoke.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-admin-v3-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  v3-wire-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    env:
+      ROOT_OUT: /tmp/remote-admin-v3-smoke
+      RELEASE_ROOT: /tmp/remote-admin-v3-smoke/release
+      SHARD: V3-smoke-80
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install V3 wire parser and PCAP runtime
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m pip install -r requirements.txt
+          bash scripts/install_extended_runner_v2.sh
+          pytest -q tests
+          command -v editcap
+          command -v mergecap
+          command -v tshark
+      - name: Capture 80 V3 signal sessions on real wire
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          py="$(command -v python)"
+          sudo -E env \
+            ADMINLAB_PYTHON="$py" \
+            ADMINLAB_OUTPUT_UID="$(id -u)" \
+            ADMINLAB_OUTPUT_GID="$(id -g)" \
+            ADMINLAB_V3_MATCHED_FRACTION=0.40 \
+            bash scripts/capture_shard_v3.sh \
+              H "$SHARD" 80 2026081403 "$ROOT_OUT"
+      - name: Verify captured V3 signal contract before parsing
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          from adminlab.manifest import SessionRecord
+          from adminlab.v3_signal import audit_v3_signal_plan
+          from adminlab.v3_campaigns import audit_v3_campaigns
+
+          release=Path('/tmp/remote-admin-v3-smoke/release'); shard='V3-smoke-80'
+          bronze=release/'bronze'/shard
+          rows=[SessionRecord.from_dict(json.loads(line)) for line in (bronze/'manifests/sessions.jsonl').read_text().splitlines() if line.strip()]
+          assert len(rows)==80,len(rows)
+          assert all(row.status=='success' for row in rows),[row.status for row in rows if row.status!='success']
+          assert Counter(row.protocol for row in rows)==Counter({'ssh':20,'smb':20,'rdp':20,'vnc':20})
+          assert Counter(int(row.label_binary) for row in rows)==Counter({0:40,1:40})
+          signal=audit_v3_signal_plan(rows); campaigns=audit_v3_campaigns(rows)
+          assert signal['counterfactual_row_fraction']>=0.40,signal
+          assert signal['matched_hour_pair_fraction']>=0.80,signal
+          assert signal['max_hour_label_fraction_gap']<=0.10,signal
+          assert not signal['invalid_counterfactual_pairs'],signal
+          evidence={'signal':signal,'campaigns':campaigns}
+          (release/'quality'/shard/'v3_smoke_signal.json').write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(evidence,sort_keys=True))
+          PY
+      - name: Build Silver and production flow Gold from temporary merged capture
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          ADMINLAB_PYTHON="$(command -v python)" bash scripts/build_silver.sh "$RELEASE_ROOT" "$SHARD"
+          bash scripts/build_rule_baseline.sh "$RELEASE_ROOT" "$SHARD"
+          python scripts/build_gold.py --release "$RELEASE_ROOT" --shard "$SHARD" --feature-contract configs/feature_contract.yaml --split-seed 2026081403
+          python scripts/build_flow_gold_v2.py --release "$RELEASE_ROOT" --shard "$SHARD" --feature-contract configs/feature_contract.yaml --split-seed 2026081403
+      - name: Replace giant Bronze capture with session campaign and raw-chunk PCAPs
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/finalize_v3_bronze.py \
+            --release "$RELEASE_ROOT" --shard "$SHARD" \
+            --sample-size 20 --raw-chunk-packets 10000 --min-session-coverage 0.9875
+          test ! -e "$RELEASE_ROOT/bronze/$SHARD/captures/$SHARD.pcap.zst"
+      - name: Build V3 grouped causal session and campaign Gold
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/build_hierarchical_gold_v3.py \
+            --release "$RELEASE_ROOT" --shard "$SHARD" \
+            --contract configs/v3_feature_contract.yaml --split-seed 2026081403
+      - name: Verify V3 mapping split causality and browsable Bronze
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path('/tmp/remote-admin-v3-smoke/release'); shard='V3-smoke-80'
+          gold=root/'gold'/shard; bronze=root/'bronze'/shard; quality=root/'quality'/shard
+          prod=json.loads((quality/'production_flow_gold.json').read_text())
+          leak=json.loads((quality/'production_leakage.json').read_text())
+          h=json.loads((gold/'hierarchical_gold_quality.json').read_text())
+          b=json.loads((quality/'v3_bronze_quality.json').read_text())
+          assert prod['session_mapping_coverage']>=0.95,prod
+          assert prod['flow_mapping_coverage']>=0.90,prod
+          assert leak['ok'] is True,leak
+          assert b['session_pcap_coverage']>=0.9875,b
+          assert b['campaign_pcap_coverage']>=0.99,b
+          assert b['full_raw_traffic_preserved_in_chunks'] is True,b
+          assert b['merged_pcap_persisted'] is False,b
+          index=pd.read_csv(bronze/'manifests/pcap_index.csv')
+          assert {'session','campaign','raw_chunk'}<=set(index['kind']),index['kind'].value_counts().to_dict()
+          assert not (bronze/'captures').exists()
+          sf=pd.read_parquet(gold/'session_features.parquet'); sl=pd.read_parquet(gold/'session_labels.parquet')
+          cf=pd.read_parquet(gold/'campaign_features.parquet'); cl=pd.read_parquet(gold/'campaign_labels.parquet')
+          assert len(sf)==len(sl)>0 and len(cf)==len(cl)>0
+          assert set(sl['environment_id'])=={'linux_v3'}
+          assert set(cl['environment_id'])=={'linux_v3'}
+          for forbidden in ('campaign_type','behavior_profile','intent_profile','environment_id','src_host_id','dst_host_id','implementation_id'):
+              assert forbidden not in pd.read_parquet(gold/'session_model_matrix.parquet').columns,forbidden
+          evidence={'production_flow_gold':prod,'leakage':leak,'hierarchical':h,'bronze':b,'session_rows':len(sf),'campaign_rows':len(cf)}
+          (quality/'V3_WIRE_SMOKE.json').write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(evidence,sort_keys=True,default=str))
+          PY
+      - name: Retain complete V3 smoke release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-v3-wire-smoke-${{ github.run_id }}
+          path: /tmp/remote-admin-v3-smoke
+          retention-days: 30
+          compression-level: 0
