@@ -1,0 +1,16 @@
+{
+  "allow_scale": false,
+  "automatic_failures": [
+    "shortcut_risk"
+  ],
+  "challenge_pr_auc": 0.42228392985541374,
+  "decision": "STOP_AT_1K",
+  "last_delta_pr_auc": -0.013807526011478721,
+  "next_sessions": 0,
+  "policy": "4k/10k/20k/40k fan-out is prohibited until a materially different feature/data hypothesis passes a new 1k gate; more rows of the same distribution are not justified",
+  "reason": "MODEL_QUALITY_REJECTED_AND_LEARNING_CURVE_SATURATED",
+  "scale_recommendation": "prefer_diversity_or_holdout_analysis",
+  "source_run_id": 31818445960,
+  "test_pr_auc": 0.5137590769069873,
+  "validation_pr_auc": 0.5074707204051365
+}

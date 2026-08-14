@@ -1,0 +1,18 @@
+{
+  "path": "quarantine/rejected/gh-31818445960",
+  "private_verified": true,
+  "promoted": false,
+  "repo_id": "Maksim123321/remote-admin-anomaly-v1",
+  "required_files_verified": [
+    "quarantine/rejected/gh-31818445960/NEGATIVE_RESEARCH_VERIFIED.json",
+    "quarantine/rejected/gh-31818445960/evaluation/M1-slices.json",
+    "quarantine/rejected/gh-31818445960/models/M1-lightgbm.metrics.json",
+    "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/captures/H-research-1k.pcap.zst",
+    "quarantine/rejected/gh-31818445960/release/gold/H-research-1k/production_model_matrix.parquet",
+    "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/suricata/eve.json.zst",
+    "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/conn.log.zst"
+  ],
+  "source_artifact_id": 9226887886,
+  "source_run_id": 31818445960,
+  "status": "UPLOADED_AND_VERIFIED_QUARANTINE"
+}

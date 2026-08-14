@@ -1,0 +1,918 @@
+{
+  "M0": {
+    "model": "deterministic-behavior-baseline",
+    "splits": {
+      "challenge": {
+        "f1": 0.0,
+        "fn": 330,
+        "fp": 1,
+        "fp_per_10k_benign": 23.094688221709006,
+        "fpr": 0.0023094688221709007,
+        "n": 763,
+        "negative": 433,
+        "positive": 330,
+        "pr_auc": 0.4467623743439693,
+        "precision": 0.0,
+        "recall": 0.0,
+        "roc_auc": 0.508436559591294,
+        "strict_operating_points": {
+          "n": 763,
+          "negative": 433,
+          "operating_points": {
+            "fpr_0_1pct": {
+              "fn": 330,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.001,
+              "precision": 0.0,
+              "recall": 0.0,
+              "threshold": 0.4500000000000003,
+              "tn": 433,
+              "tp": 0
+            },
+            "fpr_1pct": {
+              "fn": 330,
+              "fp": 1,
+              "fp_per_10k_benign": 23.094688221709006,
+              "fpr": 0.0023094688221709007,
+              "max_fpr_constraint": 0.01,
+              "precision": 0.0,
+              "recall": 0.0,
+              "threshold": 0.45000000000000007,
+              "tn": 432,
+              "tp": 0
+            }
+          },
+          "positive": 330,
+          "pr_auc": 0.4467623743439693,
+          "precision_at_prevalence": {
+            "0.1%": 1.0,
+            "1%": 1.0
+          },
+          "roc_auc": 0.508436559591294
+        },
+        "threshold": 0.44999999999999996,
+        "tn": 432,
+        "tp": 0
+      },
+      "test": {
+        "f1": 0.0,
+        "fn": 122,
+        "fp": 0,
+        "fp_per_10k_benign": 0.0,
+        "fpr": 0.0,
+        "n": 228,
+        "negative": 106,
+        "positive": 122,
+        "pr_auc": 0.5651099004158239,
+        "precision": 0.0,
+        "recall": 0.0,
+        "roc_auc": 0.5411382616764615,
+        "strict_operating_points": {
+          "n": 228,
+          "negative": 106,
+          "operating_points": {
+            "fpr_0_1pct": {
+              "fn": 120,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.001,
+              "precision": 1.0,
+              "recall": 0.01639344262295082,
+              "threshold": 0.30000000000000004,
+              "tn": 106,
+              "tp": 2
+            },
+            "fpr_1pct": {
+              "fn": 120,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.01,
+              "precision": 1.0,
+              "recall": 0.01639344262295082,
+              "threshold": 0.30000000000000004,
+              "tn": 106,
+              "tp": 2
+            }
+          },
+          "positive": 122,
+          "pr_auc": 0.5651099004158239,
+          "precision_at_prevalence": {
+            "0.1%": 1.0,
+            "1%": 1.0
+          },
+          "roc_auc": 0.5411382616764615
+        },
+        "threshold": 0.44999999999999996,
+        "tn": 106,
+        "tp": 0
+      },
+      "validation": {
+        "f1": 0.015384615384615385,
+        "fn": 128,
+        "fp": 0,
+        "fp_per_10k_benign": 0.0,
+        "fpr": 0.0,
+        "n": 233,
+        "negative": 104,
+        "positive": 129,
+        "pr_auc": 0.586292383694301,
+        "precision": 1.0,
+        "recall": 0.007751937984496124,
+        "roc_auc": 0.5463625521765056,
+        "strict_operating_points": {
+          "n": 233,
+          "negative": 104,
+          "operating_points": {
+            "fpr_0_1pct": {
+              "fn": 128,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.001,
+              "precision": 1.0,
+              "recall": 0.007751937984496124,
+              "threshold": 0.44999999999999996,
+              "tn": 104,
+              "tp": 1
+            },
+            "fpr_1pct": {
+              "fn": 128,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.01,
+              "precision": 1.0,
+              "recall": 0.007751937984496124,
+              "threshold": 0.44999999999999996,
+              "tn": 104,
+              "tp": 1
+            }
+          },
+          "positive": 129,
+          "pr_auc": 0.586292383694301,
+          "precision_at_prevalence": {
+            "0.1%": 1.0,
+            "1%": 1.0
+          },
+          "roc_auc": 0.5463625521765056
+        },
+        "threshold": 0.44999999999999996,
+        "tn": 104,
+        "tp": 1
+      }
+    },
+    "threshold": 0.44999999999999996,
+    "threshold_policy": "max validation F1 subject to FPR<=0.01"
+  },
+  "M1": {
+    "model": "LightGBM",
+    "splits": {
+      "challenge": {
+        "brier": 0.36796968232244004,
+        "f1": 0.0,
+        "fn": 330,
+        "fp": 3,
+        "fp_per_10k_benign": 69.28406466512702,
+        "fpr": 0.006928406466512702,
+        "n": 763,
+        "negative": 433,
+        "positive": 330,
+        "pr_auc": 0.42228392985541374,
+        "precision": 0.0,
+        "recall": 0.0,
+        "roc_auc": 0.49899223178668906,
+        "strict_operating_points": {
+          "brier": 0.36796968232244004,
+          "n": 763,
+          "negative": 433,
+          "operating_points": {
+            "fpr_0_1pct": {
+              "fn": 330,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.001,
+              "precision": 0.0,
+              "recall": 0.0,
+              "threshold": 0.9910847520103001,
+              "tn": 433,
+              "tp": 0
+            },
+            "fpr_1pct": {
+              "fn": 330,
+              "fp": 4,
+              "fp_per_10k_benign": 92.37875288683603,
+              "fpr": 0.009237875288683603,
+              "max_fpr_constraint": 0.01,
+              "precision": 0.0,
+              "recall": 0.0,
+              "threshold": 0.9878096226023425,
+              "tn": 429,
+              "tp": 0
+            }
+          },
+          "positive": 330,
+          "pr_auc": 0.42228392985541374,
+          "precision_at_prevalence": {
+            "0.1%": 1.0,
+            "1%": 1.0
+          },
+          "roc_auc": 0.49899223178668906
+        },
+        "threshold": 0.9878979377330073,
+        "tn": 430,
+        "tp": 0
+      },
+      "test": {
+        "brier": 0.3483748026569071,
+        "f1": 0.0,
+        "fn": 122,
+        "fp": 0,
+        "fp_per_10k_benign": 0.0,
+        "fpr": 0.0,
+        "n": 228,
+        "negative": 106,
+        "positive": 122,
+        "pr_auc": 0.5137590769069873,
+        "precision": 0.0,
+        "recall": 0.0,
+        "roc_auc": 0.46056294463346736,
+        "strict_operating_points": {
+          "brier": 0.3483748026569071,
+          "n": 228,
+          "negative": 106,
+          "operating_points": {
+            "fpr_0_1pct": {
+              "fn": 120,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.001,
+              "precision": 1.0,
+              "recall": 0.01639344262295082,
+              "threshold": 0.9840281547930532,
+              "tn": 106,
+              "tp": 2
+            },
+            "fpr_1pct": {
+              "fn": 120,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.01,
+              "precision": 1.0,
+              "recall": 0.01639344262295082,
+              "threshold": 0.9840281547930532,
+              "tn": 106,
+              "tp": 2
+            }
+          },
+          "positive": 122,
+          "pr_auc": 0.5137590769069873,
+          "precision_at_prevalence": {
+            "0.1%": 1.0,
+            "1%": 1.0
+          },
+          "roc_auc": 0.46056294463346736
+        },
+        "threshold": 0.9878979377330073,
+        "tn": 106,
+        "tp": 0
+      },
+      "validation": {
+        "brier": 0.33736409081394225,
+        "f1": 0.030303030303030304,
+        "fn": 127,
+        "fp": 1,
+        "fp_per_10k_benign": 96.15384615384616,
+        "fpr": 0.009615384615384616,
+        "n": 233,
+        "negative": 104,
+        "positive": 129,
+        "pr_auc": 0.5074707204051365,
+        "precision": 0.6666666666666666,
+        "recall": 0.015503875968992248,
+        "roc_auc": 0.4480471079308289,
+        "strict_operating_points": {
+          "brier": 0.33736409081394225,
+          "n": 233,
+          "negative": 104,
+          "operating_points": {
+            "fpr_0_1pct": {
+              "fn": 129,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.001,
+              "precision": 0.0,
+              "recall": 0.0,
+              "threshold": 0.9917385642358262,
+              "tn": 104,
+              "tp": 0
+            },
+            "fpr_1pct": {
+              "fn": 127,
+              "fp": 1,
+              "fp_per_10k_benign": 96.15384615384616,
+              "fpr": 0.009615384615384616,
+              "max_fpr_constraint": 0.01,
+              "precision": 0.6666666666666666,
+              "recall": 0.015503875968992248,
+              "threshold": 0.9878979377330073,
+              "tn": 103,
+              "tp": 2
+            }
+          },
+          "positive": 129,
+          "pr_auc": 0.5074707204051365,
+          "precision_at_prevalence": {
+            "0.1%": 1.0,
+            "1%": 1.0
+          },
+          "roc_auc": 0.4480471079308289
+        },
+        "threshold": 0.9878979377330073,
+        "tn": 103,
+        "tp": 2
+      }
+    },
+    "threshold": 0.9878979377330073,
+    "threshold_policy": "max validation F1 subject to FPR<=0.01"
+  },
+  "M2": {
+    "features": [
+      "flow_count",
+      "duration",
+      "src_bytes",
+      "dst_bytes",
+      "src_packets",
+      "dst_packets",
+      "bytes_total",
+      "packets_total",
+      "bytes_ratio",
+      "packets_ratio",
+      "dst_port",
+      "hour_sin",
+      "hour_cos",
+      "is_weekend",
+      "connections_1m",
+      "connections_5m",
+      "connections_15m",
+      "connections_1h",
+      "connections_24h",
+      "connections_7d",
+      "connections_30d",
+      "unique_dst_ip_5m",
+      "unique_dst_ip_15m",
+      "unique_dst_ip_24h",
+      "unique_dst_ip_7d",
+      "unique_dst_ip_30d",
+      "unique_protocols_1h",
+      "new_dst_for_src",
+      "new_src_dst_pair",
+      "new_dst_24h",
+      "new_dst_7d",
+      "new_dst_30d",
+      "pair_seen_count",
+      "pair_connections_24h",
+      "pair_connections_7d",
+      "pair_connections_30d",
+      "src_out_degree_1h",
+      "dst_in_degree_1h",
+      "new_edge_count_1h",
+      "protocol_entropy_1h",
+      "protocol_entropy_24h"
+    ],
+    "model": "IsolationForest-benign-only",
+    "splits": {
+      "challenge": {
+        "f1": 0.054945054945054944,
+        "fn": 320,
+        "fp": 24,
+        "fp_per_10k_benign": 554.2725173210162,
+        "fpr": 0.05542725173210162,
+        "n": 763,
+        "negative": 433,
+        "positive": 330,
+        "pr_auc": 0.406752153124585,
+        "precision": 0.29411764705882354,
+        "recall": 0.030303030303030304,
+        "roc_auc": 0.48024354398488345,
+        "strict_operating_points": {
+          "n": 763,
+          "negative": 433,
+          "operating_points": {
+            "fpr_0_1pct": {
+              "fn": 329,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.001,
+              "precision": 1.0,
+              "recall": 0.0030303030303030303,
+              "threshold": 0.6796853108657862,
+              "tn": 433,
+              "tp": 1
+            },
+            "fpr_1pct": {
+              "fn": 328,
+              "fp": 4,
+              "fp_per_10k_benign": 92.37875288683603,
+              "fpr": 0.009237875288683603,
+              "max_fpr_constraint": 0.01,
+              "precision": 0.3333333333333333,
+              "recall": 0.006060606060606061,
+              "threshold": 0.6549397724957051,
+              "tn": 429,
+              "tp": 2
+            }
+          },
+          "positive": 330,
+          "pr_auc": 0.406752153124585,
+          "precision_at_prevalence": {
+            "0.1%": 1.0,
+            "1%": 1.0
+          },
+          "roc_auc": 0.48024354398488345
+        },
+        "threshold": 0.5734594061655989,
+        "tn": 409,
+        "tp": 10
+      },
+      "test": {
+        "f1": 0.078125,
+        "fn": 117,
+        "fp": 1,
+        "fp_per_10k_benign": 94.33962264150944,
+        "fpr": 0.009433962264150943,
+        "n": 228,
+        "negative": 106,
+        "positive": 122,
+        "pr_auc": 0.6054556276610003,
+        "precision": 0.8333333333333334,
+        "recall": 0.040983606557377046,
+        "roc_auc": 0.5734611815651097,
+        "strict_operating_points": {
+          "n": 228,
+          "negative": 106,
+          "operating_points": {
+            "fpr_0_1pct": {
+              "fn": 122,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.001,
+              "precision": 0.0,
+              "recall": 0.0,
+              "threshold": 0.6830856001703909,
+              "tn": 106,
+              "tp": 0
+            },
+            "fpr_1pct": {
+              "fn": 113,
+              "fp": 1,
+              "fp_per_10k_benign": 94.33962264150944,
+              "fpr": 0.009433962264150943,
+              "max_fpr_constraint": 0.01,
+              "precision": 0.9,
+              "recall": 0.07377049180327869,
+              "threshold": 0.5346562105617679,
+              "tn": 105,
+              "tp": 9
+            }
+          },
+          "positive": 122,
+          "pr_auc": 0.6054556276610003,
+          "precision_at_prevalence": {
+            "0.1%": 1.0,
+            "1%": 1.0
+          },
+          "roc_auc": 0.5734611815651097
+        },
+        "threshold": 0.5734594061655989,
+        "tn": 105,
+        "tp": 5
+      },
+      "validation": {
+        "f1": 0.08823529411764706,
+        "fn": 123,
+        "fp": 1,
+        "fp_per_10k_benign": 96.15384615384616,
+        "fpr": 0.009615384615384616,
+        "n": 233,
+        "negative": 104,
+        "positive": 129,
+        "pr_auc": 0.5360743768014102,
+        "precision": 0.8571428571428571,
+        "recall": 0.046511627906976744,
+        "roc_auc": 0.42717650566487775,
+        "strict_operating_points": {
+          "n": 233,
+          "negative": 104,
+          "operating_points": {
+            "fpr_0_1pct": {
+              "fn": 124,
+              "fp": 0,
+              "fp_per_10k_benign": 0.0,
+              "fpr": 0.0,
+              "max_fpr_constraint": 0.001,
+              "precision": 1.0,
+              "recall": 0.03875968992248062,
+              "threshold": 0.5932296239725943,
+              "tn": 104,
+              "tp": 5
+            },
+            "fpr_1pct": {
+              "fn": 123,
+              "fp": 1,
+              "fp_per_10k_benign": 96.15384615384616,
+              "fpr": 0.009615384615384616,
+              "max_fpr_constraint": 0.01,
+              "precision": 0.8571428571428571,
+              "recall": 0.046511627906976744,
+              "threshold": 0.5734594061655989,
+              "tn": 103,
+              "tp": 6
+            }
+          },
+          "positive": 129,
+          "pr_auc": 0.5360743768014102,
+          "precision_at_prevalence": {
+            "0.1%": 1.0,
+            "1%": 1.0
+          },
+          "roc_auc": 0.42717650566487775
+        },
+        "threshold": 0.5734594061655989,
+        "tn": 103,
+        "tp": 6
+      }
+    },
+    "threshold": 0.5734594061655989,
+    "threshold_policy": "max validation F1 subject to FPR<=0.01"
+  },
+  "allow_scale": false,
+  "automatic_failures": [
+    "shortcut_risk"
+  ],
+  "best_nuisance_baseline": {
+    "features": [
+      "connections_1m",
+      "connections_5m",
+      "connections_15m",
+      "connections_1h",
+      "connections_24h"
+    ],
+    "name": "rate_only",
+    "pr_auc": 0.6733153472186315,
+    "roc_auc": 0.5919797257006559,
+    "status": "ok"
+  },
+  "capture_health": {
+    "capture_format": "pcap.zst",
+    "compressed_pcap_bytes": 227883905,
+    "dcerpc_train_included": false,
+    "full_capture_retained": true,
+    "implementation_counts": {
+      "rdp:freerdp->xrdp": 250,
+      "smb:smbclient->samba": 203,
+      "smb:smbprotocol->samba": 47,
+      "ssh:openssh->openssh-server": 208,
+      "ssh:paramiko->openssh-server": 42,
+      "vnc:rfb-python->tigervnc": 250
+    },
+    "label_counts": {
+      "benign": 500,
+      "suspicious": 500
+    },
+    "ok": true,
+    "output_owner_gid": 1001,
+    "output_owner_uid": 1001,
+    "partial_winrm_included": false,
+    "protocol_balance_max_minus_min": 0,
+    "protocol_counts": {
+      "rdp": 250,
+      "smb": 250,
+      "ssh": 250,
+      "vnc": 250
+    },
+    "raw_pcap_bytes": 534362803,
+    "sessions": 1000,
+    "shard": "H-research-1k",
+    "stage": "H"
+  },
+  "challenge_campaign_detection": {
+    "campaign_recall": 0.0,
+    "detected_campaigns": 0,
+    "status": "ok",
+    "suspicious_campaigns": 28,
+    "time_to_detection_seconds": {
+      "available_campaigns": 0,
+      "max": null,
+      "median": null,
+      "p90": null
+    }
+  },
+  "hard_benign": {
+    "by_relation": {
+      "known_pair": {
+        "false_positives": 0,
+        "fpr": 0.0,
+        "n": 290
+      },
+      "novel_but_ticketed": {
+        "false_positives": 1,
+        "fpr": 0.0051813471502590676,
+        "n": 193
+      },
+      "recently_added_pair": {
+        "false_positives": 1,
+        "fpr": 0.008928571428571428,
+        "n": 112
+      }
+    },
+    "by_task": {
+      "approved_forwarding": {
+        "false_positives": 0,
+        "fpr": 0.0,
+        "n": 29
+      },
+      "backup": {
+        "false_positives": 0,
+        "fpr": 0.0,
+        "n": 45
+      },
+      "debug": {
+        "false_positives": 0,
+        "fpr": 0.0,
+        "n": 36
+      },
+      "deploy": {
+        "false_positives": 1,
+        "fpr": 0.043478260869565216,
+        "n": 23
+      },
+      "emergency_admin": {
+        "false_positives": 0,
+        "fpr": 0.0,
+        "n": 61
+      },
+      "fix_incident": {
+        "false_positives": 0,
+        "fpr": 0.0,
+        "n": 253
+      },
+      "monitoring": {
+        "false_positives": 0,
+        "fpr": 0.0,
+        "n": 30
+      },
+      "patch_management": {
+        "false_positives": 0,
+        "fpr": 0.0,
+        "n": 43
+      },
+      "service_automation": {
+        "false_positives": 0,
+        "fpr": 0.0,
+        "n": 17
+      },
+      "user_support": {
+        "false_positives": 1,
+        "fpr": 0.017241379310344827,
+        "n": 58
+      }
+    },
+    "false_positives": 2,
+    "fp_per_10k_hard_benign": 33.61344537815126,
+    "fpr": 0.0033613445378151263,
+    "n": 595,
+    "status": "ok",
+    "threshold": 0.9878979377330073
+  },
+  "hf_persistence": {
+    "path": "quarantine/rejected/gh-31818445960",
+    "private_verified": true,
+    "promoted": false,
+    "repo_id": "Maksim123321/remote-admin-anomaly-v1",
+    "required_files_verified": [
+      "quarantine/rejected/gh-31818445960/NEGATIVE_RESEARCH_VERIFIED.json",
+      "quarantine/rejected/gh-31818445960/evaluation/M1-slices.json",
+      "quarantine/rejected/gh-31818445960/models/M1-lightgbm.metrics.json",
+      "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/captures/H-research-1k.pcap.zst",
+      "quarantine/rejected/gh-31818445960/release/gold/H-research-1k/production_model_matrix.parquet",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/suricata/eve.json.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/conn.log.zst"
+    ],
+    "source_artifact_id": 9226887886,
+    "source_run_id": 31818445960,
+    "status": "UPLOADED_AND_VERIFIED_QUARANTINE"
+  },
+  "leakage": {
+    "campaigns_crossing_splits": 0,
+    "errors": [],
+    "forbidden_model_columns": [],
+    "heldout_client_implementations_in_train": [],
+    "heldout_pairs_in_train": [],
+    "heldout_personas_in_train": [],
+    "heldout_users_in_train": [],
+    "ok": true,
+    "pairs_crossing_splits": 0,
+    "unexpected_model_columns": []
+  },
+  "learning_curve": {
+    "grouping": "campaign_id",
+    "last_delta_pr_auc": -0.013807526011478721,
+    "points": [
+      {
+        "campaigns": 22,
+        "fraction": 0.25,
+        "pr_auc": 0.5594402522461179,
+        "roc_auc": 0.49910554561717346,
+        "train_rows": 259,
+        "validation_rows": 233
+      },
+      {
+        "campaigns": 44,
+        "delta_pr_auc": -0.0464498507863228,
+        "fraction": 0.5,
+        "pr_auc": 0.5129904014597951,
+        "roc_auc": 0.4292635658914729,
+        "train_rows": 521,
+        "validation_rows": 233
+      },
+      {
+        "campaigns": 67,
+        "delta_pr_auc": 0.009967941950147607,
+        "fraction": 0.75,
+        "pr_auc": 0.5229583434099427,
+        "roc_auc": 0.5035032796660703,
+        "train_rows": 795,
+        "validation_rows": 233
+      },
+      {
+        "campaigns": 89,
+        "delta_pr_auc": -0.013807526011478721,
+        "fraction": 1.0,
+        "pr_auc": 0.509150817398464,
+        "roc_auc": 0.45430828861061423,
+        "train_rows": 1039,
+        "validation_rows": 233
+      }
+    ],
+    "policy": "scale only when the final grouped learning-curve PR-AUC gain exceeds 0.005",
+    "scale_recommendation": "prefer_diversity_or_holdout_analysis"
+  },
+  "manual_review_flags": [],
+  "model_promotion": "NONE",
+  "ngfw_posture": {
+    "M1_lightgbm": "shadow_research_only_not_enforcement",
+    "M2_isolation_forest": "shadow_research_only_not_enforcement",
+    "suricata_rules": "visibility_and_audit_only"
+  },
+  "parser_health": {
+    "ok": true,
+    "shard": "H-research-1k",
+    "suricata_eve_lines": 14925,
+    "suricata_flow_events": 2705,
+    "suricata_smb_events": 9854,
+    "suricata_ssh_events": 1000,
+    "zeek_conn_lines": 2705,
+    "zeek_smb_lines": 2158,
+    "zeek_ssh_lines": 502
+  },
+  "pipeline_status": "VALIDATED_END_TO_END",
+  "production_gold": {
+    "background_suricata_flow_count": 434,
+    "challenge_reason_counts": {
+      "temporal_future": 101,
+      "unseen_client_implementation": 187,
+      "unseen_host_pair": 46,
+      "unseen_persona": 38
+    },
+    "eligible_suricata_flow_count": 2271,
+    "evaluation_metadata_in_model_matrix": false,
+    "feature_count": 42,
+    "flow_mapping_coverage": 0.9964773227653017,
+    "heldout_client_implementations": [
+      "smb:smbprotocol->samba",
+      "ssh:paramiko->openssh-server"
+    ],
+    "heldout_personas": [
+      "developer-05"
+    ],
+    "label_join_keys": [
+      "flow_uid",
+      "session_id"
+    ],
+    "leakage_ok": true,
+    "mapped_suricata_flow_count": 2263,
+    "orchestrator_used_only_for": "labels grouped splits simulated clock and fidelity metadata",
+    "production_source": "suricata_eve_flow",
+    "production_unit": "suricata_eve_flow",
+    "raw_suricata_flow_count": 2705,
+    "rows": 2263,
+    "session_mapping_coverage": 0.993,
+    "session_mapping_coverage_by_protocol": {
+      "rdp": 1.0,
+      "smb": 1.0,
+      "ssh": 0.972,
+      "vnc": 1.0
+    },
+    "state_partition_policy": "causal prior-train reference context plus prior rows from each target split; no cross-heldout context",
+    "time_policy": "Suricata flow.start for execution mapping; captured flow offset projected to simulated organization timestamp",
+    "train_serve_feature_code": "adminlab.online_features.EveFeatureState",
+    "uid_alignment_coverage": 1.0,
+    "zeek_features_in_primary_model": false,
+    "zeek_research_status": "ok"
+  },
+  "reason": "quality gate correctly rejected the model because nuisance-only baselines outperform full M1 and the grouped learning curve does not improve at full data",
+  "reference_available": false,
+  "reference_validation_status": "not_evaluated",
+  "research_status": "REJECTED_MODEL_QUALITY",
+  "scale_decision": "STOP_AT_1K",
+  "schema_version": 1,
+  "sessions": 1000,
+  "shortcut_audit": {
+    "baselines": {
+      "bytes_only": {
+        "features": [
+          "bytes_total",
+          "src_bytes",
+          "dst_bytes"
+        ],
+        "pr_auc": 0.5844681596425703,
+        "roc_auc": 0.5156156827668454,
+        "status": "ok"
+      },
+      "duration_only": {
+        "features": [
+          "duration"
+        ],
+        "pr_auc": 0.6366450565164745,
+        "roc_auc": 0.5514311270125223,
+        "status": "ok"
+      },
+      "port_only": {
+        "features": [
+          "dst_port"
+        ],
+        "pr_auc": 0.5719508135876781,
+        "roc_auc": 0.5163237924865831,
+        "status": "ok"
+      },
+      "protocol_only": {
+        "features": [
+          "app_proto"
+        ],
+        "pr_auc": 0.5719508135876781,
+        "roc_auc": 0.5163237924865831,
+        "status": "ok"
+      },
+      "rate_only": {
+        "features": [
+          "connections_1m",
+          "connections_5m",
+          "connections_15m",
+          "connections_1h",
+          "connections_24h"
+        ],
+        "pr_auc": 0.6733153472186315,
+        "roc_auc": 0.5919797257006559,
+        "status": "ok"
+      },
+      "time_only": {
+        "features": [
+          "hour_sin",
+          "hour_cos",
+          "is_weekend"
+        ],
+        "pr_auc": 0.6099842309602419,
+        "roc_auc": 0.4634019081693501,
+        "status": "ok"
+      }
+    },
+    "full_model_pr_auc": 0.5074707204051365,
+    "high_shortcut_auc": 0.9,
+    "policy": "flag if shortcut PR-AUC >= 0.90 or within 0.02 of full M1 validation PR-AUC",
+    "risk_baselines": [
+      "port_only",
+      "bytes_only",
+      "duration_only",
+      "rate_only",
+      "time_only",
+      "protocol_only"
+    ],
+    "shortcut_risk": true,
+    "tolerance": 0.02
+  },
+  "source_artifact_digest": "sha256:40a463b9f16d4251d3b40b8915ef7a7425a883edd2916484acab660328fbbf72",
+  "source_artifact_id": 9226887886,
+  "source_artifact_name": "remote-admin-research-gate-v2-31818445960",
+  "source_run_id": 31818445960,
+  "source_run_url": "https://github.com/MakSoS1/analytics_test/actions/runs/31818445960"
+}
