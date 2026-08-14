@@ -1,0 +1,155 @@
+name: Remote Admin Anomaly V1 Ablation Diagnostic
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v1]
+    paths:
+      - '.github/workflows/remote-admin-ablation-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  ablate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_ARTIFACT_ID: '9223932257'
+      SOURCE_RUN_ID: '31810899680'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install model runtime
+        working-directory: remote-admin-anomaly-lab
+        run: python -m pip install -r requirements.txt
+      - name: Download retained model matrix and split labels
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/adminlab-ablation
+          gh api -H 'Accept: application/vnd.github+json' "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" > /tmp/research.zip
+          unzip -q /tmp/research.zip \
+            'release/gold/H-research-1k/production_model_matrix.parquet' \
+            'release/gold/H-research-1k/production_flow_labels.parquet' \
+            'release/gold/H-research-1k/production_splits.parquet' \
+            -d /tmp/adminlab-ablation
+      - name: Run fixed feature-family ablations
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from adminlab.modeling import train_supervised
+          from adminlab.evaluation import shortcut_audit
+
+          base=Path('/tmp/adminlab-ablation')
+          matrix=pd.read_parquet(base/'release/gold/H-research-1k/production_model_matrix.parquet')
+          labels=pd.read_parquet(base/'release/gold/H-research-1k/production_flow_labels.parquet')
+          splits=pd.read_parquet(base/'release/gold/H-research-1k/production_splits.parquet')
+
+          time_cols={'hour_sin','hour_cos','is_weekend'}
+          long_cols={c for c in matrix.columns if ('7d' in c or '30d' in c)}
+          rate_prefixes=('connections_','unique_dst_ip_','unique_protocols_','pair_seen_count','pair_connections_','src_out_degree_','dst_in_degree_','new_edge_count_','protocol_entropy_','new_dst_')
+          all_state={c for c in matrix.columns if c.startswith(rate_prefixes) or c in {'new_dst_for_src','new_src_dst_pair'}}
+          short_state={
+              'connections_1m','connections_5m','connections_15m','connections_1h','connections_24h',
+              'unique_dst_ip_5m','unique_dst_ip_15m','unique_dst_ip_24h','unique_protocols_1h',
+              'new_dst_for_src','new_src_dst_pair','new_dst_24h','pair_seen_count','pair_connections_24h',
+              'src_out_degree_1h','dst_in_degree_1h','new_edge_count_1h','protocol_entropy_1h','protocol_entropy_24h',
+          }
+          base_flow={'flow_count','duration','src_bytes','dst_bytes','src_packets','dst_packets','bytes_total','packets_total','bytes_ratio','packets_ratio','app_proto','dst_port'}
+
+          candidates={
+              'full': [c for c in matrix.columns if c not in {'label_binary','split'}],
+              'no_time': [c for c in matrix.columns if c not in {'label_binary','split'}|time_cols],
+              'no_long_history': [c for c in matrix.columns if c not in {'label_binary','split'}|long_cols],
+              'no_time_no_long_history': [c for c in matrix.columns if c not in {'label_binary','split'}|time_cols|long_cols],
+              'base_flow_only': sorted(base_flow & set(matrix.columns)),
+              'base_plus_short_state': sorted((base_flow|short_state) & set(matrix.columns)),
+              'base_plus_short_state_no_time': sorted((base_flow|short_state) & set(matrix.columns)),
+              'no_state': [c for c in matrix.columns if c not in {'label_binary','split'}|all_state],
+          }
+
+          results={}
+          for name,cols in candidates.items():
+              frame=matrix[cols+['label_binary','split']].copy()
+              _,report=train_supervised(frame,seed=2026082603)
+              val_pr=float(report['splits']['validation']['pr_auc'])
+              audit=shortcut_audit(frame,full_model_pr_auc=val_pr)
+              results[name]={
+                  'features':cols,
+                  'feature_count':len(cols),
+                  'splits':{s:{k:v.get(k) for k in ['n','positive','negative','pr_auc','roc_auc','fpr','recall','precision']} for s,v in report['splits'].items()},
+                  'threshold':report['threshold'],
+                  'shortcut_risk':audit['shortcut_risk'],
+                  'risk_baselines':audit['risk_baselines'],
+                  'shortcut_baselines':audit['baselines'],
+              }
+
+          # Challenge union/overlap: count sessions rather than flows so we can
+          # measure how much of the 1k corpus is consumed by each explicit holdout.
+          challenge=splits[splits['split'].astype(str)=='challenge'].copy()
+          reason_sets=challenge['challenge_reason'].fillna('').astype(str).map(lambda x:set(filter(None,x.split(','))))
+          reasons=sorted({r for rs in reason_sets for r in rs})
+          reason_counts={r:int(sum(r in rs for rs in reason_sets)) for r in reasons}
+          overlap_counts={}
+          for n in range(1,5):
+              overlap_counts[str(n)]=int(sum(len(rs)==n for rs in reason_sets))
+          split_session_counts={str(k):int(v) for k,v in splits['split'].value_counts().to_dict().items()}
+
+          # Basic nuisance balance at session level, enough to show whether generic
+          # validation/test differ materially despite label-only group stratification.
+          session_meta=labels[['session_id','label_binary','protocol','behavior_profile','task_id','simulated_day','split']].drop_duplicates('session_id')
+          nuisance={}
+          for split in ['train','validation','test']:
+              part=session_meta[session_meta['split'].astype(str)==split]
+              nuisance[split]={
+                  'sessions':int(len(part)),
+                  'suspicious_fraction':float(part['label_binary'].mean()),
+                  'protocol_label_rate':part.groupby('protocol')['label_binary'].mean().to_dict(),
+                  'behavior_label_rate':part.groupby('behavior_profile')['label_binary'].mean().to_dict(),
+                  'task_label_rate':part.groupby('task_id')['label_binary'].mean().to_dict(),
+                  'simulated_day_min':int(part['simulated_day'].min()),
+                  'simulated_day_max':int(part['simulated_day'].max()),
+              }
+
+          payload={
+              'source_run_id':int(__import__('os').environ['SOURCE_RUN_ID']),
+              'split_session_counts':split_session_counts,
+              'challenge_reason_counts':reason_counts,
+              'challenge_exact_reason_cardinality':overlap_counts,
+              'nuisance_balance':nuisance,
+              'ablations':results,
+          }
+          (base/'ABLATION_DIAGNOSTIC.json').write_text(json.dumps(payload,indent=2,sort_keys=True)+'\n')
+          concise={
+              'split_session_counts':split_session_counts,
+              'challenge_reason_counts':reason_counts,
+              'challenge_exact_reason_cardinality':overlap_counts,
+              'ablations':{name:{
+                  'feature_count':x['feature_count'],
+                  'val_pr':x['splits']['validation']['pr_auc'],
+                  'val_roc':x['splits']['validation']['roc_auc'],
+                  'test_pr':x['splits']['test']['pr_auc'],
+                  'test_roc':x['splits']['test']['roc_auc'],
+                  'challenge_pr':x['splits']['challenge']['pr_auc'],
+                  'challenge_roc':x['splits']['challenge']['roc_auc'],
+                  'shortcut_risk':x['shortcut_risk'],
+                  'risks':x['risk_baselines'],
+              } for name,x in results.items()},
+          }
+          print(json.dumps(concise,indent=2,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-ablation-diagnostic-${{ github.run_id }}
+          path: /tmp/adminlab-ablation/ABLATION_DIAGNOSTIC.json
+          retention-days: 30
