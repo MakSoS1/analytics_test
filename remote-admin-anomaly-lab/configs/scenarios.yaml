@@ -11,7 +11,7 @@ scenario_families:
 
   ssh_bulk_transfer:
     protocol: ssh
-    stages: [B, C, D, E, F, H]
+    stages: [A, B, C, D, E, F, H]
     labels: [benign, suspicious]
     src_roles: [LinuxAdmin, JumpHost, Developer, CompromisedWorkstation]
     dst_roles: [LinuxServer]
@@ -21,7 +21,7 @@ scenario_families:
 
   ssh_repeat_connections:
     protocol: ssh
-    stages: [C, D, E, G, H]
+    stages: [A, C, D, E, G, H]
     labels: [benign, suspicious]
     src_roles: [Helpdesk, JumpHost, CompromisedWorkstation]
     dst_roles: [LinuxServer]
@@ -41,7 +41,7 @@ scenario_families:
 
   smb_admin_like_transfer:
     protocol: smb
-    stages: [C, D, E, F, G, H]
+    stages: [A, C, D, E, F, G, H]
     labels: [benign, suspicious]
     src_roles: [DomainAdmin, ServiceAccount, JumpHost, CompromisedWorkstation]
     dst_roles: [FileServer]
