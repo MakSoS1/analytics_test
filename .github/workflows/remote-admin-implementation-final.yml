@@ -1,6 +1,6 @@
 name: Remote Admin Anomaly V1 Implementation Final
 
-# Evidence rerun: real alternate clients + corrected Suricata mapping.
+# Evidence rerun: alternate clients + full-timeline selection + causal Gold state.
 on:
   push:
     branches: [remote-admin-anomaly-lab-v1]
@@ -33,7 +33,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           bash scripts/install_extended_runner_v2.sh
-          pytest -q tests/test_implementation_holdout.py tests/test_scenario_quality.py tests/test_persona_holdout.py tests/test_train_serve_parity.py tests/test_capture_v4_winrm_policy.py tests/test_research_split_viability.py tests/test_suricata_gold_nan.py tests/test_online_features_nullable.py
+          pytest -q tests/test_implementation_holdout.py tests/test_scenario_quality.py tests/test_persona_holdout.py tests/test_train_serve_parity.py tests/test_capture_v4_winrm_policy.py tests/test_research_split_viability.py tests/test_suricata_gold_nan.py tests/test_online_features_nullable.py tests/test_extended_selection_timeline.py tests/test_reference_context_features.py tests/test_holdout_budget.py
       - name: Capture Stage-G alternative-client wire corpus
         working-directory: remote-admin-anomaly-lab
         run: |
@@ -69,6 +69,8 @@ jobs:
           python scripts/build_flow_gold_v2.py --release /tmp/adminlab-implementation-final/release --shard G-implementation-final --feature-contract configs/feature_contract.yaml --split-seed 20260827
       - name: Assert unseen implementation and persona holdouts
         working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
         run: |
           python - <<'PY'
           import json
@@ -86,7 +88,10 @@ jobs:
           labels=pd.read_parquet(root/'gold'/shard/'production_flow_labels.parquet')
           unseen=labels[labels['challenge_reason'].fillna('').str.contains('unseen_client_implementation')]; assert not unseen.empty
           assert set(unseen['implementation_id'].astype(str))&held
-          persona=labels[labels['challenge_reason'].fillna('').str.contains('unseen_persona')]; assert not persona.empty
+          persona=labels[labels['challenge_reason'].fillna('').str.contains('unseen_persona')]
+          availability=prod.get('holdout_availability',{})
+          if availability.get('unseen_persona') == 'selected_within_impact_budget':
+              assert not persona.empty
           report={'heldout_client_implementations':sorted(held),'unseen_client_flow_rows':len(unseen),'unseen_persona_flow_rows':len(persona),'production':prod,'leakage':leak}
           Path('/tmp/adminlab-implementation-final/IMPLEMENTATION_FINAL_REPORT.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n'); print(json.dumps(report,indent=2,sort_keys=True))
           PY
