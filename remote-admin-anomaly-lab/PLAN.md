@@ -22,8 +22,12 @@
   - Evidence: `Remote Admin Anomaly V1 Smoke` run `31787756618`, `contract-tests` success.
   - Result: 5/5 configuration tests passed on Ubuntu 24.04 / Python 3.12.13.
   - Validated: unique host IDs/namespaces/IPs, lab-only routing policy, known roles/protocols, safety flags, production feature leakage denylist.
-- [ ] M2 — canonical scenario planner and ground-truth manifests pass.
+- [x] M2 — canonical scenario planner and ground-truth manifests pass.
+  - RED evidence: run `31787871563` failed because `adminlab.manifest` and `adminlab.scenarios` did not exist.
+  - GREEN evidence: run `31787949680`, 11/11 tests passed in 0.21s.
+  - Validated: deterministic same-seed plans, 200 unique session IDs, lab-only src/dst addresses, nuisance-profile overlap between classes, counterfactual pair label inversion with the same protocol/destination/netem context, orchestrator-owned ground truth without `expected_sid`.
 - [ ] M3 — namespace topology isolation passes on GitHub Actions.
+  - RED evidence: run `31788020553`, 11 tests passed and 3 topology tests failed because `scripts/setup_topology.sh` did not yet exist.
 - [ ] M4 — real SSH/SMB wire smoke passes.
 - [ ] M5 — complete Bronze PCAP + manifests/checksums produced.
 - [ ] M6 — Suricata + Zeek Silver output produced.
@@ -68,8 +72,11 @@ If `HF_TOKEN` is unavailable in `analytics_test`, the same release tree must rem
 
 ### Configuration / unit tests
 
-- 2026-08-14 — RED: run `31787693161` failed as expected because `adminlab` did not exist.
-- 2026-08-14 — GREEN: run `31787756618` passed 5/5 configuration tests.
+- 2026-08-14 — M1 RED: run `31787693161` failed as expected because `adminlab` did not exist.
+- 2026-08-14 — M1 GREEN: run `31787756618` passed 5/5 configuration tests.
+- 2026-08-14 — M2 RED: run `31787871563` failed on missing manifest/planner modules.
+- 2026-08-14 — M2 GREEN: run `31787949680` passed 11/11 tests.
+- 2026-08-14 — M3 RED: run `31788020553` passed 11 existing tests and failed 3 new topology tests on the intentionally missing topology script.
 
 ### Wire smoke
 
