@@ -1,0 +1,91 @@
+name: Remote Admin Anomaly V1 Extended Corpus Smoke
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v1]
+    paths:
+      - 'remote-admin-anomaly-lab/.extended-smoke-trigger'
+      - '.github/workflows/remote-admin-extended-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-admin-extended-smoke-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  extended-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install Python and extended wire runtime
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          python -m pip install -r requirements.txt
+          bash scripts/install_extended_runner.sh
+      - name: Run all contracts before wire generation
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: pytest -q tests
+      - name: Capture 80-session SSH SMB RDP VNC Bronze shard
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          python_bin="$(command -v python)"
+          sudo -E env \
+            ADMINLAB_PYTHON="$python_bin" \
+            ADMINLAB_OUTPUT_UID="$(id -u)" \
+            ADMINLAB_OUTPUT_GID="$(id -g)" \
+            bash scripts/capture_shard_extended.sh A A-extended-smoke-00 80 2026081426 /tmp/adminlab-extended
+      - name: Assert extended wire mix
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/adminlab-extended/release')
+          health=json.loads((root/'quality/A-extended-smoke-00/capture_health.json').read_text())
+          counts=health['protocol_counts']
+          for proto in ('ssh','smb','rdp','vnc'):
+              assert counts.get(proto,0)>0,(proto,counts)
+          assert health['dcerpc_train_included'] is False, health
+          assert health['partial_winrm_included'] is False, health
+          assert health['full_capture_retained'] is True
+          print(json.dumps(health,indent=2,sort_keys=True))
+          PY
+      - name: Build Silver and Gold from retained extended Bronze
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          ADMINLAB_PYTHON="$(command -v python)" bash scripts/build_silver.sh /tmp/adminlab-extended/release A-extended-smoke-00
+          python scripts/build_gold.py --release /tmp/adminlab-extended/release --shard A-extended-smoke-00 --feature-contract configs/feature_contract.yaml --split-seed 20260814
+      - name: Assert mapping and leakage quality
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/adminlab-extended/release/quality/A-extended-smoke-00')
+          mapping=json.loads((root/'mapping_health.json').read_text())
+          leakage=json.loads((root/'leakage_checks.json').read_text())
+          parser=json.loads((root/'parser_health.json').read_text())
+          assert mapping['session_mapping_coverage'] >= .95, mapping
+          assert leakage['ok'] is True, leakage
+          assert parser['suricata_flow_events']>0 and parser['zeek_conn_lines']>0, parser
+          print(json.dumps({'mapping':mapping,'leakage':leakage,'parser':parser},indent=2,sort_keys=True))
+          PY
+      - name: Retain full rollback-capable extended shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-extended-smoke-${{ github.run_id }}
+          path: /tmp/adminlab-extended/release
+          retention-days: 90
+          compression-level: 0
