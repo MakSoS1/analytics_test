@@ -1,0 +1,9 @@
+# Remote Admin Anomaly V1 deterministic Suricata baseline.
+# These rules intentionally target only network-visible rate/policy conditions.
+# They are a comparison baseline, not ground truth and not ML labels.
+
+alert tcp any any -> 10.77.0.0/24 22 (msg:"ADMINLAB M0 SSH connection burst"; flags:S; flow:stateless; detection_filter:track by_src,count 8,seconds 60; classtype:attempted-admin; sid:2210001; rev:1;)
+alert tcp any any -> 10.77.0.0/24 445 (msg:"ADMINLAB M0 SMB connection burst"; flags:S; flow:stateless; detection_filter:track by_src,count 12,seconds 60; classtype:attempted-admin; sid:2210002; rev:1;)
+alert tcp any any -> 10.77.0.0/24 3389 (msg:"ADMINLAB M0 RDP repeated connections"; flags:S; flow:stateless; detection_filter:track by_src,count 5,seconds 60; classtype:attempted-admin; sid:2210003; rev:1;)
+alert tcp any any -> 10.77.0.0/24 5900 (msg:"ADMINLAB M0 VNC repeated connections"; flags:S; flow:stateless; detection_filter:track by_src,count 5,seconds 60; classtype:attempted-admin; sid:2210004; rev:1;)
+alert tcp any any -> 10.77.0.27 5985 (msg:"ADMINLAB M0 partial WinRM WS-Man access"; flags:S; flow:stateless; detection_filter:track by_src,count 5,seconds 60; classtype:attempted-admin; sid:2210005; rev:1;)
