@@ -1,39 +1,64 @@
 # Remote Admin Anomaly V1 — NGFW / Suricata Integration
 
-## Decision
+## Final V1 decision
 
-V1 is a hybrid detector, not a choice between rules and ML:
+The V1 research pipeline is validated, but **no ML detector is promoted to enforcement or production alerting**.
+
+Final evidence from research run `31818445960`:
+
+- M1 validation PR-AUC `0.5074707204`, ROC-AUC `0.4480471079`;
+- M1 test PR-AUC `0.5137590769`, ROC-AUC `0.4605629446`;
+- M1 challenge PR-AUC `0.4222839299`, ROC-AUC `0.4989922318`;
+- challenge campaign recall at the primary operating point: `0.0`;
+- nuisance-only baselines outperform full M1;
+- grouped learning-curve final delta PR-AUC `-0.0138075260`;
+- research quality failure: `shortcut_risk`;
+- scale decision: `STOP_AT_1K`.
+
+Therefore V1 deployment posture is:
 
 ```text
 wire traffic
     |
     v
 Suricata on NGFW
-    |-- M0 deterministic rules -> immediate IDS alert
+    |-- deterministic remote-admin rules -> visibility / audit telemetry only
     |
-    `-- EVE flow JSON -> admin-anomaly sidecar
+    `-- EVE flow JSON -> optional research sidecar
                            |
-                           |-- prior-only window / novelty / graph state
-                           |-- M1 LightGBM primary score
-                           `-- M2 benign-only anomaly shadow score
+                           |-- EveFeatureState
+                           |-- M1 LightGBM shadow score
+                           `-- M2 Isolation Forest shadow score
                                       |
                                       v
-                           remote_admin_ml event / SIEM
+                           experiment/SIEM telemetry only
 ```
 
-Suricata alerts are never used as training labels. The scenario manifest is ground truth in the lab. In production no scenario metadata is available or required.
+No V1 M1/M2 score should block, drop, quarantine or independently create a production-severity incident.
 
-## M0 — deterministic Suricata layer
+Suricata alerts are never used as training labels. The scenario manifest is ground truth in the lab. Production has no scenario/campaign/persona/implementation metadata and must not depend on it.
 
-`rules/remote-admin.rules` provides a deliberately conservative comparison baseline for observable connection bursts on SSH, SMB, RDP, VNC and the challenge-only WS-Man fixture. It is suitable for known policy/rate conditions and immediate alerting. It is not expected to distinguish a valid administrator from a compromised internal host when both use the same protocol normally.
+## M0 — deterministic Suricata visibility layer
 
-The rules are compiled with `suricata -T` before an offline evaluation run. Rule output is stored separately from raw parser EVE under `silver/<shard>/suricata-rules/` so the detection result cannot contaminate Gold labels.
+`rules/remote-admin.rules` remains useful as a transparent comparison/audit layer for observable SSH, SMB, RDP and VNC activity and bounded rate conditions. It is **not** evidence that the connection is malicious and its alerts are not ground truth.
 
-## M1 — production behavioral model
+In final 1k parsing the deterministic rule pass produced observable rule events, but the separate deterministic-behavior model still had extremely poor suspicious recall at its chosen operating point. Consequently V1 does not claim a high-quality behavioral detector merely because a Suricata signature fired.
 
-The promoted M1 model is trained on `production_model_matrix.parquet`, whose unit is a parser-observed network flow. Ground truth is used only to attach a class and grouped split during training.
+Rules are compiled with `suricata -T`. Rule output is stored separately from raw parser EVE under `silver/<shard>/suricata-rules/` so detector output cannot contaminate Gold labels.
 
-The online scorer is:
+Recommended V1 operational use:
+
+- protocol visibility;
+- policy/audit signal;
+- low-severity SOC enrichment;
+- troubleshooting and research cohort selection;
+- **not automatic malicious/benign classification**.
+
+## M1 — LightGBM research sidecar, not promoted
+
+M1 was trained on `production_model_matrix.parquet`, whose unit is a parser-observed Suricata flow. The train/serve feature implementation is `adminlab.online_features.EveFeatureState` and the final Gold construction uses causal prior-train reference context for held-out evaluation.
+
+The same sidecar code can be run in a **shadow experiment**:
 
 ```bash
 python scripts/score_eve_sidecar.py \
@@ -42,32 +67,34 @@ python scripts/score_eve_sidecar.py \
   --eve /var/log/suricata/eve.json
 ```
 
-For a streaming deployment, feed the same newline-delimited EVE records over a Unix stream/socket consumer or message bus and retain the `EveFeatureState` object for the life of the worker.
+For streaming research, feed newline-delimited EVE records through a local stream/socket consumer or existing event bus and retain the `EveFeatureState` object for the life of the worker.
+
+This command demonstrates train/serve integration only. The V1 metrics do **not** justify treating its output as a production detector.
 
 ### Model-visible inputs
 
-Only `production_allowlist` columns from `configs/feature_contract.yaml` are model inputs. Raw `src_ip`, `dest_ip`, host IDs, scenario/campaign IDs, generator parameters, netem profile, fidelity tags and MITRE labels are forbidden.
+Only `production_allowlist` columns from `configs/feature_contract.yaml` are model inputs. The following categories remain forbidden:
 
-The sidecar is allowed to use source/destination IPs internally as ephemeral state keys to derive:
+- raw source/destination IPs as model values;
+- host/persona/task/scenario/campaign IDs;
+- client/server implementation IDs;
+- generator/wire-control parameters;
+- netem profiles;
+- fidelity tags;
+- MITRE labels;
+- split/challenge metadata.
 
-- connection counts over 1m/5m/15m/1h;
-- unique destinations and protocol diversity;
-- first-seen destination/pair indicators;
-- pair frequency;
-- one-hour source out-degree and destination in-degree;
-- new-edge count and protocol entropy.
+The sidecar may use source/destination IPs internally as ephemeral state keys to derive network-visible history such as connection counts, unique destinations, first-seen pair flags, pair frequency and graph counters. Raw keys are not passed into the model.
 
-These raw keys are not passed to the model.
+## M2 — benign-only Isolation Forest shadow expert
 
-## M2 — benign-only anomaly expert
+M2 is trained only on benign training rows and numeric network-visible features. Final V1 results do not justify promotion. Keep it as shadow telemetry for later feature/data research only.
 
-M2 is an Isolation Forest trained only on benign training rows and numeric network-visible features. In V1 it is a **shadow expert**. Its score is logged for evaluation and SOC enrichment but does not independently trigger a block.
-
-A future fusion policy may combine M0/M1/M2 only after calibration on production-like holdouts. No V1 corpus should be relabelled from M2 output.
+A future fusion policy must not combine weak M0/M1/M2 outputs into a stronger-looking severity without independent calibration. Fusion is a new hypothesis and requires a new research gate.
 
 ## EVE configuration
 
-At minimum Suricata must export flow records plus protocol metadata needed operationally. File output is adequate for offline validation; production should prefer a bounded local transport such as Unix socket/stream or an existing event pipeline.
+At minimum Suricata must export `flow` records plus normal protocol metadata. File output is adequate for offline validation; production-like research should prefer a bounded local transport such as a Unix socket/stream or an existing event pipeline.
 
 Example EVE section:
 
@@ -88,40 +115,78 @@ outputs:
         - dcerpc
 ```
 
-Availability of protocol-specific EVE types is version/parser dependent; the production-flow model does not require payload visibility to operate.
+Protocol-specific EVE availability is Suricata-version/parser dependent. The production-flow feature code does not require payload visibility to compute its current flow/history features.
 
 ## State and restart behavior
 
-`EveFeatureState` is prior-only: the current flow is scored using history that existed before the flow is inserted into rolling state. This prevents future leakage and matches the production-flow Gold semantics.
+`EveFeatureState` is prior-only: the current flow is scored from state that existed before the current flow is inserted. Final offline Gold projects parser-observed flow timing onto the simulated organization clock and uses causal reference context for held-out evaluation.
 
-For HA/restarts the minimal state that may be checkpointed is recent source history and one-hour graph counters. A cold restart is safe but novelty features temporarily reset; deployments must surface a `state_warm=false` operational field during the warm-up period rather than treating all first-seen destinations as equally trustworthy.
+For HA/restarts, recent source history and one-hour graph counters may be checkpointed. A cold restart is operationally safe but novelty/history features reset. Any research deployment should surface `state_warm=false` during warm-up instead of interpreting every first-seen destination as meaningful anomaly evidence.
 
-## V1 response policy
-
-V1 promotion target is alert/enrichment only:
+## Final V1 response policy
 
 ```text
-risk < promoted threshold     -> no ML alert
-risk >= promoted threshold    -> remote_admin_ml alert
-M0 deterministic alert        -> Suricata alert independently
-M0 + high M1                  -> increase SOC priority
-M2 anomaly only               -> shadow telemetry
+Suricata deterministic match -> audit / visibility event
+M1 score                      -> shadow research telemetry only
+M2 score                      -> shadow research telemetry only
+M0 + M1 + M2 agreement        -> still not an enforcement decision in V1
 ```
 
-Automatic packet drop, IP blocking or runtime dataset insertion is intentionally deferred. It requires a separate production false-positive study, rollback procedure and approval threshold because legitimate helpdesk/deployment/admin bursts are hard negatives by design.
+Automatic packet drop, IP blocking, account action, host quarantine or runtime relabelling is prohibited for this V1 result.
 
-## Rollback and reproducibility
+## Why no promotion occurs
 
-A model release is not accepted unless its exact feature-contract hash, metrics, split policy and source Gold release are retained. If a parser or feature implementation changes, rebuild Silver/Gold from Bronze `*.pcap.zst`; do not regenerate traffic merely to recompute features.
+The blocker is not merely an arbitrary threshold. Under corrected full-timeline sampling, strict challenge budgets and causal state replay:
 
-The intended storage hierarchy is:
+1. M1 validation/test discrimination is around chance level;
+2. simple rate/time/duration/bytes/port-protocol families are as strong as or stronger than full M1;
+3. challenge campaign recall at the chosen low-FPR operating point is zero;
+4. the grouped learning curve does not improve with all 1k sessions;
+5. therefore scaling the same generator distribution is not supported by evidence.
+
+The correct research conclusion is `REJECTED_MODEL_QUALITY`, not threshold relaxation.
+
+## What would justify a V2 promotion attempt
+
+A new promotion attempt should change the hypothesis, for example by adding one or more of:
+
+- richer longitudinal policy/user/host context available to the intended product;
+- independently collected network environments instead of more rows from one GitHub namespace lab;
+- native Windows RDP/WinRM/DCOM cohorts;
+- real/reference benign administration data;
+- explicit organizational authorization context if such context is available at inference time;
+- new temporal/session/campaign representations that are evaluated without split leakage.
+
+Any V2 must first pass a fresh 1k gate with low-FPR recall, hard-benign, unseen implementation/persona/pair/temporal slices and shortcut audit before larger fan-out.
+
+## Rollback, storage and reproducibility
+
+Final rejected V1 evidence is intentionally retained so the research can be reproduced or re-featured without regenerating traffic.
+
+Private HF quarantine:
 
 ```text
-releases/<release-id>/
-  bronze/<shard>/      # full PCAP + manifests + checksums
-  silver/<shard>/      # Suricata/Zeek raw parser logs
-  gold/<shard>/        # research/session and production-flow features
-  quality/<shard>/     # mapping/parser/leakage gates
-  merged/              # global split/model analysis
-  production-promoted/ # parser-flow final models/reports
+Maksim123321/remote-admin-anomaly-v1/
+└── quarantine/rejected/gh-31818445960/
+    ├── release/
+    │   ├── bronze/H-research-1k/   # full PCAP + manifests + checksums
+    │   ├── silver/H-research-1k/   # raw Suricata/Zeek
+    │   ├── gold/H-research-1k/     # production-flow matrices/labels/splits
+    │   └── quality/H-research-1k/  # mapping/parser/leakage evidence
+    ├── models/
+    ├── evaluation/
+    ├── RESEARCH_GATE.json
+    └── NEGATIVE_RESEARCH_VERIFIED.json
 ```
+
+GitHub fallback:
+
+- research run `31818445960`;
+- artifact `remote-admin-research-gate-v2-31818445960`;
+- Artifact ID `9226887886`;
+- digest `sha256:40a463b9f16d4251d3b40b8915ef7a7425a883edd2916484acab660328fbbf72`;
+- 90-day retention.
+
+If parser or feature logic changes, rebuild Silver/Gold from Bronze `H-research-1k.pcap.zst`; do not regenerate traffic merely to recompute features.
+
+The quarantine path is a research rollback source, **not** a production-promoted model/data release.
