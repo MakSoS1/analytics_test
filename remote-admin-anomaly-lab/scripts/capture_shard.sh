@@ -12,6 +12,7 @@ COUNT="$3"
 SEED="$4"
 OUT_ROOT="$(realpath -m "$5")"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON_BIN="${ADMINLAB_PYTHON:-python3}"
 STATE_DIR="$OUT_ROOT/state/$SHARD"
 RUN_DIR="$OUT_ROOT/work/$SHARD"
 RELEASE="$OUT_ROOT/release"
@@ -20,6 +21,11 @@ QUALITY="$RELEASE/quality/$SHARD"
 RAW_PCAP="$RUN_DIR/$SHARD.pcap"
 COMPRESSED_PCAP="$BRONZE/captures/$SHARD.pcap.zst"
 TCPDUMP_PGID=""
+
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo "configured ADMINLAB_PYTHON is not executable: $PYTHON_BIN" >&2
+  exit 2
+fi
 
 mkdir -p "$RUN_DIR" "$BRONZE/captures" "$BRONZE/manifests" "$QUALITY"
 
@@ -55,7 +61,7 @@ TCPDUMP_PGID=$!
 sleep 1
 kill -0 -- "-$TCPDUMP_PGID"
 
-sudo -E python "$ROOT/scripts/run_scenarios.py" \
+PYTHONPATH="$ROOT/src" "$PYTHON_BIN" "$ROOT/scripts/run_scenarios.py" \
   --stage "$STAGE" \
   --count "$COUNT" \
   --seed "$SEED" \
@@ -78,7 +84,7 @@ fi
 zstd -T0 -q -9 -f "$RAW_PCAP" -o "$COMPRESSED_PCAP"
 zstd -q -t "$COMPRESSED_PCAP"
 
-PYTHONPATH="$ROOT/src" python "$ROOT/scripts/package_bronze.py" \
+PYTHONPATH="$ROOT/src" "$PYTHON_BIN" "$ROOT/scripts/package_bronze.py" \
   --topology "$ROOT/configs/topology.yaml" \
   --executed "$RUN_DIR/scenarios/sessions-executed.jsonl" \
   --planned "$RUN_DIR/scenarios/sessions-planned.jsonl" \
@@ -109,7 +115,7 @@ cat > "$QUALITY/capture_health.json" <<JSON
 }
 JSON
 
-PYTHONPATH="$ROOT/src" python - "$BRONZE" "$QUALITY/bronze_contract.json" <<'PY'
+PYTHONPATH="$ROOT/src" "$PYTHON_BIN" - "$BRONZE" "$QUALITY/bronze_contract.json" <<'PY'
 import json, sys
 from pathlib import Path
 from adminlab.quality import validate_bronze_tree
