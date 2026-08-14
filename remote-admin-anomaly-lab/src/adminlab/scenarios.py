@@ -105,7 +105,7 @@ def _make_record(
         dst_host_id=str(dst["id"]),
         src_ip=_bare_ip(str(src["ip"])),
         dst_ip=_bare_ip(str(dst["ip"])),
-        src_port=49152 + rng.randrange(0, 16384),
+        src_port=0,
         dst_port=PORTS[protocol],
         protocol=protocol,
         action=str(family["action"]),
