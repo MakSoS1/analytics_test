@@ -1,0 +1,52 @@
+name: Remote Admin Anomaly V3 Planner Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [remote-admin-anomaly-lab-v3]
+    paths:
+      - 'remote-admin-anomaly-lab/src/adminlab/v3_*.py'
+      - 'remote-admin-anomaly-lab/scripts/v3_planner_audit.py'
+      - 'remote-admin-anomaly-lab/scripts/run_scenarios_extended_v2.py'
+      - 'remote-admin-anomaly-lab/configs/v3_research.yaml'
+      - '.github/workflows/remote-admin-v3-planner.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-admin-v3-planner-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  planner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install planner runtime
+        working-directory: remote-admin-anomaly-lab
+        run: python -m pip install -r requirements.txt
+      - name: Audit exact V3 1k plan
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p /tmp/v3-planner
+          python scripts/v3_planner_audit.py \
+            --count 1000 \
+            --seed 2026081403 \
+            --config configs/v3_research.yaml \
+            --out /tmp/v3-planner/V3_PLANNER_AUDIT.json
+      - name: Retain planner evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-v3-planner-${{ github.run_id }}
+          path: /tmp/v3-planner
+          retention-days: 14
