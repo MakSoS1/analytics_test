@@ -2,123 +2,194 @@
 
 **Branch:** `remote-admin-anomaly-lab-v1`  
 **Started:** 2026-08-14  
+**V1 research closed:** 2026-08-14  
+**Final V1 decision:** `STOP_AT_1K` / `REJECTED_MODEL_QUALITY` / no model promotion  
 **Design spec:** `docs/superpowers/specs/2026-08-14-remote-admin-anomaly-lab-v1-design.md`  
 **Implementation plan:** `docs/superpowers/plans/2026-08-14-remote-admin-anomaly-lab-v1.md`
 
 ## Rules for this tracker
 
 - A checkbox is marked complete only after test/workflow evidence exists.
-- Record run IDs, counts, parser coverage, sizes and storage locations as they become available.
-- Do not publish PCAP as GitHub Release assets.
+- A completed research milestone does **not** imply that its model hypothesis passed.
+- Record run IDs, counts, parser coverage, sizes and storage locations as evidence becomes available.
+- Never publish PCAP as GitHub Release assets.
 - Bronze full PCAP is the rollback source of truth.
-- Suricata alerts are detector output, never ground truth labels.
+- Suricata alerts are detector output/telemetry, never ground-truth labels.
+- A red scientific quality gate is preserved when the evidence rejects promotion; it is not weakened to obtain a green workflow.
+
+## Final V1 status
+
+The lab/data pipeline is validated end to end, but the V1 flow-model hypothesis is rejected.
+
+- Final research source: run `31818445960`.
+- Retained Actions artifact: `remote-admin-research-gate-v2-31818445960`, Artifact ID `9226887886`.
+- Artifact size: `718,832,312` B.
+- Artifact digest: `sha256:40a463b9f16d4251d3b40b8915ef7a7425a883edd2916484acab660328fbbf72`.
+- Finalizer: run `31821404669` — GREEN.
+- Finalizer contract evidence: run `31821362433` — GREEN.
+- Private HF quarantine: `Maksim123321/remote-admin-anomaly-v1/quarantine/rejected/gh-31818445960`.
+- HF status: `UPLOADED_AND_VERIFIED_QUARANTINE`; the path is deliberately **not promoted**.
+- Scale: `STOP_AT_1K`, `allow_scale=false`, `next_sessions=0`.
+- Model promotion: `NONE`.
 
 ## Milestones
 
-- [x] M0 — approved design fixed in repository.
-- [x] M1 — configuration/schema contract passes. Evidence: run `31787756618`, 5/5 tests PASS.
-- [x] M2 — canonical scenario planner and ground-truth manifests pass. Evidence: run `31787949680`, 11/11 tests PASS.
-- [x] M3 — namespace topology isolation passes. Evidence: run `31788233293`; 15 namespaces, internal connectivity PASS, external/default-route isolation PASS.
-- [x] M4 — real SSH/SMB wire smoke passes.
-  - Final GREEN: run `31788947200`; 40/40 real sessions, SSH 25 / SMB 15, benign 32 / suspicious 8, safe service stop and topology teardown.
-- [x] M5 — complete Bronze PCAP + manifests/checksums produced.
-  - First packaging run `31789349007` captured traffic but failed because root Python could not import `pandas`; partial artifact retained but was not accepted as Bronze.
-  - TDD interpreter-propagation RED: run `31789576028`.
-  - Final GREEN: run `31789649604`; all jobs PASS.
-  - `A-smoke-00`: 40 sessions; raw PCAP 2,710,821 B; retained `pcap.zst` 1,851,067 B.
-  - Bronze checksum gate: 8 checksum entries verified, zero errors.
-  - Manifest set: sessions JSONL + sessions/ground_truth/hosts/campaigns Parquet + reproducibility metadata.
-  - Actions artifact: `remote-admin-bronze-smoke-31789649604`, Artifact ID `9214949423`, artifact size 1,954,386 B, 90-day retention, ZIP SHA256 `dce853d31a4856c8b7216353489b141d059a278e00f7a7fb23ed606162c60d98`.
-- [x] M6 — Suricata + Zeek Silver output produced.
-  - First Silver attempt `31790193120` proved Bronze valid but failed on root-owned release directory before parser output; partial artifact was retained but not accepted.
-  - Ownership handoff fixed: privileged capture now returns the entire output tree to runner UID/GID before Silver/Gold/HF stages.
-  - Final GREEN: run `31790538926`; contract, topology, Bronze and Silver gates all PASS.
-  - Parser versions: Suricata `7.0.3 RELEASE`; Zeek `8.2.1` pinned as `zeek/zeek:8.2.1`.
-  - Parser visibility on the 40-session smoke: 304 Suricata EVE lines, 102 Suricata flow events, 66 SSH-related events, 179 SMB-related events; 102 Zeek `conn.log` lines, 45 SSH log lines, 60 SMB log lines.
-  - Important mapping result: 40 orchestrator sessions generated 102 actual TCP connections, therefore Gold must support session→many-flows aggregation and must not assume one manifest row equals one flow.
-  - Silver sizes: `eve.json.zst` 11,280 B; `conn.log.zst` 4,870 B.
-  - Combined Bronze+Silver Actions artifact: `remote-admin-dataset-smoke-31790538926`, Artifact ID `9215318136`, size 1,974,898 B, ZIP SHA256 `d2c5e4573ba9e3a83eedcbc816b7bfed5126472d4faa6195ea1b5ed7c7a980d8`, 90-day retention.
-  - Note: stock Suricata emitted a warning that no external ruleset was loaded; this does not invalidate the parser layer, but M0 deterministic T1021 rules must be added before final model comparison.
-- [ ] M7 — RDP/VNC/DCE-RPC/partial WinRM fidelity matrix measured.
-- [ ] M8 — Gold features + grouped splits + leakage audit pass.
-- [ ] M9 — HF persistence tested; fallback Actions artifacts documented.
-- [ ] M10 — staged dataset fan-out runs.
-- [ ] M11 — M0/M1/M2 models trained/evaluated.
-- [ ] M12 — NGFW integration and final storage/rebuild instructions documented.
+- [x] **M0 — design and safety boundary fixed.**
+  - Isolated namespace lab; no endpoint default route/NAT.
+  - No malware/C2 framework payload execution in V1.
+  - Sliver/Mythic/Havoc/Cobalt Strike/Metasploit-style traffic deliberately excluded from V1.
 
-## Storage contract
+- [x] **M1 — configuration/schema contracts pass.**
+  - Initial evidence run `31787756618`.
+  - Final contract after all corrections: run `31817735933` — GREEN.
+  - `SessionRecord` includes `server_stack` and `implementation_id`; serialization is covered by tests.
 
-Expected Hugging Face dataset repository: `Maksim123321/remote-admin-anomaly-v1`.
+- [x] **M2 — digital-twin planner and ground truth pass.**
+  - Initial planner evidence run `31787949680`.
+  - Final planner audit run `31817778803` — GREEN.
+  - Exact 1k plan: 500 benign / 500 suspicious; SSH/SMB/RDP/VNC = 250 each; every protocol spans all 45 simulated days.
+  - Challenge share reduced from the earlier distorted 53.8% to 34.0% by enforcing strict holdout impact budgets.
+
+- [x] **M3 — namespace topology isolation passes.**
+  - Evidence run `31788233293`.
+  - 15 namespaces; internal connectivity PASS; external/default-route isolation PASS.
+
+- [x] **M4 — core real SSH/SMB wire smoke passes.**
+  - Evidence run `31788947200`: 40/40 real sessions; SSH 25 / SMB 15.
+
+- [x] **M5 — recoverable Bronze PCAP/manifests/checksums pass.**
+  - Initial accepted Bronze run `31789649604`.
+  - Final research run `31818445960`: 1000/1000 successful behavioral sessions and full compressed Bronze PCAP retained.
+  - Final research `pcap.zst`: `227,883,905` B.
+  - Capture is never deleted merely because features/models were built.
+
+- [x] **M6 — Suricata + Zeek Silver passes.**
+  - Initial Silver evidence run `31790538926`.
+  - Final research: 14,925 Suricata EVE lines, 2,705 Zeek conn records.
+  - Raw/background traffic remains in Silver even when it is ineligible for direct flow-to-session mapping.
+
+- [x] **M7 — V1 fidelity matrix finalized.**
+  - SSH: real OpenSSH wire.
+  - SMB: real smbclient/Samba plus real alternate smbprotocol client.
+  - RDP: real FreeRDP -> xrdp wire, validated in current V4/implementation gates.
+  - VNC: real RFB client -> TigerVNC wire, validated in current V4/implementation gates.
+  - Updated V4 evidence: run `31817920754` — GREEN.
+  - Updated alternative-client evidence: run `31817953836` — GREEN; Paramiko and smbprotocol observed on wire.
+  - Native Windows DCOM/DCE-RPC and native Windows WinRM are **not claimed as solved**. Linux/Samba or bounded WS-Man fixtures are partial semantics only and stay outside promoted V1 training claims.
+
+- [x] **M8 — production-compatible Gold, grouped splits and leakage audit pass.**
+  - Suricata normalization uses `flow.start` for offline flow timing where available.
+  - Nullable EVE handling is aligned offline/online.
+  - Production feature implementation: `adminlab.online_features.EveFeatureState`.
+  - Held-out evaluation uses causal prior-train reference context rather than an artificial empty state.
+  - Final Gold rows: 2,263 parser-observed flows.
+  - Suricata raw flows: 2,705; eligible: 2,271; mapped: 2,263; background: 434.
+  - Flow mapping coverage: `0.9964773`.
+  - Session mapping coverage: `0.993`.
+  - Per-protocol session mapping: RDP `1.0`, SMB `1.0`, SSH `0.972`, VNC `1.0`.
+  - UID alignment: `1.0`.
+  - Leakage audit: PASS.
+
+- [x] **M9 — persistence/recovery path verified.**
+  - GitHub Actions artifact is retained first for 90 days.
+  - Negative research release uploaded to private HF quarantine by finalizer `31821404669`.
+  - Verified HF files include Bronze `pcap.zst`, Suricata EVE, Zeek conn, Gold model matrix, M1 metrics and challenge evaluation.
+  - GitHub Release PCAP assets are never used.
+
+- [x] **M10 — staged fan-out gate executed and terminated by evidence.**
+  - Research scale gate completed at 1,000 sessions.
+  - 4k/10k/20k/40k fan-out was intentionally **not** launched because grouped learning-curve evidence rejects scaling the same generator/model hypothesis.
+  - Final decision file: `SCALE_DECISION_NEGATIVE.json`.
+
+- [x] **M11 — M0/M1/M2 trained and evaluated; model hypothesis rejected.**
+  - M1 validation PR-AUC `0.5074707204`, ROC-AUC `0.4480471079`.
+  - M1 test PR-AUC `0.5137590769`, ROC-AUC `0.4605629446`.
+  - M1 challenge PR-AUC `0.4222839299`, ROC-AUC `0.4989922318`.
+  - Challenge campaign recall at the primary operating point: `0.0`.
+  - Hard-benign FPR: `0.0033613445` (2 FP / 595 hard-benign flows).
+  - Nuisance-only baselines outperform full M1; `shortcut_risk` correctly remains the automatic rejection reason.
+  - Learning curve: last delta PR-AUC `-0.0138075260`; recommendation `prefer_diversity_or_holdout_analysis`.
+  - Scientific conclusion: more rows from the same distribution are not justified.
+
+- [x] **M12 — NGFW/storage/rebuild posture documented.**
+  - No V1 ML model is promoted to enforcement.
+  - Suricata deterministic T1021-family rules remain visibility/audit telemetry, not labels and not proof of maliciousness.
+  - M1 LightGBM and M2 Isolation Forest remain shadow/research-only.
+  - `docs/NGFW_INTEGRATION.md`, `docs/FIDELITY_MATRIX.md`, this PLAN and the autogenerated negative-result files are the final V1 deployment/research contract.
+
+## Final storage contract
+
+Primary recoverable private path:
 
 ```text
-releases/<run-id>/<shard>/
-├── bronze/<shard>/
-│   ├── captures/<shard>.pcap.zst
-│   ├── manifests/
-│   ├── reproducibility.json
-│   └── checksums.sha256
-├── silver/<shard>/
-│   ├── suricata/eve.json.zst
-│   ├── zeek/*.zst
-│   └── parser_versions.json
-├── gold/<shard>/
-│   ├── flow_features.parquet
-│   ├── window_features.parquet
-│   ├── graph_features.parquet
-│   └── splits.parquet
-└── quality/<shard>/
-    ├── capture_health.json
-    ├── parser_health.json
-    └── leakage_checks.json
+Maksim123321/remote-admin-anomaly-v1/
+└── quarantine/rejected/gh-31818445960/
+    ├── NEGATIVE_RESEARCH_VERIFIED.json
+    ├── RESEARCH_GATE.json
+    ├── release/
+    │   ├── bronze/H-research-1k/
+    │   │   ├── captures/H-research-1k.pcap.zst
+    │   │   ├── manifests/
+    │   │   ├── reproducibility.json
+    │   │   └── checksums.sha256
+    │   ├── silver/H-research-1k/
+    │   │   ├── suricata/eve.json.zst
+    │   │   ├── suricata-rules/eve.json.zst
+    │   │   ├── zeek/*.log.zst
+    │   │   └── parser_versions.json
+    │   ├── gold/H-research-1k/
+    │   │   ├── production_flow_features.parquet
+    │   │   ├── production_flow_labels.parquet
+    │   │   ├── production_model_matrix.parquet
+    │   │   └── production_splits.parquet
+    │   └── quality/H-research-1k/
+    ├── models/
+    └── evaluation/
 ```
 
-If `HF_TOKEN` is unavailable in `analytics_test`, the same release tree must remain in a 90-day GitHub Actions artifact. GitHub secrets are non-readable, so no attempt is made to extract the value from `Ansible_lab`.
+Fallback/reproducibility copy:
 
-## Run results
+- GitHub Actions run `31818445960`.
+- Artifact `remote-admin-research-gate-v2-31818445960`, ID `9226887886`.
+- Retention: 90 days from the research run.
+- Digest: `sha256:40a463b9f16d4251d3b40b8915ef7a7425a883edd2916484acab660328fbbf72`.
 
-### Configuration / unit tests
+The HF location is a **quarantine/rejected** research path. It is a durable rollback/source corpus, not an assertion that the detector is production-ready.
 
-- M1 RED `31787693161` -> GREEN `31787756618`.
-- M2 RED `31787871563` -> GREEN `31787949680`.
-- M3 RED `31788020553` -> GREEN `31788233293`.
-- M4 final GREEN `31788947200`.
-- M5 initial packaging failure `31789349007`; interpreter RED `31789576028`; final GREEN `31789649604`.
-- M6 ownership/parser failure `31790193120`; final GREEN `31790538926`.
+## Accepted challenge/evaluation design
 
-### Wire / Bronze smoke
+Final 1k challenge reasons at session level:
 
-- 40/40 successful real sessions.
-- SSH: 25; SMB: 15.
-- Benign: 32; suspicious: 8.
-- Complete PCAP retained compressed, not discarded after feature preparation.
-- `src_port` is not invented by the orchestrator: `0` means unknown until observed from PCAP/Suricata/Zeek.
-- Latest Bronze in M6: raw 2,710,834 B -> retained zstd 1,848,045 B; 8 checksums validated; ownership safely handed to runner UID/GID 1001:1001.
+- `temporal_future`: 101 sessions.
+- `unseen_client_implementation`: 187 sessions.
+- `unseen_host_pair`: 46 sessions.
+- `unseen_persona`: 38 sessions.
+- `unseen_src_host`: skipped because every whole-host candidate exceeded the declared 8% group-impact budget; the splitter now fails closed instead of distorting the benchmark.
 
-### Parser smoke
+Generic session splits after explicit challenge holdouts:
 
-- Suricata `7.0.3 RELEASE`, Zeek `8.2.1`.
-- 102 flows/connections observed by both parsers from 40 orchestrator sessions.
-- Suricata: 304 EVE / 102 flow / 66 SSH-related / 179 SMB-related.
-- Zeek: 102 conn / 45 SSH / 60 SMB log lines.
-- Result: Silver contract PASS and raw compressed parser logs retained.
+- train: 463 sessions;
+- validation: 97 sessions;
+- test: 100 sessions;
+- challenge: 340 sessions.
 
-### HF persistence
+Counterfactual pairs/campaign groups remain indivisible across splits. Evaluation metadata and implementation/persona/host identifiers remain forbidden from production model features.
 
-- Status: pending.
+## Final research decision
 
-### Dataset shards
+`REJECTED_MODEL_QUALITY` does **not** mean the data pipeline failed. The full pipeline reached real wire, Bronze, Silver, Gold, model training and challenge evaluation successfully. The rejection is the scientific result:
 
-- Status: pending.
+1. M1 generalization is approximately chance-level under proper grouped/held-out evaluation.
+2. Simple nuisance families (`rate`, `time`, `duration`, `bytes`, `port/protocol`) are at least as predictive as, and often more predictive than, full M1 on validation.
+3. Primary-threshold recall on the challenge cohort is effectively zero.
+4. Grouped learning curve does not improve at 100% of the 1k corpus.
+5. Therefore multiplying the same synthetic-real lab distribution to 4k/10k would spend compute/storage without evidence of expected model improvement.
 
-### Model evaluation
+A V2 may reopen research only with a materially different hypothesis, for example richer longitudinal/user-policy context, endpoint/identity context available to the intended product, additional truly independent network environments, native Windows fidelity cohorts, or external real/reference data. A V2 must pass a new 1k gate before any larger fan-out.
 
-- Status: pending.
+## Known external limitations retained honestly
 
-## Discovered limitations / design changes
-
-- 2026-08-14: local assistant container cannot resolve `github.com`; target-environment verification is performed by GitHub Actions.
-- 2026-08-14: unrelated legacy `mbi-hourly-monitor.yml` may fail independently; only the dedicated remote-admin workflow is used as project evidence.
-- 2026-08-14: endpoint daemons must run in dedicated process groups. Broad namespace PID cleanup was removed after it terminated the Actions job despite successful traffic generation.
-- 2026-08-14: an orchestrator cannot truthfully predict the ephemeral source port selected by a real client stack. Planned/executed ground truth therefore keeps `src_port=0`; real source ports are parser-observed fields in Silver/Gold.
-- 2026-08-14: root privileges end with capture/topology teardown. Dataset ownership is handed back to the runner before Silver/Gold/HF, preventing privileged parser/model stages.
-- 2026-08-14: session manifests are behavioral units, not direct TCP-flow rows. One session may intentionally create multiple flows; feature extraction must aggregate a variable number of parser-observed connections back to one orchestrator session.
+- Native Windows DCOM/DCE-RPC and native Windows WinRM fidelity are not provided by the Linux namespace lab.
+- No independent external/reference corpus was available in the final V1 run; reference validation remains unavailable rather than fabricated.
+- GitHub-hosted runners are not a substitute for independent organizations/ASNs/OS estates; environment shift remains an external validation requirement.
+- V1 intentionally excludes advanced C2 frameworks to avoid learning framework fingerprints instead of remote-admin behavior.
