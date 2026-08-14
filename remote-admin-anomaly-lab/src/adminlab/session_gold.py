@@ -7,7 +7,15 @@ from datetime import datetime, timezone
 import pandas as pd
 
 
-WINDOWS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "24h": 86400}
+WINDOWS = {
+    "1m": 60,
+    "5m": 300,
+    "15m": 900,
+    "1h": 3600,
+    "24h": 86400,
+    "7d": 7 * 86400,
+    "30d": 30 * 86400,
+}
 
 
 def _ts(value: object) -> float:
@@ -39,6 +47,13 @@ def _assert_consistent(group: pd.DataFrame, field: str, session_id: str) -> obje
     return vals[0] if vals else ""
 
 
+def _protocol_switch_count(events: list[tuple[float, str, str, int]]) -> int:
+    if len(events) < 2:
+        return 0
+    ordered = sorted(events, key=lambda event: event[0])
+    return sum(1 for left, right in zip(ordered, ordered[1:]) if left[2] != right[2])
+
+
 def build_session_gold(
     flow_features: pd.DataFrame,
     flow_labels: pd.DataFrame,
@@ -51,6 +66,10 @@ def build_session_gold(
     equivalent to production src/dst IP keys. They are never emitted as model
     features. Evaluation-only task/persona/fidelity metadata stays exclusively
     in the label table so hard-negative and slice audits remain reproducible.
+
+    V3 extends the same single chronological pass with 7d/30d graph/history
+    features. Every emitted value is computed before the current session is
+    added to state, so future rows cannot alter earlier session features.
     """
     required_features = {"flow_uid", "session_id"}
     required_labels = {
@@ -82,7 +101,8 @@ def build_session_gold(
         order.append((_ts(_assert_consistent(grp, "start_ts", sid)), sid))
     order.sort(key=lambda item: (item[0], item[1]))
 
-    source_history: dict[str, list[tuple[float, str, str]]] = defaultdict(list)
+    # History tuple: (timestamp, destination, protocol, was_new_destination_at_that_time)
+    source_history: dict[str, list[tuple[float, str, str, int]]] = defaultdict(list)
     pair_seen: Counter[tuple[str, str]] = Counter()
     pair_last_ts: dict[tuple[str, str], float] = {}
     source_protocols: dict[str, set[str]] = defaultdict(set)
@@ -99,7 +119,8 @@ def build_session_gold(
         end = _ts(_assert_consistent(grp, "end_ts", sid))
 
         history = source_history[src]
-        def recent(seconds: int) -> list[tuple[float, str, str]]:
+
+        def recent(seconds: int) -> list[tuple[float, str, str, int]]:
             return [event for event in history if start - seconds <= event[0] < start]
 
         h1m = recent(WINDOWS["1m"])
@@ -107,8 +128,13 @@ def build_session_gold(
         h15m = recent(WINDOWS["15m"])
         h1h = recent(WINDOWS["1h"])
         h24h = recent(WINDOWS["24h"])
+        h7d = recent(WINDOWS["7d"])
+        h30d = recent(WINDOWS["30d"])
         pair = (src, dst)
         recency = start - pair_last_ts[pair] if pair in pair_last_ts else -1.0
+        new_destination = int(dst not in source_destinations[src])
+        new_protocol = int(protocol not in source_protocols[src])
+        new_targets_24h = sum(int(event[3]) for event in h24h)
 
         bytes_total = _numeric(grp.get("bytes_total", pd.Series([0] * len(grp), index=grp.index)))
         packets_total = _numeric(grp.get("packets_total", pd.Series([0] * len(grp), index=grp.index)))
@@ -132,6 +158,7 @@ def build_session_gold(
             "flow_duration_max": float(durations.max()) if len(durations) else 0.0,
             "flow_bytes_mean": float(bytes_total.mean()) if len(bytes_total) else 0.0,
             "flow_bytes_max": float(bytes_total.max()) if len(bytes_total) else 0.0,
+            # Existing V2-compatible history features.
             "prior_sessions_1m": len(h1m),
             "prior_sessions_5m": len(h5m),
             "prior_sessions_15m": len(h15m),
@@ -143,12 +170,26 @@ def build_session_gold(
             "pair_recency_s": float(recency),
             "protocol_seen_prior": int(protocol in source_protocols[src]),
             "source_protocol_diversity_prior": len(source_protocols[src]),
-            "new_dst_prior": int(dst not in source_destinations[src]),
-            "new_protocol_prior": int(protocol not in source_protocols[src]),
+            "new_dst_prior": new_destination,
+            "new_protocol_prior": new_protocol,
             "prior_out_degree_1h": len({event[1] for event in h1h}),
-            "prior_new_edge_count_1h": sum(1 for event in h1h if event[1] != dst),
+            "prior_new_edge_count_1h": sum(int(event[3]) for event in h1h),
             "prior_protocol_entropy_1h": _entropy([event[2] for event in h1h]),
             "prior_protocol_entropy_24h": _entropy([event[2] for event in h24h]),
+            # V3 primary causal history/graph features.
+            "src_distinct_dst_24h_prior": len({event[1] for event in h24h}),
+            "src_distinct_dst_7d_prior": len({event[1] for event in h7d}),
+            "src_distinct_dst_30d_prior": len({event[1] for event in h30d}),
+            "time_since_pair_seen_seconds_prior": float(recency),
+            "new_destination_for_source": new_destination,
+            "new_protocol_for_source": new_protocol,
+            "src_protocol_diversity_7d_prior": len({event[2] for event in h7d}),
+            "src_new_target_count_1h_prior": sum(int(event[3]) for event in h1h),
+            "src_new_target_count_24h_prior": int(new_targets_24h),
+            "src_graph_expansion_rate_24h_prior": float(new_targets_24h / max(1, len(h24h))),
+            "recent_protocol_switch_count_prior": int(_protocol_switch_count(h24h)),
+            "recent_remote_admin_attempt_count_prior": int(len(h24h)),
+            # Time features remain for explicit nuisance auditing/ablation.
             "hour_sin": math.sin(angle),
             "hour_cos": math.cos(angle),
             "is_weekend": int(dt.weekday() >= 5),
@@ -183,7 +224,9 @@ def build_session_gold(
                 label_row[field] = value
         label_rows.append(label_row)
 
-        history.append((start, dst, protocol))
+        # The current session is appended only after all features are emitted.
+        was_new_destination = int(dst not in source_destinations[src])
+        history.append((start, dst, protocol, was_new_destination))
         source_destinations[src].add(dst)
         source_protocols[src].add(protocol)
         pair_seen[pair] += 1
