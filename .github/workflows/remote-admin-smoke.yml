@@ -33,4 +33,4 @@ jobs:
         working-directory: remote-admin-anomaly-lab
         env:
           PYTHONPATH: src
-        run: pytest -q tests/test_config.py tests/test_manifest.py tests/test_scenarios.py
+        run: pytest -q tests
