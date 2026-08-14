@@ -50,6 +50,7 @@ def apply_netem(ns: str, profile_name: str, netem: dict) -> None:
     mtu = int(profile.get("mtu", 1500))
     run(["ip", "netns", "exec", ns, "ip", "link", "set", "dev", "eth0", "mtu", str(mtu)])
     args = ["ip", "netns", "exec", ns, "tc", "qdisc", "replace", "dev", "eth0", "root", "netem"]
+    option_count = 0
     delay = float(profile.get("delay_ms", 0))
     jitter = float(profile.get("jitter_ms", 0))
     loss = float(profile.get("loss_pct", 0))
@@ -59,14 +60,17 @@ def apply_netem(ns: str, profile_name: str, netem: dict) -> None:
         args += ["delay", f"{delay:g}ms"]
         if jitter > 0:
             args += [f"{jitter:g}ms"]
+        option_count += 1
     if loss > 0:
         args += ["loss", f"{loss:g}%"]
+        option_count += 1
     if reorder > 0:
         args += ["reorder", f"{reorder:g}%"]
+        option_count += 1
     if rate > 0:
         args += ["rate", f"{rate:g}mbit"]
-    if len(args) == 9:
-        # netem requires at least one option. Use a zero-delay qdisc for the clean profile.
+        option_count += 1
+    if option_count == 0:
         args += ["delay", "0ms"]
     run(args)
 
@@ -209,7 +213,6 @@ def main() -> int:
     netem = load_yaml(ROOT / "configs/netem.yaml")
     ns_by_host = namespace_by_host(topology)
 
-    # Oversample the planner because Stage A also contains future RDP/VNC/RPC/WinRM families.
     planned = plan_sessions(topology, scenarios, netem, seed=args.seed, count=max(args.count * 12, 240), stage=args.stage)
     records = select_supported(planned, args.count, protocols)
 
