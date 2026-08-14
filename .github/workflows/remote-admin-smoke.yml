@@ -69,3 +69,65 @@ jobs:
         if: always()
         working-directory: remote-admin-anomaly-lab
         run: sudo -E bash scripts/setup_topology.sh down configs/topology.yaml
+
+  wire-smoke:
+    needs: contract-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python runtime
+        run: python -m pip install 'PyYAML>=6,<7'
+      - name: Install real wire services and capture tools
+        working-directory: remote-admin-anomaly-lab
+        run: bash scripts/install_runner.sh
+      - name: Bring up isolated lab
+        working-directory: remote-admin-anomaly-lab
+        run: sudo -E bash scripts/setup_topology.sh up configs/topology.yaml
+      - name: Start OpenSSH and Samba endpoints
+        working-directory: remote-admin-anomaly-lab
+        run: sudo -E bash scripts/start_services.sh start /tmp/adminlab-services
+      - name: Execute benign and suspicious SSH SMB scenarios
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          sudo -E python scripts/run_scenarios.py \
+            --stage A \
+            --count 40 \
+            --seed 20260814 \
+            --protocols ssh,smb \
+            --state-dir /tmp/adminlab-services \
+            --out /tmp/adminlab-wire-smoke
+      - name: Assert real protocol successes and both labels
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('/tmp/adminlab-wire-smoke/summary.json')
+          d = json.loads(p.read_text())
+          assert d['status_counts'] == {'success': 40}, d
+          assert d['success_by_protocol']['ssh'] > 0, d
+          assert d['success_by_protocol']['smb'] > 0, d
+          assert d['label_counts']['benign'] > 0, d
+          assert d['label_counts']['suspicious'] > 0, d
+          assert d['external_targets_allowed'] is False
+          assert d['payload_execution_allowed'] is False
+          print(json.dumps(d, sort_keys=True))
+          PY
+      - name: Retain wire-smoke manifests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-wire-smoke-${{ github.run_id }}
+          path: /tmp/adminlab-wire-smoke
+          retention-days: 30
+      - name: Stop protocol services
+        if: always()
+        working-directory: remote-admin-anomaly-lab
+        run: sudo -E bash scripts/start_services.sh stop /tmp/adminlab-services || true
+      - name: Tear down namespace lab
+        if: always()
+        working-directory: remote-admin-anomaly-lab
+        run: sudo -E bash scripts/setup_topology.sh down configs/topology.yaml || true
