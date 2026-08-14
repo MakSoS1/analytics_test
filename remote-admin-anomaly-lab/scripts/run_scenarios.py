@@ -27,6 +27,8 @@ from adminlab.wire_controls import materialize_wire_controls
 LAB_NETWORK = ip_network("10.77.0.0/24")
 SUPPORTED_PROTOCOLS = {"ssh", "smb"}
 VARIANT_CLIENT = ROOT / "scripts/wire_client_variant.py"
+SMBCLIENT_PROTOCOL_TIMEOUT = 120
+SMBCLIENT_PROCESS_TIMEOUT = 150
 
 
 def run(cmd: list[str], *, check: bool = True, timeout: int = 20) -> subprocess.CompletedProcess:
@@ -183,22 +185,22 @@ def run_smb(r: SessionRecord, ns: str, work_dir: Path) -> None:
         else:
             cmd = _variant_base(ns) + ["smbprotocol", "--dst", r.dst_ip, "--action", "list"]
         for _ in range(reps):
-            run(cmd, timeout=30)
+            run(cmd, timeout=SMBCLIENT_PROCESS_TIMEOUT)
         return
 
     base = [
         "ip", "netns", "exec", ns, "smbclient", f"//{r.dst_ip}/adminlab_admin",
-        "-U", "adminlab_smb%AdminlabSMB-2026!", "-m", "SMB3",
+        "-U", "adminlab_smb%AdminlabSMB-2026!", "-m", "SMB3", "--timeout=120",
     ]
     if r.action == "inert_marker_put":
         size = _transfer_bytes(r, 128 * 1024)
         fixture = work_dir / f"inert-marker-{r.session_id}.bin"
         fixture.write_bytes((b"ADMINLAB-INERT-SMB-MARKER\n" * ((size // 26) + 1))[:size])
         for _ in range(reps):
-            run(base + ["-c", f"put {fixture} {fixture.name}"], timeout=30)
+            run(base + ["-c", f"put {fixture} {fixture.name}"], timeout=SMBCLIENT_PROCESS_TIMEOUT)
     else:
         for _ in range(reps):
-            run(base + ["-c", "ls; get readme.txt /tmp/adminlab-readme.txt"], timeout=20)
+            run(base + ["-c", "ls; get readme.txt /tmp/adminlab-readme.txt"], timeout=SMBCLIENT_PROCESS_TIMEOUT)
 
 
 def execute_record(
