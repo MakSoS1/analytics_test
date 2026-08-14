@@ -34,12 +34,17 @@ behavior_profiles:
     attempts: [2, 5]
     transfer_bytes: [0, 262144]
     auth_outcomes: [success, transient_failure, success]
+  forwarding_session:
+    duration_seconds: [45, 1800]
+    attempts: [1, 3]
+    transfer_bytes: [0, 262144]
+    auth_outcomes: [success, success, transient_failure]
 
 # These profiles are deliberately label-agnostic. Both benign and suspicious
 # campaign classes draw from the same observable profile pool. Intent and
 # relationship history are ground truth context, never direct wire controls.
 protocol_profile_pool:
-  ssh: [short_interactive, medium_interactive, long_interactive, small_transfer, bulk_transfer, maintenance_fanout, reconnect]
+  ssh: [short_interactive, medium_interactive, long_interactive, small_transfer, bulk_transfer, maintenance_fanout, reconnect, forwarding_session]
   smb: [short_interactive, medium_interactive, small_transfer, bulk_transfer, maintenance_fanout, reconnect]
   rdp: [short_interactive, medium_interactive, long_interactive, maintenance_fanout, reconnect]
   vnc: [short_interactive, medium_interactive, long_interactive, reconnect]
