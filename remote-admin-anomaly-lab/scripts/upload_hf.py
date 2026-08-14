@@ -2,14 +2,29 @@
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import json
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from huggingface_hub import HfApi, create_repo
 
 DEFAULT_REPO = "Maksim123321/remote-admin-anomaly-v1"
 REQUIRED_LAYERS = ("bronze", "silver", "gold", "quality")
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        while True:
+            chunk = fh.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def validate_release_shard(release: Path, shard: str) -> dict[str, int]:
@@ -37,6 +52,52 @@ def write_status(path: Path | None, payload: dict) -> None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def stage_quality_for_hf(source: Path, target: Path) -> list[dict]:
+    """Create a recoverable HF transport copy without mutating the release.
+
+    `pktmon format` writes UTF-16 text. Hugging Face's commit endpoint can reject
+    such bytes under a `.txt` filename as binary regular-Git content. We retain
+    the exact original in the GitHub release and losslessly gzip only the HF
+    transport copy. The transform manifest records hashes and sizes so the
+    original bytes can be reconstructed and verified exactly.
+    """
+    shutil.copytree(source, target)
+    transforms: list[dict] = []
+    raw = target / "external" / "windows" / "capture.txt"
+    if raw.is_file() and raw.stat().st_size > 0:
+        original_bytes = raw.stat().st_size
+        original_sha = sha256_file(raw)
+        compressed = raw.with_name(raw.name + ".gz")
+        with raw.open("rb") as src, compressed.open("wb") as dst:
+            with gzip.GzipFile(filename="capture.txt", mode="wb", fileobj=dst, mtime=0) as gz:
+                shutil.copyfileobj(src, gz, length=1024 * 1024)
+        compressed_sha = sha256_file(compressed)
+        compressed_bytes = compressed.stat().st_size
+        raw.unlink()
+        transforms.append(
+            {
+                "original_path": "external/windows/capture.txt",
+                "stored_path": "external/windows/capture.txt.gz",
+                "transform": "gzip_lossless_mtime0",
+                "original_sha256": original_sha,
+                "original_bytes": original_bytes,
+                "stored_sha256": compressed_sha,
+                "stored_bytes": compressed_bytes,
+                "restore": "gzip -dc capture.txt.gz > capture.txt",
+            }
+        )
+    manifest = {
+        "schema_version": 1,
+        "purpose": "lossless transport transforms applied only to the Hugging Face persistence copy",
+        "release_mutated": False,
+        "transforms": transforms,
+    }
+    (target / "HF_PERSISTENCE_TRANSFORMS.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return transforms
 
 
 def main() -> int:
@@ -76,25 +137,34 @@ def main() -> int:
     api = HfApi(token=token)
 
     uploaded: dict[str, str] = {}
-    for layer in REQUIRED_LAYERS:
-        local = release / layer / args.shard
-        remote = f"{args.remote_path.strip('/')}/{layer}/{args.shard}"
-        api.upload_folder(
-            repo_id=args.repo,
-            repo_type="dataset",
-            folder_path=str(local),
-            path_in_repo=remote,
-            token=token,
-            commit_message=f"Remote Admin dataset {args.shard} {layer}",
-        )
-        uploaded[layer] = remote
+    transforms: list[dict] = []
+    with tempfile.TemporaryDirectory(prefix="remote-admin-v2-hf-") as tmp:
+        tmp_root = Path(tmp)
+        for layer in REQUIRED_LAYERS:
+            source = release / layer / args.shard
+            local = source
+            if layer == "quality":
+                local = tmp_root / "quality" / args.shard
+                local.parent.mkdir(parents=True, exist_ok=True)
+                transforms = stage_quality_for_hf(source, local)
+            remote = f"{args.remote_path.strip('/')}/{layer}/{args.shard}"
+            api.upload_folder(
+                repo_id=args.repo,
+                repo_type="dataset",
+                folder_path=str(local),
+                path_in_repo=remote,
+                token=token,
+                commit_message=f"Remote Admin dataset {args.shard} {layer}",
+            )
+            uploaded[layer] = remote
 
     payload = {
         **base,
         "status": "uploaded",
-        "reason": "complete recoverable shard uploaded",
-        "layer_bytes": sizes,
+        "reason": "complete recoverable shard uploaded; transport-only transforms are lossless and documented",
+        "layer_bytes_original_release": sizes,
         "uploaded_paths": uploaded,
+        "transport_transforms": transforms,
     }
     write_status(args.status, payload)
     print(json.dumps(payload, sort_keys=True))
