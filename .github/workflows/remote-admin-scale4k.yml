@@ -1,0 +1,241 @@
+name: Remote Admin Anomaly V1 Scale 4K
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v1]
+    paths:
+      - 'remote-admin-anomaly-lab/.scale4k-trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: remote-admin-scale4k
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      allow_scale: ${{ steps.decision.outputs.allow_scale }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: remote-admin-anomaly-lab-v1
+      - id: decision
+        name: Enforce prior scale decision
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('remote-admin-anomaly-lab/SCALE_DECISION.json').read_text())
+          allow=bool(d.get('allow_scale'))
+          if allow and int(d.get('next_sessions',0))!=4000:
+              raise SystemExit(f"unexpected next_sessions: {d}")
+          with open('/tmp/out','w') as f:
+              f.write(f"allow_scale={'true' if allow else 'false'}\n")
+          print(json.dumps(d,indent=2,sort_keys=True))
+          PY
+          cat /tmp/out >> "$GITHUB_OUTPUT"
+
+  fanout:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.allow_scale == 'true' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - shard: H-scale4k-01
+            seed: 2026082801
+          - shard: H-scale4k-02
+            seed: 2026082802
+          - shard: H-scale4k-03
+            seed: 2026082803
+          - shard: H-scale4k-04
+            seed: 2026082804
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: remote-admin-anomaly-lab-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install real-wire runtime
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m pip install -r requirements.txt
+          bash scripts/install_extended_runner_v2.sh
+          pytest -q tests/test_implementation_holdout.py tests/test_train_serve_parity.py tests/test_scenario_quality.py tests/test_persona_holdout.py
+      - name: Capture 1000 real-wire sessions
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          py="$(command -v python)"
+          sudo -E env ADMINLAB_PYTHON="$py" ADMINLAB_OUTPUT_UID="$(id -u)" ADMINLAB_OUTPUT_GID="$(id -g)" \
+            bash scripts/capture_shard_extended_v4.sh H "${{ matrix.shard }}" 1000 "${{ matrix.seed }}" "/tmp/adminlab-scale/${{ matrix.shard }}"
+      - name: Validate Bronze before parser stage
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from adminlab.quality import validate_bronze_tree
+          shard='${{ matrix.shard }}'; root=Path('/tmp/adminlab-scale')/shard/'release'; bronze=root/'bronze'/shard
+          report=validate_bronze_tree(bronze,verify_checksums=True); assert report['ok'],report
+          s=pd.read_parquet(bronze/'manifests/sessions.parquet'); assert len(s)==1000 and s['status'].eq('success').all()
+          assert set(s['protocol'])=={'ssh','smb','rdp','vnc'}
+          assert len(set(s['implementation_id']))>=6
+          print(report)
+          PY
+      - name: Build raw Silver and M0 rule output
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          release="/tmp/adminlab-scale/${{ matrix.shard }}/release"
+          ADMINLAB_PYTHON="$(command -v python)" bash scripts/build_silver.sh "$release" "${{ matrix.shard }}"
+          bash scripts/build_rule_baseline.sh "$release" "${{ matrix.shard }}"
+      - name: Retain shard Bronze and Silver before aggregation
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-scale4k-${{ matrix.shard }}-${{ github.run_id }}
+          path: /tmp/adminlab-scale/${{ matrix.shard }}/release
+          retention-days: 90
+          compression-level: 0
+
+  blocked:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.allow_scale != 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo '4k fan-out intentionally skipped by evidence-driven SCALE_DECISION.json.'
+
+  aggregate:
+    needs: [prepare, fanout]
+    if: ${{ needs.prepare.outputs.allow_scale == 'true' && needs.fanout.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: remote-admin-anomaly-lab-v1
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install analysis runtime
+        working-directory: remote-admin-anomaly-lab
+        run: python -m pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: remote-admin-scale4k-*-${{ github.run_id }}
+          path: /tmp/scale-download
+          merge-multiple: false
+      - name: Recompute one global Suricata Gold and global holdouts
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p /tmp/scale4k-global
+          python scripts/build_global_suricata_gold.py \
+            --input-root /tmp/scale-download \
+            --out /tmp/scale4k-global/gold \
+            --feature-contract configs/feature_contract.yaml \
+            --split-seed 20260828
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('/tmp/scale4k-global/gold/GLOBAL_GOLD.json').read_text())
+          assert d['behavioral_sessions']==4000,d
+          assert d['shard_count']==4,d
+          assert d['global_splits_recomputed'] is True and d['local_shard_splits_reused'] is False,d
+          assert d['leakage_ok'] is True and d['uid_alignment_coverage']==1.0,d
+          reasons=d['challenge_reason_counts']
+          for required in ('unseen_persona','unseen_host_pair','temporal_future','unseen_client_implementation'):
+              assert reasons.get(required,0)>0,(required,reasons)
+          print(json.dumps(d,indent=2,sort_keys=True))
+          PY
+      - name: Train global M0 M1 M2 and strict evaluations
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p /tmp/scale4k-global/models /tmp/scale4k-global/evaluation
+          python scripts/train_models.py --model-matrix /tmp/scale4k-global/gold/production_model_matrix.parquet --out /tmp/scale4k-global/models --seed 20260828
+          python scripts/evaluate_model_slices.py --model /tmp/scale4k-global/models/M1-lightgbm.joblib --metrics /tmp/scale4k-global/models/M1-lightgbm.metrics.json --model-matrix /tmp/scale4k-global/gold/production_model_matrix.parquet --labels /tmp/scale4k-global/gold/production_flow_labels.parquet --out /tmp/scale4k-global/evaluation/M1-slices.json --bootstrap 1000 --seed 20260828
+          python scripts/evaluate_hard_benign.py --model /tmp/scale4k-global/models/M1-lightgbm.joblib --metrics /tmp/scale4k-global/models/M1-lightgbm.metrics.json --model-matrix /tmp/scale4k-global/gold/production_model_matrix.parquet --labels /tmp/scale4k-global/gold/production_flow_labels.parquet --out /tmp/scale4k-global/evaluation/M1-hard-benign.json
+          python scripts/learning_curve_grouped.py --model-matrix /tmp/scale4k-global/gold/production_model_matrix.parquet --labels /tmp/scale4k-global/gold/production_flow_labels.parquet --out /tmp/scale4k-global/evaluation/M1-learning-curve.json --seed 20260828
+          python scripts/validate_reference.py --generated /tmp/scale4k-global/gold/production_flow_features.parquet --out /tmp/scale4k-global/evaluation/reference-validation.json --bootstrap 1000 --seed 20260828
+      - name: Decide whether scale beyond 4k is scientifically justified
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/scale4k-global'); m1=json.loads((root/'models/M1-lightgbm.metrics.json').read_text()); shortcut=json.loads((root/'models/shortcut-audit.json').read_text()); slices=json.loads((root/'evaluation/M1-slices.json').read_text()); hard=json.loads((root/'evaluation/M1-hard-benign.json').read_text()); curve=json.loads((root/'evaluation/M1-learning-curve.json').read_text()); gold=json.loads((root/'gold/GLOBAL_GOLD.json').read_text())
+          val=m1['splits']['validation']; reasons=slices.get('splits',{}).get('challenge',{}).get('per_challenge_reason',{}); flags=[]
+          if shortcut['shortcut_risk']: flags.append('shortcut_risk')
+          if float(val.get('pr_auc',0))>=0.98: flags.append('suspiciously_high_validation_pr_auc')
+          if hard.get('status')=='ok' and float(hard.get('fpr',0))>0.10: flags.append('hard_benign_fpr_above_10pct')
+          for name in ('unseen_persona','unseen_host_pair','temporal_future','unseen_client_implementation'):
+              if name not in reasons: flags.append('missing_challenge_slice:'+name)
+          delta=curve.get('last_delta_pr_auc'); allow_next=bool(not flags and delta is not None and float(delta)>0.005 and curve.get('scale_recommendation')=='expand')
+          report={'automatic_gate_pass':not shortcut['shortcut_risk'] and float(val['fpr'])<=0.0100001,'review_flags':flags,'allow_next_scale':allow_next,'next_stage_sessions':10000 if allow_next else 0,'validation_pr_auc':val.get('pr_auc'),'validation_roc_auc':val.get('roc_auc'),'validation_fpr':val.get('fpr'),'hard_benign':hard,'learning_curve':curve,'shortcut_audit':shortcut,'challenge_reasons':sorted(reasons),'global_gold':gold,'policy':'only 10k may follow a clean 4k gate; never jump to 20k/40k/201k'}
+          (root/'SCALE4K_DECISION.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n'); print(json.dumps(report,indent=2,sort_keys=True))
+          PY
+      - name: Retain global Gold models and evaluations before optional HF
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-scale4k-global-${{ github.run_id }}
+          path: /tmp/scale4k-global
+          retention-days: 90
+          compression-level: 0
+      - name: Optional private HF persistence after Actions retention
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          RUN_ID: ${{ github.run_id }}
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          if [[ -z "${HF_TOKEN:-}" ]]; then
+            echo 'HF_TOKEN not present in analytics_test; Actions artifacts remain recovery source.'
+            exit 0
+          fi
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+          api=HfApi(token=os.environ['HF_TOKEN']); repo='Maksim123321/remote-admin-anomaly-v1'
+          api.create_repo(repo_id=repo,repo_type='dataset',private=True,exist_ok=True)
+          api.upload_folder(repo_id=repo,repo_type='dataset',folder_path='/tmp/scale-download',path_in_repo=f"releases/{os.environ['RUN_ID']}/shards",commit_message=f"remote-admin 4k Bronze Silver {os.environ['RUN_ID']}")
+          api.upload_folder(repo_id=repo,repo_type='dataset',folder_path='/tmp/scale4k-global',path_in_repo=f"releases/{os.environ['RUN_ID']}/global",commit_message=f"remote-admin 4k global Gold models {os.environ['RUN_ID']}")
+          PY
+      - name: Commit 4k scale result summary
+        run: |
+          cp /tmp/scale4k-global/SCALE4K_DECISION.json remote-admin-anomaly-lab/SCALE4K_AUTOGENERATED.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('remote-admin-anomaly-lab/SCALE4K_AUTOGENERATED.json').read_text())
+          curve=d['learning_curve']; gold=d['global_gold']
+          lines=['# Remote Admin Anomaly V1 — 4K Scale Result','',f'- Global sessions: **{gold["behavioral_sessions"]}**',f'- Production flow rows: **{gold["production_flow_rows"]}**',f'- Validation PR-AUC: **{d["validation_pr_auc"]}**',f'- Validation ROC-AUC: **{d["validation_roc_auc"]}**',f'- Validation FPR: **{d["validation_fpr"]}**',f'- Shortcut risk: **{d["shortcut_audit"]["shortcut_risk"]}**',f'- Review flags: `{d["review_flags"]}`',f'- Last grouped ΔPR-AUC: **{curve.get("last_delta_pr_auc")}**',f'- Allow next scale: **{d["allow_next_scale"]}**',f'- Next stage sessions: **{d["next_stage_sessions"]}**','', 'All four Bronze/Silver shard artifacts are retained independently; global Gold was rebuilt from raw Suricata Silver with global holdouts rather than concatenating local split assignments.','']
+          Path('remote-admin-anomaly-lab/SCALE4K_AUTOGENERATED.md').write_text('\n'.join(lines))
+          PY
+          git fetch origin remote-admin-anomaly-lab-v1
+          git reset --soft origin/remote-admin-anomaly-lab-v1
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add remote-admin-anomaly-lab/SCALE4K_AUTOGENERATED.json remote-admin-anomaly-lab/SCALE4K_AUTOGENERATED.md
+          if ! git diff --cached --quiet; then
+            git commit -m 'docs(remote-admin): persist 4k global scale evaluation'
+            git push origin HEAD:remote-admin-anomaly-lab-v1
+          fi
