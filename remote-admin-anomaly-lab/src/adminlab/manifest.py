@@ -43,6 +43,8 @@ class SessionRecord:
     auth_outcome: str = "success"
     client_stack: str = ""
     simulated_day: int = 0
+    wire_attempts: int = 1
+    wire_transfer_bytes: int = 0
 
     def __post_init__(self) -> None:
         if self.label_binary not in (0, 1):
@@ -55,6 +57,10 @@ class SessionRecord:
             raise ValueError("src_port must be >= 0 and dst_port must be positive")
         if self.simulated_day < 0:
             raise ValueError("simulated_day must be non-negative")
+        if self.wire_attempts <= 0:
+            raise ValueError("wire_attempts must be positive")
+        if self.wire_transfer_bytes < 0:
+            raise ValueError("wire_transfer_bytes must be non-negative")
 
     def to_dict(self) -> dict:
         return asdict(self)
