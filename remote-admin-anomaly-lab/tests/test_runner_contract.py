@@ -27,6 +27,13 @@ def test_service_script_binds_ssh_and_smb_inside_namespaces():
     assert "10.77.0.23" in text
 
 
+def test_service_process_groups_are_isolated_and_cleanup_is_narrow():
+    text = SERVICES.read_text(encoding="utf-8")
+    assert "setsid ip netns exec" in text
+    assert 'kill -- "-$pgid"' in text
+    assert 'for pid in $(ip netns pids' not in text
+
+
 def test_scenario_runner_is_lab_only_and_uses_real_clients():
     text = RUNNER.read_text(encoding="utf-8").lower()
     assert "ip netns exec" in text
