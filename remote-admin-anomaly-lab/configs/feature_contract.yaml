@@ -1,4 +1,4 @@
-feature_contract_version: 6
+feature_contract_version: 7
 production_source: suricata_eve_flow
 
 production_allowlist:
@@ -101,6 +101,8 @@ forbidden:
   - historical_relation
   - auth_outcome
   - client_stack
+  - server_stack
+  - implementation_id
   - simulated_day
   - campaign_position
   - campaign_size
