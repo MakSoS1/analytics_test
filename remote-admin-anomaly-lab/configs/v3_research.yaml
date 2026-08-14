@@ -23,6 +23,8 @@ bronze:
   min_session_pcap_coverage: 0.99
   persist_merged_pcap: false
   reparse_sample_size: 20
+  preserve_complete_raw_chunks: true
+  raw_chunk_packet_target: 50000
 windows:
   runner: windows-2025
   require_same_release_job: true
