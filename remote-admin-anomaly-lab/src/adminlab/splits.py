@@ -69,14 +69,22 @@ def _choose_group_impact_holdout(
     target_fraction: float = 0.05,
     max_fraction: float = 0.10,
     min_rows: int = 3,
-) -> set[str]:
-    """Choose one unseen value by campaign-group impact, not raw frequency."""
+) -> tuple[set[str], str]:
+    """Choose one unseen value without ever exceeding the declared group budget.
+
+    Holding out a raw value may indirectly move many more rows because campaigns
+    and counterfactual pairs are indivisible. A previous fallback selected the
+    least-bad value even when *every* candidate exceeded ``max_fraction``. That
+    made a nominal 4–8% source-host holdout consume 34% of the 1k corpus. An
+    unavailable whole-value holdout is preferable to a distorted benchmark, so
+    this function now fails closed and reports why the dimension was skipped.
+    """
     if column not in frame.columns or frame.empty:
-        return set()
+        return set(), "skipped_missing_column_or_empty"
     total = len(frame)
     candidates = [value for value in sorted(frame[column].fillna("").astype(str).unique()) if value]
     if len(candidates) < 2:
-        return set()
+        return set(), "skipped_insufficient_distinct_values"
     target = max(min_rows, int(round(total * target_fraction)))
     maximum = max(min_rows, int(round(total * max_fraction)))
     impacts: list[tuple[str, int]] = []
@@ -88,18 +96,18 @@ def _choose_group_impact_holdout(
         if impacted >= min_rows:
             impacts.append((value, impacted))
     if not impacts:
-        return set()
+        return set(), "skipped_no_candidate_meeting_min_rows"
     bounded = [item for item in impacts if item[1] <= maximum]
-    pool = bounded or impacts
+    if not bounded:
+        return set(), "skipped_no_candidate_within_impact_budget"
     value, _ = min(
-        pool,
+        bounded,
         key=lambda item: (
             abs(item[1] - target),
-            item[1] > maximum,
             _hash_int(f"impact|{column}|{item[0]}", seed),
         ),
     )
-    return {value}
+    return {value}, "selected_within_impact_budget"
 
 
 def _infer_heldout_implementations(frame: pd.DataFrame) -> set[str]:
@@ -174,16 +182,20 @@ def assign_grouped_splits(sessions: pd.DataFrame, *, seed: int = 20260814) -> tu
     frame["host_pair"] = frame["src_host_id"].astype(str) + "->" + frame["dst_host_id"].astype(str)
     frame["_ts"] = pd.to_datetime(frame["start_ts"], utc=True)
 
-    heldout_src_hosts = _choose_group_impact_holdout(
+    heldout_src_hosts, src_status = _choose_group_impact_holdout(
         frame, "src_host_id", seed=seed, target_fraction=0.04, max_fraction=0.08
     )
-    heldout_pairs = _choose_group_impact_holdout(
+    heldout_pairs, pair_status = _choose_group_impact_holdout(
         frame, "host_pair", seed=seed + 1, target_fraction=0.04, max_fraction=0.08
     )
-    heldout_personas = _choose_group_impact_holdout(
+    heldout_personas, persona_status = _choose_group_impact_holdout(
         frame, "persona_id", seed=seed + 2, target_fraction=0.04, max_fraction=0.08
     )
     heldout_implementations = _infer_heldout_implementations(frame)
+    implementation_status = (
+        "selected_alternative_clients" if heldout_implementations
+        else "skipped_no_alternative_client_implementation"
+    )
 
     group_meta = (
         frame.groupby("group_id", as_index=False)
@@ -231,11 +243,22 @@ def assign_grouped_splits(sessions: pd.DataFrame, *, seed: int = 20260814) -> tu
         "heldout_host_pairs": sorted(heldout_pairs),
         "heldout_personas": sorted(heldout_personas),
         "heldout_client_implementations": sorted(heldout_implementations),
+        "holdout_availability": {
+            "unseen_src_host": src_status,
+            "unseen_host_pair": pair_status,
+            "unseen_persona": persona_status,
+            "unseen_client_implementation": implementation_status,
+        },
+        "holdout_impact_budgets": {
+            "unseen_src_host": {"target_fraction": 0.04, "max_fraction": 0.08},
+            "unseen_host_pair": {"target_fraction": 0.04, "max_fraction": 0.08},
+            "unseen_persona": {"target_fraction": 0.04, "max_fraction": 0.08},
+        },
         "temporal_holdout_groups": sorted(temporal_groups),
         "split_counts": {str(k): int(v) for k, v in out["split"].value_counts().to_dict().items()},
         "group_counts": {str(k): int(v) for k, v in out.groupby("split")["group_id"].nunique().to_dict().items()},
         "challenge_reason_counts": reason_counts,
-        "policy": "explicit group-impact-bounded challenge holdouts; remaining groups class-stratified into train/validation/test",
+        "policy": "strict group-impact-bounded challenge holdouts (unavailable dimensions are skipped); remaining groups class-stratified into train/validation/test",
     }
     return out, report
 
