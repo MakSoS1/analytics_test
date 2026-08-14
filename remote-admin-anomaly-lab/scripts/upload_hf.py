@@ -85,7 +85,7 @@ def main() -> int:
             folder_path=str(local),
             path_in_repo=remote,
             token=token,
-            commit_message=f"Remote Admin V1 {args.shard} {layer}",
+            commit_message=f"Remote Admin dataset {args.shard} {layer}",
         )
         uploaded[layer] = remote
 
