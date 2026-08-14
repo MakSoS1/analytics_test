@@ -27,6 +27,24 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _validate_v3_bronze(bronze: Path) -> None:
+    giant = list((bronze / "captures").rglob("*.pcap*")) if (bronze / "captures").exists() else []
+    if giant:
+        raise ValueError("V3 Bronze must not persist merged/full capture files")
+    required_dirs = {
+        "sessions": list((bronze / "sessions").rglob("*.pcap.zst")),
+        "campaigns": list((bronze / "campaigns").rglob("*.pcap.zst")),
+        "raw_chunks": list((bronze / "raw_chunks").glob("*.pcap.zst")),
+    }
+    empty = [name for name, rows in required_dirs.items() if not rows]
+    if empty:
+        raise ValueError(f"V3 Bronze missing authoritative PCAP groups: {empty}")
+    for name in ("pcap_index.csv", "pcap_index.parquet"):
+        path = bronze / "manifests" / name
+        if not path.is_file() or path.stat().st_size <= 0:
+            raise ValueError(f"V3 Bronze missing non-empty manifests/{name}")
+
+
 def validate_release_shard(release: Path, shard: str) -> dict[str, int]:
     sizes: dict[str, int] = {}
     missing: list[str] = []
@@ -41,9 +59,14 @@ def validate_release_shard(release: Path, shard: str) -> dict[str, int]:
         sizes[layer] = total
     if missing:
         raise ValueError(f"release shard is incomplete: {missing}")
-    bronze_pcaps = list((release / "bronze" / shard / "captures").glob("*.pcap.zst"))
-    if len(bronze_pcaps) != 1 or bronze_pcaps[0].stat().st_size <= 0:
-        raise ValueError("Bronze must contain exactly one non-empty full .pcap.zst capture")
+
+    bronze = release / "bronze" / shard
+    if str(shard).upper().startswith("V3-"):
+        _validate_v3_bronze(bronze)
+    else:
+        bronze_pcaps = list((bronze / "captures").glob("*.pcap.zst"))
+        if len(bronze_pcaps) != 1 or bronze_pcaps[0].stat().st_size <= 0:
+            raise ValueError("Legacy Bronze must contain exactly one non-empty full .pcap.zst capture")
     return sizes
 
 
@@ -67,14 +90,7 @@ def _quality_transport_ignore(source: Path):
 
 
 def stage_quality_for_hf(source: Path, target: Path) -> list[dict]:
-    """Create a recoverable HF transport copy without mutating source data.
-
-    `pktmon format` writes UTF-16 text. Hugging Face's commit endpoint can reject
-    such bytes under a `.txt` filename as binary regular-Git content. The staging
-    tree therefore omits that one source file during copy and writes a lossless,
-    deterministic gzip representation directly at the corresponding destination.
-    A transform manifest records hashes and sizes for exact reconstruction.
-    """
+    """Create a recoverable HF transport copy without mutating source data."""
     raw_source = source / "external" / "windows" / "capture.txt"
     shutil.copytree(source, target, ignore=_quality_transport_ignore(source))
     transforms: list[dict] = []
@@ -88,18 +104,16 @@ def stage_quality_for_hf(source: Path, target: Path) -> list[dict]:
                 shutil.copyfileobj(src, gz, length=1024 * 1024)
         compressed_sha = sha256_file(compressed)
         compressed_bytes = compressed.stat().st_size
-        transforms.append(
-            {
-                "original_path": "external/windows/capture.txt",
-                "stored_path": "external/windows/capture.txt.gz",
-                "transform": "gzip_lossless_mtime0",
-                "original_sha256": original_sha,
-                "original_bytes": original_bytes,
-                "stored_sha256": compressed_sha,
-                "stored_bytes": compressed_bytes,
-                "restore": "gzip -dc capture.txt.gz > capture.txt",
-            }
-        )
+        transforms.append({
+            "original_path": "external/windows/capture.txt",
+            "stored_path": "external/windows/capture.txt.gz",
+            "transform": "gzip_lossless_mtime0",
+            "original_sha256": original_sha,
+            "original_bytes": original_bytes,
+            "stored_sha256": compressed_sha,
+            "stored_bytes": compressed_bytes,
+            "restore": "gzip -dc capture.txt.gz > capture.txt",
+        })
     manifest = {
         "schema_version": 1,
         "purpose": "lossless transport transforms applied only to the Hugging Face persistence copy",
@@ -139,18 +153,12 @@ def main() -> int:
 
     release = args.release.resolve()
     sizes = validate_release_shard(release, args.shard)
-    create_repo(
-        repo_id=args.repo,
-        repo_type="dataset",
-        private=True,
-        exist_ok=True,
-        token=token,
-    )
+    create_repo(repo_id=args.repo, repo_type="dataset", private=True, exist_ok=True, token=token)
     api = HfApi(token=token)
 
     uploaded: dict[str, str] = {}
     transforms: list[dict] = []
-    with tempfile.TemporaryDirectory(prefix="remote-admin-v2-hf-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="remote-admin-hf-") as tmp:
         tmp_root = Path(tmp)
         for layer in REQUIRED_LAYERS:
             source = release / layer / args.shard
