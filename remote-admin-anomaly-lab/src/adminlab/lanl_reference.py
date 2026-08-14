@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from io import StringIO
 from typing import Iterable
 
@@ -19,6 +20,19 @@ NETFLOW_COLUMNS = [
     "dst_packets",
     "src_bytes",
     "dst_bytes",
+]
+WLS_COLUMNS = [
+    "time",
+    "event_id",
+    "user",
+    "domain",
+    "src_device",
+    "dst_device",
+    "logon_type",
+    "logon_type_id",
+    "auth_package",
+    "status",
+    "logon_id",
 ]
 
 
@@ -48,14 +62,7 @@ def parse_netflow_lines(
     remote_admin_ports: set[int],
     max_rows: int,
 ) -> pd.DataFrame:
-    """Parse a bounded LANL 2017 netflow slice without inventing labels.
-
-    Official LANL 2017 network rows contain eleven comma-separated fields:
-    time, duration, source/destination device, protocol, ports, packet counts,
-    and byte counts. Ports may appear as integers or as `PortNNN` tokens.
-    Rows are retained when either endpoint port is in the caller's explicit
-    remote-administration port set.
-    """
+    """Parse a bounded LANL 2017 netflow slice without inventing labels."""
     if max_rows <= 0:
         return pd.DataFrame(columns=NETFLOW_COLUMNS)
     rows: list[dict[str, object]] = []
@@ -66,7 +73,10 @@ def parse_netflow_lines(
         text = str(raw).strip()
         if not text or text.lower().startswith("time,"):
             continue
-        parsed = next(csv.reader(StringIO(text)))
+        try:
+            parsed = next(csv.reader(StringIO(text)))
+        except csv.Error:
+            continue
         if len(parsed) != 11:
             continue
         src_port = _parse_port(parsed[5])
@@ -91,28 +101,74 @@ def parse_netflow_lines(
     return pd.DataFrame(rows, columns=NETFLOW_COLUMNS)
 
 
+def _normalized_wls_csv(text: str) -> dict[str, object] | None:
+    try:
+        parsed = next(csv.reader(StringIO(text)))
+    except csv.Error:
+        return None
+    if len(parsed) != 7:
+        return None
+    logon_type = parsed[4].strip()
+    if logon_type.lower() != "network":
+        return None
+    return {
+        "time": _parse_int(parsed[0]),
+        "event_id": 0,
+        "user": parsed[1].strip(),
+        "domain": "",
+        "src_device": parsed[2].strip(),
+        "dst_device": parsed[3].strip(),
+        "logon_type": logon_type,
+        "logon_type_id": 3,
+        "auth_package": parsed[5].strip(),
+        "status": parsed[6].strip(),
+        "logon_id": "",
+    }
+
+
+def _official_wls_json(text: str) -> dict[str, object] | None:
+    try:
+        event = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(event, dict):
+        return None
+    event_id = _parse_int(event.get("EventID", 0))
+    description = str(event.get("LogonTypeDescription", "")).strip()
+    logon_type_id = _parse_int(event.get("LogonType", 0))
+    # The V2 reference intentionally keeps network-style authentication/logon
+    # context only. Both successful and failed logons are retained when LANL
+    # reports them; neither is re-labeled as suspicious.
+    if description.lower() != "network" and logon_type_id != 3:
+        return None
+    if event_id not in {4624, 4625, 4634, 4648, 4672, 4768, 4769, 4770, 4774, 4776}:
+        return None
+    destination = str(event.get("Computer", event.get("LogHost", event.get("Destination", "")))).strip()
+    source = str(event.get("Source", "")).strip()
+    return {
+        "time": _parse_int(event.get("Time", 0)),
+        "event_id": event_id,
+        "user": str(event.get("UserName", "")).strip(),
+        "domain": str(event.get("DomainName", "")).strip(),
+        "src_device": source,
+        "dst_device": destination,
+        "logon_type": description or ("Network" if logon_type_id == 3 else ""),
+        "logon_type_id": logon_type_id,
+        "auth_package": str(event.get("AuthenticationPackage", "")).strip(),
+        "status": str(event.get("Status", "")).strip(),
+        "logon_id": str(event.get("LogonID", "")).strip(),
+    }
+
+
 def parse_wls_lines(lines: Iterable[str], max_rows: int) -> pd.DataFrame:
-    """Normalize bounded Windows-logon reference rows when logon type is present.
+    """Parse official LANL 2017 Windows JSONL or normalized test interchange.
 
-    This function intentionally accepts the normalized seven-field interchange
-    used by the V2 reference builder:
-      time,user,src_device,dst_device,logon_type,auth_package,status
-
-    The source-specific LANL WLS decoder is responsible for converting the
-    published source schema to this normalized form. No synthetic class label is
-    ever added here.
+    The released `wls_day-XX.bz2` files are JSONL. A compact seven-field CSV
+    interchange remains accepted for local tests and downstream normalized
+    adapters. No class label is added in either path.
     """
-    columns = [
-        "time",
-        "user",
-        "src_device",
-        "dst_device",
-        "logon_type",
-        "auth_package",
-        "status",
-    ]
     if max_rows <= 0:
-        return pd.DataFrame(columns=columns)
+        return pd.DataFrame(columns=WLS_COLUMNS)
     rows: list[dict[str, object]] = []
     for raw in lines:
         if len(rows) >= max_rows:
@@ -120,18 +176,7 @@ def parse_wls_lines(lines: Iterable[str], max_rows: int) -> pd.DataFrame:
         text = str(raw).strip()
         if not text or text.lower().startswith("time,"):
             continue
-        parsed = next(csv.reader(StringIO(text)))
-        if len(parsed) != 7:
-            continue
-        rows.append(
-            {
-                "time": _parse_int(parsed[0]),
-                "user": parsed[1].strip(),
-                "src_device": parsed[2].strip(),
-                "dst_device": parsed[3].strip(),
-                "logon_type": parsed[4].strip(),
-                "auth_package": parsed[5].strip(),
-                "status": parsed[6].strip(),
-            }
-        )
-    return pd.DataFrame(rows, columns=columns)
+        row = _official_wls_json(text) if text.startswith("{") else _normalized_wls_csv(text)
+        if row is not None:
+            rows.append(row)
+    return pd.DataFrame(rows, columns=WLS_COLUMNS)
