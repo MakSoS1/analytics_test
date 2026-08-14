@@ -13,6 +13,8 @@ SEED="$4"
 OUT_ROOT="$(realpath -m "$5")"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON_BIN="${ADMINLAB_PYTHON:-python3}"
+OUTPUT_UID="${ADMINLAB_OUTPUT_UID:-${SUDO_UID:-0}}"
+OUTPUT_GID="${ADMINLAB_OUTPUT_GID:-${SUDO_GID:-0}}"
 STATE_DIR="$OUT_ROOT/state/$SHARD"
 RUN_DIR="$OUT_ROOT/work/$SHARD"
 RELEASE="$OUT_ROOT/release"
@@ -24,6 +26,10 @@ TCPDUMP_PGID=""
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
   echo "configured ADMINLAB_PYTHON is not executable: $PYTHON_BIN" >&2
+  exit 2
+fi
+if [[ ! "$OUTPUT_UID" =~ ^[0-9]+$ || ! "$OUTPUT_GID" =~ ^[0-9]+$ ]]; then
+  echo "ADMINLAB_OUTPUT_UID/GID must be numeric" >&2
   exit 2
 fi
 
@@ -111,7 +117,9 @@ cat > "$QUALITY/capture_health.json" <<JSON
   "raw_pcap_bytes": $RAW_BYTES,
   "compressed_pcap_bytes": $PCAP_BYTES,
   "capture_format": "pcap.zst",
-  "full_capture_retained": true
+  "full_capture_retained": true,
+  "output_owner_uid": $OUTPUT_UID,
+  "output_owner_gid": $OUTPUT_GID
 }
 JSON
 
@@ -132,4 +140,10 @@ rm -f "$RAW_PCAP"
 trap - EXIT INT TERM
 cleanup
 
-echo "bronze_ready=$BRONZE sessions=$SESSION_COUNT pcap_zst_bytes=$PCAP_BYTES"
+# Privileged work ends here. Hand the complete tree back to the invoking runner
+# so Silver/Gold/HF stages can operate without root and cannot mutate networking.
+if [[ "$OUTPUT_UID" != "0" || "$OUTPUT_GID" != "0" ]]; then
+  chown -R "$OUTPUT_UID:$OUTPUT_GID" "$OUT_ROOT"
+fi
+
+echo "bronze_ready=$BRONZE sessions=$SESSION_COUNT pcap_zst_bytes=$PCAP_BYTES output_owner=$OUTPUT_UID:$OUTPUT_GID"
