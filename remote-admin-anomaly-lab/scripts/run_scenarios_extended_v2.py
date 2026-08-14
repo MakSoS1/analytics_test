@@ -24,6 +24,7 @@ from adminlab.extended_wire_v2 import run_rdp_session, run_vnc_session, run_winr
 from adminlab.implementation_variants import materialize_implementation_variants
 from adminlab.manifest import SessionRecord, write_sessions
 from adminlab.v2_scenarios import build_v2_semantic_plan, summarize_v2_plan
+from adminlab.v3_campaigns import audit_v3_campaigns, organize_v3_campaigns
 from adminlab.v3_signal import audit_v3_signal_plan, build_v3_signal_plan
 from adminlab.wire_controls import materialize_wire_controls
 
@@ -194,19 +195,23 @@ def main() -> int:
         stage=args.stage,
     )
     selected = balanced_select(planned, args.count, protocols)
-    selected = organize_campaign_sequences(selected, bundle["campaigns"], seed=args.seed)
+    campaign_report = None
     if args.v3_signal:
         selected = build_v3_signal_plan(
             selected,
             seed=args.seed,
             matched_fraction=args.v3_matched_fraction,
         )
-    elif args.v2_semantic:
-        selected = build_v2_semantic_plan(
-            selected,
-            seed=args.seed,
-            min_counterfactual_fraction=args.v2_counterfactual_fraction,
-        )
+        selected = organize_v3_campaigns(selected, seed=args.seed)
+        campaign_report = audit_v3_campaigns(selected)
+    else:
+        selected = organize_campaign_sequences(selected, bundle["campaigns"], seed=args.seed)
+        if args.v2_semantic:
+            selected = build_v2_semantic_plan(
+                selected,
+                seed=args.seed,
+                min_counterfactual_fraction=args.v2_counterfactual_fraction,
+            )
     selected = materialize_implementation_variants(selected, stage=args.stage, seed=args.seed)
     selected = materialize_wire_controls(selected, bundle["behavior"], seed=args.seed)
     semantic_report = None
@@ -264,9 +269,10 @@ def main() -> int:
         "wire_controls_label_dependent": False,
         "implementation_choice_label_dependent": False,
         "simulated_timeline_preserved": True,
-        "selection_policy": "equal protocol quotas; global-label-fraction quotas per protocol; evenly spaced full-timeline sampling; V3 redistributes time-of-day label-neutrally when enabled",
+        "selection_policy": "equal protocol quotas; full-timeline sampling; V3 exact-time redistribution/matching and source-local campaigns when enabled",
         "v2_semantic": semantic_report if args.v2_semantic else None,
         "v3_signal": semantic_report if args.v3_signal else None,
+        "v3_campaigns": campaign_report if args.v3_signal else None,
         "failures": failures[:20],
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
