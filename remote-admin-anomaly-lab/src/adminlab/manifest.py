@@ -33,6 +33,16 @@ class SessionRecord:
     start_ts: str
     end_ts: str
     status: str
+    persona_id: str = ""
+    task_id: str = ""
+    calendar_id: str = ""
+    intent_profile: str = ""
+    behavior_profile: str = ""
+    campaign_type: str = ""
+    historical_relation: str = ""
+    auth_outcome: str = "success"
+    client_stack: str = ""
+    simulated_day: int = 0
 
     def __post_init__(self) -> None:
         if self.label_binary not in (0, 1):
@@ -40,9 +50,11 @@ class SessionRecord:
         if self.ground_truth_source != "scenario_orchestrator":
             raise ValueError("ground truth must originate from scenario_orchestrator")
         # src_port=0 means "unknown until observed on the real wire". The
-        # orchestrator must not invent the ephemeral port chosen by ssh/smbclient.
+        # orchestrator must not invent the ephemeral port chosen by a real client.
         if self.src_port < 0 or self.dst_port <= 0:
             raise ValueError("src_port must be >= 0 and dst_port must be positive")
+        if self.simulated_day < 0:
+            raise ValueError("simulated_day must be non-negative")
 
     def to_dict(self) -> dict:
         return asdict(self)
