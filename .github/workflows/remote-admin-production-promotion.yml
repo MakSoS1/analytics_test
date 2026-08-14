@@ -1,0 +1,74 @@
+name: Remote Admin Anomaly V1 Production Flow Promotion
+
+on:
+  workflow_run:
+    workflows: ["Remote Admin Anomaly V1 Phase 1 Corpus"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/remote-admin-anomaly-v1
+
+jobs:
+  promote-production-flow:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: remote-admin-anomaly-lab-v1}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12', cache: pip, cache-dependency-path: remote-admin-anomaly-lab/requirements.txt}
+      - name: Install model runtime
+        working-directory: remote-admin-anomaly-lab
+        run: python -m pip install -r requirements.txt
+      - name: Download every complete Phase 1 shard from triggering run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: remote-admin-phase1-full-*-${{ github.event.workflow_run.id }}
+          path: /tmp/adminlab-full-shards
+          merge-multiple: true
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Rebuild production-compatible parser-flow Gold for every shard
+        working-directory: remote-admin-anomaly-lab
+        env: {PYTHONPATH: src}
+        run: |
+          for sessions in /tmp/adminlab-full-shards/bronze/*/manifests/sessions.parquet; do
+            shard="$(basename "$(dirname "$(dirname "$sessions")")")"
+            echo "production-flow-gold shard=$shard"
+            python scripts/build_flow_gold.py --release /tmp/adminlab-full-shards --shard "$shard" --feature-contract configs/feature_contract.yaml --split-seed 20260814
+          done
+      - name: Global parser-flow merge, splits, Stage H challenge policy and leakage audit
+        working-directory: remote-admin-anomaly-lab
+        env: {PYTHONPATH: src}
+        run: python scripts/merge_production_flow_gold.py --root /tmp/adminlab-full-shards --out /tmp/adminlab-production --feature-contract configs/feature_contract.yaml --split-seed 20260814
+      - name: Train promoted production M0 M1 M2 and learning curve
+        working-directory: remote-admin-anomaly-lab
+        env: {PYTHONPATH: src}
+        run: |
+          mkdir -p /tmp/adminlab-production/models
+          python scripts/train_models.py --model-matrix /tmp/adminlab-production/gold/production_model_matrix.parquet --out /tmp/adminlab-production/models --seed 20260814
+          python scripts/learning_curve.py --model-matrix /tmp/adminlab-production/gold/production_model_matrix.parquet --out /tmp/adminlab-production/models/learning_curve.json --seed 20260814
+      - name: Production promotion gate
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=Path('/tmp/adminlab-production'); merge=json.loads((r/'quality/production_merge.json').read_text()); leak=json.loads((r/'quality/production_leakage.json').read_text()); models=json.loads((r/'models/summary.json').read_text()); curve=json.loads((r/'models/learning_curve.json').read_text())
+          assert merge['flow_join_coverage']>=.999,merge
+          assert merge['forced_challenge_groups']>0,merge
+          assert merge['leakage_ok'] is True and leak['ok'] is True,(merge,leak)
+          report={'source_phase1_run':${{ github.event.workflow_run.id }},'production_merge':merge,'models':models['models'],'learning_curve':curve}
+          (r/'PRODUCTION_PROMOTION_REPORT.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n'); print(json.dumps(report,indent=2,sort_keys=True))
+          PY
+      - name: Retain final production Gold and models
+        uses: actions/upload-artifact@v4
+        with: {name: 'remote-admin-production-promoted-${{ github.event.workflow_run.id }}', path: '/tmp/adminlab-production', retention-days: 90, compression-level: 0}
+      - name: Persist final production analysis to private HF when configured
+        working-directory: remote-admin-anomaly-lab
+        env: {HF_TOKEN: '${{ secrets.HF_TOKEN }}'}
+        run: python scripts/upload_analysis_hf.py --repo "$HF_DATASET_REPO" --folder /tmp/adminlab-production --remote-path "releases/gh-${{ github.event.workflow_run.id }}/production-promoted" --status /tmp/adminlab-production/hf-status.json
