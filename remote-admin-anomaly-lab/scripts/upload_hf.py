@@ -59,9 +59,9 @@ def stage_quality_for_hf(source: Path, target: Path) -> list[dict]:
 
     `pktmon format` writes UTF-16 text. Hugging Face's commit endpoint can reject
     such bytes under a `.txt` filename as binary regular-Git content. We retain
-    the exact original in the GitHub release and losslessly gzip only the HF
-    transport copy. The transform manifest records hashes and sizes so the
-    original bytes can be reconstructed and verified exactly.
+    the exact original in the authoritative retained artifact and losslessly gzip
+    only the HF transport copy. The transform manifest records hashes and sizes
+    so the original bytes can be reconstructed and verified exactly.
     """
     shutil.copytree(source, target)
     transforms: list[dict] = []
