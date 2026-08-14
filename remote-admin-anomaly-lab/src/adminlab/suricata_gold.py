@@ -9,8 +9,18 @@ import pandas as pd
 from .online_features import EveFeatureState
 
 
-def _epoch(value: Any) -> float:
+def _is_missing(value: Any) -> bool:
     if value is None:
+        return True
+    try:
+        missing = pd.isna(value)
+    except (TypeError, ValueError):
+        return False
+    return bool(missing) if isinstance(missing, bool) else False
+
+
+def _epoch(value: Any) -> float:
+    if _is_missing(value):
         return 0.0
     if isinstance(value, (int, float)):
         return float(value)
@@ -18,23 +28,41 @@ def _epoch(value: Any) -> float:
     return datetime.fromisoformat(text).astimezone(timezone.utc).timestamp()
 
 
+def _text(value: Any) -> str:
+    return "" if _is_missing(value) else str(value)
+
+
+def _integer(value: Any) -> int:
+    if _is_missing(value):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+        return 0 if _is_missing(numeric) else int(numeric)
+
+
 def normalize_suricata_flow_events(eve: pd.DataFrame) -> pd.DataFrame:
     if eve.empty:
         return pd.DataFrame()
     if "event_type" not in eve.columns:
         raise ValueError("EVE data missing event_type")
+    # EVE is heterogeneous. Reading JSONL into a DataFrame creates NaN for
+    # fields that are absent from some event types and, for non-TCP flows, can
+    # leave transport ports absent even on event_type=flow rows. Normalize only
+    # flow events and never rely on Python truthiness for NaN scalars.
     flows = eve[eve["event_type"].astype(str) == "flow"].copy().reset_index(drop=True)
     rows: list[dict[str, Any]] = []
     for index, event in enumerate(flows.to_dict("records")):
         flow_id = event.get("flow_id")
-        uid = f"suri:{flow_id}" if flow_id not in (None, "") else f"suri-row:{index:012d}"
+        uid = f"suri:{_text(flow_id)}" if not _is_missing(flow_id) and _text(flow_id) else f"suri-row:{index:012d}"
         rows.append({
             "uid": uid,
             "ts": _epoch(event.get("timestamp")),
-            "id.orig_h": str(event.get("src_ip", "")),
-            "id.resp_h": str(event.get("dest_ip", "")),
-            "id.orig_p": int(event.get("src_port") or 0),
-            "id.resp_p": int(event.get("dest_port") or 0),
+            "id.orig_h": _text(event.get("src_ip")),
+            "id.resp_h": _text(event.get("dest_ip")),
+            "id.orig_p": _integer(event.get("src_port")),
+            "id.resp_p": _integer(event.get("dest_port")),
             "event": event,
         })
     return pd.DataFrame(rows)
