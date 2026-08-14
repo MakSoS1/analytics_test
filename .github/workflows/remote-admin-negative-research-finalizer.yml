@@ -1,0 +1,347 @@
+name: Remote Admin Anomaly V1 Negative Research Finalizer
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v1]
+    paths:
+      - '.github/workflows/remote-admin-negative-research-finalizer.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: remote-admin-negative-research-finalizer
+  cancel-in-progress: false
+
+jobs:
+  finalize-negative-research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN_ID: '31818445960'
+      SOURCE_ARTIFACT_ID: '9226887886'
+      SOURCE_ARTIFACT_NAME: 'remote-admin-research-gate-v2-31818445960'
+      SOURCE_ARTIFACT_DIGEST: 'sha256:40a463b9f16d4251d3b40b8915ef7a7425a883edd2916484acab660328fbbf72'
+      HF_DATASET_REPO: 'Maksim123321/remote-admin-anomaly-v1'
+      HF_QUARANTINE_PATH: 'quarantine/rejected/gh-31818445960'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: remote-admin-anomaly-lab-v1
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install evidence and persistence runtime
+        run: python -m pip install 'huggingface_hub>=0.25,<2'
+      - name: Verify source run and retained artifact identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_json="$(gh api -H 'Accept: application/vnd.github+json' "/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}")"
+          artifact_json="$(gh api -H 'Accept: application/vnd.github+json' "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}")"
+          RUN_JSON="$run_json" ARTIFACT_JSON="$artifact_json" python - <<'PY'
+          import json, os
+          run=json.loads(os.environ['RUN_JSON'])
+          art=json.loads(os.environ['ARTIFACT_JSON'])
+          assert run['id']==int(os.environ['SOURCE_RUN_ID'])
+          assert run['status']=='completed',run
+          # This run is intentionally red because its research quality gate rejected
+          # model promotion. A successful workflow conclusion would be the wrong source.
+          assert run['conclusion']=='failure',run
+          assert run['head_branch']=='remote-admin-anomaly-lab-v1',run
+          assert art['id']==int(os.environ['SOURCE_ARTIFACT_ID'])
+          assert art['name']==os.environ['SOURCE_ARTIFACT_NAME'],art
+          assert art['expired'] is False,art
+          assert art.get('digest')==os.environ['SOURCE_ARTIFACT_DIGEST'],art
+          assert int(art['size_in_bytes'])>500_000_000,art
+          assert int(art['workflow_run']['id'])==int(os.environ['SOURCE_RUN_ID']),art
+          print(json.dumps({'run':run['id'],'run_conclusion':run['conclusion'],'artifact':art['id'],'artifact_size':art['size_in_bytes'],'digest':art['digest']},sort_keys=True))
+          PY
+      - name: Download retained negative-research artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/negative-research
+          gh api -H 'Accept: application/vnd.github+json' "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" > /tmp/negative-research.zip
+          unzip -q /tmp/negative-research.zip -d /tmp/negative-research
+          test -s /tmp/negative-research/RESEARCH_GATE.json
+          test -s /tmp/negative-research/models/M0-deterministic.metrics.json
+          test -s /tmp/negative-research/models/M1-lightgbm.metrics.json
+          test -s /tmp/negative-research/models/M2-isolation-forest.metrics.json
+          test -s /tmp/negative-research/models/shortcut-audit.json
+          test -s /tmp/negative-research/evaluation/M1-slices.json
+          test -s /tmp/negative-research/evaluation/M1-hard-benign.json
+          test -s /tmp/negative-research/evaluation/M1-learning-curve.json
+          test -s /tmp/negative-research/release/bronze/H-research-1k/captures/H-research-1k.pcap.zst
+          test -s /tmp/negative-research/release/silver/H-research-1k/suricata/eve.json.zst
+          test -s /tmp/negative-research/release/gold/H-research-1k/production_model_matrix.parquet
+      - name: Reverify pipeline success and scientific rejection
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path('/tmp/negative-research')
+          gate=json.loads((root/'RESEARCH_GATE.json').read_text())
+          m0=json.loads((root/'models/M0-deterministic.metrics.json').read_text())
+          m1=json.loads((root/'models/M1-lightgbm.metrics.json').read_text())
+          m2=json.loads((root/'models/M2-isolation-forest.metrics.json').read_text())
+          shortcut=json.loads((root/'models/shortcut-audit.json').read_text())
+          slices=json.loads((root/'evaluation/M1-slices.json').read_text())
+          hard=json.loads((root/'evaluation/M1-hard-benign.json').read_text())
+          curve=json.loads((root/'evaluation/M1-learning-curve.json').read_text())
+          prod=json.loads((root/'release/quality/H-research-1k/production_flow_gold.json').read_text())
+          leak=json.loads((root/'release/quality/H-research-1k/production_leakage.json').read_text())
+          capture=json.loads((root/'release/quality/H-research-1k/capture_health.json').read_text())
+          parser=json.loads((root/'release/quality/H-research-1k/parser_health.json').read_text())
+
+          assert gate['automatic_gate_pass'] is False,gate
+          assert gate['automatic_failures']==['shortcut_risk'],gate
+          assert gate.get('manual_review_flags')==[],gate
+          assert shortcut['shortcut_risk'] is True,shortcut
+          assert int(capture['sessions'])==1000,capture
+          assert capture.get('full_capture_retained') is True,capture
+          assert leak['ok'] is True,leak
+          assert prod['production_source']=='suricata_eve_flow',prod
+          assert prod['train_serve_feature_code']=='adminlab.online_features.EveFeatureState',prod
+          assert prod['uid_alignment_coverage']==1.0,prod
+          assert prod['session_mapping_coverage']>=0.95,prod
+          assert prod['flow_mapping_coverage']>=0.90,prod
+          assert all(float(v)>=0.90 for v in prod['session_mapping_coverage_by_protocol'].values()),prod
+          assert parser['suricata_flow_events']>0 and parser['zeek_conn_lines']>0,parser
+          required={'temporal_future','unseen_client_implementation','unseen_host_pair','unseen_persona'}
+          observed=set(gate.get('challenge_reasons',[]))
+          assert required<=observed,(required,observed)
+
+          val=m1['splits']['validation']; test=m1['splits']['test']; challenge=m1['splits']['challenge']
+          assert float(val['pr_auc'])<0.70,val
+          assert float(test['pr_auc'])<0.70,test
+          assert float(challenge['pr_auc'])<0.70,challenge
+          assert float(curve['last_delta_pr_auc'])<=0.005,curve
+          assert curve['scale_recommendation']!='expand',curve
+          risk=shortcut.get('risk_baselines',[])
+          assert risk,risk
+          # Negative result is substantive: at least one nuisance-only baseline is
+          # strictly better than the full validation PR-AUC.
+          best=max(float(v['pr_auc']) for v in shortcut['baselines'].values() if v.get('status')=='ok')
+          assert best>float(shortcut['full_model_pr_auc']),shortcut
+
+          challenge_slice=slices['splits']['challenge']
+          report={
+            'schema_version':1,
+            'research_status':'REJECTED_MODEL_QUALITY',
+            'pipeline_status':'VALIDATED_END_TO_END',
+            'source_run_id':int(os.environ['SOURCE_RUN_ID']),
+            'source_artifact_id':int(os.environ['SOURCE_ARTIFACT_ID']),
+            'source_artifact_name':os.environ['SOURCE_ARTIFACT_NAME'],
+            'source_artifact_digest':os.environ['SOURCE_ARTIFACT_DIGEST'],
+            'sessions':1000,
+            'scale_decision':'STOP_AT_1K',
+            'allow_scale':False,
+            'model_promotion':'NONE',
+            'ngfw_posture':{
+              'suricata_rules':'visibility_and_audit_only',
+              'M1_lightgbm':'shadow_research_only_not_enforcement',
+              'M2_isolation_forest':'shadow_research_only_not_enforcement'
+            },
+            'reason':'quality gate correctly rejected the model because nuisance-only baselines outperform the full M1 and grouped learning curve does not improve at full data',
+            'automatic_failures':gate['automatic_failures'],
+            'manual_review_flags':gate.get('manual_review_flags',[]),
+            'production_gold':prod,
+            'leakage':leak,
+            'capture_health':capture,
+            'parser_health':parser,
+            'M0':m0,
+            'M1':m1,
+            'M2':m2,
+            'shortcut_audit':shortcut,
+            'hard_benign':hard,
+            'learning_curve':curve,
+            'challenge_campaign_detection':challenge_slice.get('campaign_detection',{}),
+            'reference_validation_status':gate.get('reference_validation_status'),
+            'reference_available':gate.get('reference_available'),
+          }
+          Path('/tmp/negative-research/NEGATIVE_RESEARCH_VERIFIED.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({
+            'status':report['research_status'],
+            'val_pr_auc':val['pr_auc'],'val_roc_auc':val['roc_auc'],
+            'test_pr_auc':test['pr_auc'],'test_roc_auc':test['roc_auc'],
+            'challenge_pr_auc':challenge['pr_auc'],'challenge_roc_auc':challenge['roc_auc'],
+            'best_shortcut_pr_auc':best,
+            'last_delta_pr_auc':curve['last_delta_pr_auc'],
+            'scale_decision':report['scale_decision']
+          },indent=2,sort_keys=True))
+          PY
+      - name: Persist rejected research release to private Hugging Face quarantine
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${HF_TOKEN:-}"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from huggingface_hub import HfApi
+
+          root=Path('/tmp/negative-research')
+          token=os.environ['HF_TOKEN']; repo=os.environ['HF_DATASET_REPO']; remote=os.environ['HF_QUARANTINE_PATH']
+          api=HfApi(token=token)
+          api.create_repo(repo_id=repo,repo_type='dataset',private=True,exist_ok=True)
+          api.upload_folder(
+              repo_id=repo,repo_type='dataset',folder_path=str(root/'release'),
+              path_in_repo=f'{remote}/release',
+              commit_message=f'quarantine rejected remote-admin research {os.environ["SOURCE_RUN_ID"]}: recoverable release'
+          )
+          api.upload_folder(
+              repo_id=repo,repo_type='dataset',folder_path=str(root/'models'),
+              path_in_repo=f'{remote}/models',
+              commit_message=f'quarantine rejected remote-admin research {os.environ["SOURCE_RUN_ID"]}: models'
+          )
+          api.upload_folder(
+              repo_id=repo,repo_type='dataset',folder_path=str(root/'evaluation'),
+              path_in_repo=f'{remote}/evaluation',
+              commit_message=f'quarantine rejected remote-admin research {os.environ["SOURCE_RUN_ID"]}: evaluation'
+          )
+          for name in ('RESEARCH_GATE.json','NEGATIVE_RESEARCH_VERIFIED.json'):
+              api.upload_file(
+                  repo_id=repo,repo_type='dataset',path_or_fileobj=str(root/name),
+                  path_in_repo=f'{remote}/{name}',
+                  commit_message=f'quarantine rejected remote-admin research {os.environ["SOURCE_RUN_ID"]}: {name}'
+              )
+          files=set(api.list_repo_files(repo_id=repo,repo_type='dataset'))
+          required={
+              f'{remote}/release/bronze/H-research-1k/captures/H-research-1k.pcap.zst',
+              f'{remote}/release/silver/H-research-1k/suricata/eve.json.zst',
+              f'{remote}/release/gold/H-research-1k/production_model_matrix.parquet',
+              f'{remote}/models/M1-lightgbm.metrics.json',
+              f'{remote}/evaluation/M1-slices.json',
+              f'{remote}/NEGATIVE_RESEARCH_VERIFIED.json',
+          }
+          missing=sorted(required-files)
+          assert not missing,missing
+          status={
+              'status':'UPLOADED_AND_VERIFIED_QUARANTINE',
+              'repo_id':repo,
+              'private_expected':True,
+              'path':remote,
+              'source_run_id':int(os.environ['SOURCE_RUN_ID']),
+              'source_artifact_id':int(os.environ['SOURCE_ARTIFACT_ID']),
+              'required_files_verified':sorted(required),
+              'promoted':False,
+          }
+          (root/'HF_NEGATIVE_PERSISTENCE.json').write_text(json.dumps(status,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(status,indent=2,sort_keys=True))
+          PY
+      - name: Generate committed negative-results and scale-stop evidence
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path('/tmp/negative-research')
+          report=json.loads((root/'NEGATIVE_RESEARCH_VERIFIED.json').read_text())
+          hf=json.loads((root/'HF_NEGATIVE_PERSISTENCE.json').read_text())
+          m1=report['M1']; shortcut=report['shortcut_audit']; hard=report['hard_benign']; curve=report['learning_curve']
+          val=m1['splits']['validation']; test=m1['splits']['test']; challenge=m1['splits']['challenge']
+          strict=val['strict_operating_points']['operating_points']
+          campaign=report.get('challenge_campaign_detection',{})
+          best_name,best=max(
+              ((name,item) for name,item in shortcut['baselines'].items() if item.get('status')=='ok'),
+              key=lambda item:float(item[1]['pr_auc'])
+          )
+          report['hf_persistence']=hf
+          report['best_nuisance_baseline']={'name':best_name,**best}
+          out=Path('remote-admin-anomaly-lab')
+          (out/'RESULTS_NEGATIVE_AUTOGENERATED.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          scale={
+              'allow_scale':False,
+              'next_sessions':0,
+              'decision':'STOP_AT_1K',
+              'reason':'MODEL_QUALITY_REJECTED_AND_LEARNING_CURVE_SATURATED',
+              'source_run_id':report['source_run_id'],
+              'automatic_failures':report['automatic_failures'],
+              'validation_pr_auc':val['pr_auc'],
+              'test_pr_auc':test['pr_auc'],
+              'challenge_pr_auc':challenge['pr_auc'],
+              'last_delta_pr_auc':curve['last_delta_pr_auc'],
+              'scale_recommendation':curve['scale_recommendation'],
+              'policy':'4k/10k/20k/40k fan-out is prohibited until a materially different feature/data hypothesis passes a new 1k gate; more rows of the same distribution are not justified.'
+          }
+          (out/'SCALE_DECISION_NEGATIVE.json').write_text(json.dumps(scale,indent=2,sort_keys=True)+'\n')
+          md=f'''# Remote Admin Anomaly V1 — Evidence-verified negative research result
+
+This is a **validated negative result**, not a failed pipeline and not a promoted detector.
+
+- Source GitHub Actions run: `{report['source_run_id']}`
+- Retained artifact: `{report['source_artifact_name']}` (ID `{report['source_artifact_id']}`)
+- Artifact digest: `{report['source_artifact_digest']}`
+- Real-wire behavioral sessions: **{report['sessions']}** (1000/1000 successful)
+- Pipeline: **VALIDATED_END_TO_END** — Bronze PCAP, Suricata/Zeek Silver, production-compatible Gold, grouped splits, leakage checks, M0/M1/M2 and evaluation all completed.
+- Research quality decision: **REJECTED_MODEL_QUALITY** (`{report['automatic_failures']}`)
+- Scale decision: **STOP_AT_1K** — 4k/10k/20k/40k are intentionally blocked.
+- Model promotion: **NONE**.
+
+## M1 LightGBM
+
+- Validation PR-AUC: **{val['pr_auc']:.6f}**, ROC-AUC: **{val['roc_auc']:.6f}**
+- Test PR-AUC: **{test['pr_auc']:.6f}**, ROC-AUC: **{test['roc_auc']:.6f}**
+- Challenge PR-AUC: **{challenge['pr_auc']:.6f}**, ROC-AUC: **{challenge['roc_auc']:.6f}**
+- Validation primary FPR: **{val['fpr']:.6f}**
+- Recall @ FPR ≤1%: **{strict['fpr_1pct']['recall']:.6f}**
+- Recall @ FPR ≤0.1%: **{strict['fpr_0_1pct']['recall']:.6f}**
+- Challenge campaign recall: **{campaign.get('campaign_recall')}**
+
+## Why the model is rejected
+
+The strongest nuisance-only validation baseline is `{best_name}` with PR-AUC **{float(best['pr_auc']):.6f}**, versus full M1 **{float(shortcut['full_model_pr_auc']):.6f}**. Therefore the full model does not demonstrate a robust multivariate anomaly signal and the shortcut gate correctly remains red.
+
+Grouped learning curve ends at ΔPR-AUC **{float(curve['last_delta_pr_auc']):.6f}** with recommendation `{curve['scale_recommendation']}`. More rows from the same generator distribution are not supported by evidence.
+
+Hard-benign FPR is **{float(hard['fpr']):.6f}** ({hard['false_positives']}/{hard['n']}), so false positives alone are not the blocker; the blocker is extremely poor recall/generalization.
+
+## Storage
+
+- GitHub Actions artifact retained for 90 days; full Bronze PCAP and raw Silver remain recoverable.
+- Private Hugging Face quarantine: `{hf['repo_id']}/{hf['path']}` — status **{hf['status']}**.
+- This quarantine path is **not** a promoted/validated production dataset path.
+
+## Deployment posture
+
+- Suricata deterministic remote-admin rules: visibility/audit telemetry only.
+- M1 LightGBM: shadow/research only; **must not enforce/block**.
+- M2 Isolation Forest: shadow/research only; **must not enforce/block**.
+- No model promotion occurs from this V1 research result.
+'''
+          (out/'RESULTS_NEGATIVE_AUTOGENERATED.md').write_text(md)
+          smd=f'''# Remote Admin Anomaly V1 — Scale Decision
+
+- Decision: **STOP_AT_1K**
+- Allow scale: **false**
+- Next sessions: **0**
+- Reason: `{scale['reason']}`
+- Validation PR-AUC: `{scale['validation_pr_auc']}`
+- Test PR-AUC: `{scale['test_pr_auc']}`
+- Challenge PR-AUC: `{scale['challenge_pr_auc']}`
+- Last grouped learning-curve ΔPR-AUC: `{scale['last_delta_pr_auc']}`
+- Recommendation: `{scale['scale_recommendation']}`
+
+The next experiment must change the **feature/data hypothesis**, not merely multiply rows from the same generator distribution.
+'''
+          (out/'SCALE_DECISION_NEGATIVE.md').write_text(smd)
+          print(md)
+          PY
+      - name: Commit evidence-verified negative research conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            remote-admin-anomaly-lab/RESULTS_NEGATIVE_AUTOGENERATED.json \
+            remote-admin-anomaly-lab/RESULTS_NEGATIVE_AUTOGENERATED.md \
+            remote-admin-anomaly-lab/SCALE_DECISION_NEGATIVE.json \
+            remote-admin-anomaly-lab/SCALE_DECISION_NEGATIVE.md
+          git commit -m 'docs(remote-admin): finalize evidence-verified STOP_AT_1K result'
+          git push origin HEAD:remote-admin-anomaly-lab-v1
