@@ -16,13 +16,16 @@ tasks:
     behavior_profiles: [short_interactive, reconnect]
   debug:
     protocols: [ssh, rdp, vnc]
-    behavior_profiles: [medium_interactive, long_interactive, reconnect]
+    behavior_profiles: [medium_interactive, long_interactive, reconnect, forwarding_session]
+  approved_forwarding:
+    protocols: [ssh]
+    behavior_profiles: [forwarding_session]
   user_support:
     protocols: [rdp, vnc, smb]
     behavior_profiles: [short_interactive, medium_interactive, reconnect]
   emergency_admin:
     protocols: [ssh, rdp, smb]
-    behavior_profiles: [short_interactive, long_interactive, maintenance_fanout]
+    behavior_profiles: [short_interactive, long_interactive, maintenance_fanout, forwarding_session]
   service_automation:
     protocols: [ssh, smb]
     behavior_profiles: [short_interactive, small_transfer, maintenance_fanout]
