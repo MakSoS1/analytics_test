@@ -15,21 +15,14 @@ LAB = "10.77.0.0/24"
 
 
 def run(cmd: list[str], *, timeout: int = 15, check: bool = False) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        cmd,
-        check=check,
-        timeout=timeout,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    return subprocess.run(cmd, check=check, timeout=timeout, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 def tool(*names: str) -> str | None:
     for name in names:
-        path = shutil.which(name)
-        if path:
-            return path
+        value = shutil.which(name)
+        if value:
+            return value
     return None
 
 
@@ -38,10 +31,10 @@ def ns_exec(namespace: str, command: list[str], *, timeout: int = 15) -> subproc
 
 
 def port_listening(namespace: str, port: int) -> bool:
-    result = ns_exec(namespace, ["ss", "-ltn"], timeout=5)
-    return result.returncode == 0 and any(
-        line.rstrip().endswith(f":{port}") for line in result.stdout.splitlines()
-    )
+    # `ss` rows end with the peer column, so string-endswith checks inspect the
+    # wrong field. Filter the LOCAL socket port explicitly instead.
+    result = ns_exec(namespace, ["ss", "-H", "-ltn", "sport", "=", f":{port}"], timeout=5)
+    return result.returncode == 0 and bool(result.stdout.strip())
 
 
 def wait_listener(namespace: str, port: int, seconds: float = 5.0) -> bool:
@@ -86,7 +79,6 @@ def stop_group(proc: subprocess.Popen[str], *, graceful_signal: int = signal.SIG
 
 def start_capture(pcap: Path, log: Path) -> subprocess.Popen[str]:
     pcap.parent.mkdir(parents=True, exist_ok=True)
-    log.parent.mkdir(parents=True, exist_ok=True)
     fh = log.open("w", encoding="utf-8")
     proc = subprocess.Popen(
         ["setsid", "tcpdump", "-i", "br-adminlab", "-U", "-s", "0", "-n", "-w", str(pcap)],
@@ -141,12 +133,12 @@ def probe_vnc(work: Path) -> dict[str, Any]:
         if not listener:
             result["evidence"].append("TigerVNC did not expose TCP/5900")
             return result
-        client_code = (
+        code = (
             "import socket; s=socket.create_connection(('10.77.0.25',5900),3); "
             "b=s.recv(12); print(b.decode('ascii','replace').strip()); "
             "assert b.startswith(b'RFB '); s.close()"
         )
-        client = ns_exec("ra-help01", ["python3", "-c", client_code], timeout=8)
+        client = ns_exec("ra-help01", ["python3", "-c", code], timeout=8)
         result["wire_observed"] = client.returncode == 0 and "RFB " in client.stdout
         result["evidence"].append(f"listener={listener} client_rc={client.returncode} banner={client.stdout.strip()!r}")
         if result['tool_present'] and result['wire_observed']:
@@ -164,11 +156,7 @@ def probe_dcerpc() -> dict[str, Any]:
     if not rpc:
         result["evidence"].append("rpcclient executable not present")
         return result
-    attempt = ns_exec(
-        "ra-paw01",
-        [rpc, "-N", "-U", "", "10.77.0.23", "-c", "srvinfo"],
-        timeout=12,
-    )
+    attempt = ns_exec("ra-paw01", [rpc, "-N", "-U", "", "10.77.0.23", "-c", "srvinfo"], timeout=12)
     result["wire_observed"] = attempt.returncode == 0
     result["evidence"].append(
         f"rpcclient_rc={attempt.returncode} stdout={attempt.stdout.strip()[:240]!r} stderr={attempt.stderr.strip()[:240]!r}"
@@ -198,8 +186,6 @@ def probe_rdp(work: Path) -> dict[str, Any]:
         else:
             cmd = [client, "/v:10.77.0.24", "/u:adminlab", "/p:invalid", "/cert:ignore"]
         attempt = ns_exec("ra-help01", cmd, timeout=12)
-        # Authentication can fail by construction. A real xrdp listener plus a
-        # real FreeRDP negotiation attempt is the V1 Linux-wire claim.
         result["wire_observed"] = listener
         result["evidence"].append(
             f"listener={listener} freerdp_rc={attempt.returncode} stdout={attempt.stdout.strip()[:160]!r} stderr={attempt.stderr.strip()[:160]!r}"
@@ -219,7 +205,6 @@ def probe_winrm(work: Path) -> dict[str, Any]:
     if not curl:
         result["evidence"].append("curl not present")
         return result
-
     server_code = r'''
 from http.server import BaseHTTPRequestHandler, HTTPServer
 class H(BaseHTTPRequestHandler):
@@ -269,7 +254,6 @@ def main() -> int:
     args = parser.parse_args()
     if os.geteuid() != 0:
         raise SystemExit("fidelity probe requires root for namespaces, listeners and capture")
-
     args.out.mkdir(parents=True, exist_ok=True)
     args.pcap.parent.mkdir(parents=True, exist_ok=True)
     capture: subprocess.Popen[str] | None = None
@@ -279,14 +263,12 @@ def main() -> int:
     finally:
         if capture is not None:
             stop_group(capture, graceful_signal=signal.SIGINT)
-
-    capture_report = validate_capture(args.pcap)
     payload = {
         "lab_cidr": LAB,
         "external_targets_allowed": False,
         "payload_execution_allowed": False,
         "c2_frameworks_enabled": False,
-        "capture": capture_report,
+        "capture": validate_capture(args.pcap),
         "results": probes,
     }
     (args.out / "fidelity-results.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
