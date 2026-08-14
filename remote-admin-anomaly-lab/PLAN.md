@@ -26,8 +26,10 @@
   - RED evidence: run `31787871563` failed because `adminlab.manifest` and `adminlab.scenarios` did not exist.
   - GREEN evidence: run `31787949680`, 11/11 tests passed in 0.21s.
   - Validated: deterministic same-seed plans, 200 unique session IDs, lab-only src/dst addresses, nuisance-profile overlap between classes, counterfactual pair label inversion with the same protocol/destination/netem context, orchestrator-owned ground truth without `expected_sid`.
-- [ ] M3 — namespace topology isolation passes on GitHub Actions.
-  - RED evidence: run `31788020553`, 11 tests passed and 3 topology tests failed because `scripts/setup_topology.sh` did not yet exist.
+- [x] M3 — namespace topology isolation passes on GitHub Actions.
+  - RED evidence: run `31788020553`, 11 existing tests passed and 3 topology contract tests failed on the intentionally missing topology script.
+  - GREEN evidence: run `31788233293`; `contract-tests` and `topology-smoke` both succeeded.
+  - Result: 15 network namespaces created on `ubuntu-24.04`; `ra-paw01 -> 10.77.0.21` in-lab ping succeeded; attempted `1.1.1.1` connectivity from `ra-paw01` failed as required; every simulated host had an empty default route; topology teardown succeeded.
 - [ ] M4 — real SSH/SMB wire smoke passes.
 - [ ] M5 — complete Bronze PCAP + manifests/checksums produced.
 - [ ] M6 — Suricata + Zeek Silver output produced.
@@ -77,6 +79,7 @@ If `HF_TOKEN` is unavailable in `analytics_test`, the same release tree must rem
 - 2026-08-14 — M2 RED: run `31787871563` failed on missing manifest/planner modules.
 - 2026-08-14 — M2 GREEN: run `31787949680` passed 11/11 tests.
 - 2026-08-14 — M3 RED: run `31788020553` passed 11 existing tests and failed 3 new topology tests on the intentionally missing topology script.
+- 2026-08-14 — M3 GREEN: run `31788233293` passed all contract tests and a real 15-namespace isolation smoke.
 
 ### Wire smoke
 
