@@ -5,6 +5,7 @@ on:
   push:
     branches: [remote-admin-anomaly-lab-v2]
     paths:
+      - 'remote-admin-anomaly-lab/src/adminlab/manifest.py'
       - 'remote-admin-anomaly-lab/src/adminlab/v2_scenarios.py'
       - 'remote-admin-anomaly-lab/src/adminlab/session_gold.py'
       - 'remote-admin-anomaly-lab/src/adminlab/campaign_gold.py'
