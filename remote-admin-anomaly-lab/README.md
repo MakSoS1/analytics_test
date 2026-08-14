@@ -1,23 +1,53 @@
 # Remote Admin Anomaly Lab V1
 
-A reproducible isolated GitHub Actions lab for behavioral detection of anomalous remote administration. V1 deliberately excludes Sliver/Mythic/Havoc/Cobalt Strike/Metasploit-style C2 framework traffic: the objective is to learn remote-admin behavior rather than framework fingerprints.
+A reproducible isolated GitHub Actions lab for behavioral research on anomalous remote administration.
 
-## Current architecture
+## Final V1 status
+
+**Pipeline/data result:** validated end to end.  
+**Model result:** `REJECTED_MODEL_QUALITY`.  
+**Scale decision:** `STOP_AT_1K`.  
+**Production ML promotion:** none.
+
+Final research evidence:
+
+- research run `31818445960`;
+- 1000/1000 successful real-wire behavioral sessions;
+- SSH/SMB/RDP/VNC = 250 each;
+- full Bronze PCAP retained;
+- Suricata + Zeek Silver retained;
+- production-compatible Suricata-flow Gold built with `EveFeatureState`;
+- grouped leakage audit PASS;
+- M0/M1/M2 trained and evaluated;
+- research quality gate correctly rejected promotion because nuisance-only baselines outperform full M1 and the grouped learning curve does not improve at full data.
+
+Finalizer run `31821404669` verified the negative result and persisted the complete release to the private HF quarantine path:
+
+```text
+Maksim123321/remote-admin-anomaly-v1/
+quarantine/rejected/gh-31818445960/
+```
+
+The quarantine path is a rollback/research source, **not a promoted detector dataset**.
+
+## Scope and safety boundary
+
+V1 deliberately excludes Sliver/Mythic/Havoc/Cobalt Strike/Metasploit-style C2 framework traffic. The objective is to study remote-admin behavior rather than framework fingerprints.
 
 - GitHub-hosted Ubuntu 24.04 runner.
-- 15 isolated Linux network namespaces on `br-adminlab`, no default route/NAT from endpoint namespaces.
-- Core real-wire protocols: OpenSSH and Samba SMB.
-- Extended train wire: xrdp/FreeRDP RDP and TigerVNC/RFB after the extended gate.
-- Challenge-only: bounded HTTP/SOAP WS-Man fixture labelled `partial_winrm`.
-- Fidelity-only: Samba/rpcclient DCE/RPC labelled `partial_dcom`; it is not represented as native Windows DCOM/TCP-135 training data.
-- Full bridge capture before scenario execution.
-- Suricata + pinned Zeek 8.2.1 offline parsing.
-- Research/session Gold plus final production-compatible parser-flow Gold.
-- M0 deterministic baseline, M1 LightGBM and M2 benign-only Isolation Forest.
+- 15 isolated Linux network namespaces on `br-adminlab`.
+- No endpoint default route/NAT to external targets.
+- Core/accepted train protocols: SSH, SMB, RDP and VNC.
+- SSH implementations: OpenSSH and Paramiko.
+- SMB implementations: smbclient and smbprotocol against Samba.
+- RDP: FreeRDP -> xrdp network-wire cohort.
+- VNC: RFB client -> TigerVNC network-wire cohort.
+- Native Windows DCOM/WinRM is **not** claimed by V1; Linux/Samba/WS-Man fixtures have only partial semantics.
+- No unrestricted forwarding, malware payload execution or C2 framework payloads.
 
 ## Source of truth and rollback
 
-Bronze is immutable for an accepted shard. The complete PCAP is compressed losslessly with zstd and retained with manifests/checksums. PCAP is never intentionally published as a GitHub Release asset and is never deleted merely because Gold features have been built.
+Bronze is immutable for an accepted/research shard. The complete PCAP is compressed losslessly with zstd and retained with manifests/checksums. PCAP is never published as a GitHub Release asset and is never deleted merely because Gold features have been built.
 
 ```text
 release/
@@ -36,55 +66,125 @@ release/
 │   ├── zeek/*.log.zst
 │   └── parser_versions.json
 ├── gold/<shard>/
-│   ├── flow_features.parquet
-│   ├── window_features.parquet
-│   ├── graph_features.parquet
-│   ├── model_matrix.parquet
 │   ├── production_flow_features.parquet
 │   ├── production_flow_labels.parquet
-│   └── production_model_matrix.parquet
-├── quality/<shard>/
-│   ├── capture_health.json
-│   ├── parser_health.json
-│   ├── mapping_health.json
-│   ├── production_flow_mapping.json
-│   └── leakage_checks.json
-└── models/
+│   ├── production_model_matrix.parquet
+│   └── production_splits.parquet
+└── quality/<shard>/
+    ├── capture_health.json
+    ├── parser_health.json
+    ├── production_flow_mapping.json
+    ├── production_flow_gold.json
+    └── production_leakage.json
 ```
 
-The preferred persistent dataset repository is the private Hugging Face dataset `Maksim123321/remote-admin-anomaly-v1`. Each workflow retains a 90-day GitHub Actions artifact **before** attempting HF upload. If `HF_TOKEN` is absent, the HF step reports an explicit non-destructive skip and the Actions artifact remains the recovery copy.
+Final research rollback copies:
 
-## Local equivalent of one shard
+1. **Private Hugging Face quarantine** — durable project storage:
+   `Maksim123321/remote-admin-anomaly-v1/quarantine/rejected/gh-31818445960`.
+2. **GitHub Actions artifact** — 90-day fallback:
+   `remote-admin-research-gate-v2-31818445960`, ID `9226887886`, digest
+   `sha256:40a463b9f16d4251d3b40b8915ef7a7425a883edd2916484acab660328fbbf72`.
 
-The commands below require Linux root/network-namespace capability and the same packages as the GitHub runner:
+## Final corpus facts
+
+- Behavioral sessions: 1000.
+- Labels: 500 benign / 500 suspicious.
+- Protocols: SSH 250 / SMB 250 / RDP 250 / VNC 250.
+- Simulated organization timeline: 45 days represented by every protocol.
+- Gold parser-flow rows: 2,263.
+- Suricata raw flows: 2,705.
+- Eligible direct remote-admin flows: 2,271.
+- Mapped eligible flows: 2,263.
+- Background flows retained separately: 434.
+- Flow mapping coverage: `0.9964773`.
+- Behavioral-session mapping coverage: `0.993`.
+- Per-protocol session coverage: RDP `1.0`, SMB `1.0`, SSH `0.972`, VNC `1.0`.
+- UID label alignment: `1.0`.
+- Leakage gate: PASS.
+
+## Final model result
+
+M1 LightGBM:
+
+- validation PR-AUC `0.5074707204`, ROC-AUC `0.4480471079`;
+- test PR-AUC `0.5137590769`, ROC-AUC `0.4605629446`;
+- challenge PR-AUC `0.4222839299`, ROC-AUC `0.4989922318`;
+- challenge campaign recall at the primary low-FPR threshold: `0.0`.
+
+The final grouped learning curve has delta PR-AUC `-0.0138075260` at full 1k and recommends `prefer_diversity_or_holdout_analysis`. The correct V1 conclusion is to **stop**, not multiply the same generator distribution to 4k/10k.
+
+See:
+
+- `RESULTS_NEGATIVE_AUTOGENERATED.md`;
+- `SCALE_DECISION_NEGATIVE.md`;
+- `PLAN.md`.
+
+## Local equivalent of a bounded shard
+
+The commands below require Linux root/network-namespace capability and the same dependencies as the GitHub runner:
 
 ```bash
 cd remote-admin-anomaly-lab
 python -m pip install -r requirements.txt
 bash scripts/install_extended_runner_v2.sh
+
 sudo -E env \
   ADMINLAB_PYTHON="$(command -v python)" \
   ADMINLAB_OUTPUT_UID="$(id -u)" \
   ADMINLAB_OUTPUT_GID="$(id -g)" \
-  bash scripts/capture_shard_extended.sh A A-local-00 100 20260814 /tmp/adminlab
-ADMINLAB_PYTHON="$(command -v python)" bash scripts/build_silver.sh /tmp/adminlab/release A-local-00
-bash scripts/build_rule_baseline.sh /tmp/adminlab/release A-local-00
-PYTHONPATH=src python scripts/build_gold.py --release /tmp/adminlab/release --shard A-local-00 --feature-contract configs/feature_contract.yaml --split-seed 20260814
-PYTHONPATH=src python scripts/build_flow_gold.py --release /tmp/adminlab/release --shard A-local-00 --feature-contract configs/feature_contract.yaml --split-seed 20260814
+  bash scripts/capture_shard_extended_v4.sh \
+    H H-local-research 100 2026082602 /tmp/adminlab
+
+ADMINLAB_PYTHON="$(command -v python)" \
+  bash scripts/build_silver.sh /tmp/adminlab/release H-local-research
+
+bash scripts/build_rule_baseline.sh \
+  /tmp/adminlab/release H-local-research
+
+PYTHONPATH=src python scripts/build_flow_gold_v2.py \
+  --release /tmp/adminlab/release \
+  --shard H-local-research \
+  --feature-contract configs/feature_contract.yaml \
+  --split-seed 20260827
 ```
+
+To recompute parser/features/models for the final research corpus, prefer restoring final Bronze `H-research-1k.pcap.zst` and manifests from HF/Actions instead of generating new traffic.
 
 ## Quality gates
 
-An accepted shard must have a readable non-empty full PCAP, valid SHA256 checksums, successful protocol executions, non-empty Suricata EVE and Zeek conn logs, parser versions, at least 95% behavioral-session mapping coverage, no forbidden model columns and a passing grouped-split leakage audit.
+A usable research shard requires:
 
-The final production model is promoted only from parser-flow Gold after global cross-shard split reassignment. Stage H and `partial_winrm` are forced into challenge groups before promoted model training.
+- non-empty readable full PCAP;
+- verified SHA256 checksums;
+- successful real protocol execution;
+- non-empty Suricata EVE and Zeek conn logs;
+- parser version evidence;
+- >=95% behavioral-session mapping coverage overall;
+- >=90% per-protocol mapping coverage;
+- no forbidden production model columns;
+- grouped campaign/counterfactual leakage audit PASS;
+- explicit challenge holdouts with impact budgets;
+- shortcut audit and grouped learning curve before scale/promotion.
 
-## Workflows
+Passing infrastructure/data gates does not force a model to pass. V1 intentionally preserves the negative model result.
 
-- `Remote Admin Anomaly V1 Contract Tests` — fast TDD/static contracts.
-- `Remote Admin Anomaly V1 Extended Corpus Smoke` — bounded extended-wire integration.
-- `Remote Admin Anomaly V1 Stage A V2` — 1,000-session research/throughput/model gate.
-- `Remote Admin Anomaly V1 Phase 1 Corpus` — gated diverse fan-out with complete shard persistence.
-- `Remote Admin Anomaly V1 Production Flow Promotion` — rebuilds final model features from parser-observed flows after a successful Phase 1.
+## NGFW posture
 
-See `PLAN.md`, `docs/PLAN_AMENDMENT_WIRE_SCALE.md`, `docs/FIDELITY_MATRIX.md` and `docs/NGFW_INTEGRATION.md` for the living experiment record and deployment contract.
+- Suricata deterministic remote-admin rules: visibility/audit only.
+- M1 LightGBM: shadow/research only.
+- M2 Isolation Forest: shadow/research only.
+- Automatic blocking/drop/quarantine: not justified by V1.
+
+See `docs/NGFW_INTEGRATION.md` for the exact integration contract.
+
+## Workflows used as final evidence
+
+- `Remote Admin Anomaly V1 Contract Tests` — TDD/static contracts.
+- `Remote Admin Anomaly V1 Planner Audit` — exact 1k composition before expensive capture.
+- `Remote Admin Anomaly V1 V4 Final` — bounded 40-session full-pipeline regression barrier.
+- `Remote Admin Anomaly V1 Implementation Final` — 160-session alternate-client fidelity barrier.
+- `Remote Admin Anomaly V1 Research Gate V2` — final 1k wire/data/model/evaluation experiment.
+- `Remote Admin Anomaly V1 Negative Research Finalizer` — verifies rejected research, persists private quarantine and commits STOP evidence.
+
+See `PLAN.md`, `docs/FIDELITY_MATRIX.md`, `docs/NGFW_INTEGRATION.md`, `RESULTS_NEGATIVE_AUTOGENERATED.md` and `SCALE_DECISION_NEGATIVE.md` for the final V1 record.
