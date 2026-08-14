@@ -100,12 +100,19 @@ def main() -> int:
     label_columns = [
         "session_id", "campaign_id", "scenario_id", "pair_id", "label_binary", "label_family",
         "protocol", "semantic_fidelity", "wire_fidelity", "src_host_id", "dst_host_id",
-        "persona_id", "task_id", "campaign_type", "historical_relation", "client_stack",
+        "persona_id", "task_id", "calendar_id", "intent_profile", "behavior_profile", "campaign_type",
+        "historical_relation", "auth_outcome", "client_stack", "server_stack", "implementation_id",
+        "campaign_position", "campaign_size", "sequence_profile", "simulated_day", "start_ts", "end_ts",
     ]
     labels = (
         mapped[["uid", "session_id"]]
         .rename(columns={"uid": "flow_uid"})
-        .merge(sessions[[c for c in label_columns if c in sessions.columns]], on="session_id", how="left", validate="many_to_one")
+        .merge(
+            sessions[[c for c in label_columns if c in sessions.columns]],
+            on="session_id",
+            how="left",
+            validate="many_to_one",
+        )
     )
     labels["split"] = labels["session_id"].map(split_index["split"])
     labels["challenge_reason"] = labels["session_id"].map(split_index["challenge_reason"])
@@ -154,8 +161,11 @@ def main() -> int:
         "train_serve_feature_code": "adminlab.online_features.EveFeatureState",
         "label_join_keys": ["flow_uid", "session_id"],
         "challenge_reason_counts": split_report.get("challenge_reason_counts", {}),
+        "heldout_personas": split_report.get("heldout_personas", []),
+        "heldout_client_implementations": split_report.get("heldout_client_implementations", []),
         "zeek_features_in_primary_model": False,
         "zeek_research_status": zeek_report.get("status"),
+        "evaluation_metadata_in_model_matrix": False,
         "orchestrator_used_only_for": "labels grouped splits simulated clock and fidelity metadata",
     }
     write_json(quality / "production_flow_gold.json", summary)
