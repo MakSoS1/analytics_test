@@ -1,0 +1,56 @@
+persona_templates:
+  - template_id: domain_admin
+    role: DomainAdmin
+    count: 4
+    calendar_id: admin_oncall
+    source_endpoint_roles: [DomainAdmin, JumpHost]
+    task_weights: {deploy: 2, fix_incident: 4, patch_management: 3, monitoring: 1, emergency_admin: 2}
+    client_stacks: [openssh, smbclient, freerdp, rfb-python]
+
+  - template_id: server_admin
+    role: ServerAdmin
+    count: 8
+    calendar_id: admin_oncall
+    source_endpoint_roles: [DomainAdmin, JumpHost, Helpdesk]
+    task_weights: {deploy: 3, fix_incident: 3, patch_management: 4, backup: 2, monitoring: 2, user_support: 1}
+    client_stacks: [openssh, smbclient, freerdp, rfb-python]
+
+  - template_id: linux_admin
+    role: LinuxAdmin
+    count: 8
+    calendar_id: admin_oncall
+    source_endpoint_roles: [JumpHost, Developer]
+    task_weights: {deploy: 4, fix_incident: 3, patch_management: 3, backup: 2, monitoring: 2, debug: 2}
+    client_stacks: [openssh]
+
+  - template_id: developer
+    role: Developer
+    count: 12
+    calendar_id: developer_flex
+    source_endpoint_roles: [Developer]
+    task_weights: {deploy: 3, debug: 5, monitoring: 1, fix_incident: 1}
+    client_stacks: [openssh, smbclient]
+
+  - template_id: helpdesk
+    role: Helpdesk
+    count: 8
+    calendar_id: helpdesk_shift
+    source_endpoint_roles: [Helpdesk]
+    task_weights: {user_support: 7, fix_incident: 2, monitoring: 1, patch_management: 1}
+    client_stacks: [freerdp, rfb-python, smbclient]
+
+  - template_id: service_account
+    role: ServiceAccount
+    count: 8
+    calendar_id: service_24x7
+    source_endpoint_roles: [ServiceAccount]
+    task_weights: {service_automation: 6, backup: 3, monitoring: 3, deploy: 1}
+    client_stacks: [openssh, smbclient]
+
+  - template_id: regular_user
+    role: RegularUser
+    count: 10
+    calendar_id: standard_business
+    source_endpoint_roles: [RegularUser, RemoteWorker]
+    task_weights: {user_support: 5, debug: 2, monitoring: 1}
+    client_stacks: [freerdp, rfb-python, smbclient]
