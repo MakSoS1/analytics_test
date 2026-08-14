@@ -10,6 +10,7 @@ on:
       - 'remote-admin-anomaly-lab/scripts/build_v2_release_manifest.py'
       - 'remote-admin-anomaly-lab/scripts/train_v2_models.py'
       - 'remote-admin-anomaly-lab/scripts/evaluate_v2_external.py'
+      - 'remote-admin-anomaly-lab/scripts/upload_hf.py'
       - 'remote-admin-anomaly-lab/src/adminlab/v2_gate.py'
       - 'remote-admin-anomaly-lab/configs/v2_research.yaml'
 
@@ -282,6 +283,15 @@ jobs:
             --production-quality "$QUALITY/production_flow_gold.json" \
             --hierarchical-quality "$GOLD/hierarchical_gold_quality.json" \
             --out "$QUALITY/V2_RESEARCH_DECISION.json"
+      - name: Build immutable checksum/provenance manifest before persistence
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/build_v2_release_manifest.py \
+            --release "$RELEASE_ROOT" \
+            --shard "$SHARD" \
+            --decision "$QUALITY/V2_RESEARCH_DECISION.json" \
+            --out "$QUALITY/V2_RELEASE_MANIFEST.json"
       - name: Persist complete candidate or negative research release to Hugging Face
         working-directory: remote-admin-anomaly-lab
         env:
@@ -300,15 +310,6 @@ jobs:
             --repo Maksim123321/remote-admin-anomaly-v1 \
             --remote-path "$remote" \
             --status "$QUALITY/hf_upload_status.json"
-      - name: Build full checksum/provenance manifest
-        working-directory: remote-admin-anomaly-lab
-        run: |
-          QUALITY="$RELEASE_ROOT/quality/$SHARD"
-          python scripts/build_v2_release_manifest.py \
-            --release "$RELEASE_ROOT" \
-            --shard "$SHARD" \
-            --decision "$QUALITY/V2_RESEARCH_DECISION.json" \
-            --out "$QUALITY/V2_RELEASE_MANIFEST.json"
       - name: Verify final technical V2 release
         working-directory: remote-admin-anomaly-lab
         run: |
@@ -343,6 +344,7 @@ jobs:
             'metrics':decision['research_decision']['metrics'],
             'file_count':manifest['file_count'],
             'total_bytes':manifest['total_bytes'],
+            'hf_persistence':json.loads((quality/'hf_upload_status.json').read_text()) if (quality/'hf_upload_status.json').exists() else {'status':'missing'},
           },indent=2,sort_keys=True))
           PY
       - name: Retain complete V2 research release
