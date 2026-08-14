@@ -1,0 +1,62 @@
+feature_contract_version: 1
+
+production_allowlist:
+  - duration
+  - src_bytes
+  - dst_bytes
+  - src_packets
+  - dst_packets
+  - bytes_total
+  - packets_total
+  - bytes_ratio
+  - packets_ratio
+  - app_proto
+  - dst_port
+  - tcp_syn_count
+  - tcp_rst_count
+  - tcp_fin_count
+  - iat_mean_ms
+  - iat_std_ms
+  - iat_cv
+  - packet_size_mean
+  - packet_size_std
+  - connections_1m
+  - connections_5m
+  - connections_15m
+  - connections_1h
+  - unique_dst_ip_5m
+  - unique_dst_ip_15m
+  - unique_protocols_1h
+  - new_dst_for_src
+  - new_src_dst_pair
+  - pair_seen_count
+  - src_out_degree_1h
+  - dst_in_degree_1h
+  - new_edge_count_1h
+  - protocol_entropy_1h
+  - netem_delay_ms
+  - netem_loss_pct
+
+training_only:
+  - label_binary
+  - label_family
+  - split
+
+forbidden:
+  - scenario_id
+  - campaign_id
+  - session_id
+  - pair_id
+  - generator_seed
+  - expected_sid
+  - attack_marker
+  - capture_filename
+  - ground_truth_source
+  - wire_fidelity
+  - semantic_fidelity
+
+windows_seconds:
+  connections_1m: 60
+  connections_5m: 300
+  connections_15m: 900
+  connections_1h: 3600
