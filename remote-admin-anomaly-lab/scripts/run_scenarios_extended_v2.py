@@ -45,19 +45,76 @@ def assert_lab(value: str) -> None:
         raise RuntimeError(f"non-lab address rejected: {value}")
 
 
+def _evenly_spaced(records: list[SessionRecord], need: int) -> list[SessionRecord]:
+    ordered = sorted(records, key=lambda record: (record.start_ts, record.session_id))
+    if need <= 0:
+        return []
+    if len(ordered) < need:
+        raise RuntimeError(f"cannot select {need} rows from a bucket of {len(ordered)}")
+    if need == len(ordered):
+        return ordered
+    if need == 1:
+        return [ordered[len(ordered) // 2]]
+    indices = [round(index * (len(ordered) - 1) / (need - 1)) for index in range(need)]
+    if len(set(indices)) != need:
+        raise AssertionError((len(ordered), need, indices))
+    return [ordered[index] for index in indices]
+
+
+def _label_quotas(records: list[SessionRecord], need: int, suspicious_fraction: float) -> tuple[int, int]:
+    benign = sum(1 for record in records if int(record.label_binary) == 0)
+    suspicious = sum(1 for record in records if int(record.label_binary) == 1)
+    target_suspicious = int(round(need * suspicious_fraction))
+    target_suspicious = min(target_suspicious, suspicious)
+    target_benign = need - target_suspicious
+    if target_benign > benign:
+        shift = target_benign - benign
+        target_benign = benign
+        target_suspicious += shift
+    if target_suspicious > suspicious:
+        shift = target_suspicious - suspicious
+        target_suspicious = suspicious
+        target_benign += shift
+    if target_benign + target_suspicious != need:
+        raise RuntimeError(
+            f"cannot satisfy binary label quota: need={need} benign={benign} suspicious={suspicious}"
+        )
+    return target_benign, target_suspicious
+
+
 def balanced_select(records: list[SessionRecord], count: int, protocols: tuple[str, ...]) -> list[SessionRecord]:
+    """Select an equal protocol corpus without collapsing the simulated timeline.
+
+    The old implementation took ``bucket[:need]`` after the digital-twin planner
+    had sorted rows chronologically. On a 45-day H plan this selected the earliest
+    rows of each protocol, accidentally coupling label, clock time and history
+    density. We instead preserve the planner's aggregate label fraction within
+    each protocol and choose evenly spaced rows from the full chronological
+    benign/suspicious buckets. Selection remains deterministic and label-balanced;
+    labels affect only sampling quota, never wire controls or nuisance settings.
+    """
     buckets: dict[str, list[SessionRecord]] = defaultdict(list)
-    for record in records:
-        if record.protocol in protocols:
-            buckets[record.protocol].append(record)
+    candidates = [record for record in records if record.protocol in protocols]
+    for record in candidates:
+        buckets[record.protocol].append(record)
+    if not candidates:
+        raise RuntimeError("digital twin produced no selectable protocol rows")
+
+    suspicious_fraction = sum(int(record.label_binary) for record in candidates) / len(candidates)
     base = count // len(protocols)
     remainder = count % len(protocols)
     output: list[SessionRecord] = []
     for index, protocol in enumerate(protocols):
         need = base + (1 if index < remainder else 0)
-        if len(buckets[protocol]) < need:
-            raise RuntimeError(f"digital twin produced only {len(buckets[protocol])} {protocol} rows; need {need}")
-        output.extend(buckets[protocol][:need])
+        bucket = buckets[protocol]
+        if len(bucket) < need:
+            raise RuntimeError(f"digital twin produced only {len(bucket)} {protocol} rows; need {need}")
+        benign_need, suspicious_need = _label_quotas(bucket, need, suspicious_fraction)
+        benign_rows = [record for record in bucket if int(record.label_binary) == 0]
+        suspicious_rows = [record for record in bucket if int(record.label_binary) == 1]
+        output.extend(_evenly_spaced(benign_rows, benign_need))
+        output.extend(_evenly_spaced(suspicious_rows, suspicious_need))
+
     output.sort(key=lambda record: (record.start_ts, record.session_id))
     if len(output) != count:
         raise AssertionError((len(output), count))
@@ -175,6 +232,7 @@ def main() -> int:
         "wire_controls_label_dependent": False,
         "implementation_choice_label_dependent": False,
         "simulated_timeline_preserved": True,
+        "selection_policy": "equal protocol quotas; global-label-fraction quotas per protocol; evenly spaced full-timeline sampling",
         "failures": failures[:20],
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
