@@ -1,0 +1,137 @@
+# Remote Admin Anomaly Lab V1 — Final Status
+
+**Status:** CLOSED AS VALIDATED NEGATIVE RESEARCH RESULT  
+**Decision:** `STOP_AT_1K`  
+**Model promotion:** `NONE`  
+**Branch:** `remote-admin-anomaly-lab-v1`
+
+## What is complete
+
+The V1 engineering/data pipeline is complete and reproducible:
+
+- isolated 15-namespace topology;
+- real-wire SSH, SMB, RDP and VNC traffic;
+- alternate SSH/SMB clients (Paramiko and smbprotocol);
+- 45-day simulated organization timeline;
+- balanced 1000-session research corpus;
+- immutable Bronze full PCAP/manifests/checksums;
+- Suricata + Zeek Silver;
+- deterministic Suricata rule pass stored separately from raw EVE;
+- production-compatible Suricata-flow Gold using `EveFeatureState`;
+- causal held-out state replay;
+- grouped campaign/counterfactual splits;
+- strict challenge holdout impact budgets;
+- leakage and train/serve checks;
+- M0/M1/M2 training;
+- low-FPR, hard-benign, unseen implementation/persona/pair/temporal and campaign evaluation;
+- grouped learning curve and shortcut audit;
+- private HF quarantine persistence;
+- fail-closed scale/promotion conclusion.
+
+## Final evidence chain
+
+| Gate | Run | Result |
+|---|---:|---|
+| Planner audit | `31817778803` | GREEN |
+| Final contract before wire barriers | `31817735933` | GREEN |
+| V4 40-session full-pipeline barrier | `31817920754` | GREEN |
+| 160-session implementation barrier | `31817953836` | GREEN |
+| Final 1k research | `31818445960` | pipeline/evaluation complete; scientific quality rejection on `shortcut_risk` |
+| Negative-result/HF finalizer | `31821404669` | GREEN |
+| Finalizer code contract | `31821362433` | GREEN |
+
+## Final 1k corpus
+
+- Behavioral sessions: **1000/1000 successful**.
+- Labels: **500 benign / 500 suspicious**.
+- SSH / SMB / RDP / VNC: **250 each**.
+- Timeline: **45 simulated days** represented by every protocol.
+- Compressed full Bronze PCAP: **227,883,905 B**.
+- Suricata raw flows: **2,705**.
+- Direct eligible flows: **2,271**.
+- Mapped direct flows: **2,263**.
+- Background flows retained: **434**.
+- Flow mapping coverage: **0.9964773**.
+- Session mapping coverage: **0.993**.
+- Per protocol: RDP `1.0`, SMB `1.0`, SSH `0.972`, VNC `1.0`.
+- UID alignment: **1.0**.
+- Leakage audit: **PASS**.
+
+## Model conclusion
+
+M1 LightGBM:
+
+| Split | PR-AUC | ROC-AUC |
+|---|---:|---:|
+| validation | `0.5074707204` | `0.4480471079` |
+| test | `0.5137590769` | `0.4605629446` |
+| challenge | `0.4222839299` | `0.4989922318` |
+
+- Challenge campaign recall at primary low-FPR threshold: **0.0**.
+- Hard-benign FPR: `0.0033613445` (2/595).
+- Nuisance-only feature-family baselines outperform full M1 on validation.
+- Automatic research failure: `shortcut_risk`.
+- Final grouped learning-curve delta PR-AUC: `-0.0138075260`.
+- Learning-curve recommendation: `prefer_diversity_or_holdout_analysis`.
+
+Interpretation: the corrected evaluation does not support a robust suspicious-vs-benign decision from the current V1 network-flow feature/data hypothesis. More rows from the same generator distribution are not justified.
+
+## Storage
+
+### Private durable quarantine
+
+```text
+Maksim123321/remote-admin-anomaly-v1/
+└── quarantine/rejected/gh-31818445960/
+    ├── release/
+    │   ├── bronze/H-research-1k/
+    │   ├── silver/H-research-1k/
+    │   ├── gold/H-research-1k/
+    │   └── quality/H-research-1k/
+    ├── models/
+    ├── evaluation/
+    ├── RESEARCH_GATE.json
+    └── NEGATIVE_RESEARCH_VERIFIED.json
+```
+
+HF verification status: `UPLOADED_AND_VERIFIED_QUARANTINE`; repository privacy verified.
+
+### GitHub fallback
+
+- Run `31818445960`.
+- Artifact `remote-admin-research-gate-v2-31818445960`.
+- Artifact ID `9226887886`.
+- Size `718,832,312` B.
+- Digest `sha256:40a463b9f16d4251d3b40b8915ef7a7425a883edd2916484acab660328fbbf72`.
+- Retention: 90 days.
+
+## NGFW decision
+
+- Suricata deterministic remote-admin rules: visibility/audit telemetry only.
+- M1 LightGBM: shadow/research only.
+- M2 Isolation Forest: shadow/research only.
+- Automatic drop/block/quarantine: **not justified by V1**.
+
+## What is deliberately not complete/claimed
+
+These are external fidelity/validation gaps, not hidden unfinished V1 tasks:
+
+- native Windows DCOM/DCE-RPC fidelity;
+- native Windows WinRM fidelity;
+- independent real/reference external corpus;
+- independent enterprise OS/identity/network environments;
+- adversarial C2-framework challenge traffic.
+
+V1 does not fabricate evidence for those items.
+
+## Reopening criteria for V2
+
+Do not restart by changing only seed or row count. A V2 must introduce a materially different hypothesis, then pass a fresh 1k gate before scale. Candidate changes include independently collected environments, native Windows cohorts, real/reference administration traffic, richer longitudinal policy/user context available at inference time, or redesigned session/campaign features.
+
+The positive V1 promotion files `RESULTS_AUTOGENERATED.json` and `SCALE_DECISION_AUTOGENERATED.json` intentionally do not exist. The authoritative final files are:
+
+- `RESULTS_NEGATIVE_AUTOGENERATED.md/json`;
+- `SCALE_DECISION_NEGATIVE.md/json`;
+- `HF_NEGATIVE_PERSISTENCE.json`;
+- this `FINAL_STATUS.md`;
+- `PLAN.md`.
