@@ -87,7 +87,9 @@ jobs:
       - name: Capture 40-session real-wire Bronze shard
         working-directory: remote-admin-anomaly-lab
         run: |
-          sudo -E bash scripts/capture_shard.sh A A-smoke-00 40 20260814 /tmp/adminlab-dataset
+          python_bin="$(command -v python)"
+          test -x "$python_bin"
+          sudo -E env ADMINLAB_PYTHON="$python_bin" bash scripts/capture_shard.sh A A-smoke-00 40 20260814 /tmp/adminlab-dataset
       - name: Assert immutable Bronze contract
         working-directory: remote-admin-anomaly-lab
         env:
