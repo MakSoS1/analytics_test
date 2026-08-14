@@ -6,6 +6,8 @@ if [[ $# -ne 2 ]]; then
   exit 2
 fi
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON_BIN="${ADMINLAB_PYTHON:-python3}"
 RELEASE="$(realpath -m "$1")"
 SHARD="$2"
 BRONZE="$RELEASE/bronze/$SHARD"
@@ -17,6 +19,16 @@ PCAP="$WORK/$SHARD.pcap"
 SURI_RAW="$WORK/suricata"
 ZEEK_RAW="$WORK/zeek"
 ZEEK_IMAGE="zeek/zeek:8.2.1"
+
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo "configured ADMINLAB_PYTHON is not executable: $PYTHON_BIN" >&2
+  exit 2
+fi
+if [[ ! -w "$RELEASE" ]]; then
+  echo "release tree is not writable by Silver stage: $RELEASE" >&2
+  stat -c 'owner=%u:%g mode=%a path=%n' "$RELEASE" >&2 || true
+  exit 1
+fi
 
 rm -rf "$WORK"
 mkdir -p "$WORK" "$SURI_RAW" "$ZEEK_RAW" "$SILVER/suricata" "$SILVER/zeek" "$QUALITY"
@@ -100,10 +112,9 @@ if [[ "$EVE_LINES" -le 0 || "$FLOW_EVENTS" -le 0 || "$ZEEK_CONN_LINES" -le 0 ]];
   exit 1
 fi
 
-python3 - "$SILVER" "$QUALITY/silver_contract.json" <<'PY'
+PYTHONPATH="$ROOT/src" "$PYTHON_BIN" - "$SILVER" "$QUALITY/silver_contract.json" <<'PY'
 import json, sys
 from pathlib import Path
-sys.path.insert(0, str(Path.cwd() / "src"))
 from adminlab.quality import validate_silver_tree
 report = validate_silver_tree(Path(sys.argv[1]))
 Path(sys.argv[2]).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
