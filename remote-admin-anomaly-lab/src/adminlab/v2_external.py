@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections import Counter, defaultdict
 
 import pandas as pd
@@ -15,6 +16,23 @@ REMOTE_ADMIN_PROTOCOLS = {
     5985: "winrm",
     5986: "winrm",
 }
+WINDOWS_NATIVE_NAMES = {
+    22: "openssh",
+    135: "dcom",
+    445: "smb",
+    3389: "rdp",
+    5985: "winrm",
+    5986: "winrm",
+}
+_PKTMON_HEADER_RE = re.compile(
+    r"::(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+)"
+)
+_PKTMON_TCP_RE = re.compile(
+    r"(?P<src>(?:(?:\d{1,3}\.){3}\d{1,3})|::1)\."
+    r"(?P<sport>\d+)\s+>\s+"
+    r"(?P<dst>(?:(?:\d{1,3}\.){3}\d{1,3})|::1)\."
+    r"(?P<dport>\d+):.*?\blength\s+(?P<length>\d+)"
+)
 
 
 def _entropy(values: list[str]) -> float:
@@ -29,6 +47,98 @@ def _protocol(row: pd.Series) -> str:
     dst = int(row["dst_port"]) if pd.notna(row["dst_port"]) else -1
     src = int(row["src_port"]) if pd.notna(row["src_port"]) else -1
     return REMOTE_ADMIN_PROTOCOLS.get(dst) or REMOTE_ADMIN_PROTOCOLS.get(src) or "other"
+
+
+def parse_pktmon_text_sessions(text: str, validated: set[str]) -> tuple[pd.DataFrame, dict]:
+    """Recover session-like rows from retained `pktmon format` text evidence.
+
+    Some Windows runner pktmon PCAPNG files keep enough ETW/packet information
+    for `pktmon format` but do not expose conventional Wireshark `tcp.stream`
+    fields. This parser therefore consumes the retained formatted packet evidence
+    rather than weakening native-fidelity validation. Each unique
+    protocol/server-port/client-port tuple is one bounded reference session.
+    Packet identities are used only in this temporary table and are removed by
+    `build_lanl_session_features` before model scoring.
+    """
+    valid = {str(item) for item in validated}
+    current_ts: float | None = None
+    groups: dict[tuple[str, int, int], dict[str, object]] = {}
+    matched_packet_lines = 0
+
+    for line in str(text).splitlines():
+        header = _PKTMON_HEADER_RE.search(line)
+        if header is not None:
+            current_ts = float(pd.Timestamp(header.group("ts"), tz="UTC").timestamp())
+            continue
+        if current_ts is None:
+            continue
+        packet = _PKTMON_TCP_RE.search(line)
+        if packet is None:
+            continue
+        sport = int(packet.group("sport"))
+        dport = int(packet.group("dport"))
+        protocol = WINDOWS_NATIVE_NAMES.get(dport) or WINDOWS_NATIVE_NAMES.get(sport)
+        if protocol is None or protocol not in valid:
+            continue
+        server_port = dport if WINDOWS_NATIVE_NAMES.get(dport) == protocol else sport
+        client_port = sport if dport == server_port else dport
+        key = (protocol, int(server_port), int(client_port))
+        group = groups.setdefault(
+            key,
+            {
+                "first": current_ts,
+                "last": current_ts,
+                "src_packets": 0,
+                "dst_packets": 0,
+                "src_bytes": 0,
+                "dst_bytes": 0,
+            },
+        )
+        group["first"] = min(float(group["first"]), current_ts)
+        group["last"] = max(float(group["last"]), current_ts)
+        length = int(packet.group("length"))
+        if dport == server_port:
+            group["src_packets"] = int(group["src_packets"]) + 1
+            group["src_bytes"] = int(group["src_bytes"]) + length
+        else:
+            group["dst_packets"] = int(group["dst_packets"]) + 1
+            group["dst_bytes"] = int(group["dst_bytes"]) + length
+        matched_packet_lines += 1
+
+    rows: list[dict[str, object]] = []
+    sessions_by_protocol: Counter[str] = Counter()
+    for (protocol, server_port, client_port), group in sorted(
+        groups.items(), key=lambda item: (float(item[1]["first"]), item[0])
+    ):
+        sessions_by_protocol[protocol] += 1
+        rows.append(
+            {
+                "time": float(group["first"]),
+                "duration": max(0.0, float(group["last"]) - float(group["first"])),
+                "src_device": "windows_runner",
+                "dst_device": f"native_{protocol}",
+                "protocol": "6",
+                "src_port": int(client_port),
+                "dst_port": int(server_port),
+                "src_packets": int(group["src_packets"]),
+                "dst_packets": int(group["dst_packets"]),
+                "src_bytes": int(group["src_bytes"]),
+                "dst_bytes": int(group["dst_bytes"]),
+                "native_protocol": protocol,
+                "pktmon_session_key": f"{protocol}:{server_port}:{client_port}",
+            }
+        )
+
+    frame = pd.DataFrame(rows)
+    evidence = {
+        "transport": "pktmon_formatted_text",
+        "matched_packet_lines": int(matched_packet_lines),
+        "sessions_total": int(len(frame)),
+        "sessions_by_protocol": dict(sorted(sessions_by_protocol.items())),
+        "validated_protocols_requested": sorted(valid),
+        "identity_retained_in_model_features": False,
+    }
+    return frame, evidence
 
 
 def build_lanl_session_features(netflow: pd.DataFrame) -> pd.DataFrame:
