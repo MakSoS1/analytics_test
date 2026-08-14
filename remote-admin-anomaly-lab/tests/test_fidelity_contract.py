@@ -27,6 +27,12 @@ def test_fidelity_probe_uses_real_tools_and_explicit_partial_statuses():
     assert "validated" in text
 
 
+def test_listener_check_filters_local_socket_port_not_peer_column():
+    text = PROBE.read_text(encoding="utf-8")
+    assert '"ss", "-H", "-ltn", "sport", "=", f":{port}"' in text
+    assert 'line.rstrip().endswith(f":{port}")' not in text
+
+
 def test_probe_never_promotes_tool_presence_to_validated_wire_fidelity():
     text = PROBE.read_text(encoding="utf-8")
     assert "tool_present" in text
