@@ -92,8 +92,15 @@ jobs:
         working-directory: remote-admin-anomaly-lab
         run: |
           python_bin="$(command -v python)"
+          output_uid="$(id -u)"
+          output_gid="$(id -g)"
           test -x "$python_bin"
-          sudo -E env ADMINLAB_PYTHON="$python_bin" bash scripts/capture_shard.sh A A-smoke-00 40 20260814 /tmp/adminlab-dataset
+          sudo -E env \
+            ADMINLAB_PYTHON="$python_bin" \
+            ADMINLAB_OUTPUT_UID="$output_uid" \
+            ADMINLAB_OUTPUT_GID="$output_gid" \
+            bash scripts/capture_shard.sh A A-smoke-00 40 20260814 /tmp/adminlab-dataset
+          test -w /tmp/adminlab-dataset/release
       - name: Assert immutable Bronze contract
         working-directory: remote-admin-anomaly-lab
         env:
@@ -111,6 +118,7 @@ jobs:
           health = json.loads((root / 'quality/A-smoke-00/capture_health.json').read_text())
           assert health['full_capture_retained'] is True
           assert health['sessions'] == 40, health
+          assert health['output_owner_uid'] > 0, health
           assert (bronze / 'manifests/sessions.parquet').stat().st_size > 0
           assert (bronze / 'manifests/ground_truth.parquet').stat().st_size > 0
           assert (bronze / 'manifests/hosts.parquet').stat().st_size > 0
@@ -119,7 +127,8 @@ jobs:
           PY
       - name: Build Silver from the retained Bronze PCAP
         working-directory: remote-admin-anomaly-lab
-        run: bash scripts/build_silver.sh /tmp/adminlab-dataset/release A-smoke-00
+        run: |
+          ADMINLAB_PYTHON="$(command -v python)" bash scripts/build_silver.sh /tmp/adminlab-dataset/release A-smoke-00
       - name: Assert Suricata and Zeek Silver contract
         working-directory: remote-admin-anomaly-lab
         env:
