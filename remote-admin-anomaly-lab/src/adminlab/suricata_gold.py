@@ -19,11 +19,6 @@ def _epoch(value: Any) -> float:
 
 
 def normalize_suricata_flow_events(eve: pd.DataFrame) -> pd.DataFrame:
-    """Normalize Suricata EVE flow rows for the generic PCAP→session mapper.
-
-    The original event dict is retained in the `event` column so offline feature
-    extraction can replay the exact Suricata structure through EveFeatureState.
-    """
     if eve.empty:
         return pd.DataFrame()
     if "event_type" not in eve.columns:
@@ -33,17 +28,15 @@ def normalize_suricata_flow_events(eve: pd.DataFrame) -> pd.DataFrame:
     for index, event in enumerate(flows.to_dict("records")):
         flow_id = event.get("flow_id")
         uid = f"suri:{flow_id}" if flow_id not in (None, "") else f"suri-row:{index:012d}"
-        rows.append(
-            {
-                "uid": uid,
-                "ts": _epoch(event.get("timestamp")),
-                "id.orig_h": str(event.get("src_ip", "")),
-                "id.resp_h": str(event.get("dest_ip", "")),
-                "id.orig_p": int(event.get("src_port") or 0),
-                "id.resp_p": int(event.get("dest_port") or 0),
-                "event": event,
-            }
-        )
+        rows.append({
+            "uid": uid,
+            "ts": _epoch(event.get("timestamp")),
+            "id.orig_h": str(event.get("src_ip", "")),
+            "id.resp_h": str(event.get("dest_ip", "")),
+            "id.orig_p": int(event.get("src_port") or 0),
+            "id.resp_p": int(event.get("dest_port") or 0),
+            "event": event,
+        })
     return pd.DataFrame(rows)
 
 
@@ -55,17 +48,11 @@ def attach_behavior_time(mapped: pd.DataFrame, sessions: pd.DataFrame) -> pd.Dat
     times = sessions[["session_id", "start_ts", "execution_start_ts"]].copy()
     times["_sim_start"] = pd.to_datetime(times["start_ts"], utc=True).astype("int64") / 1_000_000_000.0
     times["_exec_start"] = pd.to_datetime(times["execution_start_ts"], utc=True).astype("int64") / 1_000_000_000.0
-    out = mapped.merge(
-        times[["session_id", "_sim_start", "_exec_start"]],
-        on="session_id",
-        how="left",
-        validate="many_to_one",
-    )
+    out = mapped.merge(times[["session_id", "_sim_start", "_exec_start"]], on="session_id", how="left", validate="many_to_one")
     if out[["_sim_start", "_exec_start"]].isna().any().any():
         raise ValueError("cannot project parser flow onto simulated behavior clock")
     out["execution_ts"] = pd.to_numeric(out["ts"], errors="coerce")
-    offset = (out["execution_ts"] - out["_exec_start"]).clip(lower=0.0)
-    out["behavior_ts"] = out["_sim_start"] + offset
+    out["behavior_ts"] = out["_sim_start"] + (out["execution_ts"] - out["_exec_start"]).clip(lower=0.0)
     return out.drop(columns=["_sim_start", "_exec_start"])
 
 
@@ -74,23 +61,25 @@ def _iso_from_epoch(value: float) -> str:
 
 
 def build_split_isolated_suricata_features(mapped_events: pd.DataFrame) -> pd.DataFrame:
-    """Replay captured EVE flows through the exact online state implementation.
+    """Replay captured EVE flows through the exact online EveFeatureState.
 
-    A fresh EveFeatureState is created for each dataset partition, preventing
-    validation/test/challenge events from contaminating train state. Only the
-    outer EVE timestamp is projected to simulated organization time; the nested
-    flow start/end remain captured values, preserving the real wire duration.
+    `uid` is the mapper-internal name; `flow_uid` is the public Gold name. This
+    helper accepts either so train/serve parity tests and pipeline code share one
+    stable output schema.
     """
+    frame = mapped_events.copy()
+    if "uid" not in frame.columns and "flow_uid" in frame.columns:
+        frame["uid"] = frame["flow_uid"].astype(str)
     required = {"uid", "session_id", "split", "behavior_ts", "event"}
-    missing = required - set(mapped_events.columns)
+    missing = required - set(frame.columns)
     if missing:
         raise ValueError(f"mapped Suricata events missing: {sorted(missing)}")
-    order = {str(uid): index for index, uid in enumerate(mapped_events["uid"].astype(str).tolist())}
+    order = {str(uid): index for index, uid in enumerate(frame["uid"].astype(str).tolist())}
     chunks: list[pd.DataFrame] = []
     preferred = ["train", "validation", "test", "challenge"]
-    split_names = preferred + sorted(set(mapped_events["split"].astype(str)) - set(preferred))
+    split_names = preferred + sorted(set(frame["split"].astype(str)) - set(preferred))
     for split in split_names:
-        part = mapped_events[mapped_events["split"].astype(str) == split].copy()
+        part = frame[frame["split"].astype(str) == split].copy()
         if part.empty:
             continue
         part = part.sort_values(["behavior_ts", "session_id", "uid"])
