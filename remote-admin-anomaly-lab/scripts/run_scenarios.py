@@ -39,10 +39,18 @@ def run_ssh(r:SessionRecord,ns:str,state_dir:Path,work_dir:Path)->None:
         size=_transfer_bytes(r,64*1024);f=work_dir/f'inert-{r.session_id}.bin';f.write_bytes((b'ADMINLAB-INERT-SSH-MARKER\n'*((size//26)+1))[:size]);scp=['ip','netns','exec',ns,'scp','-q','-i',str(key),'-o','BatchMode=yes','-o','StrictHostKeyChecking=no','-o','UserKnownHostsFile=/dev/null',str(f),f'root@{r.dst_ip}:/tmp/{f.name}']
         for _ in range(_attempts(r)):run(scp,timeout=30)
         return
+    if r.action=='bounded_proxyjump':
+        # Lab-only OpenSSH ProxyJump: source -> linux01 -> linux02. Both hops are
+        # inside 10.77/24, no SOCKS listener, no external destination and no
+        # payload execution beyond a harmless `true` on the final host.
+        jump='10.77.0.21';target='10.77.0.22';assert_lab_address(jump);assert_lab_address(target)
+        proxy=['ip','netns','exec',ns,'ssh','-i',str(key),'-o','BatchMode=yes','-o','StrictHostKeyChecking=no','-o','UserKnownHostsFile=/dev/null','-o','ConnectTimeout=5','-o',f'ProxyCommand=ssh -i {key} -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p root@{jump}',f'root@{target}','true']
+        for _ in range(_attempts(r)):run(proxy,timeout=20)
+        return
     reps=_attempts(r) if r.action=='repeated_login' else 1
     for _ in range(reps):run(base+["printf 'adminlab-session-ok\\n' >/dev/null; true"],timeout=15)
 def run_smb(r:SessionRecord,ns:str,work_dir:Path)->None:
-    assert_lab_address(r.dst_ip);base=['ip','netns','exec',ns,'smbclient',f'//{r.dst_ip}/public','-N','-m','SMB3'];reps=_attempts(r)
+    assert_lab_address(r.dst_ip);base=['ip','netns','exec',ns,'smbclient',f'//{r.dst_ip}/adminlab_admin','-U','adminlab_smb%AdminlabSMB-2026!','-m','SMB3'];reps=_attempts(r)
     if r.action=='inert_marker_put':
         size=_transfer_bytes(r,128*1024);f=work_dir/f'inert-marker-{r.session_id}.bin';f.write_bytes((b'ADMINLAB-INERT-SMB-MARKER\n'*((size//26)+1))[:size])
         for _ in range(reps):run(base+['-c',f'put {f} {f.name}'],timeout=30)
