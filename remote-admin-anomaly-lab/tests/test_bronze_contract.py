@@ -17,6 +17,14 @@ def test_capture_script_retains_full_compressed_pcap_and_checksums():
     assert "rm -f \"$COMPRESSED_PCAP\"" not in text
 
 
+def test_capture_script_uses_explicit_python_runtime_for_root_packaging():
+    text = CAPTURE.read_text(encoding="utf-8")
+    assert 'PYTHON_BIN="${ADMINLAB_PYTHON:-python3}"' in text
+    assert '"$PYTHON_BIN" "$ROOT/scripts/run_scenarios.py"' in text
+    assert '"$PYTHON_BIN" "$ROOT/scripts/package_bronze.py"' in text
+    assert 'sudo -E python "$ROOT/scripts/run_scenarios.py"' not in text
+
+
 def test_bronze_validator_accepts_complete_tree(tmp_path: Path):
     shard = tmp_path / "bronze" / "A-smoke-00"
     (shard / "captures").mkdir(parents=True)
