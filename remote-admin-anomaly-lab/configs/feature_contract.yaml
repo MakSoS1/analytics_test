@@ -1,4 +1,5 @@
-feature_contract_version: 4
+feature_contract_version: 5
+production_source: suricata_eve_flow
 
 production_allowlist:
   - flow_count
@@ -13,29 +14,9 @@ production_allowlist:
   - packets_ratio
   - app_proto
   - dst_port
-  - tcp_syn_count
-  - tcp_rst_count
-  - tcp_fin_count
-  - iat_mean_ms
-  - iat_std_ms
-  - iat_cv
-  - packet_size_mean
-  - packet_size_std
   - hour_sin
   - hour_cos
   - is_weekend
-  - connection_success
-  - connection_failure
-  - connection_outcome_known
-  - successful_connection_rate_15m
-  - failed_connection_rate_15m
-  - successful_connection_rate_1h
-  - failed_connection_rate_1h
-  - successful_connection_rate_24h
-  - failed_connection_rate_24h
-  - ssh_auth_observed
-  - ssh_auth_success
-  - ssh_auth_attempts
   - connections_1m
   - connections_5m
   - connections_15m
@@ -63,6 +44,36 @@ production_allowlist:
   - new_edge_count_1h
   - protocol_entropy_1h
   - protocol_entropy_24h
+
+production_required:
+  - duration
+  - bytes_total
+  - packets_total
+  - app_proto
+  - dst_port
+  - connections_1m
+  - connections_1h
+  - connections_24h
+  - connections_7d
+  - connections_30d
+  - new_dst_for_src
+  - new_src_dst_pair
+  - pair_seen_count
+  - protocol_entropy_1h
+
+research_optional_zeek:
+  - connection_success
+  - connection_failure
+  - connection_outcome_known
+  - successful_connection_rate_15m
+  - failed_connection_rate_15m
+  - successful_connection_rate_1h
+  - failed_connection_rate_1h
+  - successful_connection_rate_24h
+  - failed_connection_rate_24h
+  - ssh_auth_observed
+  - ssh_auth_success
+  - ssh_auth_attempts
 
 training_only:
   - label_binary
