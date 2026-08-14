@@ -49,7 +49,8 @@ def build_session_gold(
 
     Host identifiers from the label side are used only as ephemeral state keys,
     equivalent to production src/dst IP keys. They are never emitted as model
-    features.
+    features. Evaluation-only task/persona/fidelity metadata stays exclusively
+    in the label table so hard-negative and slice audits remain reproducible.
     """
     required_features = {"flow_uid", "session_id"}
     required_labels = {
@@ -167,10 +168,11 @@ def build_session_gold(
 
         label_fields = [
             "campaign_id", "label_binary", "split", "challenge_reason", "protocol",
-            "persona_id", "implementation_id", "src_host_id", "dst_host_id",
-            "start_ts", "end_ts", "scenario_id", "pair_id", "label_family",
-            "campaign_type", "behavior_profile", "intent_profile",
-            "historical_relation", "sequence_profile", "simulated_day",
+            "persona_id", "task_id", "calendar_id", "implementation_id",
+            "src_host_id", "dst_host_id", "start_ts", "end_ts", "scenario_id", "pair_id",
+            "label_family", "campaign_type", "behavior_profile", "intent_profile",
+            "historical_relation", "sequence_profile", "simulated_day", "auth_outcome",
+            "wire_fidelity", "semantic_fidelity", "client_stack", "server_stack",
         ]
         label_row: dict[str, object] = {"session_id": sid, "environment_id": environment_id}
         for field in label_fields:
