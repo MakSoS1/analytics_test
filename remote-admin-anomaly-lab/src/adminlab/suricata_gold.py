@@ -164,8 +164,17 @@ def _iso_from_epoch(value: float) -> str:
     return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat()
 
 
-def build_split_isolated_suricata_features(mapped_events: pd.DataFrame) -> pd.DataFrame:
-    """Replay captured EVE flows through the exact online EveFeatureState."""
+def _feature_row(state: EveFeatureState, row: dict[str, Any]) -> dict[str, Any]:
+    event = deepcopy(row["event"])
+    event["timestamp"] = _iso_from_epoch(float(row["behavior_ts"]))
+    result = state.consume_flow(event)
+    features = dict(result["features"])
+    features["flow_uid"] = str(row["uid"])
+    features["session_id"] = str(row["session_id"])
+    return features
+
+
+def _validated_feature_frame(mapped_events: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:
     frame = mapped_events.copy()
     if "uid" not in frame.columns and "flow_uid" in frame.columns:
         frame["uid"] = frame["flow_uid"].astype(str)
@@ -174,6 +183,25 @@ def build_split_isolated_suricata_features(mapped_events: pd.DataFrame) -> pd.Da
     if missing:
         raise ValueError(f"mapped Suricata events missing: {sorted(missing)}")
     order = {str(uid): index for index, uid in enumerate(frame["uid"].astype(str).tolist())}
+    return frame, order
+
+
+def _restore_original_order(chunks: list[pd.DataFrame], order: dict[str, int]) -> pd.DataFrame:
+    if not chunks:
+        return pd.DataFrame()
+    result = pd.concat(chunks, ignore_index=True)
+    result["_order"] = result["flow_uid"].map(order).fillna(len(order))
+    return result.sort_values("_order").drop(columns=["_order"]).reset_index(drop=True)
+
+
+def build_split_isolated_suricata_features(mapped_events: pd.DataFrame) -> pd.DataFrame:
+    """Replay each split from an empty EveFeatureState.
+
+    Retained for explicit experiments and backwards-comparison only. Production
+    research Gold uses :func:`build_reference_context_suricata_features` so a
+    held-out split is not evaluated with an artificial zero-history baseline.
+    """
+    frame, order = _validated_feature_frame(mapped_events)
     chunks: list[pd.DataFrame] = []
     preferred = ["train", "validation", "test", "challenge"]
     split_names = preferred + sorted(set(frame["split"].astype(str)) - set(preferred))
@@ -183,18 +211,49 @@ def build_split_isolated_suricata_features(mapped_events: pd.DataFrame) -> pd.Da
             continue
         part = part.sort_values(["behavior_ts", "session_id", "uid"])
         state = EveFeatureState()
-        rows: list[dict[str, Any]] = []
-        for row in part.to_dict("records"):
-            event = deepcopy(row["event"])
-            event["timestamp"] = _iso_from_epoch(float(row["behavior_ts"]))
-            result = state.consume_flow(event)
-            features = dict(result["features"])
-            features["flow_uid"] = str(row["uid"])
-            features["session_id"] = str(row["session_id"])
-            rows.append(features)
+        rows = [_feature_row(state, row) for row in part.to_dict("records")]
         chunks.append(pd.DataFrame(rows))
-    if not chunks:
-        return pd.DataFrame()
-    result = pd.concat(chunks, ignore_index=True)
-    result["_order"] = result["flow_uid"].map(order).fillna(len(order))
-    return result.sort_values("_order").drop(columns=["_order"]).reset_index(drop=True)
+    return _restore_original_order(chunks, order)
+
+
+def build_reference_context_suricata_features(mapped_events: pd.DataFrame) -> pd.DataFrame:
+    """Replay held-out splits with causal prior-train network context.
+
+    A deployed EveFeatureState does not reset merely because an evaluator later
+    calls a row ``validation`` or ``test``. At the same time, generic evaluation
+    must not let validation/test/challenge covariates contaminate one another.
+
+    For each target split we therefore replay the complete chronology but consume
+    only prior ``train`` rows plus prior rows from that target split. Features are
+    emitted only for the target split. This is causal (no future events), uses no
+    labels, preserves the exact online state machine, and gives validation/test/
+    challenge a common reference history instead of an artificial empty state.
+    """
+    frame, order = _validated_feature_frame(mapped_events)
+    ordered = frame.sort_values(["behavior_ts", "session_id", "uid"])
+    observed_splits = set(ordered["split"].astype(str))
+    preferred = ["train", "validation", "test", "challenge"]
+    split_names = [split for split in preferred if split in observed_splits]
+    split_names.extend(sorted(observed_splits - set(split_names)))
+
+    chunks: list[pd.DataFrame] = []
+    rows_as_dicts = ordered.to_dict("records")
+    for target_split in split_names:
+        state = EveFeatureState()
+        emitted: list[dict[str, Any]] = []
+        for row in rows_as_dicts:
+            row_split = str(row["split"])
+            if row_split != "train" and row_split != target_split:
+                continue
+            features = _feature_row(state, row)
+            if row_split == target_split:
+                emitted.append(features)
+        if emitted:
+            chunks.append(pd.DataFrame(emitted))
+
+    result = _restore_original_order(chunks, order)
+    if len(result) != len(frame):
+        raise ValueError(f"reference-context replay incomplete: {len(result)} != {len(frame)}")
+    if result["flow_uid"].astype(str).duplicated().any():
+        raise ValueError("reference-context replay emitted duplicate flow_uid")
+    return result
