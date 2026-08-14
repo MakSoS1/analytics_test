@@ -1,0 +1,111 @@
+schema_version: 3
+primary_unit: session
+training_environment: linux_v3
+external_training_environments: []
+forbidden_model_columns:
+  - label_binary
+  - label_family
+  - split
+  - challenge_reason
+  - scenario_id
+  - campaign_id
+  - session_id
+  - flow_uid
+  - pair_id
+  - campaign_type
+  - behavior_profile
+  - intent_profile
+  - historical_relation
+  - sequence_profile
+  - implementation_id
+  - environment_id
+  - generator_seed
+  - netem_profile
+  - src_host_id
+  - dst_host_id
+  - src_ip
+  - dst_ip
+  - persona_id
+  - task_id
+  - calendar_id
+  - wire_fidelity
+  - semantic_fidelity
+  - ground_truth_source
+  - client_stack
+  - server_stack
+  - action
+  - protocol
+  - mitre_technique
+  - auth_outcome
+session_required_features:
+  - flow_count
+  - session_duration_s
+  - session_total_bytes
+  - session_total_packets
+  - src_distinct_dst_24h_prior
+  - src_distinct_dst_7d_prior
+  - src_distinct_dst_30d_prior
+  - pair_seen_count_prior
+  - time_since_pair_seen_seconds_prior
+  - new_destination_for_source
+  - new_protocol_for_source
+  - src_protocol_diversity_7d_prior
+  - src_new_target_count_24h_prior
+  - src_graph_expansion_rate_24h_prior
+  - recent_protocol_switch_count_prior
+  - recent_remote_admin_attempt_count_prior
+session_primary_history_features:
+  - src_distinct_dst_24h_prior
+  - src_distinct_dst_7d_prior
+  - src_distinct_dst_30d_prior
+  - pair_seen_count_prior
+  - time_since_pair_seen_seconds_prior
+  - new_destination_for_source
+  - new_protocol_for_source
+  - src_protocol_diversity_7d_prior
+  - src_new_target_count_1h_prior
+  - src_new_target_count_24h_prior
+  - src_graph_expansion_rate_24h_prior
+  - recent_protocol_switch_count_prior
+  - recent_remote_admin_attempt_count_prior
+nuisance_feature_groups:
+  time_only:
+    - hour_sin
+    - hour_cos
+    - is_weekend
+  bytes_packets_only:
+    - session_total_bytes
+    - session_total_packets
+    - session_src_bytes
+    - session_dst_bytes
+    - flow_bytes_mean
+    - flow_bytes_max
+  duration_rate_only:
+    - session_duration_s
+    - flow_duration_mean
+    - flow_duration_max
+    - flow_count
+  current_session_only:
+    - flow_count
+    - session_duration_s
+    - session_total_bytes
+    - session_total_packets
+    - session_src_bytes
+    - session_dst_bytes
+    - flow_duration_mean
+    - flow_duration_max
+    - flow_bytes_mean
+    - flow_bytes_max
+    - hour_sin
+    - hour_cos
+    - is_weekend
+campaign_required_features:
+  - session_count
+  - target_count
+  - protocol_count
+  - new_target_ratio
+  - protocol_transition_count
+  - protocol_entropy
+  - fanout_slope
+  - inter_session_mean_s
+  - unseen_pair_fraction
