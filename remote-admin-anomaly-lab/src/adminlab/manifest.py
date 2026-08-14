@@ -42,6 +42,8 @@ class SessionRecord:
     historical_relation: str = ""
     auth_outcome: str = "success"
     client_stack: str = ""
+    server_stack: str = ""
+    implementation_id: str = ""
     simulated_day: int = 0
     campaign_position: int = 0
     campaign_size: int = 1
