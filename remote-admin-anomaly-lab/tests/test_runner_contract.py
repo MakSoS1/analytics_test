@@ -30,7 +30,9 @@ def test_service_script_binds_ssh_and_smb_inside_namespaces():
 def test_service_process_groups_are_isolated_and_cleanup_is_narrow():
     text = SERVICES.read_text(encoding="utf-8")
     assert "setsid ip netns exec" in text
-    assert 'kill -- "-$pgid"' in text
+    assert 'kill -TERM -- "-$pgid"' in text
+    assert 'kill -KILL -- "-$pgid"' in text
+    assert 'kill -0 -- "-$pgid"' in text
     assert 'for pid in $(ip netns pids' not in text
 
 
