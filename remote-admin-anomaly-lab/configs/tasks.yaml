@@ -1,0 +1,28 @@
+tasks:
+  deploy:
+    protocols: [ssh, smb]
+    behavior_profiles: [medium_interactive, small_transfer, maintenance_fanout]
+  fix_incident:
+    protocols: [ssh, rdp, vnc, smb]
+    behavior_profiles: [short_interactive, medium_interactive, reconnect]
+  patch_management:
+    protocols: [ssh, smb, rdp]
+    behavior_profiles: [medium_interactive, maintenance_fanout, bulk_transfer]
+  backup:
+    protocols: [ssh, smb]
+    behavior_profiles: [bulk_transfer, long_interactive]
+  monitoring:
+    protocols: [ssh, smb]
+    behavior_profiles: [short_interactive, reconnect]
+  debug:
+    protocols: [ssh, rdp, vnc]
+    behavior_profiles: [medium_interactive, long_interactive, reconnect]
+  user_support:
+    protocols: [rdp, vnc, smb]
+    behavior_profiles: [short_interactive, medium_interactive, reconnect]
+  emergency_admin:
+    protocols: [ssh, rdp, smb]
+    behavior_profiles: [short_interactive, long_interactive, maintenance_fanout]
+  service_automation:
+    protocols: [ssh, smb]
+    behavior_profiles: [short_interactive, small_transfer, maintenance_fanout]
