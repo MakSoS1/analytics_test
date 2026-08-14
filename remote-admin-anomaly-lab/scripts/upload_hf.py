@@ -54,28 +54,40 @@ def write_status(path: Path | None, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _quality_transport_ignore(source: Path):
+    windows_dir = (source / "external" / "windows").resolve()
+
+    def ignore(directory: str, names: list[str]) -> list[str]:
+        current = Path(directory).resolve()
+        if current == windows_dir and "capture.txt" in names:
+            return ["capture.txt"]
+        return []
+
+    return ignore
+
+
 def stage_quality_for_hf(source: Path, target: Path) -> list[dict]:
-    """Create a recoverable HF transport copy without mutating the release.
+    """Create a recoverable HF transport copy without mutating source data.
 
     `pktmon format` writes UTF-16 text. Hugging Face's commit endpoint can reject
-    such bytes under a `.txt` filename as binary regular-Git content. We retain
-    the exact original in the authoritative retained artifact and losslessly gzip
-    only the HF transport copy. The transform manifest records hashes and sizes
-    so the original bytes can be reconstructed and verified exactly.
+    such bytes under a `.txt` filename as binary regular-Git content. The staging
+    tree therefore omits that one source file during copy and writes a lossless,
+    deterministic gzip representation directly at the corresponding destination.
+    A transform manifest records hashes and sizes for exact reconstruction.
     """
-    shutil.copytree(source, target)
+    raw_source = source / "external" / "windows" / "capture.txt"
+    shutil.copytree(source, target, ignore=_quality_transport_ignore(source))
     transforms: list[dict] = []
-    raw = target / "external" / "windows" / "capture.txt"
-    if raw.is_file() and raw.stat().st_size > 0:
-        original_bytes = raw.stat().st_size
-        original_sha = sha256_file(raw)
-        compressed = raw.with_name(raw.name + ".gz")
-        with raw.open("rb") as src, compressed.open("wb") as dst:
+    if raw_source.is_file() and raw_source.stat().st_size > 0:
+        original_bytes = raw_source.stat().st_size
+        original_sha = sha256_file(raw_source)
+        compressed = target / "external" / "windows" / "capture.txt.gz"
+        compressed.parent.mkdir(parents=True, exist_ok=True)
+        with raw_source.open("rb") as src, compressed.open("wb") as dst:
             with gzip.GzipFile(filename="capture.txt", mode="wb", fileobj=dst, mtime=0) as gz:
                 shutil.copyfileobj(src, gz, length=1024 * 1024)
         compressed_sha = sha256_file(compressed)
         compressed_bytes = compressed.stat().st_size
-        raw.unlink()
         transforms.append(
             {
                 "original_path": "external/windows/capture.txt",
