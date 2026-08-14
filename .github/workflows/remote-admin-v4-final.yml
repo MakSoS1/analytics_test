@@ -74,6 +74,9 @@ jobs:
           assert len(sessions)==40 and sessions['status'].eq('success').all()
           assert sessions['protocol'].value_counts().to_dict()=={'ssh':10,'smb':10,'rdp':10,'vnc':10},sessions['protocol'].value_counts().to_dict()
           assert set(sessions['client_stack'].astype(str))=={'openssh','smbclient','freerdp','rfb-python'}
+          expected_impl={'ssh:openssh->openssh-server','smb:smbclient->samba','rdp:freerdp->xrdp','vnc:rfb-python->tigervnc'}
+          assert set(sessions['implementation_id'].astype(str))==expected_impl,sessions['implementation_id'].value_counts().to_dict()
+          assert sessions['server_stack'].fillna('').astype(str).str.len().gt(0).all()
           assert cap['dcerpc_train_included'] is False and cap['partial_winrm_included'] is False
           assert parser['suricata_flow_events']>0 and parser['zeek_conn_lines']>0,parser
           assert rules['ok'] is True and rules['ground_truth_source'] is False,rules
@@ -85,7 +88,7 @@ jobs:
           matrix=pd.read_parquet(root/'gold'/shard/'production_model_matrix.parquet')
           forbidden={'scenario_id','campaign_id','session_id','pair_id','persona_id','task_id','client_stack','server_stack','implementation_id','src_ip','dst_ip','netem_profile','wire_attempts','wire_transfer_bytes'}
           assert not (set(matrix.columns)&forbidden),sorted(set(matrix.columns)&forbidden)
-          report={'bronze':bronze,'silver':silver,'capture':cap,'parser':parser,'rules':rules,'production':prod,'leakage':leak,'model_rows':len(matrix),'model_columns':list(matrix.columns)}
+          report={'bronze':bronze,'silver':silver,'capture':cap,'parser':parser,'rules':rules,'production':prod,'leakage':leak,'model_rows':len(matrix),'model_columns':list(matrix.columns),'implementation_counts':sessions['implementation_id'].value_counts().to_dict()}
           Path('/tmp/adminlab-v4-final/V4_FINAL_REPORT.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
           print(json.dumps(report,indent=2,sort_keys=True))
           PY
