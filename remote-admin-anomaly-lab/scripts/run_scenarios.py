@@ -18,8 +18,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from adminlab.config import load_yaml  # noqa: E402
+from adminlab.digital_twin import load_digital_twin_bundle, plan_digital_twin_sessions  # noqa: E402
 from adminlab.manifest import SessionRecord, write_sessions  # noqa: E402
-from adminlab.scenarios import plan_sessions  # noqa: E402
 
 LAB_NETWORK = ip_network("10.77.0.0/24")
 SUPPORTED_PROTOCOLS = {"ssh", "smb"}
@@ -83,23 +83,19 @@ def clear_netem(ns: str) -> None:
 def ssh_base(ns: str, key: Path, dst_ip: str) -> list[str]:
     assert_lab_address(dst_ip)
     return [
-        "ip",
-        "netns",
-        "exec",
-        ns,
-        "ssh",
-        "-i",
-        str(key),
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "StrictHostKeyChecking=no",
-        "-o",
-        "UserKnownHostsFile=/dev/null",
-        "-o",
-        "ConnectTimeout=5",
+        "ip", "netns", "exec", ns, "ssh", "-i", str(key),
+        "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=5",
         f"root@{dst_ip}",
     ]
+
+
+def _transfer_bytes(record: SessionRecord, fallback: int) -> int:
+    return int(record.wire_transfer_bytes) if int(record.wire_transfer_bytes) > 0 else fallback
+
+
+def _attempts(record: SessionRecord) -> int:
+    return max(1, int(record.wire_attempts))
 
 
 def run_ssh(record: SessionRecord, ns: str, state_dir: Path, work_dir: Path) -> None:
@@ -109,33 +105,20 @@ def run_ssh(record: SessionRecord, ns: str, state_dir: Path, work_dir: Path) -> 
     base = ssh_base(ns, key, record.dst_ip)
 
     if record.action == "inert_sftp_transfer":
-        size = 32 * 1024 if record.label_binary == 0 else 256 * 1024
+        size = _transfer_bytes(record, 64 * 1024)
         inert = work_dir / f"inert-{record.session_id}.bin"
         inert.write_bytes((b"ADMINLAB-INERT-SSH-MARKER\n" * ((size // 26) + 1))[:size])
         scp = [
-            "ip",
-            "netns",
-            "exec",
-            ns,
-            "scp",
-            "-q",
-            "-i",
-            str(key),
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "StrictHostKeyChecking=no",
-            "-o",
-            "UserKnownHostsFile=/dev/null",
-            str(inert),
+            "ip", "netns", "exec", ns, "scp", "-q", "-i", str(key),
+            "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null", str(inert),
             f"root@{record.dst_ip}:/tmp/{inert.name}",
         ]
-        run(scp, timeout=30)
+        for _ in range(_attempts(record)):
+            run(scp, timeout=30)
         return
 
-    repetitions = 1
-    if record.action == "repeated_login":
-        repetitions = 2 if record.label_binary == 0 else 6
+    repetitions = _attempts(record) if record.action == "repeated_login" else 1
     for _ in range(repetitions):
         run(base + ["printf 'adminlab-session-ok\\n' >/dev/null; true"], timeout=15)
 
@@ -143,23 +126,19 @@ def run_ssh(record: SessionRecord, ns: str, state_dir: Path, work_dir: Path) -> 
 def run_smb(record: SessionRecord, ns: str, work_dir: Path) -> None:
     assert_lab_address(record.dst_ip)
     base = [
-        "ip",
-        "netns",
-        "exec",
-        ns,
-        "smbclient",
-        f"//{record.dst_ip}/public",
-        "-N",
-        "-m",
-        "SMB3",
+        "ip", "netns", "exec", ns, "smbclient", f"//{record.dst_ip}/public",
+        "-N", "-m", "SMB3",
     ]
+    attempts = _attempts(record)
     if record.action == "inert_marker_put":
-        size = 64 * 1024 if record.label_binary == 0 else 512 * 1024
+        size = _transfer_bytes(record, 128 * 1024)
         marker = work_dir / f"inert-marker-{record.session_id}.bin"
         marker.write_bytes((b"ADMINLAB-INERT-SMB-MARKER\n" * ((size // 26) + 1))[:size])
-        run(base + ["-c", f"put {marker} {marker.name}"], timeout=30)
+        for _ in range(attempts):
+            run(base + ["-c", f"put {marker} {marker.name}"], timeout=30)
     else:
-        run(base + ["-c", "ls; get readme.txt /tmp/adminlab-readme.txt"], timeout=20)
+        for _ in range(attempts):
+            run(base + ["-c", "ls; get readme.txt /tmp/adminlab-readme.txt"], timeout=20)
 
 
 def execute_record(record: SessionRecord, ns_by_host: dict[str, str], state_dir: Path, work_dir: Path, netem: dict) -> SessionRecord:
@@ -181,6 +160,9 @@ def execute_record(record: SessionRecord, ns_by_host: dict[str, str], state_dir:
     finally:
         clear_netem(ns)
     ended = datetime.now(timezone.utc)
+    # Real execution timestamps are retained separately from the simulated
+    # organizational timestamp embedded in the planned record. For mapping the
+    # captured PCAP we need wall-clock execution time here.
     return replace(record, start_ts=started.isoformat(), end_ts=ended.isoformat(), status=status)
 
 
@@ -211,9 +193,13 @@ def main() -> int:
     topology = load_yaml(ROOT / "configs/topology.yaml")
     scenarios = load_yaml(ROOT / "configs/scenarios.yaml")
     netem = load_yaml(ROOT / "configs/netem.yaml")
+    bundle = load_digital_twin_bundle(ROOT / "configs")
     ns_by_host = namespace_by_host(topology)
 
-    planned = plan_sessions(topology, scenarios, netem, seed=args.seed, count=max(args.count * 12, 240), stage=args.stage)
+    planned = plan_digital_twin_sessions(
+        topology, scenarios, netem, bundle, seed=args.seed,
+        count=max(args.count * 12, 240), stage=args.stage,
+    )
     records = select_supported(planned, args.count, protocols)
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -241,6 +227,8 @@ def main() -> int:
         "lab_network": str(LAB_NETWORK),
         "external_targets_allowed": False,
         "payload_execution_allowed": False,
+        "planner": "digital_twin_v1",
+        "wire_controls_label_dependent": False,
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(summary, sort_keys=True))
@@ -249,7 +237,7 @@ def main() -> int:
         return 1
     if any(success_by_protocol.get(protocol, 0) == 0 for protocol in protocols):
         return 1
-    if len(label_counts) < 2:
+    if len(label_counts) < 2 and args.stage not in {"B"}:
         return 1
     return 0
 
