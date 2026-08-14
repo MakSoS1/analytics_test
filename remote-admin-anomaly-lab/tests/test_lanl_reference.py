@@ -45,3 +45,22 @@ def test_wls_parser_filters_non_network_logon_json():
     ]
     frame = parse_wls_lines(lines, max_rows=100)
     assert frame.empty
+
+
+def test_wls_parser_accepts_rocketgraph_auth_event_csv_mirror():
+    # Rocketgraph xGT AuthEvents order from its published LANL mirror schema:
+    # epoch_time,event_id,log_host,logon_type,logon_type_description,username,
+    # domain_name,logon_id,subject_username,subject_domain_name,subject_logon_id,
+    # status,source,service_name,destination,authentication_package,
+    # failure_reason,process_name,process_id,parent_process_name,parent_process_id
+    lines = [
+        '1001,4624,Comp9,3,Network,User1,Domain1,123,Subject1,Domain1,99,0x0,Comp1,cifs,Comp9,Kerberos,,C:\\Windows\\System32\\svchost.exe,321,,0'
+    ]
+    frame = parse_wls_lines(lines, max_rows=100)
+    assert len(frame) == 1
+    row = frame.iloc[0]
+    assert int(row["event_id"]) == 4624
+    assert row["src_device"] == "Comp1"
+    assert row["dst_device"] == "Comp9"
+    assert row["logon_type"] == "Network"
+    assert row["auth_package"] == "Kerberos"
