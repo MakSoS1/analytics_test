@@ -16,21 +16,14 @@
 ## Milestones
 
 - [x] M0 — approved design fixed in repository.
-  - Evidence: branch created and design/implementation plan committed.
-  - Result: V1 excludes Sliver/C2 frameworks and focuses on clean remote-admin behavioral baseline.
-- [x] M1 — configuration/schema contract passes.
-  - Evidence: `Remote Admin Anomaly V1 Smoke` run `31787756618`, `contract-tests` success.
-  - Result: 5/5 configuration tests passed on Ubuntu 24.04 / Python 3.12.13.
-  - Validated: unique host IDs/namespaces/IPs, lab-only routing policy, known roles/protocols, safety flags, production feature leakage denylist.
-- [x] M2 — canonical scenario planner and ground-truth manifests pass.
-  - RED evidence: run `31787871563` failed because `adminlab.manifest` and `adminlab.scenarios` did not exist.
-  - GREEN evidence: run `31787949680`, 11/11 tests passed in 0.21s.
-  - Validated: deterministic same-seed plans, 200 unique session IDs, lab-only src/dst addresses, nuisance-profile overlap between classes, counterfactual pair label inversion with the same protocol/destination/netem context, orchestrator-owned ground truth without `expected_sid`.
-- [x] M3 — namespace topology isolation passes on GitHub Actions.
-  - RED evidence: run `31788020553`, 11 existing tests passed and 3 topology contract tests failed on the intentionally missing topology script.
-  - GREEN evidence: run `31788233293`; `contract-tests` and `topology-smoke` both succeeded.
-  - Result: 15 network namespaces created on `ubuntu-24.04`; `ra-paw01 -> 10.77.0.21` in-lab ping succeeded; attempted `1.1.1.1` connectivity from `ra-paw01` failed as required; every simulated host had an empty default route; topology teardown succeeded.
-- [ ] M4 — real SSH/SMB wire smoke passes.
+- [x] M1 — configuration/schema contract passes. Evidence: run `31787756618`, 5/5 tests PASS.
+- [x] M2 — canonical scenario planner and ground-truth manifests pass. Evidence: run `31787949680`, 11/11 tests PASS.
+- [x] M3 — namespace topology isolation passes. Evidence: run `31788233293`; 15 namespaces, internal connectivity PASS, external/default-route isolation PASS.
+- [x] M4 — real SSH/SMB wire smoke passes.
+  - Initial functional evidence: run `31788604772` executed 40/40 real sessions successfully but exposed a cleanup defect after artifact upload.
+  - Cleanup RED: run `31788781815`, 18 PASS / 1 expected cleanup-contract FAIL.
+  - Final GREEN: run `31788947200`; contract-tests, topology-smoke and wire-smoke all PASS, including safe service stop and topology teardown.
+  - Wire result: 40 success / 0 failed; SSH 25, SMB 15; benign 32, suspicious 8; no external targets; no payload execution.
 - [ ] M5 — complete Bronze PCAP + manifests/checksums produced.
 - [ ] M6 — Suricata + Zeek Silver output produced.
 - [ ] M7 — RDP/VNC/DCE-RPC/partial WinRM fidelity matrix measured.
@@ -43,8 +36,6 @@
 ## Storage contract
 
 Expected Hugging Face dataset repository: `Maksim123321/remote-admin-anomaly-v1`.
-
-Per release/shard:
 
 ```text
 releases/<run-id>/<shard>/
@@ -68,22 +59,23 @@ releases/<run-id>/<shard>/
     └── leakage_checks.json
 ```
 
-If `HF_TOKEN` is unavailable in `analytics_test`, the same release tree must remain in a 90-day GitHub Actions artifact and the missing-HF blocker is recorded below. GitHub secrets are not readable, so no attempt is made to extract the value from `Ansible_lab`.
+If `HF_TOKEN` is unavailable in `analytics_test`, the same release tree must remain in a 90-day GitHub Actions artifact. GitHub secrets are non-readable, so no attempt is made to extract the value from `Ansible_lab`.
 
 ## Run results
 
 ### Configuration / unit tests
 
-- 2026-08-14 — M1 RED: run `31787693161` failed as expected because `adminlab` did not exist.
-- 2026-08-14 — M1 GREEN: run `31787756618` passed 5/5 configuration tests.
-- 2026-08-14 — M2 RED: run `31787871563` failed on missing manifest/planner modules.
-- 2026-08-14 — M2 GREEN: run `31787949680` passed 11/11 tests.
-- 2026-08-14 — M3 RED: run `31788020553` passed 11 existing tests and failed 3 new topology tests on the intentionally missing topology script.
-- 2026-08-14 — M3 GREEN: run `31788233293` passed all contract tests and a real 15-namespace isolation smoke.
+- M1 RED `31787693161` -> GREEN `31787756618`.
+- M2 RED `31787871563` -> GREEN `31787949680`.
+- M3 RED `31788020553` -> GREEN `31788233293`.
+- M4 RED `31788309962`; functional-but-cleanup-failed `31788604772`; cleanup RED `31788781815`; final GREEN `31788947200`.
 
 ### Wire smoke
 
-- Status: pending.
+- 40/40 successful real sessions.
+- SSH: 25; SMB: 15.
+- Benign: 32; suspicious: 8.
+- Process-group cleanup uses dedicated `setsid` groups; teardown no longer terminates the Actions shell.
 
 ### Parser smoke
 
@@ -103,5 +95,6 @@ If `HF_TOKEN` is unavailable in `analytics_test`, the same release tree must rem
 
 ## Discovered limitations / design changes
 
-- 2026-08-14: local assistant container cannot resolve `github.com`, so target-environment verification is performed by GitHub Actions rather than a local clone. Repository work remains isolated in `remote-admin-anomaly-lab-v1`.
-- 2026-08-14: unrelated legacy `mbi-hourly-monitor.yml` also runs on branch pushes and may fail independently; remote-admin evidence is tracked only from the dedicated `remote-admin-smoke.yml` workflow.
+- 2026-08-14: local assistant container cannot resolve `github.com`; target-environment verification is performed by GitHub Actions.
+- 2026-08-14: unrelated legacy `mbi-hourly-monitor.yml` may fail independently; only the dedicated remote-admin workflow is used as project evidence.
+- 2026-08-14: endpoint daemons must run in dedicated process groups. Broad namespace PID cleanup was removed after it terminated the Actions job despite successful traffic generation.
