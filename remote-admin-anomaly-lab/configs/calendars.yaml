@@ -1,0 +1,25 @@
+simulation:
+  start: '2026-01-05T00:00:00+00:00'
+  days: 45
+
+calendars:
+  standard_business:
+    weekdays: [0, 1, 2, 3, 4]
+    hour_ranges: [[8, 18]]
+    off_hours_probability: 0.03
+  developer_flex:
+    weekdays: [0, 1, 2, 3, 4, 5]
+    hour_ranges: [[7, 22]]
+    off_hours_probability: 0.08
+  helpdesk_shift:
+    weekdays: [0, 1, 2, 3, 4, 5, 6]
+    hour_ranges: [[6, 23]]
+    off_hours_probability: 0.05
+  admin_oncall:
+    weekdays: [0, 1, 2, 3, 4, 5, 6]
+    hour_ranges: [[7, 20]]
+    off_hours_probability: 0.18
+  service_24x7:
+    weekdays: [0, 1, 2, 3, 4, 5, 6]
+    hour_ranges: [[0, 24]]
+    off_hours_probability: 1.0
