@@ -10,8 +10,8 @@ This document records what V1 actually exercised on the wire. A protocol is neve
 | SMB | `smbclient` and `smbprotocol` -> Samba across namespace bridge | REAL | HIGH for SMB2/3 share/list/get/put; no payload execution | **validated** | Core smoke `31788947200`; alternate-client gate `31817953836`; final 1k `31818445960` includes both clients |
 | RDP | FreeRDP -> xrdp bounded sessions across namespace bridge | REAL protocol wire | PARTIAL Windows semantics because server is Linux/xrdp, not native Windows | **validated for V1 network-wire cohort** | Current V4 `31817920754`, Implementation Final `31817953836`, final 1k `31818445960`; 250/250 RDP sessions successful in final 1k |
 | VNC/RFB | bounded RFB client -> TigerVNC | REAL RFB wire | HIGH for RFB handshake/session transport; PARTIAL human-interaction semantics | **validated for V1 network-wire cohort** | Current V4 `31817920754`, Implementation Final `31817953836`, final 1k `31818445960`; 250/250 VNC sessions successful in final 1k |
-| DCE/RPC / DCOM | Samba/rpcclient-style fixture only | PARTIAL / non-native | PARTIAL DCOM semantics | **not a claimed native-Windows training protocol** | Native Windows DCOM/TCP-135 semantics remain an external fidelity gap. V1 never relabels the Linux/Samba fixture as native Windows DCOM. |
-| WinRM / WS-Man | bounded HTTP/SOAP fixture | PARTIAL | PARTIAL WinRM semantics | **challenge/fidelity fixture only; excluded from accepted V1 train corpus** | Native Windows WinRM remains an external fidelity gap. Final 1k train protocols are only SSH/SMB/RDP/VNC. |
+| DCE/RPC / DCOM | Samba/rpcclient-style fixture only, explicitly labelled `partial_dcom` | PARTIAL / non-native | PARTIAL DCOM semantics | **not a claimed native-Windows training protocol** | Native Windows DCOM/TCP-135 semantics remain an external fidelity gap. V1 never relabels `partial_dcom` as native Windows DCOM. |
+| WinRM / WS-Man | bounded HTTP/SOAP fixture explicitly labelled `partial_winrm` | PARTIAL | PARTIAL WinRM semantics | **challenge/fidelity fixture only; excluded from accepted V1 train corpus** | Native Windows WinRM remains an external fidelity gap. `partial_winrm` is not promoted to native Windows fidelity. Final 1k train protocols are only SSH/SMB/RDP/VNC. |
 
 ## Implementation diversity evidence
 
@@ -48,8 +48,8 @@ Final 1k production mapping coverage by protocol:
 ## What V1 does **not** claim
 
 - xrdp traffic is not evidence that native Windows RDP server behavior has been exhaustively covered.
-- Samba/rpcclient is not native Windows DCOM.
-- A bounded SOAP fixture is not native Windows WinRM.
+- Samba/rpcclient `partial_dcom` is not native Windows DCOM.
+- A bounded SOAP `partial_winrm` fixture is not native Windows WinRM.
 - A Linux namespace topology is not an independent enterprise OS/identity/network estate.
 - Passing wire fidelity does not imply that the final anomaly model passed; the V1 model hypothesis was rejected separately by the research quality gate.
 
