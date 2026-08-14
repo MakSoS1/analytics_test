@@ -6,7 +6,6 @@ import json
 import os
 import shutil
 import signal
-import socket
 import subprocess
 import time
 from pathlib import Path
@@ -67,13 +66,13 @@ def start_group(namespace: str, command: list[str], log: Path) -> subprocess.Pop
     return proc
 
 
-def stop_group(proc: subprocess.Popen[str]) -> None:
+def stop_group(proc: subprocess.Popen[str], *, graceful_signal: int = signal.SIGTERM) -> None:
     try:
-        os.killpg(proc.pid, signal.SIGTERM)
+        os.killpg(proc.pid, graceful_signal)
     except ProcessLookupError:
         pass
     try:
-        proc.wait(timeout=3)
+        proc.wait(timeout=4)
     except subprocess.TimeoutExpired:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
@@ -83,6 +82,33 @@ def stop_group(proc: subprocess.Popen[str]) -> None:
     handle = getattr(proc, "_adminlab_log_handle", None)
     if handle is not None:
         handle.close()
+
+
+def start_capture(pcap: Path, log: Path) -> subprocess.Popen[str]:
+    pcap.parent.mkdir(parents=True, exist_ok=True)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    fh = log.open("w", encoding="utf-8")
+    proc = subprocess.Popen(
+        ["setsid", "tcpdump", "-i", "br-adminlab", "-U", "-s", "0", "-n", "-w", str(pcap)],
+        stdout=fh,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    proc._adminlab_log_handle = fh  # type: ignore[attr-defined]
+    time.sleep(1.0)
+    if proc.poll() is not None:
+        fh.flush()
+        raise RuntimeError(f"tcpdump exited before fidelity probes; see {log}")
+    return proc
+
+
+def validate_capture(pcap: Path) -> dict[str, Any]:
+    if not pcap.is_file() or pcap.stat().st_size <= 24:
+        raise RuntimeError(f"fidelity capture missing or empty: {pcap}")
+    check = run(["tcpdump", "-nn", "-r", str(pcap), "-c", "1"], timeout=10)
+    if check.returncode != 0:
+        raise RuntimeError(f"fidelity capture unreadable: {check.stderr.strip()}")
+    return {"path": str(pcap), "bytes": pcap.stat().st_size, "readable": True}
 
 
 def safe_result(protocol: str, wire: str, semantic: str) -> dict[str, Any]:
@@ -143,9 +169,6 @@ def probe_dcerpc() -> dict[str, Any]:
         [rpc, "-N", "-U", "", "10.77.0.23", "-c", "srvinfo"],
         timeout=12,
     )
-    # A successful rpcclient transaction is genuine Samba DCE/RPC wire traffic.
-    # Authentication/session failures still prove a connection attempt but are
-    # not promoted to validated semantic fidelity.
     result["wire_observed"] = attempt.returncode == 0
     result["evidence"].append(
         f"rpcclient_rc={attempt.returncode} stdout={attempt.stdout.strip()[:240]!r} stderr={attempt.stderr.strip()[:240]!r}"
@@ -165,9 +188,6 @@ def probe_rdp(work: Path) -> dict[str, Any]:
         return result
     proc: subprocess.Popen[str] | None = None
     try:
-        # The package's default configuration is used inside the isolated RDP
-        # endpoint namespace. A completed GUI desktop is not claimed; V1 probes
-        # real xrdp/FreeRDP transport/negotiation only on the Linux runner.
         proc = start_group("ra-rdp01", [xrdp, "--nodaemon"], work / "xrdp.log")
         listener = wait_listener("ra-rdp01", 3389, seconds=6)
         if not listener:
@@ -178,8 +198,8 @@ def probe_rdp(work: Path) -> dict[str, Any]:
         else:
             cmd = [client, "/v:10.77.0.24", "/u:adminlab", "/p:invalid", "/cert:ignore"]
         attempt = ns_exec("ra-help01", cmd, timeout=12)
-        # Authentication may fail by construction. Real listener plus a real
-        # FreeRDP attempt is sufficient for a Linux RDP wire-negotiation fixture.
+        # Authentication can fail by construction. A real xrdp listener plus a
+        # real FreeRDP negotiation attempt is the V1 Linux-wire claim.
         result["wire_observed"] = listener
         result["evidence"].append(
             f"listener={listener} freerdp_rc={attempt.returncode} stdout={attempt.stdout.strip()[:160]!r} stderr={attempt.stderr.strip()[:160]!r}"
@@ -235,8 +255,6 @@ HTTPServer(('10.77.0.27',5985),H).serve_forever()
         result["wire_observed"] = attempt.returncode == 0 and "IdentifyResponse" in attempt.stdout
         result["evidence"].append(f"listener={listener} curl_rc={attempt.returncode} response={attempt.stdout[:180]!r}")
         if result["wire_observed"]:
-            # This is intentionally not promoted to native WinRM. It is a real
-            # HTTP/SOAP WS-Man wire fixture with partial WinRM semantics only.
             result["status"] = "partial"
         return result
     finally:
@@ -247,16 +265,28 @@ HTTPServer(('10.77.0.27',5985),H).serve_forever()
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--pcap", type=Path, required=True)
     args = parser.parse_args()
     if os.geteuid() != 0:
-        raise SystemExit("fidelity probe requires root for ip netns exec/listeners")
+        raise SystemExit("fidelity probe requires root for namespaces, listeners and capture")
+
     args.out.mkdir(parents=True, exist_ok=True)
-    probes = [probe_vnc(args.out), probe_dcerpc(), probe_rdp(args.out), probe_winrm(args.out)]
+    args.pcap.parent.mkdir(parents=True, exist_ok=True)
+    capture: subprocess.Popen[str] | None = None
+    try:
+        capture = start_capture(args.pcap, args.out / "tcpdump.log")
+        probes = [probe_vnc(args.out), probe_dcerpc(), probe_rdp(args.out), probe_winrm(args.out)]
+    finally:
+        if capture is not None:
+            stop_group(capture, graceful_signal=signal.SIGINT)
+
+    capture_report = validate_capture(args.pcap)
     payload = {
         "lab_cidr": LAB,
         "external_targets_allowed": False,
         "payload_execution_allowed": False,
         "c2_frameworks_enabled": False,
+        "capture": capture_report,
         "results": probes,
     }
     (args.out / "fidelity-results.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
