@@ -12,6 +12,7 @@ on:
       - 'remote-admin-anomaly-lab/scripts/finalize_v3_bronze.py'
       - 'remote-admin-anomaly-lab/scripts/build_hierarchical_gold_v3.py'
       - 'remote-admin-anomaly-lab/scripts/run_scenarios_extended_v2.py'
+      - 'remote-admin-anomaly-lab/scripts/install_extended_runner_v2.sh'
       - 'remote-admin-anomaly-lab/configs/v3_*.yaml'
       - '.github/workflows/remote-admin-v3-smoke.yml'
 
