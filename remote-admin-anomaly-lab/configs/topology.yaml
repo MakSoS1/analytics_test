@@ -1,0 +1,42 @@
+lab:
+  bridge: br-adminlab
+  cidr: 10.77.0.0/24
+  bridge_ip: 10.77.0.1/24
+  external_routing: false
+
+hosts:
+  - {id: paw01, namespace: ra-paw01, ip: 10.77.0.11/24, role: DomainAdmin, services: []}
+  - {id: jump01, namespace: ra-jump01, ip: 10.77.0.12/24, role: JumpHost, services: []}
+  - {id: dev01, namespace: ra-dev01, ip: 10.77.0.13/24, role: Developer, services: []}
+  - {id: user01, namespace: ra-user01, ip: 10.77.0.14/24, role: RegularUser, services: []}
+  - {id: help01, namespace: ra-help01, ip: 10.77.0.15/24, role: Helpdesk, services: []}
+  - {id: comp01, namespace: ra-comp01, ip: 10.77.0.16/24, role: CompromisedWorkstation, services: []}
+  - {id: svc01, namespace: ra-svc01, ip: 10.77.0.17/24, role: ServiceAccount, services: []}
+  - {id: remote01, namespace: ra-remote01, ip: 10.77.0.18/24, role: RemoteWorker, services: []}
+  - {id: linux01, namespace: ra-linux01, ip: 10.77.0.21/24, role: LinuxServer, services: [ssh]}
+  - {id: linux02, namespace: ra-linux02, ip: 10.77.0.22/24, role: LinuxServer, services: [ssh]}
+  - {id: file01, namespace: ra-file01, ip: 10.77.0.23/24, role: FileServer, services: [smb]}
+  - {id: rdp01, namespace: ra-rdp01, ip: 10.77.0.24/24, role: RDPServer, services: [rdp]}
+  - {id: vnc01, namespace: ra-vnc01, ip: 10.77.0.25/24, role: VNCServer, services: [vnc]}
+  - {id: rpc01, namespace: ra-rpc01, ip: 10.77.0.26/24, role: RPCServer, services: [dcerpc]}
+  - {id: mgmt01, namespace: ra-mgmt01, ip: 10.77.0.27/24, role: ManagementServer, services: [winrm]}
+
+known_roles:
+  - DomainAdmin
+  - ServerAdmin
+  - LinuxAdmin
+  - Helpdesk
+  - Developer
+  - ServiceAccount
+  - RegularUser
+  - RemoteWorker
+  - JumpHost
+  - CompromisedWorkstation
+  - LinuxServer
+  - FileServer
+  - RDPServer
+  - VNCServer
+  - RPCServer
+  - ManagementServer
+
+known_protocols: [ssh, smb, rdp, vnc, dcerpc, winrm]
