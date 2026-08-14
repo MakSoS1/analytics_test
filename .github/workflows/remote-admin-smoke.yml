@@ -34,3 +34,38 @@ jobs:
         env:
           PYTHONPATH: src
         run: pytest -q tests
+
+  topology-smoke:
+    needs: contract-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install topology dependency
+        run: python -m pip install 'PyYAML>=6,<7'
+      - name: Bring up isolated namespace lab
+        working-directory: remote-admin-anomaly-lab
+        run: sudo -E bash scripts/setup_topology.sh up configs/topology.yaml
+      - name: Verify isolation and namespace count
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          sudo -E bash scripts/setup_topology.sh verify configs/topology.yaml
+          count="$(sudo ip netns list | awk '{print $1}' | grep -c '^ra-' || true)"
+          test "$count" -eq 15
+          for ns in $(sudo ip netns list | awk '{print $1}' | grep '^ra-'); do
+            test -z "$(sudo ip netns exec "$ns" ip route show default)"
+          done
+      - name: Verify in-lab connectivity only
+        run: |
+          sudo ip netns exec ra-paw01 ping -c 1 -W 2 10.77.0.21
+          if sudo ip netns exec ra-paw01 ping -c 1 -W 1 1.1.1.1; then
+            echo 'external connectivity unexpectedly succeeded' >&2
+            exit 1
+          fi
+      - name: Tear down namespace lab
+        if: always()
+        working-directory: remote-admin-anomaly-lab
+        run: sudo -E bash scripts/setup_topology.sh down configs/topology.yaml
