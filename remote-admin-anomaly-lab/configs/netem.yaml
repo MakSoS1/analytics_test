@@ -1,0 +1,10 @@
+profiles:
+  clean: {delay_ms: 0, jitter_ms: 0, loss_pct: 0.0, reorder_pct: 0.0, rate_mbit: 0, mtu: 1500}
+  lan_jitter: {delay_ms: 2, jitter_ms: 1, loss_pct: 0.0, reorder_pct: 0.0, rate_mbit: 0, mtu: 1500}
+  wan_20ms: {delay_ms: 20, jitter_ms: 4, loss_pct: 0.1, reorder_pct: 0.0, rate_mbit: 50, mtu: 1500}
+  wan_80ms: {delay_ms: 80, jitter_ms: 15, loss_pct: 0.3, reorder_pct: 0.0, rate_mbit: 20, mtu: 1500}
+  remote_vpn: {delay_ms: 45, jitter_ms: 10, loss_pct: 0.2, reorder_pct: 0.0, rate_mbit: 25, mtu: 1400}
+  lossy_wifi: {delay_ms: 12, jitter_ms: 8, loss_pct: 1.5, reorder_pct: 0.2, rate_mbit: 15, mtu: 1500}
+  constrained: {delay_ms: 30, jitter_ms: 5, loss_pct: 0.3, reorder_pct: 0.0, rate_mbit: 3, mtu: 1500}
+  reorder: {delay_ms: 15, jitter_ms: 6, loss_pct: 0.1, reorder_pct: 1.0, rate_mbit: 20, mtu: 1500}
+  low_mtu: {delay_ms: 10, jitter_ms: 2, loss_pct: 0.0, reorder_pct: 0.0, rate_mbit: 20, mtu: 1280}
