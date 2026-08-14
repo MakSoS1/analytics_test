@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from adminlab.quality import validate_gold_tree
@@ -31,20 +32,50 @@ def test_gold_builder_persists_model_matrix_without_identifiers():
 def test_gold_validator_accepts_complete_tree(tmp_path: Path):
     shard = tmp_path / "gold" / "A-smoke-00"
     shard.mkdir(parents=True)
-    required = [
+    parquet_files = [
         "flow_features.parquet",
         "window_features.parquet",
         "graph_features.parquet",
         "splits.parquet",
         "labels.parquet",
         "model_matrix.parquet",
-        "feature_contract.json",
     ]
-    for name in required:
+    for name in parquet_files:
         (shard / name).write_bytes(b"non-empty")
+
+    (shard / "feature_contract.json").write_text(
+        json.dumps(
+            {
+                "feature_contract_version": "test-v1",
+                "feature_contract_sha256": "0" * 64,
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
     report = validate_gold_tree(shard)
     assert report["ok"] is True
-    assert report["required_files"] == len(required)
+    assert report["required_files"] == len(parquet_files) + 1
+
+
+def test_gold_validator_rejects_invalid_feature_contract_json(tmp_path: Path):
+    shard = tmp_path / "gold" / "invalid-contract"
+    shard.mkdir(parents=True)
+    for name in [
+        "flow_features.parquet",
+        "window_features.parquet",
+        "graph_features.parquet",
+        "splits.parquet",
+        "labels.parquet",
+        "model_matrix.parquet",
+    ]:
+        (shard / name).write_bytes(b"x")
+    (shard / "feature_contract.json").write_bytes(b"not-json")
+
+    report = validate_gold_tree(shard)
+    assert report["ok"] is False
+    assert "invalid feature_contract.json" in report["errors"]
 
 
 def test_gold_validator_rejects_missing_model_matrix(tmp_path: Path):
