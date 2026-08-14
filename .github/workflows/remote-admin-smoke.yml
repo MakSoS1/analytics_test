@@ -16,8 +16,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: remote-admin-smoke-${{ github.ref }}
-  cancel-in-progress: true
+  group: remote-admin-smoke-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   contract-tests:
