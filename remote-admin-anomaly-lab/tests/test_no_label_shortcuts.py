@@ -10,15 +10,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_core_wire_runner_does_not_branch_on_label_for_size_or_attempts():
     text = (ROOT / "scripts/run_scenarios.py").read_text(encoding="utf-8")
-    assert "record.wire_transfer_bytes" in text
-    assert "record.wire_attempts" in text
+    assert ".wire_transfer_bytes" in text
+    assert ".wire_attempts" in text
     assert "if record.label_binary" not in text
+    assert "if r.label_binary" not in text
 
 
 def test_extended_wire_runner_does_not_branch_on_label_for_attempts():
     text = (ROOT / "src/adminlab/extended_wire_v2.py").read_text(encoding="utf-8")
-    assert "record.wire_attempts" in text
+    assert ".wire_attempts" in text
     assert "if record.label_binary" not in text
+    assert "if r.label_binary" not in text
 
 
 def test_counterfactual_pairs_get_identical_concrete_wire_controls():
@@ -63,8 +65,6 @@ def test_observable_control_distributions_overlap_between_labels():
     for protocol in ("ssh", "smb", "rdp", "vnc"):
         assert by_protocol[protocol][0]
         assert by_protocol[protocol][1]
-        # Exact tuples need not always overlap, but both labels must draw from
-        # common behavior profiles, preventing a label-exclusive wire family.
         benign_profiles = {x[0] for x in by_protocol[protocol][0]}
         suspicious_profiles = {x[0] for x in by_protocol[protocol][1]}
         assert benign_profiles & suspicious_profiles
