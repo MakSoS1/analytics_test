@@ -1,0 +1,10 @@
+PyYAML>=6.0,<7
+numpy>=1.26,<3
+pandas>=2.2,<3
+pyarrow>=17,<23
+scipy>=1.13,<2
+scikit-learn>=1.5,<2
+lightgbm>=4.5,<5
+joblib>=1.4,<2
+huggingface_hub>=0.25,<2
+pytest>=8,<9
