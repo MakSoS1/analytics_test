@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping, Any
 
 
 @dataclass(frozen=True)
@@ -73,6 +73,18 @@ class SessionRecord:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "SessionRecord":
+        """Deserialize a manifest row while remaining forward-compatible.
+
+        Unknown keys are ignored so evidence produced by a newer writer can still
+        be inspected by older readers. Missing optional fields use dataclass
+        defaults; missing required fields still fail through the constructor.
+        """
+        allowed = {field.name for field in fields(cls)}
+        kwargs = {str(key): item for key, item in value.items() if str(key) in allowed}
+        return cls(**kwargs)
 
 
 def write_sessions(records: Iterable[SessionRecord], path: Path | str) -> None:
