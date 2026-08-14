@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 
@@ -65,5 +66,39 @@ def validate_bronze_tree(shard_dir: Path | str, *, verify_checksums: bool = True
         "errors": errors,
         "pcap_bytes": pcap_bytes,
         "checksum_entries_verified": checksum_checked,
+        "shard": shard.name,
+    }
+
+
+def validate_silver_tree(shard_dir: Path | str) -> dict:
+    shard = Path(shard_dir)
+    errors: list[str] = []
+    eve = shard / "suricata/eve.json.zst"
+    conn = shard / "zeek/conn.log.zst"
+    versions = shard / "parser_versions.json"
+
+    eve_bytes = eve.stat().st_size if eve.is_file() else 0
+    conn_bytes = conn.stat().st_size if conn.is_file() else 0
+    if eve_bytes <= 0:
+        errors.append("missing or empty Suricata eve.json.zst")
+    if conn_bytes <= 0:
+        errors.append("missing or empty Zeek conn.log.zst")
+    if not versions.is_file() or versions.stat().st_size <= 0:
+        errors.append("missing or empty parser_versions.json")
+    else:
+        try:
+            payload = json.loads(versions.read_text(encoding="utf-8"))
+            if not payload.get("suricata"):
+                errors.append("Suricata version missing")
+            if not payload.get("zeek"):
+                errors.append("Zeek version missing")
+        except (json.JSONDecodeError, OSError):
+            errors.append("invalid parser_versions.json")
+
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "eve_bytes": eve_bytes,
+        "conn_bytes": conn_bytes,
         "shard": shard.name,
     }
