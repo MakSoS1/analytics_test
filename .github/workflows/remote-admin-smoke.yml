@@ -1,0 +1,36 @@
+name: Remote Admin Anomaly V1 Smoke
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v1]
+    paths:
+      - 'remote-admin-anomaly-lab/**'
+      - '.github/workflows/remote-admin-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-admin-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install test dependencies
+        working-directory: remote-admin-anomaly-lab
+        run: python -m pip install 'PyYAML>=6,<7' 'pytest>=8,<9'
+      - name: Run configuration contract tests
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: pytest -q tests/test_config.py
