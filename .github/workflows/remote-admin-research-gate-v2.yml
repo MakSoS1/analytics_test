@@ -111,16 +111,28 @@ jobs:
           (base/'RESEARCH_GATE.json').write_text(json.dumps(decision,indent=2,sort_keys=True)+'\n'); print(json.dumps(decision,indent=2,sort_keys=True))
           if failures: raise SystemExit('research automatic quality gate failed: '+','.join(failures))
           PY
-      - name: Record HF persistence intent
+      - name: Record persistence state before artifact retention
         if: always()
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          mkdir -p /tmp/adminlab-research
           python - <<'PY'
           import json,os
           from pathlib import Path
-          enabled=bool(os.environ.get('HF_TOKEN',''))
-          Path('/tmp/adminlab-research/HF_PERSISTENCE.json').write_text(json.dumps({'repo_id':'Maksim123321/remote-admin-anomaly-v1','enabled':enabled,'artifact_first':True,'github_release_assets_used':False,'status':'pending_after_artifact' if enabled else 'skipped_missing_HF_TOKEN_in_analytics_test'},indent=2,sort_keys=True)+'\n')
+          base=Path('/tmp/adminlab-research'); release=base/'release'; gate=base/'RESEARCH_GATE.json'; enabled=bool(os.environ.get('HF_TOKEN',''))
+          if not release.exists() or not gate.exists():
+              status='SKIPPED_UPSTREAM_FAILURE'
+          else:
+              decision=json.loads(gate.read_text())
+              if not decision.get('automatic_gate_pass'):
+                  status='SKIPPED_QUALITY_GATE_FAILURE'
+              elif not enabled:
+                  status='SKIPPED_MISSING_HF_TOKEN_IN_ANALYTICS_TEST'
+              else:
+                  status='READY_AFTER_ARTIFACT'
+          payload={'repo_id':'Maksim123321/remote-admin-anomaly-v1','enabled':enabled,'artifact_first':True,'github_release_assets_used':False,'status':status}
+          (base/'HF_PERSISTENCE.json').write_text(json.dumps(payload,indent=2,sort_keys=True)+'\n')
           PY
       - name: Retain complete recoverable research release first
         if: always()
@@ -128,17 +140,33 @@ jobs:
         with:
           name: remote-admin-research-gate-v2-${{ github.run_id }}
           path: /tmp/adminlab-research
+          if-no-files-found: warn
           retention-days: 90
           compression-level: 0
-      - name: Persist release tree to private Hugging Face when current repo has write token
+      - name: Persist release tree to private Hugging Face only after successful quality gate and artifact
         if: always()
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           RUN_ID: ${{ github.run_id }}
         working-directory: remote-admin-anomaly-lab
         run: |
+          set -euo pipefail
+          if [[ ! -d "$RELEASE_ROOT" || ! -s /tmp/adminlab-research/RESEARCH_GATE.json ]]; then
+            echo 'SKIPPED_UPSTREAM_FAILURE: no validated release tree.'
+            exit 0
+          fi
+          if ! python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('/tmp/adminlab-research/RESEARCH_GATE.json').read_text())
+          raise SystemExit(0 if d.get('automatic_gate_pass') else 1)
+          PY
+          then
+            echo 'SKIPPED_QUALITY_GATE_FAILURE: research gate did not pass.'
+            exit 0
+          fi
           if [[ -z "${HF_TOKEN:-}" ]]; then
-            echo 'HF_TOKEN missing in analytics_test; permanent HF upload skipped after Actions artifact retention.'
+            echo 'SKIPPED_MISSING_HF_TOKEN_IN_ANALYTICS_TEST: artifact retained; HF upload not attempted.'
             exit 0
           fi
           python - <<'PY'
