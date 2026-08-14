@@ -37,10 +37,10 @@ campaigns:
       historical_relations: [novel_pair, rare_pair]
     offhours_mimic:
       intents: [credential_abuse]
-      historical_relations: [known_pair, rare_pair]
+      historical_relations: [rare_pair, novel_pair]
     single_normal_session:
       intents: [credential_abuse]
-      historical_relations: [known_pair, rare_pair]
+      historical_relations: [rare_pair, novel_pair]
 
 stage_policy:
   A: {suspicious_fraction: 0.25}
