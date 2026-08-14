@@ -18,12 +18,12 @@ def test_install_runner_installs_real_protocol_tools():
 
 def test_service_script_binds_ssh_and_smb_inside_namespaces():
     text = SERVICES.read_text(encoding="utf-8")
-    assert "ip netns exec ra-linux01" in text
-    assert "ip netns exec ra-linux02" in text
+    assert "ip netns exec" in text
+    assert "start_ssh ra-linux01 10.77.0.21" in text
+    assert "start_ssh ra-linux02 10.77.0.22" in text
     assert "/usr/sbin/sshd" in text
     assert "ip netns exec ra-file01" in text
     assert "smbd" in text
-    assert "10.77.0.21" in text
     assert "10.77.0.23" in text
 
 
