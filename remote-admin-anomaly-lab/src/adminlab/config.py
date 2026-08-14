@@ -10,8 +10,9 @@ FORBIDDEN_FEATURE_COLUMNS: set[str] = {
     "scenario_id", "campaign_id", "session_id", "pair_id", "generator_seed", "expected_sid",
     "attack_marker", "capture_filename", "ground_truth_source", "wire_fidelity", "semantic_fidelity",
     "persona_id", "task_id", "calendar_id", "intent_profile", "behavior_profile", "campaign_type",
-    "historical_relation", "auth_outcome", "client_stack", "simulated_day", "wire_attempts",
-    "wire_transfer_bytes", "execution_start_ts", "execution_end_ts",
+    "historical_relation", "auth_outcome", "client_stack", "simulated_day", "campaign_position",
+    "campaign_size", "sequence_profile", "wire_attempts", "wire_transfer_bytes", "execution_start_ts",
+    "execution_end_ts",
 }
 
 
