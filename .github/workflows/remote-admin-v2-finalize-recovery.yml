@@ -1,0 +1,222 @@
+name: Remote Admin Anomaly V2 Finalize Retained 1k
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [remote-admin-anomaly-lab-v2]
+    paths:
+      - '.github/workflows/remote-admin-v2-finalize-recovery.yml'
+      - 'remote-admin-anomaly-lab/src/adminlab/v2_external.py'
+      - 'remote-admin-anomaly-lab/scripts/evaluate_v2_external.py'
+      - 'remote-admin-anomaly-lab/scripts/finalize_v2_research.py'
+      - 'remote-admin-anomaly-lab/scripts/build_v2_release_manifest.py'
+      - 'remote-admin-anomaly-lab/scripts/upload_hf.py'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: remote-admin-v2-finalize-retained-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SHARD: V2-1k
+  RELEASE_ROOT: /tmp/remote-admin-v2-recovered
+  SOURCE_RUN_ID: '31831956891'
+  SOURCE_GIT_SHA: 'ebe12195545f3612ef5204fe1cb505b1cb8b0e90'
+
+jobs:
+  finalize-retained-v2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install finalizer runtime and run full regression contracts
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          python -m pip install -r requirements.txt
+          pytest -q tests
+      - name: Recover retained 1k Linux release tree
+        uses: actions/download-artifact@v4
+        with:
+          name: remote-admin-v2-research-release-31831956891
+          path: /tmp/remote-admin-v2-recovered
+          repository: MakSoS1/analytics_test
+          run-id: 31831956891
+          github-token: ${{ github.token }}
+      - name: Recover same-run Windows native holdout
+        uses: actions/download-artifact@v4
+        with:
+          name: v2-release-windows-31831956891
+          path: /tmp/v2-external/windows
+          repository: MakSoS1/analytics_test
+          run-id: 31831956891
+          github-token: ${{ github.token }}
+      - name: Recover same-run LANL reference
+        uses: actions/download-artifact@v4
+        with:
+          name: v2-release-lanl-31831956891
+          path: /tmp/v2-external/lanl
+          repository: MakSoS1/analytics_test
+          run-id: 31831956891
+          github-token: ${{ github.token }}
+      - name: Verify recovered pre-finalization evidence and record lineage
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          release=Path('/tmp/remote-admin-v2-recovered')
+          shard='V2-1k'
+          gold=release/'gold'/shard
+          quality=release/'quality'/shard
+          assert (release/'bronze'/shard/'captures').is_dir()
+          pcaps=list((release/'bronze'/shard/'captures').glob('*.pcap.zst'))
+          assert len(pcaps)==1 and pcaps[0].stat().st_size>0,pcaps
+          prod=json.loads((quality/'production_flow_gold.json').read_text())
+          hier=json.loads((gold/'hierarchical_gold_quality.json').read_text())
+          assert prod['leakage_ok'] is True,prod
+          assert prod['session_mapping_coverage']>=0.95,prod
+          assert prod['flow_mapping_coverage']>=0.90,prod
+          assert hier['session_rows']>=950,hier
+          assert (gold/'models/session-primary.joblib').stat().st_size>0
+          win=json.loads(Path('/tmp/v2-external/windows/windows_fidelity.json').read_text(encoding='utf-8-sig'))
+          lanl=json.loads(Path('/tmp/v2-external/lanl/reference_quality.json').read_text())
+          assert len(win.get('validated_protocols',[]))>=1,win
+          assert lanl.get('status')=='PASS',lanl
+          lineage={
+            'schema_version':2,
+            'data_generation_run_id':'31831956891',
+            'data_generation_git_sha':'ebe12195545f3612ef5204fe1cb505b1cb8b0e90',
+            'linux_partial_artifact_id':'9231786128',
+            'linux_partial_artifact_sha256':'8260156cc93144932a5684725ccf5dea9dc8887e81e0f5ff06bf58db7de9e595',
+            'windows_artifact_id':'9231031840',
+            'windows_artifact_sha256':'ba26c235a82592716a09ab157441edbff36edc7b76a446795be3cc9f4d57d948',
+            'lanl_artifact_id':'9231029449',
+            'lanl_artifact_sha256':'d800a8219d8890770bcdae62213920bb934610729334318ce787aaac5f92ad3d',
+            'recovery_reason':'pktmon PCAPNG lacked conventional tshark tcp.stream decoding; retained pktmon formatted packet evidence is used by the corrected external adapter',
+            'linux_capture_regenerated':False,
+          }
+          (quality/'V2_RECOVERY_LINEAGE.json').write_text(json.dumps(lineage,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'production':prod,'hierarchical':hier,'windows_validated':win['validated_protocols'],'lanl':lanl},sort_keys=True))
+          PY
+      - name: Score independent holdouts using tshark-or-pktmon adapter
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/evaluate_v2_external.py \
+            --model "$GOLD/models/session-primary.joblib" \
+            --metrics "$GOLD/models/session-primary.metrics.json" \
+            --lanl-root /tmp/v2-external/lanl \
+            --windows-root /tmp/v2-external/windows \
+            --out "$QUALITY/v2_external_evaluation.json"
+          mkdir -p "$QUALITY/external/windows" "$QUALITY/external/lanl"
+          cp -a /tmp/v2-external/windows/. "$QUALITY/external/windows/"
+          cp -a /tmp/v2-external/lanl/. "$QUALITY/external/lanl/"
+      - name: Finalize fail-closed research decision
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/finalize_v2_research.py \
+            --config configs/v2_research.yaml \
+            --session-metrics "$GOLD/models/session-primary.metrics.json" \
+            --shortcut "$GOLD/models/shortcut-audit.json" \
+            --hard-benign "$QUALITY/hard_benign_session.json" \
+            --external "$QUALITY/v2_external_evaluation.json" \
+            --learning-curve "$QUALITY/session_learning_curve.json" \
+            --planner-audit "$QUALITY/V2_PLANNER_AUDIT.json" \
+            --production-quality "$QUALITY/production_flow_gold.json" \
+            --hierarchical-quality "$GOLD/hierarchical_gold_quality.json" \
+            --out "$QUALITY/V2_RESEARCH_DECISION.json"
+      - name: Build immutable recovered-release checksum manifest
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/build_v2_release_manifest.py \
+            --release "$RELEASE_ROOT" \
+            --shard "$SHARD" \
+            --decision "$QUALITY/V2_RESEARCH_DECISION.json" \
+            --data-source-run-id "$SOURCE_RUN_ID" \
+            --data-source-git-sha "$SOURCE_GIT_SHA" \
+            --out "$QUALITY/V2_RELEASE_MANIFEST.json"
+      - name: Persist complete V2 negative/candidate release to Hugging Face
+        working-directory: remote-admin-anomaly-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          status="$(python -c "import json; print(json.load(open('$QUALITY/V2_RESEARCH_DECISION.json'))['research_status'])")"
+          if [[ "$status" == "PASS" ]]; then
+            remote="v2/candidates/data-run-${SOURCE_RUN_ID}-final-${GITHUB_RUN_ID}"
+          else
+            remote="v2/quarantine/data-run-${SOURCE_RUN_ID}-final-${GITHUB_RUN_ID}"
+          fi
+          python scripts/upload_hf.py \
+            --release "$RELEASE_ROOT" \
+            --shard "$SHARD" \
+            --repo Maksim123321/remote-admin-anomaly-v1 \
+            --remote-path "$remote" \
+            --status "$QUALITY/hf_upload_status.json"
+      - name: Verify final recovered technical release
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path('/tmp/remote-admin-v2-recovered')
+          shard='V2-1k'
+          gold=root/'gold'/shard
+          q=root/'quality'/shard
+          d=json.loads((q/'V2_RESEARCH_DECISION.json').read_text())
+          m=json.loads((q/'V2_RELEASE_MANIFEST.json').read_text())
+          e=json.loads((q/'v2_external_evaluation.json').read_text())
+          hf=json.loads((q/'hf_upload_status.json').read_text()) if (q/'hf_upload_status.json').exists() else {'status':'missing'}
+          assert d['dataset_release_status']=='READY',d
+          assert d['research_status'] in {'PASS','FAIL'},d
+          assert d['scale_decision'] in {'ALLOW_4K','STOP_AT_1K'},d
+          assert m['dataset_release_status']=='READY',m
+          assert m['provenance']['data_generation_run_id']=='31831956891',m
+          assert m['provenance']['recovered_from_retained_artifact'] is True,m
+          assert e['external_gate_inputs']['lanl_reference_complete'] is True,e
+          assert e['external_gate_inputs']['windows_mapped_native_protocols']>=1,e
+          assert e['external_gate_inputs']['windows_score_distribution_finite'] is True,e
+          assert (q/'external/windows/capture.pcapng').stat().st_size>0
+          assert (q/'external/windows/capture.txt').stat().st_size>0
+          assert (q/'external/lanl/remote_admin_flows.parquet').stat().st_size>0
+          session=pd.read_parquet(gold/'session_labels.parquet')
+          assert len(session)==989,len(session)
+          print(json.dumps({
+            'dataset_release_status':d['dataset_release_status'],
+            'research_status':d['research_status'],
+            'scale_decision':d['scale_decision'],
+            'automatic_failures':d['research_decision']['automatic_failures'],
+            'metrics':d['research_decision']['metrics'],
+            'external':e['external_gate_inputs'],
+            'windows_capture_evidence':e['windows']['capture_evidence'],
+            'hf':hf,
+            'manifest_file_count':m['file_count'],
+            'manifest_total_bytes':m['total_bytes'],
+          },indent=2,sort_keys=True))
+          PY
+      - name: Retain final complete V2 release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-v2-final-${{ github.run_id }}
+          path: /tmp/remote-admin-v2-recovered
+          retention-days: 90
+          compression-level: 0
