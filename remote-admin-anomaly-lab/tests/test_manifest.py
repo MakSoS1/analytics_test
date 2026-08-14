@@ -31,21 +31,29 @@ def sample_record() -> SessionRecord:
         start_ts="2026-08-14T09:00:00+00:00",
         end_ts="2026-08-14T09:00:03+00:00",
         status="planned",
+        client_stack="openssh",
+        server_stack="openssh-server",
+        implementation_id="ssh:openssh->openssh-server",
     )
 
 
-def test_session_record_has_independent_ground_truth():
+def test_session_record_has_independent_ground_truth_and_implementation_metadata():
     record = sample_record()
     data = record.to_dict()
     assert data["ground_truth_source"] == "scenario_orchestrator"
     assert "expected_sid" not in data
     assert data["label_binary"] == 0
+    assert data["client_stack"] == "openssh"
+    assert data["server_stack"] == "openssh-server"
+    assert data["implementation_id"] == "ssh:openssh->openssh-server"
 
 
-def test_write_sessions_jsonl_round_trip(tmp_path: Path):
+def test_write_sessions_jsonl_round_trip_preserves_implementation_metadata(tmp_path: Path):
     out = tmp_path / "sessions.jsonl"
     write_sessions([sample_record()], out)
     rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
     assert len(rows) == 1
     assert rows[0]["session_id"] == "ses-001"
     assert rows[0]["dst_ip"] == "10.77.0.21"
+    assert rows[0]["server_stack"] == "openssh-server"
+    assert rows[0]["implementation_id"] == "ssh:openssh->openssh-server"
