@@ -13,24 +13,19 @@ mkdir -p "$STATE_DIR" "$STATE_DIR/pids" "$STATE_DIR/logs" "$STATE_DIR/ssh" "$STA
 
 stop_services() {
   shopt -s nullglob
-  for pidfile in "$STATE_DIR"/pids/*.pid; do
-    pid="$(cat "$pidfile" 2>/dev/null || true)"
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-      for _ in 1 2 3 4 5; do
-        kill -0 "$pid" 2>/dev/null || break
+  for pgfile in "$STATE_DIR"/pids/*.pgid; do
+    pgid="$(cat "$pgfile" 2>/dev/null || true)"
+    if [[ "$pgid" =~ ^[0-9]+$ ]] && kill -0 -- "-$pgid" 2>/dev/null; then
+      kill -TERM -- "-$pgid" 2>/dev/null || true
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        kill -0 -- "-$pgid" 2>/dev/null || break
         sleep 0.2
       done
-      kill -9 "$pid" 2>/dev/null || true
+      if kill -0 -- "-$pgid" 2>/dev/null; then
+        kill -KILL -- "-$pgid" 2>/dev/null || true
+      fi
     fi
-    rm -f "$pidfile"
-  done
-  for ns in ra-linux01 ra-linux02 ra-file01; do
-    if ip netns list | awk '{print $1}' | grep -Fxq "$ns"; then
-      for pid in $(ip netns pids "$ns" 2>/dev/null || true); do
-        kill "$pid" 2>/dev/null || true
-      done
-    fi
+    rm -f "$pgfile"
   done
 }
 
@@ -40,6 +35,7 @@ start_ssh() {
   local name="$3"
   local dir="$STATE_DIR/ssh/$name"
   mkdir -p "$dir"
+  rm -f "$dir/host_key" "$dir/host_key.pub"
   ssh-keygen -q -t ed25519 -N '' -f "$dir/host_key" >/dev/null
   cp "$STATE_DIR/ssh/client_ed25519.pub" "$dir/authorized_keys"
   chmod 600 "$dir/authorized_keys" "$dir/host_key"
@@ -60,9 +56,10 @@ LogLevel VERBOSE
 Subsystem sftp internal-sftp
 EOF
 
-  # Real OpenSSH server process runs inside the endpoint network namespace.
-  ip netns exec "$ns" /usr/sbin/sshd -D -e -f "$dir/sshd_config" >"$STATE_DIR/logs/$name-sshd.log" 2>&1 &
-  echo $! >"$STATE_DIR/pids/$name-sshd.pid"
+  # Keep each real endpoint service in a dedicated process group so cleanup
+  # cannot signal the GitHub Actions shell or unrelated namespace processes.
+  setsid ip netns exec "$ns" /usr/sbin/sshd -D -e -f "$dir/sshd_config" >"$STATE_DIR/logs/$name-sshd.log" 2>&1 &
+  echo $! >"$STATE_DIR/pids/$name-sshd.pgid"
 }
 
 start_samba() {
@@ -106,9 +103,10 @@ create mask = 0666
 directory mask = 0777
 EOF
 
-  # Real Samba SMB server process runs only inside ra-file01.
-  ip netns exec ra-file01 /usr/sbin/smbd --foreground --no-process-group --configfile="$STATE_DIR/samba/smb.conf" >"$STATE_DIR/logs/smbd-stdout.log" 2>&1 &
-  echo $! >"$STATE_DIR/pids/smbd.pid"
+  # --no-process-group keeps Samba in the dedicated setsid group instead of
+  # constructing a second group that would make bounded cleanup ambiguous.
+  setsid ip netns exec ra-file01 /usr/sbin/smbd --foreground --no-process-group --configfile="$STATE_DIR/samba/smb.conf" >"$STATE_DIR/logs/smbd-stdout.log" 2>&1 &
+  echo $! >"$STATE_DIR/pids/smbd.pgid"
 }
 
 verify_services() {
