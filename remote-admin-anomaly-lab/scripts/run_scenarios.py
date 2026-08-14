@@ -20,20 +20,14 @@ if str(SRC) not in sys.path:
 from adminlab.config import load_yaml  # noqa: E402
 from adminlab.digital_twin import load_digital_twin_bundle, plan_digital_twin_sessions  # noqa: E402
 from adminlab.manifest import SessionRecord, write_sessions  # noqa: E402
+from adminlab.wire_controls import materialize_wire_controls  # noqa: E402
 
 LAB_NETWORK = ip_network("10.77.0.0/24")
 SUPPORTED_PROTOCOLS = {"ssh", "smb"}
 
 
 def run(cmd: list[str], *, check: bool = True, timeout: int = 20) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        cmd,
-        check=check,
-        timeout=timeout,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    return subprocess.run(cmd, check=check, timeout=timeout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 
 def assert_lab_address(address: str) -> None:
@@ -51,27 +45,16 @@ def apply_netem(ns: str, profile_name: str, netem: dict) -> None:
     run(["ip", "netns", "exec", ns, "ip", "link", "set", "dev", "eth0", "mtu", str(mtu)])
     args = ["ip", "netns", "exec", ns, "tc", "qdisc", "replace", "dev", "eth0", "root", "netem"]
     option_count = 0
-    delay = float(profile.get("delay_ms", 0))
-    jitter = float(profile.get("jitter_ms", 0))
-    loss = float(profile.get("loss_pct", 0))
-    reorder = float(profile.get("reorder_pct", 0))
-    rate = float(profile.get("rate_mbit", 0))
+    delay = float(profile.get("delay_ms", 0)); jitter = float(profile.get("jitter_ms", 0))
+    loss = float(profile.get("loss_pct", 0)); reorder = float(profile.get("reorder_pct", 0)); rate = float(profile.get("rate_mbit", 0))
     if delay > 0 or jitter > 0:
         args += ["delay", f"{delay:g}ms"]
-        if jitter > 0:
-            args += [f"{jitter:g}ms"]
+        if jitter > 0: args += [f"{jitter:g}ms"]
         option_count += 1
-    if loss > 0:
-        args += ["loss", f"{loss:g}%"]
-        option_count += 1
-    if reorder > 0:
-        args += ["reorder", f"{reorder:g}%"]
-        option_count += 1
-    if rate > 0:
-        args += ["rate", f"{rate:g}mbit"]
-        option_count += 1
-    if option_count == 0:
-        args += ["delay", "0ms"]
+    if loss > 0: args += ["loss", f"{loss:g}%"]; option_count += 1
+    if reorder > 0: args += ["reorder", f"{reorder:g}%"]; option_count += 1
+    if rate > 0: args += ["rate", f"{rate:g}mbit"]; option_count += 1
+    if option_count == 0: args += ["delay", "0ms"]
     run(args)
 
 
@@ -82,12 +65,7 @@ def clear_netem(ns: str) -> None:
 
 def ssh_base(ns: str, key: Path, dst_ip: str) -> list[str]:
     assert_lab_address(dst_ip)
-    return [
-        "ip", "netns", "exec", ns, "ssh", "-i", str(key),
-        "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
-        "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=5",
-        f"root@{dst_ip}",
-    ]
+    return ["ip", "netns", "exec", ns, "ssh", "-i", str(key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=5", f"root@{dst_ip}"]
 
 
 def _transfer_bytes(record: SessionRecord, fallback: int) -> int:
@@ -100,147 +78,70 @@ def _attempts(record: SessionRecord) -> int:
 
 def run_ssh(record: SessionRecord, ns: str, state_dir: Path, work_dir: Path) -> None:
     key = state_dir / "ssh/client_ed25519"
-    if not key.is_file():
-        raise RuntimeError(f"SSH client key missing: {key}")
+    if not key.is_file(): raise RuntimeError(f"SSH client key missing: {key}")
     base = ssh_base(ns, key, record.dst_ip)
-
     if record.action == "inert_sftp_transfer":
         size = _transfer_bytes(record, 64 * 1024)
         inert = work_dir / f"inert-{record.session_id}.bin"
         inert.write_bytes((b"ADMINLAB-INERT-SSH-MARKER\n" * ((size // 26) + 1))[:size])
-        scp = [
-            "ip", "netns", "exec", ns, "scp", "-q", "-i", str(key),
-            "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null", str(inert),
-            f"root@{record.dst_ip}:/tmp/{inert.name}",
-        ]
-        for _ in range(_attempts(record)):
-            run(scp, timeout=30)
+        scp = ["ip", "netns", "exec", ns, "scp", "-q", "-i", str(key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", str(inert), f"root@{record.dst_ip}:/tmp/{inert.name}"]
+        for _ in range(_attempts(record)): run(scp, timeout=30)
         return
-
     repetitions = _attempts(record) if record.action == "repeated_login" else 1
-    for _ in range(repetitions):
-        run(base + ["printf 'adminlab-session-ok\\n' >/dev/null; true"], timeout=15)
+    for _ in range(repetitions): run(base + ["printf 'adminlab-session-ok\\n' >/dev/null; true"], timeout=15)
 
 
 def run_smb(record: SessionRecord, ns: str, work_dir: Path) -> None:
     assert_lab_address(record.dst_ip)
-    base = [
-        "ip", "netns", "exec", ns, "smbclient", f"//{record.dst_ip}/public",
-        "-N", "-m", "SMB3",
-    ]
+    base = ["ip", "netns", "exec", ns, "smbclient", f"//{record.dst_ip}/public", "-N", "-m", "SMB3"]
     attempts = _attempts(record)
     if record.action == "inert_marker_put":
         size = _transfer_bytes(record, 128 * 1024)
         marker = work_dir / f"inert-marker-{record.session_id}.bin"
         marker.write_bytes((b"ADMINLAB-INERT-SMB-MARKER\n" * ((size // 26) + 1))[:size])
-        for _ in range(attempts):
-            run(base + ["-c", f"put {marker} {marker.name}"], timeout=30)
+        for _ in range(attempts): run(base + ["-c", f"put {marker} {marker.name}"], timeout=30)
     else:
-        for _ in range(attempts):
-            run(base + ["-c", "ls; get readme.txt /tmp/adminlab-readme.txt"], timeout=20)
+        for _ in range(attempts): run(base + ["-c", "ls; get readme.txt /tmp/adminlab-readme.txt"], timeout=20)
 
 
 def execute_record(record: SessionRecord, ns_by_host: dict[str, str], state_dir: Path, work_dir: Path, netem: dict) -> SessionRecord:
-    assert_lab_address(record.src_ip)
-    assert_lab_address(record.dst_ip)
-    ns = ns_by_host[record.src_host_id]
-    started = datetime.now(timezone.utc)
-    status = "success"
+    assert_lab_address(record.src_ip); assert_lab_address(record.dst_ip)
+    ns = ns_by_host[record.src_host_id]; started = datetime.now(timezone.utc); status = "success"
     try:
         apply_netem(ns, record.netem_profile, netem)
-        if record.protocol == "ssh":
-            run_ssh(record, ns, state_dir, work_dir)
-        elif record.protocol == "smb":
-            run_smb(record, ns, work_dir)
-        else:
-            status = "unsupported"
+        if record.protocol == "ssh": run_ssh(record, ns, state_dir, work_dir)
+        elif record.protocol == "smb": run_smb(record, ns, work_dir)
+        else: status = "unsupported"
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError, ValueError) as exc:
         status = f"failed:{type(exc).__name__}"
-    finally:
-        clear_netem(ns)
-    ended = datetime.now(timezone.utc)
-    # Real execution timestamps are retained separately from the simulated
-    # organizational timestamp embedded in the planned record. For mapping the
-    # captured PCAP we need wall-clock execution time here.
-    return replace(record, start_ts=started.isoformat(), end_ts=ended.isoformat(), status=status)
+    finally: clear_netem(ns)
+    return replace(record, start_ts=started.isoformat(), end_ts=datetime.now(timezone.utc).isoformat(), status=status)
 
 
 def select_supported(records: list[SessionRecord], count: int, protocols: set[str]) -> list[SessionRecord]:
     selected = [r for r in records if r.protocol in protocols]
-    if len(selected) < count:
-        raise RuntimeError(f"planner produced only {len(selected)} supported sessions, need {count}")
+    if len(selected) < count: raise RuntimeError(f"planner produced only {len(selected)} supported sessions, need {count}")
     return selected[:count]
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--stage", default="A", choices=list("ABCDEFGH"))
-    parser.add_argument("--count", type=int, default=40)
-    parser.add_argument("--seed", type=int, default=20260814)
-    parser.add_argument("--protocols", default="ssh,smb")
-    parser.add_argument("--state-dir", type=Path, default=Path("/tmp/adminlab-services"))
-    parser.add_argument("--out", type=Path, default=Path("/tmp/adminlab-wire-smoke"))
-    args = parser.parse_args()
-
-    if os.geteuid() != 0:
-        raise SystemExit("run_scenarios.py must run as root because it uses ip netns exec")
-
+    parser = argparse.ArgumentParser(); parser.add_argument("--stage", default="A", choices=list("ABCDEFGH")); parser.add_argument("--count", type=int, default=40); parser.add_argument("--seed", type=int, default=20260814); parser.add_argument("--protocols", default="ssh,smb"); parser.add_argument("--state-dir", type=Path, default=Path("/tmp/adminlab-services")); parser.add_argument("--out", type=Path, default=Path("/tmp/adminlab-wire-smoke")); args = parser.parse_args()
+    if os.geteuid() != 0: raise SystemExit("run_scenarios.py must run as root because it uses ip netns exec")
     protocols = {p.strip() for p in args.protocols.split(",") if p.strip()}
-    if not protocols or not protocols <= SUPPORTED_PROTOCOLS:
-        raise SystemExit(f"V1 core runner supports only {sorted(SUPPORTED_PROTOCOLS)}")
-
-    topology = load_yaml(ROOT / "configs/topology.yaml")
-    scenarios = load_yaml(ROOT / "configs/scenarios.yaml")
-    netem = load_yaml(ROOT / "configs/netem.yaml")
-    bundle = load_digital_twin_bundle(ROOT / "configs")
-    ns_by_host = namespace_by_host(topology)
-
-    planned = plan_digital_twin_sessions(
-        topology, scenarios, netem, bundle, seed=args.seed,
-        count=max(args.count * 12, 240), stage=args.stage,
-    )
+    if not protocols or not protocols <= SUPPORTED_PROTOCOLS: raise SystemExit(f"V1 core runner supports only {sorted(SUPPORTED_PROTOCOLS)}")
+    topology = load_yaml(ROOT / "configs/topology.yaml"); scenarios = load_yaml(ROOT / "configs/scenarios.yaml"); netem = load_yaml(ROOT / "configs/netem.yaml"); bundle = load_digital_twin_bundle(ROOT / "configs"); ns_by_host = namespace_by_host(topology)
+    planned = plan_digital_twin_sessions(topology, scenarios, netem, bundle, seed=args.seed, count=max(args.count * 12, 240), stage=args.stage)
     records = select_supported(planned, args.count, protocols)
-
-    args.out.mkdir(parents=True, exist_ok=True)
-    work_dir = args.out / "inert-fixtures"
-    work_dir.mkdir(parents=True, exist_ok=True)
-    write_sessions(records, args.out / "sessions-planned.jsonl")
-
-    executed = [execute_record(r, ns_by_host, args.state_dir, work_dir, netem) for r in records]
-    write_sessions(executed, args.out / "sessions-executed.jsonl")
-
-    status_counts = Counter(r.status for r in executed)
-    protocol_counts = Counter(r.protocol for r in executed)
-    label_counts = Counter("suspicious" if r.label_binary else "benign" for r in executed)
-    success_by_protocol = {
-        protocol: sum(1 for r in executed if r.protocol == protocol and r.status == "success")
-        for protocol in sorted(protocols)
-    }
-    summary = {
-        "requested": args.count,
-        "executed": len(executed),
-        "status_counts": dict(status_counts),
-        "protocol_counts": dict(protocol_counts),
-        "label_counts": dict(label_counts),
-        "success_by_protocol": success_by_protocol,
-        "lab_network": str(LAB_NETWORK),
-        "external_targets_allowed": False,
-        "payload_execution_allowed": False,
-        "planner": "digital_twin_v1",
-        "wire_controls_label_dependent": False,
-    }
-    (args.out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(summary, sort_keys=True))
-
-    if status_counts.get("success", 0) != len(executed):
-        return 1
-    if any(success_by_protocol.get(protocol, 0) == 0 for protocol in protocols):
-        return 1
-    if len(label_counts) < 2 and args.stage not in {"B"}:
-        return 1
+    records = materialize_wire_controls(records, bundle["behavior"], seed=args.seed)
+    args.out.mkdir(parents=True, exist_ok=True); work_dir = args.out / "inert-fixtures"; work_dir.mkdir(parents=True, exist_ok=True); write_sessions(records, args.out / "sessions-planned.jsonl")
+    executed = [execute_record(r, ns_by_host, args.state_dir, work_dir, netem) for r in records]; write_sessions(executed, args.out / "sessions-executed.jsonl")
+    status_counts = Counter(r.status for r in executed); protocol_counts = Counter(r.protocol for r in executed); label_counts = Counter("suspicious" if r.label_binary else "benign" for r in executed); success_by_protocol = {p: sum(1 for r in executed if r.protocol == p and r.status == "success") for p in sorted(protocols)}
+    summary = {"requested": args.count, "executed": len(executed), "status_counts": dict(status_counts), "protocol_counts": dict(protocol_counts), "label_counts": dict(label_counts), "success_by_protocol": success_by_protocol, "lab_network": str(LAB_NETWORK), "external_targets_allowed": False, "payload_execution_allowed": False, "planner": "digital_twin_v1", "wire_controls_label_dependent": False}
+    (args.out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"); print(json.dumps(summary, sort_keys=True))
+    if status_counts.get("success", 0) != len(executed): return 1
+    if any(success_by_protocol.get(p, 0) == 0 for p in protocols): return 1
+    if len(label_counts) < 2 and args.stage not in {"B"}: return 1
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__ == "__main__": raise SystemExit(main())
