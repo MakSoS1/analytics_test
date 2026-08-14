@@ -24,6 +24,7 @@ from adminlab.extended_wire_v2 import run_rdp_session, run_vnc_session, run_winr
 from adminlab.implementation_variants import materialize_implementation_variants
 from adminlab.manifest import SessionRecord, write_sessions
 from adminlab.v2_scenarios import build_v2_semantic_plan, summarize_v2_plan
+from adminlab.v3_signal import audit_v3_signal_plan, build_v3_signal_plan
 from adminlab.wire_controls import materialize_wire_controls
 
 spec = importlib.util.spec_from_file_location("adminlab_core_wire", ROOT / "scripts/run_scenarios.py")
@@ -161,10 +162,14 @@ def main() -> int:
     parser.add_argument("--include-partial-winrm", action="store_true")
     parser.add_argument("--v2-semantic", action="store_true")
     parser.add_argument("--v2-counterfactual-fraction", type=float, default=0.30)
+    parser.add_argument("--v3-signal", action="store_true")
+    parser.add_argument("--v3-matched-fraction", type=float, default=0.40)
     args = parser.parse_args()
 
     if os.geteuid() != 0:
         raise SystemExit("extended scenario runner requires root")
+    if args.v2_semantic and args.v3_signal:
+        raise SystemExit("choose either V2 semantic or V3 signal mode, not both")
 
     topology = load_yaml(ROOT / "configs/topology.yaml")
     scenarios = load_yaml(ROOT / "configs/scenarios.yaml")
@@ -176,6 +181,8 @@ def main() -> int:
         raise SystemExit("partial WinRM is Stage-H challenge only")
     if args.v2_semantic and args.stage != "H":
         raise SystemExit("V2 semantic corpus is Stage H only")
+    if args.v3_signal and args.stage != "H":
+        raise SystemExit("V3 signal corpus is Stage H only")
 
     planned = plan_digital_twin_sessions(
         topology,
@@ -188,7 +195,13 @@ def main() -> int:
     )
     selected = balanced_select(planned, args.count, protocols)
     selected = organize_campaign_sequences(selected, bundle["campaigns"], seed=args.seed)
-    if args.v2_semantic:
+    if args.v3_signal:
+        selected = build_v3_signal_plan(
+            selected,
+            seed=args.seed,
+            matched_fraction=args.v3_matched_fraction,
+        )
+    elif args.v2_semantic:
         selected = build_v2_semantic_plan(
             selected,
             seed=args.seed,
@@ -196,12 +209,23 @@ def main() -> int:
         )
     selected = materialize_implementation_variants(selected, stage=args.stage, seed=args.seed)
     selected = materialize_wire_controls(selected, bundle["behavior"], seed=args.seed)
-    v2_report = summarize_v2_plan(selected) if args.v2_semantic else None
-    if args.v2_semantic:
-        if float(v2_report["counterfactual_pair_fraction"]) < float(args.v2_counterfactual_fraction):
-            raise RuntimeError(f"V2 counterfactual coverage below target: {v2_report}")
-        if v2_report["invalid_counterfactual_pairs"]:
-            raise RuntimeError(f"invalid V2 counterfactual pairs: {v2_report['invalid_counterfactual_pairs']}")
+    semantic_report = None
+    if args.v3_signal:
+        semantic_report = audit_v3_signal_plan(selected)
+        if float(semantic_report["counterfactual_row_fraction"]) < float(args.v3_matched_fraction):
+            raise RuntimeError(f"V3 counterfactual coverage below target: {semantic_report}")
+        if float(semantic_report["matched_hour_pair_fraction"]) < 0.80:
+            raise RuntimeError(f"V3 exact-hour matching below target: {semantic_report}")
+        if float(semantic_report["max_hour_label_fraction_gap"]) > 0.10:
+            raise RuntimeError(f"V3 time shortcut audit failed: {semantic_report}")
+        if semantic_report["invalid_counterfactual_pairs"]:
+            raise RuntimeError(f"invalid V3 counterfactual pairs: {semantic_report['invalid_counterfactual_pairs']}")
+    elif args.v2_semantic:
+        semantic_report = summarize_v2_plan(selected)
+        if float(semantic_report["counterfactual_pair_fraction"]) < float(args.v2_counterfactual_fraction):
+            raise RuntimeError(f"V2 counterfactual coverage below target: {semantic_report}")
+        if semantic_report["invalid_counterfactual_pairs"]:
+            raise RuntimeError(f"invalid V2 counterfactual pairs: {semantic_report['invalid_counterfactual_pairs']}")
 
     args.out.mkdir(parents=True, exist_ok=True)
     fixtures = args.out / "inert-fixtures"
@@ -236,12 +260,13 @@ def main() -> int:
         "dcerpc_train_included": False,
         "external_targets_allowed": False,
         "payload_execution_allowed": False,
-        "planner": "digital_twin_v2_semantic" if args.v2_semantic else "digital_twin_v1",
+        "planner": "digital_twin_v3_signal" if args.v3_signal else ("digital_twin_v2_semantic" if args.v2_semantic else "digital_twin_v1"),
         "wire_controls_label_dependent": False,
         "implementation_choice_label_dependent": False,
         "simulated_timeline_preserved": True,
-        "selection_policy": "equal protocol quotas; global-label-fraction quotas per protocol; evenly spaced full-timeline sampling",
-        "v2_semantic": v2_report,
+        "selection_policy": "equal protocol quotas; global-label-fraction quotas per protocol; evenly spaced full-timeline sampling; V3 redistributes time-of-day label-neutrally when enabled",
+        "v2_semantic": semantic_report if args.v2_semantic else None,
+        "v3_signal": semantic_report if args.v3_signal else None,
         "failures": failures[:20],
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
