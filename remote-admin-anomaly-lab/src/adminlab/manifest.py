@@ -39,8 +39,10 @@ class SessionRecord:
             raise ValueError("label_binary must be 0 or 1")
         if self.ground_truth_source != "scenario_orchestrator":
             raise ValueError("ground truth must originate from scenario_orchestrator")
-        if self.src_port <= 0 or self.dst_port <= 0:
-            raise ValueError("ports must be positive")
+        # src_port=0 means "unknown until observed on the real wire". The
+        # orchestrator must not invent the ephemeral port chosen by ssh/smbclient.
+        if self.src_port < 0 or self.dst_port <= 0:
+            raise ValueError("src_port must be >= 0 and dst_port must be positive")
 
     def to_dict(self) -> dict:
         return asdict(self)
