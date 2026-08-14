@@ -4,7 +4,7 @@ persona_templates:
     count: 4
     calendar_id: admin_oncall
     source_endpoint_roles: [DomainAdmin, JumpHost]
-    task_weights: {deploy: 2, fix_incident: 4, patch_management: 3, monitoring: 1, emergency_admin: 2}
+    task_weights: {deploy: 2, fix_incident: 4, patch_management: 3, monitoring: 1, emergency_admin: 2, approved_forwarding: 1}
     client_stacks: [openssh, smbclient, freerdp, rfb-python]
 
   - template_id: server_admin
@@ -12,7 +12,7 @@ persona_templates:
     count: 8
     calendar_id: admin_oncall
     source_endpoint_roles: [DomainAdmin, JumpHost, Helpdesk]
-    task_weights: {deploy: 3, fix_incident: 3, patch_management: 4, backup: 2, monitoring: 2, user_support: 1}
+    task_weights: {deploy: 3, fix_incident: 3, patch_management: 4, backup: 2, monitoring: 2, user_support: 1, approved_forwarding: 1}
     client_stacks: [openssh, smbclient, freerdp, rfb-python]
 
   - template_id: linux_admin
@@ -20,7 +20,7 @@ persona_templates:
     count: 8
     calendar_id: admin_oncall
     source_endpoint_roles: [JumpHost, Developer]
-    task_weights: {deploy: 4, fix_incident: 3, patch_management: 3, backup: 2, monitoring: 2, debug: 2}
+    task_weights: {deploy: 4, fix_incident: 3, patch_management: 3, backup: 2, monitoring: 2, debug: 2, approved_forwarding: 2}
     client_stacks: [openssh]
 
   - template_id: developer
@@ -28,7 +28,7 @@ persona_templates:
     count: 12
     calendar_id: developer_flex
     source_endpoint_roles: [Developer]
-    task_weights: {deploy: 3, debug: 5, monitoring: 1, fix_incident: 1}
+    task_weights: {deploy: 3, debug: 5, monitoring: 1, fix_incident: 1, approved_forwarding: 1}
     client_stacks: [openssh, smbclient]
 
   - template_id: helpdesk
