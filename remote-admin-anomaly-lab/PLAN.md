@@ -18,7 +18,10 @@
 - [x] M0 — approved design fixed in repository.
   - Evidence: branch created and design/implementation plan committed.
   - Result: V1 excludes Sliver/C2 frameworks and focuses on clean remote-admin behavioral baseline.
-- [ ] M1 — configuration/schema contract passes.
+- [x] M1 — configuration/schema contract passes.
+  - Evidence: `Remote Admin Anomaly V1 Smoke` run `31787756618`, `contract-tests` success.
+  - Result: 5/5 configuration tests passed on Ubuntu 24.04 / Python 3.12.13.
+  - Validated: unique host IDs/namespaces/IPs, lab-only routing policy, known roles/protocols, safety flags, production feature leakage denylist.
 - [ ] M2 — canonical scenario planner and ground-truth manifests pass.
 - [ ] M3 — namespace topology isolation passes on GitHub Actions.
 - [ ] M4 — real SSH/SMB wire smoke passes.
@@ -65,7 +68,8 @@ If `HF_TOKEN` is unavailable in `analytics_test`, the same release tree must rem
 
 ### Configuration / unit tests
 
-- Status: pending.
+- 2026-08-14 — RED: run `31787693161` failed as expected because `adminlab` did not exist.
+- 2026-08-14 — GREEN: run `31787756618` passed 5/5 configuration tests.
 
 ### Wire smoke
 
@@ -90,3 +94,4 @@ If `HF_TOKEN` is unavailable in `analytics_test`, the same release tree must rem
 ## Discovered limitations / design changes
 
 - 2026-08-14: local assistant container cannot resolve `github.com`, so target-environment verification is performed by GitHub Actions rather than a local clone. Repository work remains isolated in `remote-admin-anomaly-lab-v1`.
+- 2026-08-14: unrelated legacy `mbi-hourly-monitor.yml` also runs on branch pushes and may fail independently; remote-admin evidence is tracked only from the dedicated `remote-admin-smoke.yml` workflow.
