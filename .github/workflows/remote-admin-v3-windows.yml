@@ -1,0 +1,66 @@
+name: Remote Admin Anomaly V3 Windows Fidelity
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [remote-admin-anomaly-lab-v3]
+    paths:
+      - 'remote-admin-anomaly-lab/windows/**'
+      - 'remote-admin-anomaly-lab/src/adminlab/windows_v3.py'
+      - 'remote-admin-anomaly-lab/tests/test_windows_v3_contract.py'
+      - '.github/workflows/remote-admin-v3-windows.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-admin-v3-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-native:
+    runs-on: windows-2025
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run base bounded Windows-native probes
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v3-windows'
+          & .\remote-admin-anomaly-lab\windows\capture_native.ps1 -OutputDir $out
+      - name: Normalize base pktmon wire evidence
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v3-windows'
+          python .\remote-admin-anomaly-lab\windows\mark_wire.py (Join-Path $out 'windows_fidelity.json') (Join-Path $out 'capture.txt')
+      - name: Run V3 network-addressed DCOM and native mstsc probe
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v3-windows'
+          & .\remote-admin-anomaly-lab\windows\v3_extra_probes.ps1 -OutputDir $out
+      - name: Validate fail-closed V3 Windows fidelity
+        shell: pwsh
+        env:
+          PYTHONPATH: remote-admin-anomaly-lab/src
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v3-windows'
+          python .\remote-admin-anomaly-lab\windows\validate_v3.py `
+            --base-report (Join-Path $out 'windows_fidelity.json') `
+            --extra-report (Join-Path $out 'v3-extra.json') `
+            --extra-capture (Join-Path $out 'v3-extra.txt') `
+            --out (Join-Path $out 'windows_v3_fidelity.json')
+          $report = Get-Content (Join-Path $out 'windows_v3_fidelity.json') -Raw | ConvertFrom-Json
+          if ($report.validated_protocols.Count -lt 1) { throw 'No V3 native Windows protocol validated' }
+          if (-not (Test-Path (Join-Path $out 'capture.pcapng'))) { throw 'Base Windows PCAPNG missing' }
+          if (-not (Test-Path (Join-Path $out 'v3-extra.pcapng'))) { throw 'V3 extra Windows PCAPNG missing' }
+      - name: Retain V3 Windows evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-v3-windows-${{ github.run_id }}
+          path: ${{ runner.temp }}/remote-admin-v3-windows
+          retention-days: 30
+          compression-level: 0
