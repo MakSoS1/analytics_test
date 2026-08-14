@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 import pandas as pd
@@ -23,6 +24,13 @@ def _entropy(counter: Counter[str]) -> float:
     if not total:
         return 0.0
     return float(-sum((n / total) * math.log2(n / total) for n in counter.values() if n))
+
+
+def _clock_features(ts: float) -> tuple[float, float, int]:
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    seconds = dt.hour * 3600 + dt.minute * 60 + dt.second
+    angle = 2.0 * math.pi * seconds / 86400.0
+    return math.sin(angle), math.cos(angle), int(dt.weekday() >= 5)
 
 
 @dataclass
@@ -48,6 +56,7 @@ class ProductionFlowState:
         output: list[dict[str, Any]] = []
         for idx, row in enumerate(rows):
             ts = _num(row, time_col); src = str(row["id.orig_h"]); dst = str(row["id.resp_h"]); dport = int(_num(row, "id.resp_p")); proto = str(row.get("service") or row.get("proto") or "unknown"); sid = str(row["session_id"])
+            hour_sin, hour_cos, is_weekend = _clock_features(ts)
             hist = self.source_history[src]
             while hist and hist[0][0] < ts - WINDOWS["30d"]:
                 hist.popleft()
@@ -68,6 +77,7 @@ class ProductionFlowState:
                 "flow_uid": uid, "session_id": sid,
                 "flow_count": 1, "duration": _num(row, "duration"), "src_bytes": ob, "dst_bytes": rb, "src_packets": op, "dst_packets": rp,
                 "bytes_total": ob + rb, "packets_total": op + rp, "bytes_ratio": ob / (rb + 1.0), "packets_ratio": op / (rp + 1.0), "app_proto": proto, "dst_port": dport,
+                "hour_sin": hour_sin, "hour_cos": hour_cos, "is_weekend": is_weekend,
                 "connections_1m": len(h60), "connections_5m": len(h300), "connections_15m": len(h900), "connections_1h": len(h1h),
                 "connections_24h": len(h24), "connections_7d": len(h7), "connections_30d": len(h30),
                 "unique_dst_ip_5m": len({e[1] for e in h300}), "unique_dst_ip_15m": len({e[1] for e in h900}),
@@ -98,10 +108,6 @@ def build_split_isolated_production_flow_features(mapped_conn: pd.DataFrame) -> 
         subset = mapped_conn[mapped_conn["split"].astype(str) == split]
         if subset.empty:
             continue
-        # Deliberately fresh state per dataset partition. This is conservative,
-        # but guarantees validation/test/challenge can never influence train or
-        # each other. A separately generated baseline warm-up may be loaded in a
-        # future version without crossing labelled partition boundaries.
         part = ProductionFlowState().process(subset)
         part["_split_for_order"] = split
         chunks.append(part)
