@@ -41,15 +41,22 @@ jobs:
           import json
           from pathlib import Path
           q=Path('/tmp/adminlab-v4/release/quality/A-v4-smoke')
-          cap=json.loads((q/'capture_health.json').read_text()); parser=json.loads((q/'parser_health.json').read_text()); prod=json.loads((q/'production_flow_gold.json').read_text()); leak=json.loads((q/'leakage_checks.json').read_text())
+          cap=json.loads((q/'capture_health.json').read_text())
+          parser=json.loads((q/'parser_health.json').read_text())
+          prod=json.loads((q/'production_flow_gold.json').read_text())
+          leak=json.loads((q/'leakage_checks.json').read_text())
           assert cap['sessions']==40,cap
           assert cap['protocol_counts']=={'rdp':10,'smb':10,'ssh':10,'vnc':10},cap
           assert cap['dcerpc_train_included'] is False and cap['partial_winrm_included'] is False
           assert parser['suricata_flow_events']>0 and parser['zeek_conn_lines']>0,parser
-          assert prod['session_mapping_coverage']>=.95 and prod['conn_mapping_coverage']>=.90 and prod['uid_alignment_coverage']==1.0,prod
+          assert prod['production_source']=='suricata_eve_flow',prod
+          assert prod['train_serve_feature_code']=='adminlab.online_features.EveFeatureState',prod
+          assert prod['session_mapping_coverage']>=.95 and prod['flow_mapping_coverage']>=.90 and prod['uid_alignment_coverage']==1.0,prod
+          assert prod['zeek_features_in_primary_model'] is False,prod
           assert leak['ok'] is True,leak
           report={'capture':cap,'parser':parser,'production':prod,'leakage':leak}
-          Path('/tmp/adminlab-v4/V4_REPORT.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n'); print(json.dumps(report,indent=2,sort_keys=True))
+          Path('/tmp/adminlab-v4/V4_REPORT.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(report,indent=2,sort_keys=True))
           PY
       - uses: actions/upload-artifact@v4
         if: always()
