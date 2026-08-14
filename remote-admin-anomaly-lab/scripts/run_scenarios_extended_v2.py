@@ -18,9 +18,9 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from adminlab.config import load_yaml  # noqa: E402
+from adminlab.digital_twin import load_digital_twin_bundle, plan_digital_twin_sessions  # noqa: E402
 from adminlab.extended_wire_v2 import run_rdp_session, run_vnc_session, run_winrm_session  # noqa: E402
 from adminlab.manifest import SessionRecord, write_sessions  # noqa: E402
-from adminlab.scenarios import plan_sessions  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("adminlab_core_wire", ROOT / "scripts/run_scenarios.py")
 if spec is None or spec.loader is None:
@@ -56,10 +56,9 @@ def balanced_select(records: list[SessionRecord], count: int, protocols: tuple[s
         required[protocol] = need
         if len(buckets[protocol]) < need:
             raise RuntimeError(
-                f"canonical planner produced only {len(buckets[protocol])} {protocol} rows; need {need}"
+                f"digital twin produced only {len(buckets[protocol])} {protocol} rows; need {need}"
             )
         selected.extend(buckets[protocol][:need])
-    # Restore the planner's temporal order after balanced sampling.
     selected.sort(key=lambda row: (row.start_ts, row.session_id))
     if len(selected) != count:
         raise AssertionError((len(selected), count, required))
@@ -91,6 +90,8 @@ def execute(record: SessionRecord, namespaces: dict[str, str], core_state: Path,
     finally:
         core.clear_netem(ns)
     ended = datetime.now(timezone.utc)
+    # Preserve execution timestamps for PCAP mapping. Simulated organizational
+    # day/persona/task context remains in explicit manifest fields.
     return replace(record, start_ts=started.isoformat(), end_ts=ended.isoformat(), status=status)
 
 
@@ -109,15 +110,16 @@ def main() -> int:
     topology = load_yaml(ROOT / "configs/topology.yaml")
     scenarios = load_yaml(ROOT / "configs/scenarios.yaml")
     netem = load_yaml(ROOT / "configs/netem.yaml")
+    bundle = load_digital_twin_bundle(ROOT / "configs")
     namespaces = namespace_map(topology)
     protocols = CHALLENGE_PROTOCOLS if args.include_partial_winrm else TRAIN_PROTOCOLS
     if args.stage != "H" and args.include_partial_winrm:
         raise SystemExit("partial WinRM is Stage-H challenge only")
 
-    # Strong oversampling makes protocol balance a verified property rather
-    # than a consequence of the first random N planner rows.
-    oversample = max(args.count * 12, args.count + 1000)
-    planned = plan_sessions(topology, scenarios, netem, seed=args.seed, count=oversample, stage=args.stage)
+    oversample = max(args.count * 16, args.count + 1600)
+    planned = plan_digital_twin_sessions(
+        topology, scenarios, netem, bundle, seed=args.seed, count=oversample, stage=args.stage
+    )
     selected = balanced_select(planned, args.count, protocols)
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -143,6 +145,8 @@ def main() -> int:
         "dcerpc_train_included": False,
         "external_targets_allowed": False,
         "payload_execution_allowed": False,
+        "planner": "digital_twin_v1",
+        "wire_controls_label_dependent": False,
         "failures": failures[:20],
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
