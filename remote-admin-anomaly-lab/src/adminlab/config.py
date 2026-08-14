@@ -10,9 +10,9 @@ FORBIDDEN_FEATURE_COLUMNS: set[str] = {
     "scenario_id", "campaign_id", "session_id", "pair_id", "generator_seed", "expected_sid",
     "attack_marker", "capture_filename", "ground_truth_source", "wire_fidelity", "semantic_fidelity",
     "persona_id", "task_id", "calendar_id", "intent_profile", "behavior_profile", "campaign_type",
-    "historical_relation", "auth_outcome", "client_stack", "simulated_day", "campaign_position",
-    "campaign_size", "sequence_profile", "wire_attempts", "wire_transfer_bytes", "execution_start_ts",
-    "execution_end_ts",
+    "historical_relation", "auth_outcome", "client_stack", "server_stack", "implementation_id",
+    "simulated_day", "campaign_position", "campaign_size", "sequence_profile", "wire_attempts",
+    "wire_transfer_bytes", "execution_start_ts", "execution_end_ts",
 }
 
 
@@ -115,7 +115,7 @@ def validate_feature_contract(data: dict[str, Any]) -> None:
         raise ValueError(f"production_required outside allowlist: {sorted(missing_required)}")
     research_leak = allowlist & research_optional
     if research_leak:
-        raise ValueError(f"Zeek research feature leaked into production allowlist: {sorted(research_leak)}")
+        raise ValueError(f"Zeek research feature leaked into production allowlist: {sorted(research_leak)[0]}")
     required_windows = {
         "connections_1m", "connections_5m", "connections_15m", "connections_1h",
         "connections_24h", "connections_7d", "connections_30d",
