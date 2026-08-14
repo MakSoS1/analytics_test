@@ -23,6 +23,7 @@ from adminlab.digital_twin import load_digital_twin_bundle, plan_digital_twin_se
 from adminlab.extended_wire_v2 import run_rdp_session, run_vnc_session, run_winrm_session
 from adminlab.implementation_variants import materialize_implementation_variants
 from adminlab.manifest import SessionRecord, write_sessions
+from adminlab.v2_scenarios import build_v2_semantic_plan, summarize_v2_plan
 from adminlab.wire_controls import materialize_wire_controls
 
 spec = importlib.util.spec_from_file_location("adminlab_core_wire", ROOT / "scripts/run_scenarios.py")
@@ -83,16 +84,7 @@ def _label_quotas(records: list[SessionRecord], need: int, suspicious_fraction: 
 
 
 def balanced_select(records: list[SessionRecord], count: int, protocols: tuple[str, ...]) -> list[SessionRecord]:
-    """Select an equal protocol corpus without collapsing the simulated timeline.
-
-    The old implementation took ``bucket[:need]`` after the digital-twin planner
-    had sorted rows chronologically. On a 45-day H plan this selected the earliest
-    rows of each protocol, accidentally coupling label, clock time and history
-    density. We instead preserve the planner's aggregate label fraction within
-    each protocol and choose evenly spaced rows from the full chronological
-    benign/suspicious buckets. Selection remains deterministic and label-balanced;
-    labels affect only sampling quota, never wire controls or nuisance settings.
-    """
+    """Select an equal protocol corpus without collapsing the simulated timeline."""
     buckets: dict[str, list[SessionRecord]] = defaultdict(list)
     candidates = [record for record in records if record.protocol in protocols]
     for record in candidates:
@@ -167,6 +159,8 @@ def main() -> int:
     parser.add_argument("--core-state", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--include-partial-winrm", action="store_true")
+    parser.add_argument("--v2-semantic", action="store_true")
+    parser.add_argument("--v2-counterfactual-fraction", type=float, default=0.30)
     args = parser.parse_args()
 
     if os.geteuid() != 0:
@@ -180,6 +174,8 @@ def main() -> int:
     protocols = CHALLENGE_PROTOCOLS if args.include_partial_winrm else TRAIN_PROTOCOLS
     if args.stage != "H" and args.include_partial_winrm:
         raise SystemExit("partial WinRM is Stage-H challenge only")
+    if args.v2_semantic and args.stage != "H":
+        raise SystemExit("V2 semantic corpus is Stage H only")
 
     planned = plan_digital_twin_sessions(
         topology,
@@ -192,8 +188,20 @@ def main() -> int:
     )
     selected = balanced_select(planned, args.count, protocols)
     selected = organize_campaign_sequences(selected, bundle["campaigns"], seed=args.seed)
+    if args.v2_semantic:
+        selected = build_v2_semantic_plan(
+            selected,
+            seed=args.seed,
+            min_counterfactual_fraction=args.v2_counterfactual_fraction,
+        )
     selected = materialize_implementation_variants(selected, stage=args.stage, seed=args.seed)
     selected = materialize_wire_controls(selected, bundle["behavior"], seed=args.seed)
+    v2_report = summarize_v2_plan(selected) if args.v2_semantic else None
+    if args.v2_semantic:
+        if float(v2_report["counterfactual_pair_fraction"]) < float(args.v2_counterfactual_fraction):
+            raise RuntimeError(f"V2 counterfactual coverage below target: {v2_report}")
+        if v2_report["invalid_counterfactual_pairs"]:
+            raise RuntimeError(f"invalid V2 counterfactual pairs: {v2_report['invalid_counterfactual_pairs']}")
 
     args.out.mkdir(parents=True, exist_ok=True)
     fixtures = args.out / "inert-fixtures"
@@ -228,11 +236,12 @@ def main() -> int:
         "dcerpc_train_included": False,
         "external_targets_allowed": False,
         "payload_execution_allowed": False,
-        "planner": "digital_twin_v1",
+        "planner": "digital_twin_v2_semantic" if args.v2_semantic else "digital_twin_v1",
         "wire_controls_label_dependent": False,
         "implementation_choice_label_dependent": False,
         "simulated_timeline_preserved": True,
         "selection_policy": "equal protocol quotas; global-label-fraction quotas per protocol; evenly spaced full-timeline sampling",
+        "v2_semantic": v2_report,
         "failures": failures[:20],
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
