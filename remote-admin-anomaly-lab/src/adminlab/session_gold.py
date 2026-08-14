@@ -101,7 +101,6 @@ def build_session_gold(
         order.append((_ts(_assert_consistent(grp, "start_ts", sid)), sid))
     order.sort(key=lambda item: (item[0], item[1]))
 
-    # History tuple: (timestamp, destination, protocol, was_new_destination_at_that_time)
     source_history: dict[str, list[tuple[float, str, str, int]]] = defaultdict(list)
     pair_seen: Counter[tuple[str, str]] = Counter()
     pair_last_ts: dict[tuple[str, str], float] = {}
@@ -158,7 +157,6 @@ def build_session_gold(
             "flow_duration_max": float(durations.max()) if len(durations) else 0.0,
             "flow_bytes_mean": float(bytes_total.mean()) if len(bytes_total) else 0.0,
             "flow_bytes_max": float(bytes_total.max()) if len(bytes_total) else 0.0,
-            # Existing V2-compatible history features.
             "prior_sessions_1m": len(h1m),
             "prior_sessions_5m": len(h5m),
             "prior_sessions_15m": len(h15m),
@@ -176,7 +174,6 @@ def build_session_gold(
             "prior_new_edge_count_1h": sum(int(event[3]) for event in h1h),
             "prior_protocol_entropy_1h": _entropy([event[2] for event in h1h]),
             "prior_protocol_entropy_24h": _entropy([event[2] for event in h24h]),
-            # V3 primary causal history/graph features.
             "src_distinct_dst_24h_prior": len({event[1] for event in h24h}),
             "src_distinct_dst_7d_prior": len({event[1] for event in h7d}),
             "src_distinct_dst_30d_prior": len({event[1] for event in h30d}),
@@ -187,9 +184,8 @@ def build_session_gold(
             "src_new_target_count_1h_prior": sum(int(event[3]) for event in h1h),
             "src_new_target_count_24h_prior": int(new_targets_24h),
             "src_graph_expansion_rate_24h_prior": float(new_targets_24h / max(1, len(h24h))),
-            "recent_protocol_switch_count_prior": int(_protocol_switch_count(h24h)),
+            "recent_protocol_switch_count_prior": int(_protocol_switch_count(h7d)),
             "recent_remote_admin_attempt_count_prior": int(len(h24h)),
-            # Time features remain for explicit nuisance auditing/ablation.
             "hour_sin": math.sin(angle),
             "hour_cos": math.cos(angle),
             "is_weekend": int(dt.weekday() >= 5),
@@ -224,7 +220,6 @@ def build_session_gold(
                 label_row[field] = value
         label_rows.append(label_row)
 
-        # The current session is appended only after all features are emitted.
         was_new_destination = int(dst not in source_destinations[src])
         history.append((start, dst, protocol, was_new_destination))
         source_destinations[src].add(dst)
