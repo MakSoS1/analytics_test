@@ -8,6 +8,7 @@ from ipaddress import ip_address,ip_network
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];SRC=ROOT/'src'
 if str(SRC) not in sys.path:sys.path.insert(0,str(SRC))
+from adminlab.campaign_sequences import organize_campaign_sequences
 from adminlab.config import load_yaml
 from adminlab.digital_twin import load_digital_twin_bundle,plan_digital_twin_sessions
 from adminlab.extended_wire_v2 import run_rdp_session,run_vnc_session,run_winrm_session
@@ -50,7 +51,14 @@ def main()->int:
     if os.geteuid()!=0:raise SystemExit('extended scenario runner requires root')
     topology=load_yaml(ROOT/'configs/topology.yaml');scenarios=load_yaml(ROOT/'configs/scenarios.yaml');netem=load_yaml(ROOT/'configs/netem.yaml');bundle=load_digital_twin_bundle(ROOT/'configs');namespaces=namespace_map(topology);protocols=CHALLENGE_PROTOCOLS if a.include_partial_winrm else TRAIN_PROTOCOLS
     if a.stage!='H' and a.include_partial_winrm:raise SystemExit('partial WinRM is Stage-H challenge only')
-    planned=plan_digital_twin_sessions(topology,scenarios,netem,bundle,seed=a.seed,count=max(a.count*16,a.count+1600),stage=a.stage);selected=materialize_wire_controls(balanced_select(planned,a.count,protocols),bundle['behavior'],seed=a.seed);a.out.mkdir(parents=True,exist_ok=True);fixtures=a.out/'inert-fixtures';fixtures.mkdir(exist_ok=True);write_sessions(selected,a.out/'sessions-planned.jsonl');executed=[execute(r,namespaces,a.core_state,fixtures,netem) for r in selected];write_sessions(executed,a.out/'sessions-executed.jsonl');statuses=Counter('success' if r.status=='success' else 'failed' for r in executed);pc=Counter(r.protocol for r in executed);lc=Counter('suspicious' if r.label_binary else 'benign' for r in executed);failures=[r.to_dict() for r in executed if r.status!='success'];summary={'requested':a.count,'executed':len(executed),'status_counts':dict(statuses),'protocol_counts':dict(pc),'label_counts':dict(lc),'protocol_balance_max_minus_min':max(pc.values())-min(pc.values()),'train_protocols':list(TRAIN_PROTOCOLS),'partial_winrm_included':a.include_partial_winrm,'dcerpc_train_included':False,'external_targets_allowed':False,'payload_execution_allowed':False,'planner':'digital_twin_v1','wire_controls_label_dependent':False,'simulated_timeline_preserved':True,'failures':failures[:20]};(a.out/'summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n');print(json.dumps(summary,sort_keys=True))
+    planned=plan_digital_twin_sessions(topology,scenarios,netem,bundle,seed=a.seed,count=max(a.count*16,a.count+1600),stage=a.stage)
+    selected=balanced_select(planned,a.count,protocols)
+    selected=organize_campaign_sequences(selected,bundle['campaigns'],seed=a.seed)
+    selected=materialize_wire_controls(selected,bundle['behavior'],seed=a.seed)
+    a.out.mkdir(parents=True,exist_ok=True);fixtures=a.out/'inert-fixtures';fixtures.mkdir(exist_ok=True);write_sessions(selected,a.out/'sessions-planned.jsonl');executed=[execute(r,namespaces,a.core_state,fixtures,netem) for r in selected];write_sessions(executed,a.out/'sessions-executed.jsonl');statuses=Counter('success' if r.status=='success' else 'failed' for r in executed);pc=Counter(r.protocol for r in executed);lc=Counter('suspicious' if r.label_binary else 'benign' for r in executed);failures=[r.to_dict() for r in executed if r.status!='success'];campaigns=defaultdict(list)
+    for r in selected:campaigns[r.campaign_id].append(r)
+    multi=sum(1 for rows in campaigns.values() if len(rows)>=3);diverse=sum(1 for rows in campaigns.values() if len({r.protocol for r in rows})>=2)
+    summary={'requested':a.count,'executed':len(executed),'status_counts':dict(statuses),'protocol_counts':dict(pc),'label_counts':dict(lc),'protocol_balance_max_minus_min':max(pc.values())-min(pc.values()),'campaign_count':len(campaigns),'multi_session_campaigns':multi,'multi_protocol_campaigns':diverse,'train_protocols':list(TRAIN_PROTOCOLS),'partial_winrm_included':a.include_partial_winrm,'dcerpc_train_included':False,'external_targets_allowed':False,'payload_execution_allowed':False,'planner':'digital_twin_v1','wire_controls_label_dependent':False,'simulated_timeline_preserved':True,'failures':failures[:20]};(a.out/'summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n');print(json.dumps(summary,sort_keys=True))
     if failures:return 1
     if set(pc)!=set(protocols):return 1
     if summary['protocol_balance_max_minus_min']>1:return 1
