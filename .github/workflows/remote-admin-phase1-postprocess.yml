@@ -1,0 +1,65 @@
+name: Remote Admin Anomaly V1 Phase 1 Final Promotion
+
+on:
+  workflow_run:
+    workflows: ["Remote Admin Anomaly V1 Phase 1 Corpus"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/remote-admin-anomaly-v1
+
+jobs:
+  promote:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: remote-admin-anomaly-lab-v1
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12', cache: pip, cache-dependency-path: remote-admin-anomaly-lab/requirements.txt}
+      - name: Install model runtime
+        working-directory: remote-admin-anomaly-lab
+        run: python -m pip install -r requirements.txt
+      - name: Download merged Phase 1 artifact from triggering run
+        uses: actions/download-artifact@v4
+        with:
+          name: remote-admin-phase1-merged-${{ github.event.workflow_run.id }}
+          path: /tmp/adminlab-promoted
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Force Stage H and partial WinRM to challenge then re-audit
+        working-directory: remote-admin-anomaly-lab
+        env: {PYTHONPATH: src}
+        run: python scripts/enforce_challenge_policy.py --merged /tmp/adminlab-promoted --feature-contract configs/feature_contract.yaml
+      - name: Retrain promoted models and learning curve
+        working-directory: remote-admin-anomaly-lab
+        env: {PYTHONPATH: src}
+        run: |
+          rm -rf /tmp/adminlab-promoted/models-promoted
+          mkdir -p /tmp/adminlab-promoted/models-promoted
+          python scripts/train_models.py --model-matrix /tmp/adminlab-promoted/gold/model_matrix.parquet --out /tmp/adminlab-promoted/models-promoted --seed 20260814
+          python scripts/learning_curve.py --model-matrix /tmp/adminlab-promoted/gold/model_matrix.parquet --out /tmp/adminlab-promoted/models-promoted/learning_curve.json --seed 20260814
+      - name: Promotion quality gate
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=Path('/tmp/adminlab-promoted'); policy=json.loads((r/'quality/challenge_policy.json').read_text()); leakage=json.loads((r/'quality/global_leakage_checks.json').read_text()); models=json.loads((r/'models-promoted/summary.json').read_text()); curve=json.loads((r/'models-promoted/learning_curve.json').read_text())
+          assert policy['forced_challenge_rows']>0,policy
+          assert policy['leakage_ok'] is True and leakage['ok'] is True,(policy,leakage)
+          report={'source_phase1_run':${{ github.event.workflow_run.id }},'challenge_policy':policy,'models':models['models'],'learning_curve':curve}
+          (r/'FINAL_PROMOTION_REPORT.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n'); print(json.dumps(report,indent=2,sort_keys=True))
+          PY
+      - name: Retain promoted Gold/models
+        uses: actions/upload-artifact@v4
+        with: {name: 'remote-admin-phase1-promoted-${{ github.event.workflow_run.id }}', path: '/tmp/adminlab-promoted', retention-days: 90, compression-level: 0}
+      - name: Upload promoted analysis to private HF when configured
+        working-directory: remote-admin-anomaly-lab
+        env: {HF_TOKEN: '${{ secrets.HF_TOKEN }}'}
+        run: python scripts/upload_analysis_hf.py --repo "$HF_DATASET_REPO" --folder /tmp/adminlab-promoted --remote-path "releases/gh-${{ github.event.workflow_run.id }}/promoted" --status /tmp/adminlab-promoted/hf-promoted.json
