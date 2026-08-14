@@ -102,3 +102,43 @@ def validate_silver_tree(shard_dir: Path | str) -> dict:
         "conn_bytes": conn_bytes,
         "shard": shard.name,
     }
+
+
+def validate_gold_tree(shard_dir: Path | str) -> dict:
+    shard = Path(shard_dir)
+    names = [
+        "flow_features.parquet",
+        "window_features.parquet",
+        "graph_features.parquet",
+        "splits.parquet",
+        "labels.parquet",
+        "model_matrix.parquet",
+        "feature_contract.json",
+    ]
+    errors: list[str] = []
+    total_bytes = 0
+    for name in names:
+        path = shard / name
+        if not path.is_file() or path.stat().st_size <= 0:
+            errors.append(f"missing or empty Gold file: {name}")
+        else:
+            total_bytes += path.stat().st_size
+
+    contract = shard / "feature_contract.json"
+    if contract.is_file() and contract.stat().st_size > 0:
+        try:
+            payload = json.loads(contract.read_text(encoding="utf-8"))
+            if not payload.get("feature_contract_sha256"):
+                errors.append("feature_contract_sha256 missing from feature_contract.json")
+            if not payload.get("feature_contract_version"):
+                errors.append("feature_contract_version missing from feature_contract.json")
+        except (json.JSONDecodeError, OSError):
+            errors.append("invalid feature_contract.json")
+
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "required_files": len(names),
+        "gold_bytes": total_bytes,
+        "shard": shard.name,
+    }
