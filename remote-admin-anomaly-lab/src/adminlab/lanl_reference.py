@@ -71,7 +71,7 @@ def parse_netflow_lines(
         if len(rows) >= max_rows:
             break
         text = str(raw).strip()
-        if not text or text.lower().startswith("time,"):
+        if not text or text.lower().startswith(("time,", "epoch_time,")):
             continue
         try:
             parsed = next(csv.reader(StringIO(text)))
@@ -126,6 +126,46 @@ def _normalized_wls_csv(text: str) -> dict[str, object] | None:
     }
 
 
+def _rocketgraph_wls_csv(text: str) -> dict[str, object] | None:
+    """Parse Rocketgraph's documented LANL AuthEvents `_2v.csv` row.
+
+    The mirror's published 21-field order is:
+      epoch_time,event_id,log_host,logon_type,logon_type_description,username,
+      domain_name,logon_id,subject_username,subject_domain_name,subject_logon_id,
+      status,source,service_name,destination,authentication_package,
+      failure_reason,process_name,process_id,parent_process_name,parent_process_id
+    """
+    try:
+        parsed = next(csv.reader(StringIO(text)))
+    except csv.Error:
+        return None
+    if len(parsed) != 21:
+        return None
+    description = parsed[4].strip()
+    logon_type_id = _parse_int(parsed[3])
+    if description.lower() != "network" and logon_type_id != 3:
+        return None
+    event_id = _parse_int(parsed[1])
+    if event_id not in {4624, 4625, 4634, 4648, 4672, 4768, 4769, 4770, 4774, 4776}:
+        return None
+    log_host = parsed[2].strip()
+    source = parsed[12].strip() or log_host
+    destination = parsed[14].strip() or log_host
+    return {
+        "time": _parse_int(parsed[0]),
+        "event_id": event_id,
+        "user": parsed[5].strip(),
+        "domain": parsed[6].strip(),
+        "src_device": source,
+        "dst_device": destination,
+        "logon_type": description or ("Network" if logon_type_id == 3 else ""),
+        "logon_type_id": logon_type_id,
+        "auth_package": parsed[15].strip(),
+        "status": parsed[11].strip(),
+        "logon_id": parsed[7].strip(),
+    }
+
+
 def _official_wls_json(text: str) -> dict[str, object] | None:
     try:
         event = json.loads(text)
@@ -136,9 +176,6 @@ def _official_wls_json(text: str) -> dict[str, object] | None:
     event_id = _parse_int(event.get("EventID", 0))
     description = str(event.get("LogonTypeDescription", "")).strip()
     logon_type_id = _parse_int(event.get("LogonType", 0))
-    # The V2 reference intentionally keeps network-style authentication/logon
-    # context only. Both successful and failed logons are retained when LANL
-    # reports them; neither is re-labeled as suspicious.
     if description.lower() != "network" and logon_type_id != 3:
         return None
     if event_id not in {4624, 4625, 4634, 4648, 4672, 4768, 4769, 4770, 4774, 4776}:
@@ -161,11 +198,11 @@ def _official_wls_json(text: str) -> dict[str, object] | None:
 
 
 def parse_wls_lines(lines: Iterable[str], max_rows: int) -> pd.DataFrame:
-    """Parse official LANL 2017 Windows JSONL or normalized test interchange.
+    """Parse LANL WLS from official JSONL or documented mirror CSV forms.
 
-    The released `wls_day-XX.bz2` files are JSONL. A compact seven-field CSV
-    interchange remains accepted for local tests and downstream normalized
-    adapters. No class label is added in either path.
+    Official LANL WLS is JSONL. Rocketgraph publishes a documented transformed
+    AuthEvents `_2v.csv` mirror with 21 fields. A compact seven-field interchange
+    remains accepted for local tests. No class label is created in any path.
     """
     if max_rows <= 0:
         return pd.DataFrame(columns=WLS_COLUMNS)
@@ -174,9 +211,12 @@ def parse_wls_lines(lines: Iterable[str], max_rows: int) -> pd.DataFrame:
         if len(rows) >= max_rows:
             break
         text = str(raw).strip()
-        if not text or text.lower().startswith("time,"):
+        if not text or text.lower().startswith(("time,", "epoch_time,")):
             continue
-        row = _official_wls_json(text) if text.startswith("{") else _normalized_wls_csv(text)
+        if text.startswith("{"):
+            row = _official_wls_json(text)
+        else:
+            row = _rocketgraph_wls_csv(text) or _normalized_wls_csv(text)
         if row is not None:
             rows.append(row)
     return pd.DataFrame(rows, columns=WLS_COLUMNS)
