@@ -1,9 +1,10 @@
 import math
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
 
-from adminlab.suricata_gold import normalize_suricata_flow_events
+from adminlab.suricata_gold import map_suricata_flows_to_sessions, normalize_suricata_flow_events
 
 
 def test_normalize_suricata_flow_events_filters_non_flow_and_handles_nan_ports():
@@ -72,10 +73,6 @@ def test_normalize_suricata_flow_events_does_not_stringify_nan_addresses():
 
 
 def test_offline_suricata_mapping_timestamp_prefers_nested_flow_start_over_shutdown_event_timestamp():
-    # Offline Suricata can flush many flow records during engine shutdown with
-    # an identical top-level EVE timestamp. The captured connection start/end
-    # inside the flow object retain the actual packet time and must drive PCAP
-    # to session mapping.
     eve = pd.DataFrame([
         {
             "event_type": "flow",
@@ -97,3 +94,49 @@ def test_offline_suricata_mapping_timestamp_prefers_nested_flow_start_over_shutd
     expected = pd.Timestamp("2026-08-14T13:55:20.040002+00:00").timestamp()
     assert abs(float(normalized.loc[0, "ts"]) - expected) < 1e-6
     assert normalized.loc[0, "mapping_timestamp_source"] == "flow.start"
+
+
+def test_suricata_mapping_coverage_uses_only_direct_manifest_tuples_and_reports_background():
+    base = datetime(2026, 8, 14, 13, 55, tzinfo=timezone.utc)
+    sessions = pd.DataFrame([
+        {
+            "session_id": "s-ssh",
+            "src_ip": "10.77.0.11",
+            "dst_ip": "10.77.0.21",
+            "dst_port": 22,
+            "protocol": "ssh",
+            "start_ts": base.isoformat(),
+            "end_ts": (base + timedelta(seconds=3)).isoformat(),
+            "execution_start_ts": base.isoformat(),
+            "execution_end_ts": (base + timedelta(seconds=3)).isoformat(),
+        },
+        {
+            "session_id": "s-smb",
+            "src_ip": "10.77.0.12",
+            "dst_ip": "10.77.0.23",
+            "dst_port": 445,
+            "protocol": "smb",
+            "start_ts": (base + timedelta(seconds=10)).isoformat(),
+            "end_ts": (base + timedelta(seconds=13)).isoformat(),
+            "execution_start_ts": (base + timedelta(seconds=10)).isoformat(),
+            "execution_end_ts": (base + timedelta(seconds=13)).isoformat(),
+        },
+    ])
+    normalized = pd.DataFrame([
+        {"uid": "a", "ts": base.timestamp() + 1, "id.orig_h": "10.77.0.11", "id.orig_p": 50001, "id.resp_h": "10.77.0.21", "id.resp_p": 22, "event": {}},
+        {"uid": "b", "ts": base.timestamp() + 11, "id.orig_h": "10.77.0.12", "id.orig_p": 50002, "id.resp_h": "10.77.0.23", "id.resp_p": 445, "event": {}},
+        {"uid": "netbios", "ts": base.timestamp() + 11, "id.orig_h": "10.77.0.12", "id.orig_p": 50003, "id.resp_h": "10.77.0.23", "id.resp_p": 139, "event": {}},
+        {"uid": "proxy-hop", "ts": base.timestamp() + 1, "id.orig_h": "10.77.0.21", "id.orig_p": 50004, "id.resp_h": "10.77.0.22", "id.resp_p": 22, "event": {}},
+    ])
+
+    mapped, report = map_suricata_flows_to_sessions(sessions, normalized)
+
+    assert len(mapped) == 2
+    assert report["raw_conn_count"] == 4
+    assert report["eligible_conn_count"] == 2
+    assert report["background_conn_count"] == 2
+    assert report["mapped_conn_count"] == 2
+    assert report["unmapped_eligible_conn_count"] == 0
+    assert report["conn_mapping_coverage"] == 1.0
+    assert report["session_mapping_coverage"] == 1.0
+    assert report["session_mapping_coverage_by_protocol"] == {"smb": 1.0, "ssh": 1.0}
