@@ -39,7 +39,7 @@ def run_ssh(r:SessionRecord,ns:str,state_dir:Path,work_dir:Path)->None:
         size=_transfer_bytes(r,64*1024);f=work_dir/f'inert-{r.session_id}.bin';f.write_bytes((b'ADMINLAB-INERT-SSH-MARKER\n'*((size//26)+1))[:size]);scp=['ip','netns','exec',ns,'scp','-q','-i',str(key),'-o','BatchMode=yes','-o','StrictHostKeyChecking=no','-o','UserKnownHostsFile=/dev/null',str(f),f'root@{r.dst_ip}:/tmp/{f.name}']
         for _ in range(_attempts(r)):run(scp,timeout=30)
         return
-    if r.action=='bounded_proxyjump':
+    if r.action=='bounded_proxyjump' or r.task_id=='approved_forwarding':
         # Lab-only OpenSSH ProxyJump: source -> linux01 -> linux02. Both hops are
         # inside 10.77/24, no SOCKS listener, no external destination and no
         # payload execution beyond a harmless `true` on the final host.
