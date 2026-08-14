@@ -1,0 +1,97 @@
+name: Remote Admin Anomaly V1 Stage A V2
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v1]
+    paths:
+      - 'remote-admin-anomaly-lab/.stage-a-v2-trigger'
+      - '.github/workflows/remote-admin-stage-a-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/remote-admin-anomaly-v1
+
+jobs:
+  stage-a-v2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install full extended runtime
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          python -m pip install -r requirements.txt
+          bash scripts/install_extended_runner_v2.sh
+      - name: Contract gate
+        working-directory: remote-admin-anomaly-lab
+        env: {PYTHONPATH: src}
+        run: pytest -q tests
+      - name: Generate 1000 real-wire behavioral sessions
+        id: generate
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          start="$(date +%s)"
+          python_bin="$(command -v python)"
+          sudo -E env ADMINLAB_PYTHON="$python_bin" ADMINLAB_OUTPUT_UID="$(id -u)" ADMINLAB_OUTPUT_GID="$(id -g)" \
+            bash scripts/capture_shard_extended.sh A A-research-v2-00 1000 2026081431 /tmp/adminlab-stage-a-v2
+          echo "generation_seconds=$(( $(date +%s)-start ))" >> "$GITHUB_OUTPUT"
+      - name: Build Silver rule baseline and Gold
+        working-directory: remote-admin-anomaly-lab
+        env: {PYTHONPATH: src}
+        run: |
+          ADMINLAB_PYTHON="$(command -v python)" bash scripts/build_silver.sh /tmp/adminlab-stage-a-v2/release A-research-v2-00
+          bash scripts/build_rule_baseline.sh /tmp/adminlab-stage-a-v2/release A-research-v2-00
+          python scripts/build_gold.py --release /tmp/adminlab-stage-a-v2/release --shard A-research-v2-00 --feature-contract configs/feature_contract.yaml --split-seed 20260814
+      - name: Train M0 M1 M2 and learning curve
+        working-directory: remote-admin-anomaly-lab
+        env: {PYTHONPATH: src}
+        run: |
+          mkdir -p /tmp/adminlab-stage-a-v2/release/models/A-research-v2-00
+          python scripts/train_models.py --model-matrix /tmp/adminlab-stage-a-v2/release/gold/A-research-v2-00/model_matrix.parquet --out /tmp/adminlab-stage-a-v2/release/models/A-research-v2-00 --seed 20260814
+          python scripts/learning_curve.py --model-matrix /tmp/adminlab-stage-a-v2/release/gold/A-research-v2-00/model_matrix.parquet --out /tmp/adminlab-stage-a-v2/release/models/A-research-v2-00/learning_curve.json --seed 20260814
+      - name: Research quality report
+        working-directory: remote-admin-anomaly-lab
+        env:
+          GENERATION_SECONDS: ${{ steps.generate.outputs.generation_seconds }}
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=Path('/tmp/adminlab-stage-a-v2/release'); q=r/'quality/A-research-v2-00'
+          cap=json.loads((q/'capture_health.json').read_text()); parser=json.loads((q/'parser_health.json').read_text()); mapping=json.loads((q/'mapping_health.json').read_text()); leak=json.loads((q/'leakage_checks.json').read_text()); models=json.loads((r/'models/A-research-v2-00/summary.json').read_text()); curve=json.loads((r/'models/A-research-v2-00/learning_curve.json').read_text())
+          seconds=max(1,int(os.environ['GENERATION_SECONDS']))
+          report={'sessions':cap['sessions'],'generation_seconds':seconds,'sessions_per_minute':cap['sessions']*60/seconds,'protocol_counts':cap['protocol_counts'],'raw_pcap_bytes':cap['raw_pcap_bytes'],'compressed_pcap_bytes':cap['compressed_pcap_bytes'],'flows_per_session':parser['zeek_conn_lines']/cap['sessions'],'mapping_coverage':mapping['session_mapping_coverage'],'leakage_ok':leak['ok'],'models':models['models'],'learning_curve_recommendation':curve['recommendation'],'learning_curve_final_pr_auc':curve['final_pr_auc'],'learning_curve_last_delta':curve['last_step_pr_auc_delta']}
+          assert report['mapping_coverage']>=.95,report
+          assert report['leakage_ok'] is True,report
+          assert all(cap['protocol_counts'].get(p,0)>0 for p in ('ssh','smb','rdp','vnc')),cap
+          (q/'stage_a_v2_report.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n'); print(json.dumps(report,indent=2,sort_keys=True))
+          PY
+      - name: Retain complete release before HF
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-stage-a-v2-${{ github.run_id }}
+          path: /tmp/adminlab-stage-a-v2/release
+          retention-days: 90
+          compression-level: 0
+      - name: Persist dataset layers to private HF when token exists
+        working-directory: remote-admin-anomaly-lab
+        env: {HF_TOKEN: '${{ secrets.HF_TOKEN }}'}
+        run: |
+          python scripts/upload_hf.py --repo "$HF_DATASET_REPO" --release /tmp/adminlab-stage-a-v2/release --shard A-research-v2-00 --remote-path "releases/gh-${{ github.run_id }}-a${{ github.run_attempt }}" --status /tmp/adminlab-stage-a-v2/hf-status.json
+          cat /tmp/adminlab-stage-a-v2/hf-status.json
+      - name: Retain storage status
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-stage-a-v2-storage-${{ github.run_id }}
+          path: /tmp/adminlab-stage-a-v2/hf-status.json
+          if-no-files-found: ignore
+          retention-days: 90
