@@ -15,7 +15,15 @@ hf_quarantine_prefix: v2/quarantine
 lanl:
   dataset: Unified Host and Network Data Set
   year: 2017
+  origin: Los Alamos National Laboratory
+  origin_page: https://csr.lanl.gov/data/2017/
+  transport: rocketgraph_xgt_mirror
+  mirror_page: https://datasets.rocketgraph.com/cyber/LANL/index.html
   netflow_day: 2
-  netflow_url: https://csr.lanl.gov/data-fence//unified-host-network-dataset-2017/netflow/netflow_day-02.bz2
-  host_url: https://csr.lanl.gov/data-fence//unified-host-network-dataset-2017/wls/wls_day-02.bz2
+  netflow_url: https://datasets.rocketgraph.com/LANL/xgt/nf_day-02.csv
+  auth_url: https://datasets.rocketgraph.com/LANL/xgt/wls_day-02_2v.csv
+  mirror_transforms:
+    - PortXXXX converted to integer ports
+    - Windows Logging Service JSON converted to CSV
+    - empty Source or Destination filled from LogHost by mirror publisher
   remote_admin_ports: [22, 135, 445, 3389, 5985, 5986]
