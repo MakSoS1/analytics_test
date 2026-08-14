@@ -1,6 +1,7 @@
-feature_contract_version: 1
+feature_contract_version: 2
 
 production_allowlist:
+  - flow_count
   - duration
   - src_bytes
   - dst_bytes
@@ -34,8 +35,6 @@ production_allowlist:
   - dst_in_degree_1h
   - new_edge_count_1h
   - protocol_entropy_1h
-  - netem_delay_ms
-  - netem_loss_pct
 
 training_only:
   - label_binary
@@ -54,6 +53,23 @@ forbidden:
   - ground_truth_source
   - wire_fidelity
   - semantic_fidelity
+  - netem_profile
+  - netem_delay_ms
+  - netem_loss_pct
+  - netem_jitter_ms
+  - netem_reorder_pct
+  - netem_rate_mbit
+  - netem_mtu
+  - src_ip
+  - dst_ip
+  - src_host_id
+  - dst_host_id
+  - src_role
+  - dst_role
+  - action
+  - mitre_technique
+  - status
+  - protocol
 
 windows_seconds:
   connections_1m: 60
