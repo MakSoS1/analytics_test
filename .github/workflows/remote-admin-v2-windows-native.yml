@@ -29,6 +29,16 @@ jobs:
         run: |
           $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v2-windows'
           & .\remote-admin-anomaly-lab\windows\capture_native.ps1 -OutputDir $out
+      - name: Normalize pktmon wire evidence
+        if: always()
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v2-windows'
+          $report = Join-Path $out 'windows_fidelity.json'
+          $capture = Join-Path $out 'capture.txt'
+          if (-not (Test-Path $report)) { throw 'windows_fidelity.json was not produced' }
+          if (-not (Test-Path $capture)) { throw 'pktmon formatted capture was not produced' }
+          python .\remote-admin-anomaly-lab\windows\mark_wire.py $report $capture
       - name: Validate fail-closed native fidelity claims
         if: always()
         shell: pwsh
