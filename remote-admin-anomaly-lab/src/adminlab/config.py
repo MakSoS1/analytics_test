@@ -18,6 +18,15 @@ FORBIDDEN_FEATURE_COLUMNS: set[str] = {
     "ground_truth_source",
     "wire_fidelity",
     "semantic_fidelity",
+    "persona_id",
+    "task_id",
+    "calendar_id",
+    "intent_profile",
+    "behavior_profile",
+    "campaign_type",
+    "historical_relation",
+    "client_stack",
+    "simulated_day",
 }
 
 
