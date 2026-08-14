@@ -23,10 +23,22 @@ SERVER_STACKS = {
 }
 
 
-def _bucket(record: SessionRecord, seed: int) -> int:
-    identity = record.pair_id or record.session_id
-    digest = hashlib.sha256(f"{seed}|{identity}|{record.protocol}".encode()).digest()
+def _identity(record: SessionRecord) -> str:
+    # Counterfactual twins must stay identical. Outside Stage F, campaigns are
+    # the evaluation unit, so client implementation is selected for the whole
+    # campaign rather than independently per session.
+    return record.pair_id or record.campaign_id or record.session_id
+
+
+def _hash_int(value: str, seed: int) -> int:
+    digest = hashlib.sha256(f"{seed}|{value}".encode()).digest()
     return int.from_bytes(digest[:8], "big")
+
+
+def _use_alternative(record: SessionRecord, seed: int) -> bool:
+    # A bounded 20% implementation cohort leaves a large primary-client train
+    # population while producing enough truly unseen implementation campaigns.
+    return _hash_int(f"implementation-cohort|{_identity(record)}", seed) % 5 == 0
 
 
 def materialize_implementation_variants(
@@ -36,15 +48,16 @@ def materialize_implementation_variants(
 
     Alternative implementations are introduced in G/H. Earlier stages keep the
     stable primary client so V4/baseline fidelity changes one dimension at a time.
-    Counterfactual pairs share one selection key and therefore the same stack.
+    Selection is label-neutral and group-stable: a counterfactual pair or campaign
+    never gets a different implementation merely because of row order or label.
     """
     output: list[SessionRecord] = []
     for record in records:
         clients = CLIENTS.get(record.protocol, (record.client_stack or "unknown",))
         if record.task_id == "approved_forwarding" and record.protocol == "ssh":
             client = "openssh"
-        elif stage in {"G", "H"} and len(clients) > 1:
-            client = clients[_bucket(record, seed) % len(clients)]
+        elif stage in {"G", "H"} and len(clients) > 1 and _use_alternative(record, seed):
+            client = clients[1]
         else:
             client = clients[0]
         server = SERVER_STACKS.get(record.protocol, "unknown")
