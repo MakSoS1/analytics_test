@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: remote-admin-v4-final
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   v4-final:
