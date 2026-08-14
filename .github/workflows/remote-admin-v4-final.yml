@@ -1,6 +1,6 @@
 name: Remote Admin Anomaly V1 V4 Final
 
-# Evidence rerun: Suricata flow.start + eligible direct-flow mapping.
+# Evidence rerun: full-timeline selection + causal reference-context Gold.
 on:
   push:
     branches: [remote-admin-anomaly-lab-v1]
