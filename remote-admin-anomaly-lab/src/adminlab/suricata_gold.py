@@ -54,12 +54,12 @@ def normalize_suricata_flow_events(eve: pd.DataFrame) -> pd.DataFrame:
         uid = f"suri:{_text(flow_id)}" if not _is_missing(flow_id) and _text(flow_id) else f"suri-row:{index:012d}"
         flow = event.get("flow") if isinstance(event.get("flow"), dict) else {}
         flow_start = flow.get("start")
-        mapping_ts = flow_start if not _is_missing(flow_start) and _text(flow_start) else event.get("timestamp")
-        mapping_source = "flow.start" if mapping_ts is flow_start else "event.timestamp"
+        use_flow_start = not _is_missing(flow_start) and bool(_text(flow_start))
+        mapping_ts = flow_start if use_flow_start else event.get("timestamp")
         rows.append({
             "uid": uid,
             "ts": _epoch(mapping_ts),
-            "mapping_timestamp_source": mapping_source,
+            "mapping_timestamp_source": "flow.start" if use_flow_start else "event.timestamp",
             "id.orig_h": _text(event.get("src_ip")),
             "id.resp_h": _text(event.get("dest_ip")),
             "id.orig_p": _integer(event.get("src_port")),
@@ -67,6 +67,81 @@ def normalize_suricata_flow_events(eve: pd.DataFrame) -> pd.DataFrame:
             "event": event,
         })
     return pd.DataFrame(rows)
+
+
+def map_suricata_flows_to_sessions(
+    sessions: pd.DataFrame,
+    normalized_flows: pd.DataFrame,
+    *,
+    tolerance_seconds: float = 2.0,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Map only direct remote-admin flow tuples and retain background accounting.
+
+    Offline captures legitimately contain NetBIOS helper traffic, IPv6/router
+    chatter, and internal ProxyJump second-hop flows. Those records are valuable
+    raw Silver evidence but cannot map to the direct scenario tuple recorded in
+    the session manifest. They therefore stay visible as `background_conn_count`
+    instead of depressing the correspondence coverage denominator.
+    """
+    from .features import map_zeek_flows_to_sessions
+
+    required_sessions = {"src_ip", "dst_ip", "dst_port", "session_id"}
+    missing = required_sessions - set(sessions.columns)
+    if missing:
+        raise ValueError(f"sessions missing Suricata mapping columns: {sorted(missing)}")
+    required_flows = {"id.orig_h", "id.resp_h", "id.resp_p", "ts"}
+    missing_flows = required_flows - set(normalized_flows.columns)
+    if missing_flows:
+        raise ValueError(f"normalized Suricata flows missing columns: {sorted(missing_flows)}")
+
+    direct_tuples = {
+        (str(row["src_ip"]), str(row["dst_ip"]), int(row["dst_port"]))
+        for row in sessions.to_dict("records")
+    }
+    if normalized_flows.empty:
+        eligible = normalized_flows.copy()
+    else:
+        mask = normalized_flows.apply(
+            lambda row: (str(row["id.orig_h"]), str(row["id.resp_h"]), int(row["id.resp_p"])) in direct_tuples,
+            axis=1,
+        )
+        eligible = normalized_flows[mask].copy().reset_index(drop=True)
+
+    mapped, report = map_zeek_flows_to_sessions(
+        sessions,
+        eligible,
+        tolerance_seconds=tolerance_seconds,
+    )
+    raw_count = int(len(normalized_flows))
+    eligible_count = int(len(eligible))
+    mapped_count = int(len(mapped))
+    report.update({
+        "raw_conn_count": raw_count,
+        "eligible_conn_count": eligible_count,
+        "background_conn_count": raw_count - eligible_count,
+        "mapped_conn_count": mapped_count,
+        "unmapped_eligible_conn_count": eligible_count - mapped_count,
+        "conn_count": eligible_count,
+        "conn_mapping_coverage": float(mapped_count / eligible_count) if eligible_count else 0.0,
+        "mapping_scope": "direct_manifest_remote_admin_tuple_only",
+    })
+
+    session_count_by_protocol: dict[str, int] = {}
+    mapped_session_count_by_protocol: dict[str, int] = {}
+    coverage_by_protocol: dict[str, float] = {}
+    if "protocol" in sessions.columns:
+        mapped_ids = set(mapped["session_id"].astype(str)) if not mapped.empty else set()
+        for protocol, part in sessions.groupby("protocol", sort=True):
+            ids = set(part["session_id"].astype(str))
+            mapped_ids_for_protocol = ids & mapped_ids
+            key = str(protocol)
+            session_count_by_protocol[key] = len(ids)
+            mapped_session_count_by_protocol[key] = len(mapped_ids_for_protocol)
+            coverage_by_protocol[key] = float(len(mapped_ids_for_protocol) / len(ids)) if ids else 0.0
+    report["session_count_by_protocol"] = session_count_by_protocol
+    report["mapped_session_count_by_protocol"] = mapped_session_count_by_protocol
+    report["session_mapping_coverage_by_protocol"] = coverage_by_protocol
+    return mapped, report
 
 
 def attach_behavior_time(mapped: pd.DataFrame, sessions: pd.DataFrame) -> pd.DataFrame:
