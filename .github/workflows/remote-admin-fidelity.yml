@@ -5,6 +5,7 @@ on:
     branches: [remote-admin-anomaly-lab-v1]
     paths:
       - 'remote-admin-anomaly-lab/.fidelity-trigger'
+      - '.github/workflows/remote-admin-fidelity.yml'
   workflow_dispatch:
 
 permissions:
@@ -31,25 +32,15 @@ jobs:
         run: |
           sudo -E bash scripts/setup_topology.sh up configs/topology.yaml
           sudo -E bash scripts/start_services.sh start /tmp/adminlab-fidelity-services
-      - name: Start full bridge capture
-        run: |
-          sudo bash -c 'mkdir -p /tmp/adminlab-fidelity && setsid tcpdump -i br-adminlab -U -s 0 -n -w /tmp/adminlab-fidelity/fidelity.pcap >/tmp/adminlab-fidelity/tcpdump.log 2>&1 & echo $! >/tmp/adminlab-fidelity/tcpdump.pgid'
-          sleep 1
-          pgid="$(sudo cat /tmp/adminlab-fidelity/tcpdump.pgid)"
-          sudo kill -0 -- "-$pgid"
-      - name: Probe RDP VNC DCE-RPC and partial WinRM fidelity
+      - name: Probe RDP VNC DCE-RPC and partial WinRM with full bridge capture
         working-directory: remote-admin-anomaly-lab
-        run: sudo -E python scripts/probe_fidelity.py --out /tmp/adminlab-fidelity/results
-      - name: Stop capture and validate evidence
-        if: always()
         run: |
-          pgid="$(sudo cat /tmp/adminlab-fidelity/tcpdump.pgid 2>/dev/null || true)"
-          if [[ "$pgid" =~ ^[0-9]+$ ]]; then
-            sudo kill -INT -- "-$pgid" 2>/dev/null || true
-            sleep 1
-            sudo kill -TERM -- "-$pgid" 2>/dev/null || true
-          fi
+          sudo -E python scripts/probe_fidelity.py \
+            --out /tmp/adminlab-fidelity/results \
+            --pcap /tmp/adminlab-fidelity/fidelity.pcap
           sudo chown -R "$(id -u):$(id -g)" /tmp/adminlab-fidelity
+      - name: Validate fidelity evidence
+        run: |
           test -s /tmp/adminlab-fidelity/fidelity.pcap
           tcpdump -nn -r /tmp/adminlab-fidelity/fidelity.pcap -c 1 >/dev/null
           python - <<'PY'
@@ -60,12 +51,17 @@ jobs:
           assert d['external_targets_allowed'] is False
           assert d['payload_execution_allowed'] is False
           assert d['c2_frameworks_enabled'] is False
+          assert d['capture']['readable'] is True
+          assert d['capture']['bytes'] > 24
           rows={r['protocol']:r for r in d['results']}
           assert set(rows)=={'rdp','vnc','dcerpc','winrm'}
           assert rows['winrm']['status'] in {'partial','unavailable'}
           assert rows['dcerpc']['semantic_fidelity']=='partial_dcom'
           assert rows['rdp']['semantic_fidelity']=='partial_windows'
           assert rows['vnc']['wire_fidelity']=='real_rfb'
+          for row in rows.values():
+              if row['status'] == 'validated':
+                  assert row['tool_present'] and row['wire_observed'], row
           print(json.dumps(d, indent=2, sort_keys=True))
           PY
       - name: Stop endpoint services and topology
