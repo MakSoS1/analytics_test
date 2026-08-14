@@ -20,6 +20,7 @@ from adminlab.splits import assign_grouped_splits, audit_leakage  # noqa: E402
 from adminlab.suricata_gold import (  # noqa: E402
     attach_behavior_time,
     build_split_isolated_suricata_features,
+    map_suricata_flows_to_sessions,
     normalize_suricata_flow_events,
 )
 
@@ -78,11 +79,18 @@ def main() -> int:
     if normalized.empty:
         raise SystemExit("Suricata EVE contains no flow events")
 
-    mapped, mapping_report = map_zeek_flows_to_sessions(sessions, normalized)
+    mapped, mapping_report = map_suricata_flows_to_sessions(sessions, normalized)
     mapping_report["production_source"] = "suricata_eve_flow"
     write_json(quality / "production_flow_mapping.json", mapping_report)
     if mapping_report["session_mapping_coverage"] < 0.95 or mapping_report["conn_mapping_coverage"] < 0.90:
         raise SystemExit(f"Suricata flow mapping gate failed: {mapping_report}")
+    protocol_coverage = mapping_report.get("session_mapping_coverage_by_protocol", {})
+    missing_protocols = sorted(
+        protocol for protocol in sessions["protocol"].astype(str).unique()
+        if float(protocol_coverage.get(protocol, 0.0)) < 0.90
+    )
+    if missing_protocols:
+        raise SystemExit(f"Suricata per-protocol mapping gate failed for {missing_protocols}: {mapping_report}")
     if mapped["uid"].isna().any() or mapped["uid"].astype(str).duplicated().any():
         raise SystemExit("Suricata normalized flow_uid must be non-null and unique")
 
@@ -150,12 +158,17 @@ def main() -> int:
     summary = {
         "rows": int(len(model_matrix)),
         "feature_count": int(len(selected.columns)),
+        "raw_suricata_flow_count": mapping_report["raw_conn_count"],
+        "eligible_suricata_flow_count": mapping_report["eligible_conn_count"],
+        "background_suricata_flow_count": mapping_report["background_conn_count"],
+        "mapped_suricata_flow_count": mapping_report["mapped_conn_count"],
         "session_mapping_coverage": mapping_report["session_mapping_coverage"],
         "flow_mapping_coverage": mapping_report["conn_mapping_coverage"],
+        "session_mapping_coverage_by_protocol": protocol_coverage,
         "uid_alignment_coverage": float(len(aligned) / len(production_features)),
         "leakage_ok": True,
         "state_partition_policy": "fresh EveFeatureState per split",
-        "time_policy": "captured execution timestamp projected to simulated organization timestamp",
+        "time_policy": "Suricata flow.start for execution mapping; captured flow offset projected to simulated organization timestamp",
         "production_unit": "suricata_eve_flow",
         "production_source": "suricata_eve_flow",
         "train_serve_feature_code": "adminlab.online_features.EveFeatureState",
