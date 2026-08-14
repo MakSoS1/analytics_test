@@ -47,18 +47,19 @@ def normalize_suricata_flow_events(eve: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
     if "event_type" not in eve.columns:
         raise ValueError("EVE data missing event_type")
-    # EVE is heterogeneous. Reading JSONL into a DataFrame creates NaN for
-    # fields that are absent from some event types and, for non-TCP flows, can
-    # leave transport ports absent even on event_type=flow rows. Normalize only
-    # flow events and never rely on Python truthiness for NaN scalars.
     flows = eve[eve["event_type"].astype(str) == "flow"].copy().reset_index(drop=True)
     rows: list[dict[str, Any]] = []
     for index, event in enumerate(flows.to_dict("records")):
         flow_id = event.get("flow_id")
         uid = f"suri:{_text(flow_id)}" if not _is_missing(flow_id) and _text(flow_id) else f"suri-row:{index:012d}"
+        flow = event.get("flow") if isinstance(event.get("flow"), dict) else {}
+        flow_start = flow.get("start")
+        mapping_ts = flow_start if not _is_missing(flow_start) and _text(flow_start) else event.get("timestamp")
+        mapping_source = "flow.start" if mapping_ts is flow_start else "event.timestamp"
         rows.append({
             "uid": uid,
-            "ts": _epoch(event.get("timestamp")),
+            "ts": _epoch(mapping_ts),
+            "mapping_timestamp_source": mapping_source,
             "id.orig_h": _text(event.get("src_ip")),
             "id.resp_h": _text(event.get("dest_ip")),
             "id.orig_p": _integer(event.get("src_port")),
@@ -89,12 +90,7 @@ def _iso_from_epoch(value: float) -> str:
 
 
 def build_split_isolated_suricata_features(mapped_events: pd.DataFrame) -> pd.DataFrame:
-    """Replay captured EVE flows through the exact online EveFeatureState.
-
-    `uid` is the mapper-internal name; `flow_uid` is the public Gold name. This
-    helper accepts either so train/serve parity tests and pipeline code share one
-    stable output schema.
-    """
+    """Replay captured EVE flows through the exact online EveFeatureState."""
     frame = mapped_events.copy()
     if "uid" not in frame.columns and "flow_uid" in frame.columns:
         frame["uid"] = frame["flow_uid"].astype(str)
