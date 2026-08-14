@@ -45,39 +45,28 @@ class SessionRecord:
     simulated_day: int = 0
     wire_attempts: int = 1
     wire_transfer_bytes: int = 0
+    execution_start_ts: str = ""
+    execution_end_ts: str = ""
 
     def __post_init__(self) -> None:
-        if self.label_binary not in (0, 1):
-            raise ValueError("label_binary must be 0 or 1")
-        if self.ground_truth_source != "scenario_orchestrator":
-            raise ValueError("ground truth must originate from scenario_orchestrator")
-        # src_port=0 means "unknown until observed on the real wire". The
-        # orchestrator must not invent the ephemeral port chosen by a real client.
-        if self.src_port < 0 or self.dst_port <= 0:
-            raise ValueError("src_port must be >= 0 and dst_port must be positive")
-        if self.simulated_day < 0:
-            raise ValueError("simulated_day must be non-negative")
-        if self.wire_attempts <= 0:
-            raise ValueError("wire_attempts must be positive")
-        if self.wire_transfer_bytes < 0:
-            raise ValueError("wire_transfer_bytes must be non-negative")
+        if self.label_binary not in (0, 1): raise ValueError("label_binary must be 0 or 1")
+        if self.ground_truth_source != "scenario_orchestrator": raise ValueError("ground truth must originate from scenario_orchestrator")
+        if self.src_port < 0 or self.dst_port <= 0: raise ValueError("src_port must be >= 0 and dst_port must be positive")
+        if self.simulated_day < 0: raise ValueError("simulated_day must be non-negative")
+        if self.wire_attempts <= 0: raise ValueError("wire_attempts must be positive")
+        if self.wire_transfer_bytes < 0: raise ValueError("wire_transfer_bytes must be non-negative")
 
     def to_dict(self) -> dict:
         return asdict(self)
 
 
 def write_sessions(records: Iterable[SessionRecord], path: Path | str) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    rows = [record.to_dict() for record in records]
+    target = Path(path); target.parent.mkdir(parents=True, exist_ok=True); rows = [record.to_dict() for record in records]
     if target.suffix == ".jsonl":
         with target.open("w", encoding="utf-8") as fh:
-            for row in rows:
-                fh.write(json.dumps(row, sort_keys=True) + "\n")
+            for row in rows: fh.write(json.dumps(row, sort_keys=True) + "\n")
         return
     if target.suffix == ".parquet":
         import pandas as pd
-
-        pd.DataFrame(rows).to_parquet(target, index=False)
-        return
+        pd.DataFrame(rows).to_parquet(target, index=False); return
     raise ValueError(f"unsupported manifest format: {target.suffix}")
