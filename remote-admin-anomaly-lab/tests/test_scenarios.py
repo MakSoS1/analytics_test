@@ -32,6 +32,13 @@ def test_plan_has_unique_session_ids_and_lab_only_destinations():
     assert all(ip_address(r.src_ip) in lab for r in records)
 
 
+def test_planner_does_not_invent_ephemeral_source_ports():
+    topology, scenarios, netem = configs()
+    records = plan_sessions(topology, scenarios, netem, seed=420, count=200, stage="A")
+    assert {r.src_port for r in records} == {0}
+    assert all(r.dst_port > 0 for r in records)
+
+
 def test_nuisance_profiles_overlap_labels():
     topology, scenarios, netem = configs()
     records = plan_sessions(topology, scenarios, netem, seed=43, count=360, stage="A")
