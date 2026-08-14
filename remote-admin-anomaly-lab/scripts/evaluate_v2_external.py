@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 import subprocess
 from collections import defaultdict
 from io import StringIO
@@ -14,7 +13,11 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from adminlab.v2_external import align_external_features, build_lanl_session_features
+from adminlab.v2_external import (
+    align_external_features,
+    build_lanl_session_features,
+    parse_pktmon_text_sessions,
+)
 
 
 PORT_TO_PROTOCOL = {
@@ -95,24 +98,30 @@ def _parse_tshark_windows_sessions(pcapng: Path, validated: set[str]) -> tuple[p
         first = packets[0]
         protocol = first["protocol"]
         per_protocol_streams[protocol] += 1
-        # Preserve network identity only inside this temporary reference table;
-        # build_lanl_session_features removes it after causal state derivation.
-        remote_port = next(port for port, name in PORT_TO_PROTOCOL.items() if name == protocol and (port in {p["sport"] for p in packets} or port in {p["dport"] for p in packets}))
+        remote_port = next(
+            port for port, name in PORT_TO_PROTOCOL.items()
+            if name == protocol and (port in {p["sport"] for p in packets} or port in {p["dport"] for p in packets})
+        )
         src_device = first["src"] or "windows_runner"
         dst_device = first["dst"] or f"native_{protocol}"
+        server_is_dst = first["dport"] in PORT_TO_PROTOCOL and PORT_TO_PROTOCOL[first["dport"]] == protocol
+        src_packets = sum(1 for packet in packets if packet["dport"] == remote_port)
+        dst_packets = len(packets) - src_packets
+        src_bytes = sum(int(packet["len"]) for packet in packets if packet["dport"] == remote_port)
+        dst_bytes = sum(int(packet["len"]) for packet in packets if packet["sport"] == remote_port)
         rows.append(
             {
                 "time": float(first["time"]),
                 "duration": max(0.0, float(packets[-1]["time"] - first["time"])),
-                "src_device": src_device,
-                "dst_device": dst_device,
+                "src_device": src_device if server_is_dst else dst_device,
+                "dst_device": dst_device if server_is_dst else src_device,
                 "protocol": "6",
-                "src_port": int(first["sport"]),
-                "dst_port": int(first["dport"] if first["dport"] in PORT_TO_PROTOCOL else remote_port),
-                "src_packets": len(packets),
-                "dst_packets": 0,
-                "src_bytes": int(sum(p["len"] for p in packets)),
-                "dst_bytes": 0,
+                "src_port": int(first["sport"] if server_is_dst else first["dport"]),
+                "dst_port": int(remote_port),
+                "src_packets": int(src_packets),
+                "dst_packets": int(dst_packets),
+                "src_bytes": int(src_bytes),
+                "dst_bytes": int(dst_bytes),
                 "native_protocol": protocol,
                 "tcp_stream": stream_id,
             }
@@ -120,7 +129,34 @@ def _parse_tshark_windows_sessions(pcapng: Path, validated: set[str]) -> tuple[p
     frame = pd.DataFrame(rows)
     if frame.empty:
         raise ValueError("no validated native Windows TCP streams were found in PCAPNG")
-    return frame, {"tcp_streams_by_protocol": dict(sorted(per_protocol_streams.items())), "tcp_streams_total": len(frame)}
+    return frame, {
+        "transport": "tshark_tcp_stream",
+        "tcp_streams_by_protocol": dict(sorted(per_protocol_streams.items())),
+        "tcp_streams_total": len(frame),
+    }
+
+
+def _parse_windows_sessions(root: Path, validated: set[str]) -> tuple[pd.DataFrame, dict]:
+    pcapng = root / "capture.pcapng"
+    tshark_error = ""
+    try:
+        frame, evidence = _parse_tshark_windows_sessions(pcapng, validated)
+        evidence["fallback_used"] = False
+        return frame, evidence
+    except (FileNotFoundError, ValueError, subprocess.CalledProcessError) as exc:
+        tshark_error = f"{type(exc).__name__}: {exc}"
+
+    capture_text = root / "capture.txt"
+    if not capture_text.exists() or capture_text.stat().st_size <= 0:
+        raise ValueError(f"Windows native capture has no usable tshark streams and no pktmon text fallback: {tshark_error}")
+    text = capture_text.read_text(encoding="utf-16")
+    frame, evidence = parse_pktmon_text_sessions(text, validated)
+    if frame.empty:
+        raise ValueError(f"pktmon text fallback found no validated native Windows sessions; tshark={tshark_error}")
+    evidence["fallback_used"] = True
+    evidence["tshark_failure"] = tshark_error
+    evidence["pcapng_retained"] = bool(pcapng.exists() and pcapng.stat().st_size > 0)
+    return frame, evidence
 
 
 def main() -> int:
@@ -161,9 +197,11 @@ def main() -> int:
     validated = set(map(str, fidelity.get("validated_protocols", [])))
     if not validated:
         raise SystemExit("Windows external holdout has no native_windows_validated protocols")
-    windows_net, windows_capture = _parse_tshark_windows_sessions(args.windows_root / "capture.pcapng", validated)
+    windows_net, windows_capture = _parse_windows_sessions(args.windows_root, validated)
     native_protocols = windows_net.pop("native_protocol").astype(str).tolist()
-    windows_net = windows_net.drop(columns=["tcp_stream"])
+    for transient in ("tcp_stream", "pktmon_session_key"):
+        if transient in windows_net.columns:
+            windows_net = windows_net.drop(columns=[transient])
     windows_features = build_lanl_session_features(windows_net)
     windows_aligned, windows_coverage = align_external_features(windows_features, expected)
     windows_scores = model.predict_proba(windows_aligned)[:, 1]
