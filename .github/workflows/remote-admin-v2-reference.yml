@@ -31,7 +31,7 @@ jobs:
       - name: Install reference parser runtime
         working-directory: remote-admin-anomaly-lab
         run: python -m pip install -r requirements.txt
-      - name: Stream bounded LANL 2017 independent reference
+      - name: Stream bounded LANL 2017 independent reference through documented public mirror
         working-directory: remote-admin-anomaly-lab
         env:
           PYTHONPATH: src
@@ -42,7 +42,7 @@ jobs:
             --out /tmp/remote-admin-v2-reference/lanl-2017 \
             --netflow-rows 5000 \
             --wls-rows 5000 \
-            --max-compressed-mb 384
+            --max-download-mb 384
       - name: Verify external-only reference contract
         working-directory: remote-admin-anomaly-lab
         run: |
@@ -52,14 +52,18 @@ jobs:
           import pandas as pd
           root=Path('/tmp/remote-admin-v2-reference/lanl-2017')
           q=json.loads((root/'reference_quality.json').read_text())
+          m=json.loads((root/'source_manifest.json').read_text())
           assert q['status']=='PASS',q
           assert q['external_only'] is True,q
           assert q['threshold_tuning_allowed'] is False,q
+          assert m['origin']=='Los Alamos National Laboratory',m
+          assert m['transport']=='rocketgraph_xgt_mirror',m
+          assert m['used_for_training'] is False,m
           net=pd.read_parquet(root/'remote_admin_flows.parquet')
           wls=pd.read_parquet(root/'network_logons.parquet')
           assert len(net)>0 and len(wls)>0
           assert 'label_binary' not in net.columns and 'label_binary' not in wls.columns
-          print(json.dumps(q,sort_keys=True))
+          print(json.dumps({'quality':q,'source':m},sort_keys=True))
           PY
       - name: Retain LANL external reference artifact
         if: always()
