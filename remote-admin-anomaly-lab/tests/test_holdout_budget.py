@@ -36,3 +36,5 @@ def test_source_host_holdout_never_falls_back_above_eight_percent_group_impact()
     # Temporal and other possible holdouts are independent; specifically there
     # must be no source-host challenge reason when the budget cannot be met.
     assert not splits["challenge_reason"].fillna("").str.contains("unseen_src_host").any()
+
+# Regression target: never violate a declared holdout budget just to force coverage.
