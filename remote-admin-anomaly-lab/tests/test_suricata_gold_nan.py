@@ -69,3 +69,31 @@ def test_normalize_suricata_flow_events_does_not_stringify_nan_addresses():
     normalized = normalize_suricata_flow_events(eve)
     assert normalized.loc[0, "id.orig_h"] == ""
     assert normalized.loc[0, "id.resp_h"] == ""
+
+
+def test_offline_suricata_mapping_timestamp_prefers_nested_flow_start_over_shutdown_event_timestamp():
+    # Offline Suricata can flush many flow records during engine shutdown with
+    # an identical top-level EVE timestamp. The captured connection start/end
+    # inside the flow object retain the actual packet time and must drive PCAP
+    # to session mapping.
+    eve = pd.DataFrame([
+        {
+            "event_type": "flow",
+            "timestamp": "2026-08-14T13:55:07.622703+00:00",
+            "src_ip": "10.77.0.12",
+            "src_port": 44574,
+            "dest_ip": "10.77.0.25",
+            "dest_port": 5900,
+            "flow_id": 171808569033198,
+            "flow": {
+                "start": "2026-08-14T13:55:20.040002+00:00",
+                "end": "2026-08-14T13:55:20.249964+00:00",
+                "pkts_toserver": 14,
+                "pkts_toclient": 14,
+            },
+        }
+    ])
+    normalized = normalize_suricata_flow_events(eve)
+    expected = pd.Timestamp("2026-08-14T13:55:20.040002+00:00").timestamp()
+    assert abs(float(normalized.loc[0, "ts"]) - expected) < 1e-6
+    assert normalized.loc[0, "mapping_timestamp_source"] == "flow.start"
