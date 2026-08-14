@@ -8,7 +8,8 @@ STATE_DIR="$OUT_ROOT/state/$SHARD"; RUN_DIR="$OUT_ROOT/work/$SHARD"; RELEASE="$O
 [[ -x "$PYTHON_BIN" ]]; [[ "$OUTPUT_UID" =~ ^[0-9]+$ ]]; [[ "$OUTPUT_GID" =~ ^[0-9]+$ ]]; mkdir -p "$RUN_DIR" "$BRONZE/captures" "$BRONZE/manifests" "$QUALITY"
 
 stop_capture(){ if [[ "$TCPDUMP_PGID" =~ ^[0-9]+$ ]] && kill -0 -- "-$TCPDUMP_PGID" 2>/dev/null; then kill -INT -- "-$TCPDUMP_PGID" 2>/dev/null || true; for _ in $(seq 1 20); do kill -0 -- "-$TCPDUMP_PGID" 2>/dev/null || break; sleep .2; done; kill -TERM -- "-$TCPDUMP_PGID" 2>/dev/null || true; wait "$TCPDUMP_PGID" 2>/dev/null || true; fi; }
-cleanup(){ set +e; stop_capture; "$PYTHON_BIN" "$ROOT/scripts/start_extended_services_v2.py" stop "$STATE_DIR/extended"; bash "$ROOT/scripts/start_services.sh" stop "$STATE_DIR/core"; bash "$ROOT/scripts/setup_topology.sh" down "$ROOT/configs/topology.yaml"; }
+restore_output_ownership(){ if [[ "$OUTPUT_UID" != "0" || "$OUTPUT_GID" != "0" ]]; then chown -R "$OUTPUT_UID:$OUTPUT_GID" "$OUT_ROOT" 2>/dev/null || true; fi; }
+cleanup(){ set +e; stop_capture; "$PYTHON_BIN" "$ROOT/scripts/start_extended_services_v2.py" stop "$STATE_DIR/extended"; bash "$ROOT/scripts/start_services.sh" stop "$STATE_DIR/core"; bash "$ROOT/scripts/setup_topology.sh" down "$ROOT/configs/topology.yaml"; restore_output_ownership; }
 trap cleanup EXIT INT TERM
 
 bash "$ROOT/scripts/setup_topology.sh" up "$ROOT/configs/topology.yaml"
@@ -44,5 +45,4 @@ r=validate_bronze_tree(Path(sys.argv[1]),verify_checksums=True); Path(sys.argv[2
 if not r['ok']: raise SystemExit(json.dumps(r,sort_keys=True))
 PY
 rm -f "$RAW_PCAP"; trap - EXIT INT TERM; cleanup
-if [[ "$OUTPUT_UID" != "0" || "$OUTPUT_GID" != "0" ]]; then chown -R "$OUTPUT_UID:$OUTPUT_GID" "$OUT_ROOT"; fi
 echo "extended_v4_bronze_ready=$BRONZE sessions=$SESSION_COUNT pcap_zst_bytes=$PCAP_BYTES"
