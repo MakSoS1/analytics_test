@@ -1,0 +1,11 @@
+V3 release authorized after prerequisites:
+- full contract run: 31884551800 = success
+- real-wire smoke run: 31884532071 = success
+- smoke artifact: 9246946749
+- session mapping: 1.0
+- per-protocol mapping: ssh=1.0 smb=1.0 rdp=1.0 vnc=1.0
+- flow mapping: 0.9948186528497409
+- session PCAP coverage: 1.0
+- campaign PCAP coverage: 1.0
+- full raw chunks preserved: true
+- merged PCAP persisted: false
