@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterable
+
+
+REMOTE_ADMIN_BRANCHES = {
+    "remote-admin-anomaly-lab-v1",
+    "remote-admin-anomaly-lab-v2",
+    "remote-admin-anomaly-lab-v3",
+}
+ROOT_HF_METADATA = {"README.md", ".gitattributes"}
 
 
 def validate_cleanup_preconditions(status: dict[str, Any]) -> dict[str, Any]:
@@ -40,3 +48,50 @@ def validate_cleanup_preconditions(status: dict[str, Any]) -> dict[str, Any]:
         "retained_github_artifact_id": artifact_id_int,
         "policy": "delete superseded Remote Admin V1/V2 storage only; preserve verified V3 final and unrelated repository workflows/artifacts",
     }
+
+
+def select_github_run_ids_for_cleanup(
+    runs: Iterable[dict[str, Any]],
+    *,
+    final_run_id: int,
+    current_run_id: int,
+) -> list[int]:
+    """Return only superseded Remote Admin Action run ids, never unrelated CI."""
+    preserve = {int(final_run_id), int(current_run_id)}
+    selected: set[int] = set()
+    for run in runs:
+        try:
+            run_id = int(run.get("id", 0))
+        except (TypeError, ValueError):
+            continue
+        if run_id <= 0 or run_id in preserve:
+            continue
+        branch = str(run.get("head_branch", ""))
+        workflow_path = str(run.get("path", "")).lower()
+        if branch not in REMOTE_ADMIN_BRANCHES:
+            continue
+        if "remote-admin" not in workflow_path:
+            continue
+        selected.add(run_id)
+    return sorted(selected)
+
+
+def select_hf_paths_for_cleanup(files: Iterable[str], *, retained_prefix: str) -> list[str]:
+    """Delete all superseded dataset payloads while retaining one V3 final tree.
+
+    The remote-admin HF repository is dedicated to this dataset lineage. Root
+    README/.gitattributes remain; every payload object outside the verified final
+    V3 prefix is superseded by user-authorized cleanup policy B.
+    """
+    prefix = str(retained_prefix).strip("/")
+    if not prefix.startswith("v3/final/"):
+        raise ValueError("retained_prefix must be a V3 final path")
+    selected: list[str] = []
+    for raw in files:
+        path = str(raw).strip("/")
+        if not path or path in ROOT_HF_METADATA:
+            continue
+        if path == prefix or path.startswith(prefix + "/"):
+            continue
+        selected.append(path)
+    return sorted(set(selected))
