@@ -1,0 +1,2098 @@
+{
+  "cleanup": {
+    "github_cleanup_run_id": 31891679949,
+    "github_deleted_run_count": 797,
+    "github_deleted_run_ids": [
+      31787693161,
+      31787733986,
+      31787756618,
+      31787810044,
+      31787834199,
+      31787850844,
+      31787871563,
+      31787920430,
+      31787949680,
+      31788008802,
+      31788020553,
+      31788198195,
+      31788217082,
+      31788233293,
+      31788291218,
+      31788309962,
+      31788393923,
+      31788424050,
+      31788482481,
+      31788508307,
+      31788527606,
+      31788577151,
+      31788604772,
+      31788781815,
+      31788891080,
+      31788947200,
+      31789118042,
+      31789156271,
+      31789172031,
+      31789231902,
+      31789260125,
+      31789276535,
+      31789293493,
+      31789317820,
+      31789349007,
+      31789576028,
+      31789625413,
+      31789649604,
+      31789806522,
+      31789823490,
+      31790015170,
+      31790040353,
+      31790059908,
+      31790097440,
+      31790193120,
+      31790439418,
+      31790470472,
+      31790513750,
+      31790538926,
+      31790784169,
+      31790819654,
+      31790863845,
+      31790900576,
+      31790939024,
+      31790976126,
+      31791029674,
+      31791085491,
+      31791112811,
+      31791134938,
+      31791154551,
+      31791358737,
+      31791444044,
+      31791464876,
+      31791508192,
+      31791601361,
+      31791643838,
+      31791668036,
+      31791730239,
+      31792068347,
+      31792087769,
+      31792636420,
+      31792665847,
+      31792682856,
+      31792712051,
+      31792735951,
+      31792751868,
+      31792779907,
+      31792863838,
+      31792881013,
+      31792899714,
+      31792936010,
+      31792994029,
+      31793003516,
+      31793038680,
+      31793047652,
+      31793161123,
+      31793193872,
+      31793216494,
+      31793226851,
+      31793257458,
+      31793302910,
+      31793342415,
+      31793421306,
+      31793440440,
+      31793453080,
+      31793488157,
+      31793555720,
+      31793567412,
+      31793580800,
+      31793737147,
+      31793791564,
+      31793983008,
+      31794016717,
+      31794039077,
+      31794091043,
+      31794226271,
+      31794247799,
+      31794280981,
+      31796359156,
+      31796454207,
+      31796541208,
+      31796668753,
+      31796679783,
+      31796692338,
+      31796707335,
+      31796718527,
+      31796729903,
+      31796787747,
+      31796816493,
+      31796922411,
+      31796933516,
+      31797002303,
+      31797016167,
+      31797065727,
+      31797094147,
+      31797122928,
+      31797153882,
+      31797176341,
+      31797206307,
+      31797228932,
+      31797257067,
+      31797300179,
+      31797318245,
+      31797346918,
+      31797361982,
+      31797401081,
+      31797437899,
+      31797467832,
+      31797486594,
+      31797536392,
+      31797576069,
+      31797628161,
+      31797804199,
+      31797820595,
+      31797935918,
+      31798012267,
+      31798078398,
+      31798119262,
+      31798241990,
+      31798290548,
+      31798312337,
+      31798330547,
+      31798347683,
+      31798389518,
+      31798429675,
+      31798469221,
+      31798543145,
+      31798589606,
+      31798638455,
+      31798656522,
+      31798695340,
+      31798721668,
+      31798737262,
+      31798756731,
+      31798772969,
+      31798789393,
+      31798806633,
+      31798820015,
+      31798857353,
+      31798887188,
+      31798910459,
+      31798956196,
+      31798989173,
+      31799056991,
+      31799078987,
+      31799107680,
+      31799225928,
+      31799258133,
+      31799298884,
+      31799427475,
+      31799558294,
+      31799633244,
+      31799647063,
+      31799687103,
+      31799811711,
+      31799860193,
+      31799880521,
+      31799904342,
+      31800053428,
+      31800071714,
+      31800116973,
+      31800154313,
+      31800180825,
+      31800229022,
+      31800541332,
+      31800559628,
+      31801385633,
+      31801402446,
+      31801495111,
+      31801670637,
+      31801688081,
+      31801705137,
+      31801739576,
+      31801822191,
+      31801893780,
+      31801991301,
+      31801992034,
+      31802039349,
+      31802040131,
+      31802207263,
+      31802208905,
+      31802659145,
+      31802659960,
+      31802777628,
+      31802778668,
+      31803000922,
+      31803001859,
+      31803014751,
+      31803016168,
+      31803017347,
+      31803190855,
+      31803191530,
+      31803192717,
+      31803267717,
+      31803268309,
+      31803284059,
+      31803284663,
+      31803285479,
+      31803386265,
+      31803387115,
+      31803399236,
+      31803399958,
+      31803401635,
+      31803465973,
+      31803466625,
+      31803467952,
+      31804591986,
+      31804593483,
+      31804594185,
+      31804595102,
+      31804623560,
+      31804624145,
+      31804624715,
+      31804625558,
+      31804649014,
+      31804649814,
+      31804650516,
+      31804651476,
+      31804680691,
+      31804681239,
+      31804681818,
+      31804683257,
+      31804701046,
+      31804701793,
+      31804702593,
+      31804704183,
+      31804749191,
+      31804749811,
+      31804751211,
+      31804752310,
+      31804811874,
+      31804812617,
+      31804813491,
+      31804814507,
+      31804835702,
+      31804837268,
+      31804838839,
+      31804839714,
+      31804858595,
+      31804859982,
+      31804860688,
+      31804861667,
+      31804919946,
+      31804921359,
+      31804922023,
+      31804922792,
+      31804958305,
+      31804959127,
+      31804959828,
+      31804961457,
+      31805127744,
+      31805128573,
+      31805129603,
+      31805281372,
+      31805282053,
+      31805283394,
+      31805284382,
+      31805311968,
+      31805312625,
+      31805313281,
+      31805314841,
+      31805414595,
+      31805415313,
+      31805415971,
+      31805426598,
+      31805427811,
+      31805466378,
+      31805467079,
+      31805467980,
+      31805497455,
+      31805498245,
+      31805499129,
+      31805601471,
+      31805602123,
+      31805602852,
+      31805987433,
+      31805988237,
+      31805989898,
+      31806020140,
+      31806020853,
+      31806021790,
+      31806106600,
+      31806107620,
+      31806109292,
+      31806141822,
+      31806142407,
+      31806143267,
+      31806250067,
+      31806250897,
+      31806252285,
+      31806585291,
+      31806585857,
+      31806586701,
+      31806641453,
+      31806643245,
+      31806644342,
+      31806765017,
+      31806765652,
+      31806766686,
+      31807394184,
+      31807395265,
+      31807397549,
+      31807438785,
+      31807439876,
+      31807441682,
+      31807483414,
+      31807483926,
+      31807485515,
+      31807531806,
+      31807532840,
+      31807534784,
+      31807590293,
+      31807590963,
+      31807592637,
+      31807644246,
+      31807644832,
+      31807645864,
+      31807695818,
+      31807697671,
+      31807698760,
+      31807978081,
+      31807978868,
+      31807981091,
+      31808007389,
+      31808008498,
+      31808009299,
+      31808497517,
+      31808498394,
+      31808499850,
+      31810624088,
+      31810624822,
+      31810626290,
+      31810692711,
+      31810693517,
+      31810694621,
+      31810710365,
+      31810710983,
+      31810712172,
+      31810743194,
+      31810743979,
+      31810745624,
+      31810897292,
+      31810897939,
+      31810899680,
+      31816247684,
+      31816248898,
+      31816249915,
+      31816697729,
+      31816698549,
+      31816700214,
+      31816926218,
+      31816926868,
+      31816928503,
+      31816948763,
+      31816949345,
+      31816950464,
+      31817155983,
+      31817157079,
+      31817158159,
+      31817220082,
+      31817220675,
+      31817221703,
+      31817304978,
+      31817305721,
+      31817306499,
+      31817525260,
+      31817526035,
+      31817527051,
+      31817733560,
+      31817734306,
+      31817735933,
+      31817777028,
+      31817777623,
+      31817778803,
+      31817918936,
+      31817919831,
+      31817920754,
+      31817952146,
+      31817952843,
+      31817953836,
+      31818444473,
+      31818445052,
+      31818445960,
+      31821146311,
+      31821147589,
+      31821148313,
+      31821360508,
+      31821361036,
+      31821361581,
+      31821362433,
+      31821402953,
+      31821403606,
+      31821404669,
+      31821689786,
+      31821690654,
+      31821721664,
+      31821722358,
+      31821788189,
+      31821789556,
+      31821838966,
+      31821840634,
+      31821912768,
+      31821914101,
+      31822005552,
+      31822007424,
+      31822024762,
+      31822025472,
+      31822026342,
+      31822158758,
+      31822159361,
+      31822181579,
+      31822182280,
+      31822183376,
+      31824219575,
+      31824220953,
+      31824356918,
+      31824357414,
+      31824497314,
+      31824498353,
+      31824554424,
+      31824555051,
+      31824570423,
+      31824571246,
+      31824572859,
+      31824680381,
+      31824680975,
+      31824682499,
+      31824739703,
+      31824740837,
+      31824742209,
+      31824751281,
+      31824781890,
+      31824782726,
+      31824940997,
+      31824942713,
+      31825032066,
+      31825033398,
+      31825181120,
+      31825182350,
+      31825203242,
+      31825204130,
+      31825350854,
+      31825351936,
+      31825384073,
+      31825384795,
+      31825548010,
+      31825549677,
+      31825746623,
+      31825747505,
+      31825765809,
+      31825766643,
+      31825786614,
+      31825787499,
+      31825805514,
+      31825806082,
+      31826004904,
+      31826006750,
+      31826022999,
+      31826024447,
+      31826049817,
+      31826050622,
+      31826119966,
+      31826121394,
+      31826147705,
+      31826149247,
+      31826172155,
+      31826172816,
+      31826173456,
+      31826252898,
+      31826253663,
+      31826253675,
+      31826335750,
+      31826337056,
+      31826382819,
+      31826383627,
+      31826431238,
+      31826431998,
+      31826457021,
+      31826457958,
+      31826458025,
+      31826671574,
+      31826672297,
+      31826672318,
+      31826708071,
+      31826708863,
+      31826708911,
+      31826737308,
+      31826738866,
+      31826765599,
+      31826767237,
+      31826829122,
+      31826830140,
+      31827190033,
+      31827190893,
+      31827377082,
+      31827378382,
+      31827378452,
+      31827415874,
+      31827416919,
+      31827416930,
+      31827470286,
+      31827471997,
+      31827472007,
+      31827502943,
+      31827503732,
+      31827503827,
+      31827640923,
+      31827641895,
+      31827750053,
+      31827751990,
+      31827829927,
+      31827831477,
+      31827884981,
+      31827885762,
+      31828078902,
+      31828079836,
+      31828100952,
+      31828102992,
+      31828103195,
+      31828164680,
+      31828165658,
+      31828470774,
+      31828472266,
+      31828472310,
+      31828614939,
+      31828617017,
+      31828720901,
+      31828722010,
+      31828766975,
+      31828768632,
+      31831146398,
+      31831148120,
+      31831256499,
+      31831257210,
+      31831257237,
+      31831417346,
+      31831418401,
+      31831608727,
+      31831609777,
+      31831609835,
+      31831642248,
+      31831643643,
+      31831709517,
+      31831711204,
+      31831711282,
+      31831823629,
+      31831824473,
+      31831955925,
+      31831956891,
+      31831956918,
+      31834299265,
+      31834301638,
+      31834424428,
+      31834425240,
+      31834468926,
+      31834469619,
+      31834469655,
+      31834509664,
+      31834510415,
+      31834510493,
+      31834560853,
+      31834562545,
+      31834562547,
+      31834768224,
+      31834769435,
+      31834769456,
+      31835012514,
+      31835014082,
+      31835014098,
+      31835014121,
+      31835156590,
+      31835157402,
+      31835157431,
+      31835157461,
+      31835349302,
+      31835350019,
+      31835350024,
+      31835350082,
+      31835734549,
+      31838945154,
+      31839015818,
+      31839030699,
+      31839142190,
+      31839215478,
+      31839216545,
+      31839385390,
+      31839386740,
+      31839515920,
+      31839516847,
+      31839534744,
+      31839535834,
+      31839580555,
+      31839582152,
+      31839761617,
+      31839763001,
+      31839780108,
+      31839780827,
+      31839940757,
+      31839941523,
+      31839999361,
+      31840000833,
+      31840042034,
+      31840042843,
+      31840165868,
+      31840166911,
+      31840222864,
+      31840223769,
+      31840347660,
+      31840348361,
+      31840572513,
+      31840574101,
+      31840711444,
+      31840712931,
+      31840820133,
+      31840820905,
+      31840910423,
+      31840911329,
+      31840931786,
+      31840932612,
+      31840969015,
+      31840969750,
+      31840994121,
+      31840995562,
+      31840995625,
+      31841067609,
+      31841069206,
+      31841100293,
+      31841101590,
+      31841101598,
+      31841116587,
+      31841118116,
+      31841178435,
+      31841179811,
+      31841203171,
+      31841204164,
+      31841245135,
+      31841246031,
+      31841260336,
+      31841260968,
+      31841276848,
+      31841278365,
+      31841278375,
+      31841697927,
+      31841699369,
+      31841733087,
+      31841734377,
+      31841791184,
+      31841791753,
+      31841834779,
+      31841835534,
+      31841835642,
+      31841916398,
+      31841917816,
+      31841917831,
+      31841917873,
+      31842135855,
+      31842136818,
+      31842203165,
+      31842204076,
+      31842204247,
+      31842338797,
+      31842340331,
+      31842364658,
+      31842366058,
+      31842436182,
+      31842437542,
+      31842556687,
+      31842557444,
+      31842652807,
+      31842654377,
+      31842709475,
+      31842710949,
+      31842710959,
+      31842710960,
+      31842744390,
+      31842746015,
+      31883425884,
+      31883426799,
+      31883426826,
+      31883426828,
+      31883602764,
+      31883603092,
+      31883665813,
+      31883666604,
+      31883698395,
+      31883699259,
+      31883721704,
+      31883722478,
+      31883821077,
+      31883821504,
+      31883821621,
+      31883970698,
+      31883971422,
+      31884020688,
+      31884021068,
+      31884021090,
+      31884021104,
+      31884031535,
+      31884032229,
+      31884054738,
+      31884055189,
+      31884055210,
+      31884055218,
+      31884083097,
+      31884083895,
+      31884083896,
+      31884097396,
+      31884097830,
+      31884152132,
+      31884153047,
+      31884153055,
+      31884169146,
+      31884169692,
+      31884186274,
+      31884186635,
+      31884220678,
+      31884221391,
+      31884221419,
+      31884237066,
+      31884237509,
+      31884293548,
+      31884294226,
+      31884294368,
+      31884313132,
+      31884313886,
+      31884383861,
+      31884384361,
+      31884462025,
+      31884462489,
+      31884531084,
+      31884532071,
+      31884532115,
+      31884551237,
+      31884551800,
+      31884786987,
+      31884787358,
+      31884889359,
+      31884890165,
+      31884897541,
+      31884898053,
+      31884990170,
+      31884991039,
+      31885004060,
+      31885004550,
+      31885076651,
+      31885077006,
+      31885087903,
+      31885088720,
+      31885330403,
+      31885331216,
+      31885391235,
+      31890794726,
+      31890797472,
+      31890908943,
+      31890909383,
+      31891000340,
+      31891001331,
+      31891001422,
+      31891080057,
+      31891080555,
+      31891080570,
+      31891467677,
+      31891468343,
+      31891555867,
+      31891557358,
+      31891679060,
+      31891679951
+    ],
+    "github_final_run_id": 31885392045,
+    "github_repository": "MakSoS1/analytics_test",
+    "guard": {
+      "allowed": true,
+      "policy": "delete superseded Remote Admin V1/V2 storage only; preserve verified V3 final and unrelated repository workflows/artifacts",
+      "retained_github_artifact_id": 9247494536,
+      "retained_hf_prefix": "v3/final/run-31885392045"
+    },
+    "hf_deleted_file_count": 279,
+    "hf_deleted_paths_sample": [
+      "quarantine/rejected/gh-31818445960/NEGATIVE_RESEARCH_VERIFIED.json",
+      "quarantine/rejected/gh-31818445960/RESEARCH_GATE.json",
+      "quarantine/rejected/gh-31818445960/evaluation/M1-hard-benign.json",
+      "quarantine/rejected/gh-31818445960/evaluation/M1-learning-curve.json",
+      "quarantine/rejected/gh-31818445960/evaluation/M1-slices.json",
+      "quarantine/rejected/gh-31818445960/evaluation/reference-validation.json",
+      "quarantine/rejected/gh-31818445960/models/M0-deterministic.metrics.json",
+      "quarantine/rejected/gh-31818445960/models/M1-lightgbm.joblib",
+      "quarantine/rejected/gh-31818445960/models/M1-lightgbm.metrics.json",
+      "quarantine/rejected/gh-31818445960/models/M2-isolation-forest.joblib",
+      "quarantine/rejected/gh-31818445960/models/M2-isolation-forest.metrics.json",
+      "quarantine/rejected/gh-31818445960/models/shortcut-audit.json",
+      "quarantine/rejected/gh-31818445960/models/summary.json",
+      "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/captures/H-research-1k.pcap.zst",
+      "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/checksums.sha256",
+      "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/manifests/campaigns.parquet",
+      "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/manifests/ground_truth.parquet",
+      "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/manifests/hosts.parquet",
+      "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/manifests/sessions-planned.jsonl",
+      "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/manifests/sessions.jsonl",
+      "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/manifests/sessions.parquet",
+      "quarantine/rejected/gh-31818445960/release/bronze/H-research-1k/reproducibility.json",
+      "quarantine/rejected/gh-31818445960/release/gold/H-research-1k/production_flow_features.parquet",
+      "quarantine/rejected/gh-31818445960/release/gold/H-research-1k/production_flow_labels.parquet",
+      "quarantine/rejected/gh-31818445960/release/gold/H-research-1k/production_model_matrix.parquet",
+      "quarantine/rejected/gh-31818445960/release/gold/H-research-1k/production_splits.parquet",
+      "quarantine/rejected/gh-31818445960/release/gold/H-research-1k/research_zeek_outcome_features.parquet",
+      "quarantine/rejected/gh-31818445960/release/quality/H-research-1k/bronze_contract.json",
+      "quarantine/rejected/gh-31818445960/release/quality/H-research-1k/capture_health.json",
+      "quarantine/rejected/gh-31818445960/release/quality/H-research-1k/parser_health.json",
+      "quarantine/rejected/gh-31818445960/release/quality/H-research-1k/production_flow_gold.json",
+      "quarantine/rejected/gh-31818445960/release/quality/H-research-1k/production_flow_mapping.json",
+      "quarantine/rejected/gh-31818445960/release/quality/H-research-1k/production_leakage.json",
+      "quarantine/rejected/gh-31818445960/release/quality/H-research-1k/research_zeek_features.json",
+      "quarantine/rejected/gh-31818445960/release/quality/H-research-1k/rule_health.json",
+      "quarantine/rejected/gh-31818445960/release/quality/H-research-1k/silver_contract.json",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/parser_versions.json",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/suricata-rules/eve.json.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/suricata/eve.json.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/conn.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/dns.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/files.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/ntlm.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/packet_filter.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/rdp.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/rfb.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/smb_files.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/smb_mapping.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/ssh.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/ssl.log.zst",
+      "quarantine/rejected/gh-31818445960/release/silver/H-research-1k/zeek/weird.log.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/bronze/V2-1k/captures/V2-1k.pcap.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/bronze/V2-1k/checksums.sha256",
+      "v2/quarantine/data-run-31831956891-final-31834769435/bronze/V2-1k/manifests/campaigns.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/bronze/V2-1k/manifests/ground_truth.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/bronze/V2-1k/manifests/hosts.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/bronze/V2-1k/manifests/sessions-planned.jsonl",
+      "v2/quarantine/data-run-31831956891-final-31834769435/bronze/V2-1k/manifests/sessions.jsonl",
+      "v2/quarantine/data-run-31831956891-final-31834769435/bronze/V2-1k/manifests/sessions.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/bronze/V2-1k/reproducibility.json",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/campaign_features.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/campaign_labels.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/campaign_model_matrix.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/feature_contract.json",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/flow_features.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/graph_features.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/hierarchical_gold_quality.json",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/labels.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/model_matrix.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/models/V2_MODEL_SUMMARY.json",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/models/campaign-primary.joblib",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/models/campaign-primary.metrics.json",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/models/flow-baseline.joblib",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/models/flow-baseline.metrics.json",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/models/session-primary.joblib",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/models/session-primary.metrics.json",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/models/shortcut-audit.json",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/production_flow_features.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/production_flow_labels.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/production_model_matrix.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/production_splits.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/research_zeek_outcome_features.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/session_features.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/session_labels.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/session_model_matrix.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/splits.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/gold/V2-1k/window_features.parquet",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/parser_versions.json",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/suricata-rules/eve.json.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/suricata/eve.json.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/zeek/conn.log.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/zeek/dns.log.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/zeek/files.log.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/zeek/ntlm.log.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/zeek/packet_filter.log.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/zeek/rdp.log.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/zeek/rfb.log.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/zeek/smb_files.log.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/zeek/smb_mapping.log.zst",
+      "v2/quarantine/data-run-31831956891-final-31834769435/silver/V2-1k/zeek/ssh.log.zst"
+    ],
+    "hf_repo": "Maksim123321/remote-admin-anomaly-v1",
+    "hf_residual_superseded_paths": [],
+    "hf_retained_file_count": 1563,
+    "hf_retained_prefix": "v3/final/run-31885392045",
+    "policy": "B",
+    "status": "PASS",
+    "unrelated_github_runs_preserved_by_selector": true
+  },
+  "decision": {
+    "dataset_release_status": "READY",
+    "evidence": {
+      "bronze": {
+        "campaign_pcap_coverage": 1.0,
+        "campaign_pcaps": 461,
+        "campaigns": 461,
+        "checksums_verified": true,
+        "full_raw_traffic_preserved_in_chunks": true,
+        "inspection_layout": {
+          "campaign": "campaigns/<label>/<campaign_id>.pcap.zst",
+          "index_csv": "manifests/pcap_index.csv",
+          "raw": "raw_chunks/chunk-XXXX.pcap.zst",
+          "session": "sessions/<label>/<protocol>/<session_id>.pcap.zst"
+        },
+        "kind_counts": {
+          "campaign": 461,
+          "raw_chunk": 6,
+          "session": 1000
+        },
+        "merged_pcap_persisted": false,
+        "pcap_index_rows": 1467,
+        "raw_chunk_packet_total": 266424,
+        "raw_chunks": 6,
+        "reparsed_session_sample": [
+          "sessions/benign/smb/dt-ses-h-78c38c7b-0007404.pcap.zst",
+          "sessions/benign/vnc/dt-ses-h-78c38c7b-0001161.pcap.zst",
+          "sessions/suspicious/rdp/dt-ses-h-78c38c7b-0000776.pcap.zst",
+          "sessions/benign/ssh/dt-ses-h-78c38c7b-0002828.pcap.zst",
+          "sessions/benign/rdp/dt-ses-h-78c38c7b-0014489.pcap.zst",
+          "sessions/suspicious/ssh/dt-ses-h-78c38c7b-0010811.pcap.zst",
+          "sessions/benign/ssh/dt-ses-h-78c38c7b-0001191.pcap.zst",
+          "sessions/benign/vnc/dt-ses-h-78c38c7b-0008485.pcap.zst",
+          "sessions/suspicious/ssh/dt-ses-h-78c38c7b-0006767.pcap.zst",
+          "sessions/benign/ssh/dt-ses-h-78c38c7b-0003147.pcap.zst",
+          "sessions/suspicious/ssh/dt-ses-h-78c38c7b-0015285.pcap.zst",
+          "sessions/benign/smb/dt-ses-h-78c38c7b-0007603.pcap.zst",
+          "sessions/benign/ssh/dt-ses-h-78c38c7b-0013757.pcap.zst",
+          "sessions/suspicious/ssh/dt-ses-h-78c38c7b-0011461.pcap.zst",
+          "sessions/suspicious/rdp/dt-ses-h-78c38c7b-0000743.pcap.zst",
+          "sessions/suspicious/smb/dt-ses-h-78c38c7b-0007908.pcap.zst",
+          "sessions/benign/vnc/dt-ses-h-78c38c7b-0014220.pcap.zst",
+          "sessions/suspicious/rdp/dt-ses-h-78c38c7b-0003182.pcap.zst",
+          "sessions/suspicious/smb/dt-ses-h-78c38c7b-0014168.pcap.zst",
+          "sessions/suspicious/ssh/dt-ses-h-78c38c7b-0004655.pcap.zst"
+        ],
+        "schema_version": 3,
+        "session_label_protocol_counts": {
+          "benign/rdp": 125,
+          "benign/smb": 125,
+          "benign/ssh": 125,
+          "benign/vnc": 125,
+          "suspicious/rdp": 125,
+          "suspicious/smb": 125,
+          "suspicious/ssh": 125,
+          "suspicious/vnc": 125
+        },
+        "session_pcap_coverage": 1.0,
+        "session_pcaps": 1000,
+        "shard": "V3-1k",
+        "source_merged_packet_total": 266424,
+        "status": "PASS",
+        "successful_sessions": 1000
+      },
+      "hard_benign": {
+        "by_relation": {
+          "approved_multi_protocol_admin": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 4
+          },
+          "approved_multi_target_change": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 4
+          },
+          "approved_new_pair": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 1
+          },
+          "approved_new_target": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 2
+          },
+          "approved_offhours_exception": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 5
+          },
+          "approved_offhours_response": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 9
+          },
+          "first_observed_source_session": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 2
+          },
+          "interactive_support_path": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 32
+          },
+          "known_bulk_transfer": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 17
+          },
+          "known_pair": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 118
+          }
+        },
+        "by_task": {
+          "approved_forwarding": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 20
+          },
+          "backup": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 18
+          },
+          "emergency_admin": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 7
+          },
+          "fix_incident": {
+            "false_positives": 0,
+            "fpr": 0.0,
+            "n": 149
+          }
+        },
+        "false_positives": 0,
+        "fp_per_10k_hard_benign": 0.0,
+        "fpr": 0.0,
+        "n": 194,
+        "status": "ok",
+        "threshold": 0.981186794000061
+      },
+      "hierarchical_gold": {
+        "campaign_class_counts": {
+          "0": 224,
+          "1": 236
+        },
+        "campaign_feature_count": 18,
+        "campaign_rows": 460,
+        "campaign_split_counts": {
+          "challenge": 93,
+          "test": 120,
+          "train": 175,
+          "validation": 72
+        },
+        "causal_history_policy": "strictly_prior_session_event_time_with_7d_30d_graph_state",
+        "environment_id": "linux_v3",
+        "external_rows_in_training_gold": 0,
+        "flow_rows": 2259,
+        "schema_version": 3,
+        "session_class_counts": {
+          "0": 498,
+          "1": 499
+        },
+        "session_feature_count": 56,
+        "session_rows": 997,
+        "session_split_counts": {
+          "challenge": 177,
+          "test": 324,
+          "train": 323,
+          "validation": 173
+        },
+        "split_report": {
+          "challenge_fraction": 0.17753259779338015,
+          "challenge_reason_counts": {
+            "hash_challenge": 105,
+            "temporal_future": 53,
+            "unseen_persona": 39
+          },
+          "group_counts": {
+            "challenge": 63,
+            "test": 36,
+            "train": 121,
+            "validation": 46
+          },
+          "holdout_impact": {
+            "temporal_future": {
+              "fraction": 0.05315947843530592,
+              "max_fraction": 0.07,
+              "rows": 53,
+              "status": "selected_within_budget"
+            },
+            "unseen_client_implementation": {
+              "fraction": 0.0,
+              "max_fraction": 0.06,
+              "rows": 0,
+              "status": "skipped_no_candidate_within_budget",
+              "value": null
+            },
+            "unseen_host_pair": {
+              "fraction": 0.0,
+              "max_fraction": 0.06,
+              "rows": 0,
+              "status": "skipped_no_candidate_within_budget",
+              "value": null
+            },
+            "unseen_persona": {
+              "fraction": 0.03911735205616851,
+              "max_fraction": 0.06,
+              "new_rows": 19,
+              "rows": 39,
+              "status": "selected_within_budget",
+              "value": "service_account-03"
+            },
+            "unseen_src_host": {
+              "fraction": 0.0,
+              "max_fraction": 0.06,
+              "rows": 0,
+              "status": "skipped_no_candidate_within_budget",
+              "value": null
+            }
+          },
+          "policy": "V3 cumulative impact-budget challenge (17-23% target); connected campaign+pair components; remaining groups roughly 60/20/20 train/validation/test by rows",
+          "seed": 2026081403,
+          "split_counts": {
+            "challenge": 177,
+            "test": 324,
+            "train": 323,
+            "validation": 173
+          }
+        }
+      },
+      "learning_curve": {
+        "grouping": "campaign_id",
+        "last_delta_pr_auc": -0.04768158004229889,
+        "points": [
+          {
+            "campaigns": 44,
+            "fraction": 0.25,
+            "pr_auc": 0.4462207473305143,
+            "roc_auc": 0.45398608881754954,
+            "train_rows": 85,
+            "validation_rows": 173
+          },
+          {
+            "campaigns": 88,
+            "delta_pr_auc": 0.0404951711676535,
+            "fraction": 0.5,
+            "pr_auc": 0.4867159184981678,
+            "roc_auc": 0.49785981808453716,
+            "train_rows": 163,
+            "validation_rows": 173
+          },
+          {
+            "campaigns": 131,
+            "delta_pr_auc": -0.023278283418963264,
+            "fraction": 0.75,
+            "pr_auc": 0.46343763507920455,
+            "roc_auc": 0.4610754414125201,
+            "train_rows": 240,
+            "validation_rows": 173
+          },
+          {
+            "campaigns": 175,
+            "delta_pr_auc": -0.04768158004229889,
+            "fraction": 1.0,
+            "pr_auc": 0.41575605503690566,
+            "roc_auc": 0.40850722311396465,
+            "train_rows": 323,
+            "validation_rows": 173
+          }
+        ],
+        "policy": "scale only when the final grouped learning-curve PR-AUC gain exceeds 0.005",
+        "scale_recommendation": "prefer_diversity_or_holdout_analysis"
+      },
+      "planner": {
+        "benign_families": [
+          "backup_burst",
+          "benign_first_seen",
+          "helpdesk",
+          "incident_response",
+          "jump_host",
+          "new_admin",
+          "new_server",
+          "offhours_emergency",
+          "routine_admin",
+          "scheduled_patch_fanout",
+          "service_automation"
+        ],
+        "campaigns": {
+          "benign_campaign_count": 224,
+          "campaign_count": 461,
+          "hard_benign_campaign_count": 131,
+          "max_campaign_fraction": 0.006,
+          "max_campaign_size": 6,
+          "median_campaign_size": 2,
+          "multi_protocol_campaign_count": 208,
+          "rows": 1000,
+          "suspicious_campaign_count": 237
+        },
+        "failures": [],
+        "family_counts": {
+          "backup_burst": 18,
+          "benign_first_seen": 1,
+          "credential_hop_like": 268,
+          "failed_then_success": 73,
+          "helpdesk": 50,
+          "incident_response": 9,
+          "jump_host": 9,
+          "low_slow_lateral": 46,
+          "new_admin": 3,
+          "new_protocol": 6,
+          "new_server": 2,
+          "offhours_emergency": 24,
+          "offhours_lateral": 42,
+          "protocol_switch": 41,
+          "routine_admin": 215,
+          "scheduled_patch_fanout": 156,
+          "service_automation": 13,
+          "small_copy_then_admin": 21,
+          "target_chain": 3
+        },
+        "label_counts": {
+          "0": 500,
+          "1": 500
+        },
+        "per_protocol_label_counts": {
+          "rdp": {
+            "0": 125,
+            "1": 125
+          },
+          "smb": {
+            "0": 125,
+            "1": 125
+          },
+          "ssh": {
+            "0": 125,
+            "1": 125
+          },
+          "vnc": {
+            "0": 125,
+            "1": 125
+          }
+        },
+        "planned_pool_rows": 16000,
+        "protocol_counts": {
+          "rdp": 250,
+          "smb": 250,
+          "ssh": 250,
+          "vnc": 250
+        },
+        "requested": 1000,
+        "requirements": {
+          "campaign_groups_min": 180,
+          "challenge_fraction_range": [
+            0.15,
+            0.25
+          ],
+          "matched_fraction_min": 0.4,
+          "matched_hour_pair_fraction_min": 0.8,
+          "max_hour_label_fraction_gap": 0.1,
+          "test_sessions_min": 120,
+          "validation_sessions_min": 120
+        },
+        "schema_version": 3,
+        "seed": 2026081403,
+        "signal": {
+          "counterfactual_pairs": 200,
+          "counterfactual_row_fraction": 0.4,
+          "hour_label_counts": {
+            "0": {
+              "0": 5,
+              "1": 5
+            },
+            "1": {
+              "0": 3,
+              "1": 3
+            },
+            "10": {
+              "0": 39,
+              "1": 39
+            },
+            "11": {
+              "0": 35,
+              "1": 35
+            },
+            "12": {
+              "0": 41,
+              "1": 41
+            },
+            "13": {
+              "0": 37,
+              "1": 36
+            },
+            "14": {
+              "0": 31,
+              "1": 32
+            },
+            "15": {
+              "0": 29,
+              "1": 30
+            },
+            "16": {
+              "0": 26,
+              "1": 27
+            },
+            "17": {
+              "0": 34,
+              "1": 35
+            },
+            "18": {
+              "0": 35,
+              "1": 34
+            },
+            "19": {
+              "0": 30,
+              "1": 30
+            },
+            "2": {
+              "0": 1,
+              "1": 1
+            },
+            "20": {
+              "0": 13,
+              "1": 13
+            },
+            "21": {
+              "0": 12,
+              "1": 12
+            },
+            "22": {
+              "0": 10,
+              "1": 9
+            },
+            "23": {
+              "0": 4,
+              "1": 4
+            },
+            "3": {
+              "0": 1,
+              "1": 1
+            },
+            "4": {
+              "0": 1,
+              "1": 1
+            },
+            "5": {
+              "0": 3,
+              "1": 3
+            },
+            "6": {
+              "0": 5,
+              "1": 5
+            },
+            "7": {
+              "0": 45,
+              "1": 44
+            },
+            "8": {
+              "0": 28,
+              "1": 27
+            },
+            "9": {
+              "0": 32,
+              "1": 33
+            }
+          },
+          "invalid_counterfactual_pairs": [],
+          "label_counts": {
+            "0": 500,
+            "1": 500
+          },
+          "matched_hour_pair_fraction": 1.0,
+          "max_hour_label_fraction_gap": 0.0020000000000000018,
+          "protocol_hour_label_counts": {
+            "rdp": {
+              "10": {
+                "0": 10,
+                "1": 10
+              },
+              "11": {
+                "0": 10,
+                "1": 10
+              },
+              "12": {
+                "0": 12,
+                "1": 12
+              },
+              "13": {
+                "0": 8,
+                "1": 8
+              },
+              "14": {
+                "0": 4,
+                "1": 5
+              },
+              "15": {
+                "0": 6,
+                "1": 6
+              },
+              "16": {
+                "0": 6,
+                "1": 6
+              },
+              "17": {
+                "0": 11,
+                "1": 11
+              },
+              "18": {
+                "0": 7,
+                "1": 6
+              },
+              "19": {
+                "0": 6,
+                "1": 6
+              },
+              "20": {
+                "0": 5,
+                "1": 5
+              },
+              "21": {
+                "0": 3,
+                "1": 4
+              },
+              "22": {
+                "0": 4,
+                "1": 4
+              },
+              "6": {
+                "0": 1,
+                "1": 1
+              },
+              "7": {
+                "0": 16,
+                "1": 15
+              },
+              "8": {
+                "0": 8,
+                "1": 7
+              },
+              "9": {
+                "0": 8,
+                "1": 9
+              }
+            },
+            "smb": {
+              "0": {
+                "0": 2,
+                "1": 2
+              },
+              "1": {
+                "0": 1,
+                "1": 1
+              },
+              "10": {
+                "0": 15,
+                "1": 15
+              },
+              "11": {
+                "0": 8,
+                "1": 8
+              },
+              "12": {
+                "0": 7,
+                "1": 7
+              },
+              "13": {
+                "0": 7,
+                "1": 7
+              },
+              "14": {
+                "0": 10,
+                "1": 10
+              },
+              "15": {
+                "0": 7,
+                "1": 7
+              },
+              "16": {
+                "0": 6,
+                "1": 6
+              },
+              "17": {
+                "0": 10,
+                "1": 10
+              },
+              "18": {
+                "0": 10,
+                "1": 10
+              },
+              "19": {
+                "0": 2,
+                "1": 2
+              },
+              "20": {
+                "0": 5,
+                "1": 5
+              },
+              "21": {
+                "0": 3,
+                "1": 3
+              },
+              "22": {
+                "0": 3,
+                "1": 3
+              },
+              "23": {
+                "0": 2,
+                "1": 2
+              },
+              "5": {
+                "0": 1,
+                "1": 1
+              },
+              "6": {
+                "0": 3,
+                "1": 3
+              },
+              "7": {
+                "0": 4,
+                "1": 4
+              },
+              "8": {
+                "0": 11,
+                "1": 11
+              },
+              "9": {
+                "0": 8,
+                "1": 8
+              }
+            },
+            "ssh": {
+              "0": {
+                "0": 3,
+                "1": 3
+              },
+              "1": {
+                "0": 2,
+                "1": 2
+              },
+              "10": {
+                "0": 5,
+                "1": 5
+              },
+              "11": {
+                "0": 10,
+                "1": 10
+              },
+              "12": {
+                "0": 10,
+                "1": 10
+              },
+              "13": {
+                "0": 9,
+                "1": 9
+              },
+              "14": {
+                "0": 9,
+                "1": 10
+              },
+              "15": {
+                "0": 6,
+                "1": 6
+              },
+              "16": {
+                "0": 6,
+                "1": 6
+              },
+              "17": {
+                "0": 5,
+                "1": 6
+              },
+              "18": {
+                "0": 6,
+                "1": 6
+              },
+              "19": {
+                "0": 13,
+                "1": 13
+              },
+              "2": {
+                "0": 1,
+                "1": 1
+              },
+              "20": {
+                "0": 3,
+                "1": 3
+              },
+              "21": {
+                "0": 6,
+                "1": 5
+              },
+              "22": {
+                "0": 3,
+                "1": 2
+              },
+              "23": {
+                "0": 2,
+                "1": 2
+              },
+              "3": {
+                "0": 1,
+                "1": 1
+              },
+              "4": {
+                "0": 1,
+                "1": 1
+              },
+              "5": {
+                "0": 2,
+                "1": 2
+              },
+              "6": {
+                "0": 1,
+                "1": 1
+              },
+              "7": {
+                "0": 13,
+                "1": 13
+              },
+              "8": {
+                "0": 2,
+                "1": 2
+              },
+              "9": {
+                "0": 6,
+                "1": 6
+              }
+            },
+            "vnc": {
+              "10": {
+                "0": 9,
+                "1": 9
+              },
+              "11": {
+                "0": 7,
+                "1": 7
+              },
+              "12": {
+                "0": 12,
+                "1": 12
+              },
+              "13": {
+                "0": 13,
+                "1": 12
+              },
+              "14": {
+                "0": 8,
+                "1": 7
+              },
+              "15": {
+                "0": 10,
+                "1": 11
+              },
+              "16": {
+                "0": 8,
+                "1": 9
+              },
+              "17": {
+                "0": 8,
+                "1": 8
+              },
+              "18": {
+                "0": 12,
+                "1": 12
+              },
+              "19": {
+                "0": 9,
+                "1": 9
+              },
+              "7": {
+                "0": 12,
+                "1": 12
+              },
+              "8": {
+                "0": 7,
+                "1": 7
+              },
+              "9": {
+                "0": 10,
+                "1": 10
+              }
+            }
+          },
+          "rows": 1000,
+          "time_matching_fallback_allowed": false,
+          "wire_controls_label_dependent": false
+        },
+        "splits": {
+          "challenge_fraction": 0.173,
+          "challenge_reason_counts": {
+            "hash_challenge": 82,
+            "temporal_future": 53,
+            "unseen_persona": 38
+          },
+          "group_counts": {
+            "challenge": 42,
+            "test": 42,
+            "train": 125,
+            "validation": 56
+          },
+          "holdout_impact": {
+            "temporal_future": {
+              "fraction": 0.053,
+              "max_fraction": 0.07,
+              "rows": 53,
+              "status": "selected_within_budget"
+            },
+            "unseen_client_implementation": {
+              "fraction": 0.0,
+              "max_fraction": 0.06,
+              "rows": 0,
+              "status": "skipped_no_candidate_within_budget",
+              "value": null
+            },
+            "unseen_host_pair": {
+              "fraction": 0.0,
+              "max_fraction": 0.06,
+              "rows": 0,
+              "status": "skipped_no_candidate_within_budget",
+              "value": null
+            },
+            "unseen_persona": {
+              "fraction": 0.038,
+              "max_fraction": 0.06,
+              "new_rows": 38,
+              "rows": 38,
+              "status": "selected_within_budget",
+              "value": "developer-05"
+            },
+            "unseen_src_host": {
+              "fraction": 0.0,
+              "max_fraction": 0.06,
+              "rows": 0,
+              "status": "skipped_no_candidate_within_budget",
+              "value": null
+            }
+          },
+          "policy": "V3 cumulative impact-budget challenge (17-23% target); connected campaign+pair components; remaining groups roughly 60/20/20 train/validation/test by rows",
+          "seed": 2026081403,
+          "split_counts": {
+            "challenge": 173,
+            "test": 295,
+            "train": 357,
+            "validation": 175
+          }
+        },
+        "status": "PASS",
+        "suspicious_families": [
+          "credential_hop_like",
+          "failed_then_success",
+          "low_slow_lateral",
+          "new_protocol",
+          "offhours_lateral",
+          "protocol_switch",
+          "small_copy_then_admin",
+          "target_chain"
+        ],
+        "timeline_days_by_protocol": {
+          "rdp": 45,
+          "smb": 45,
+          "ssh": 45,
+          "vnc": 45
+        }
+      },
+      "production_flow_gold": {
+        "background_suricata_flow_count": 427,
+        "challenge_reason_counts": {
+          "temporal_future": 329,
+          "unseen_client_implementation": 464,
+          "unseen_host_pair": 78,
+          "unseen_persona": 38
+        },
+        "eligible_suricata_flow_count": 2310,
+        "evaluation_metadata_in_model_matrix": false,
+        "feature_count": 42,
+        "flow_mapping_coverage": 0.977922077922078,
+        "heldout_client_implementations": [
+          "smb:smbprotocol->samba",
+          "ssh:paramiko->openssh-server"
+        ],
+        "heldout_personas": [
+          "developer-05"
+        ],
+        "label_join_keys": [
+          "flow_uid",
+          "session_id"
+        ],
+        "leakage_ok": true,
+        "mapped_suricata_flow_count": 2259,
+        "orchestrator_used_only_for": "labels grouped splits simulated clock and fidelity metadata",
+        "production_source": "suricata_eve_flow",
+        "production_unit": "suricata_eve_flow",
+        "raw_suricata_flow_count": 2737,
+        "rows": 2259,
+        "session_mapping_coverage": 0.997,
+        "session_mapping_coverage_by_protocol": {
+          "rdp": 1.0,
+          "smb": 0.988,
+          "ssh": 1.0,
+          "vnc": 1.0
+        },
+        "state_partition_policy": "causal prior-train reference context plus prior rows from each target split; no cross-heldout context",
+        "time_policy": "Suricata flow.start for execution mapping; captured flow offset projected to simulated organization timestamp",
+        "train_serve_feature_code": "adminlab.online_features.EveFeatureState",
+        "uid_alignment_coverage": 1.0,
+        "zeek_features_in_primary_model": false,
+        "zeek_research_status": "ok"
+      },
+      "shortcut_audit": {
+        "baselines": {
+          "bytes_packets_only": {
+            "columns": [
+              "session_total_bytes",
+              "session_total_packets",
+              "session_src_bytes",
+              "session_dst_bytes",
+              "flow_bytes_mean",
+              "flow_bytes_max"
+            ],
+            "status": "ok",
+            "train_rows": 323,
+            "validation_pr_auc": 0.49274927121277445,
+            "validation_rows": 173
+          },
+          "current_session_only": {
+            "columns": [
+              "flow_count",
+              "session_duration_s",
+              "session_total_bytes",
+              "session_total_packets",
+              "session_src_bytes",
+              "session_dst_bytes",
+              "flow_duration_mean",
+              "flow_duration_max",
+              "flow_bytes_mean",
+              "flow_bytes_max",
+              "hour_sin",
+              "hour_cos",
+              "is_weekend"
+            ],
+            "status": "ok",
+            "train_rows": 323,
+            "validation_pr_auc": 0.4668488083834658,
+            "validation_rows": 173
+          },
+          "duration_rate_only": {
+            "columns": [
+              "session_duration_s",
+              "flow_duration_mean",
+              "flow_duration_max",
+              "flow_count"
+            ],
+            "status": "ok",
+            "train_rows": 323,
+            "validation_pr_auc": 0.5299716244511707,
+            "validation_rows": 173
+          },
+          "history_only": {
+            "columns": [
+              "src_distinct_dst_24h_prior",
+              "src_distinct_dst_7d_prior",
+              "src_distinct_dst_30d_prior",
+              "pair_seen_count_prior",
+              "time_since_pair_seen_seconds_prior",
+              "new_destination_for_source",
+              "new_protocol_for_source",
+              "src_protocol_diversity_7d_prior",
+              "src_new_target_count_1h_prior",
+              "src_new_target_count_24h_prior",
+              "src_graph_expansion_rate_24h_prior",
+              "recent_protocol_switch_count_prior",
+              "recent_remote_admin_attempt_count_prior"
+            ],
+            "status": "ok",
+            "train_rows": 323,
+            "validation_pr_auc": 0.44334163319963,
+            "validation_rows": 173
+          },
+          "time_only": {
+            "columns": [
+              "hour_sin",
+              "hour_cos",
+              "is_weekend"
+            ],
+            "status": "ok",
+            "train_rows": 323,
+            "validation_pr_auc": 0.41055230241055063,
+            "validation_rows": 173
+          }
+        },
+        "best_nuisance_pr_auc": 0.5299716244511707,
+        "current_session_only_pr_auc": 0.4668488083834658,
+        "full_model_pr_auc": 0.42500245440557627,
+        "full_over_best_nuisance_margin": -0.10496917004559447,
+        "full_over_current_session_margin": -0.04184635397788955,
+        "policy": "V3 full session model must beat current-session and all nuisance-only views; history-only is reported as intended-signal ablation",
+        "schema_version": 3,
+        "time_only_pr_auc": 0.41055230241055063
+      }
+    },
+    "external_gate_inputs": {
+      "lanl_reference_complete": true,
+      "threshold_tuning_on_external": false,
+      "windows_mapped_native_protocols": 3,
+      "windows_score_distribution_finite": true,
+      "windows_score_distribution_non_degenerate": true
+    },
+    "learning_curve": {
+      "grouping": "campaign_id",
+      "last_delta_pr_auc": -0.04768158004229889,
+      "points": [
+        {
+          "campaigns": 44,
+          "fraction": 0.25,
+          "pr_auc": 0.4462207473305143,
+          "roc_auc": 0.45398608881754954,
+          "train_rows": 85,
+          "validation_rows": 173
+        },
+        {
+          "campaigns": 88,
+          "delta_pr_auc": 0.0404951711676535,
+          "fraction": 0.5,
+          "pr_auc": 0.4867159184981678,
+          "roc_auc": 0.49785981808453716,
+          "train_rows": 163,
+          "validation_rows": 173
+        },
+        {
+          "campaigns": 131,
+          "delta_pr_auc": -0.023278283418963264,
+          "fraction": 0.75,
+          "pr_auc": 0.46343763507920455,
+          "roc_auc": 0.4610754414125201,
+          "train_rows": 240,
+          "validation_rows": 173
+        },
+        {
+          "campaigns": 175,
+          "delta_pr_auc": -0.04768158004229889,
+          "fraction": 1.0,
+          "pr_auc": 0.41575605503690566,
+          "roc_auc": 0.40850722311396465,
+          "train_rows": 323,
+          "validation_rows": 173
+        }
+      ],
+      "policy": "scale only when the final grouped learning-curve PR-AUC gain exceeds 0.005",
+      "scale_recommendation": "prefer_diversity_or_holdout_analysis"
+    },
+    "mapping_fidelity": {
+      "flow_mapping_coverage": 0.977922077922078,
+      "min_protocol_required": 0.95,
+      "protocol_mapping_pass": true,
+      "session_mapping_coverage": 0.997,
+      "session_mapping_coverage_by_protocol": {
+        "rdp": 1.0,
+        "smb": 0.988,
+        "ssh": 1.0,
+        "vnc": 1.0
+      }
+    },
+    "release_semantics": {
+      "baseline_model_unit": "flow",
+      "complete_raw_wire_preserved_as_chunks": true,
+      "external_holdouts_used_for_fit": false,
+      "external_holdouts_used_for_threshold_tuning": false,
+      "merged_bronze_pcap_persisted": false,
+      "primary_model_unit": "session",
+      "research_fail_is_preserved_as_valid_dataset_release": true,
+      "sequence_model_unit": "campaign"
+    },
+    "research_decision": {
+      "failed_gates": [
+        "validation_pr_auc",
+        "test_pr_auc",
+        "current_session_margin",
+        "best_nuisance_margin"
+      ],
+      "observed": {
+        "best_nuisance_pr_auc": 0.5299716244511707,
+        "challenge_recall_fpr_1pct": 0.021505376344086023,
+        "current_session_only_pr_auc": 0.4668488083834658,
+        "external_rows_in_train": 0,
+        "full_model_pr_auc": 0.42500245440557627,
+        "hard_benign_fpr": 0.0,
+        "session_mapping_coverage": 0.997,
+        "test_pr_auc": 0.5166915947724884,
+        "threshold_tuning_on_external": false,
+        "time_only_pr_auc": 0.41055230241055063,
+        "validation_pr_auc": 0.42500245440557627
+      },
+      "policy": "V3 1k may scale only when technical provenance, low-shortcut signal quality, low-FPR challenge recall, hard-benign safety and external isolation all pass",
+      "research_status": "FAIL",
+      "scale_decision": "STOP_AT_1K",
+      "schema_version": 3,
+      "technical_failures": [],
+      "technical_status": "READY",
+      "thresholds": {
+        "max_hard_benign_fpr": 0.05,
+        "max_time_only_pr_auc": 0.55,
+        "min_full_over_best_nuisance_margin": 0.05,
+        "min_full_over_current_session_margin": 0.05,
+        "min_session_mapping_coverage": 0.98,
+        "min_test_pr_auc": 0.58,
+        "min_validation_pr_auc": 0.6
+      }
+    },
+    "research_status": "FAIL",
+    "scale_decision": "STOP_AT_1K",
+    "schema_version": 3,
+    "technical_failures": [],
+    "technical_status": "READY",
+    "windows_fidelity": {
+      "dcom": {
+        "endpoint_mapper_wire_count": 0,
+        "endpoint_mapper_wire_observed": false,
+        "failure_reason": "",
+        "fidelity_status": "attempted_unverified",
+        "protocol": "dcom",
+        "service_present": true,
+        "session_completed": true,
+        "source_stack": "windows_native",
+        "target_stack": "windows_native",
+        "tool_present": true,
+        "v3_network_dcom_completed": true,
+        "wire_observed": false
+      },
+      "rdp": {
+        "failure_reason": "native mstsc/TermService wire handshake observed, but authenticated interactive hosted-runner session was not proven",
+        "fidelity_status": "attempted_unverified",
+        "handshake_wire_count": 3,
+        "handshake_wire_observed": true,
+        "protocol": "rdp",
+        "service_present": true,
+        "session_completed": false,
+        "source_stack": "windows_native",
+        "target_stack": "windows_native",
+        "tool_present": true,
+        "wire_observed": true
+      },
+      "validated_protocols": [
+        "openssh",
+        "smb",
+        "winrm"
+      ]
+    }
+  },
+  "post_cleanup": {
+    "hf_payload_files": 1563,
+    "retained_artifact_id": 9247494536,
+    "retained_artifact_name": "remote-admin-v3-release-31885392045",
+    "retained_prefix": "v3/final/run-31885392045",
+    "status": "PASS"
+  },
+  "verified": {
+    "cleanup_policy": "B_after_verified_v3_only",
+    "dataset_release_status": "READY",
+    "github_artifact_verified": true,
+    "github_final_artifact_id": 9247494536,
+    "github_final_run_id": 31885392045,
+    "hf_final_path": "v3/final/run-31885392045",
+    "hf_verified": true,
+    "hf_verified_bytes": 668433606,
+    "hf_verified_files": 1560,
+    "research_status": "FAIL",
+    "scale_decision": "STOP_AT_1K",
+    "schema_version": 3,
+    "technical_status": "READY"
+  }
+}
