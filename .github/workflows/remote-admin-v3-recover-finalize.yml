@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: remote-admin-v3-recover-finalize
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   DATA_RUN_ID: '31885392045'
@@ -29,6 +29,7 @@ jobs:
     timeout-minutes: 150
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HUB_DISABLE_XET: '1'
       PYTHONPATH: ${{ github.workspace }}/remote-admin-anomaly-lab/src
     steps:
       - uses: actions/checkout@v4
