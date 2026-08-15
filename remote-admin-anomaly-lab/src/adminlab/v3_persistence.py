@@ -16,12 +16,10 @@ def expected_remote_paths(
 ) -> list[dict[str, Any]]:
     """Map authoritative release-manifest files to their expected HF objects.
 
-    Most files are persisted byte-for-byte under ``remote_prefix``.  Lossless
-    transport transformations (currently the Windows pktmon UTF-16 text gzip)
-    are declared by the uploader relative to the layer/shard root; for those
-    rows the expected remote checksum/size must be the stored representation,
-    while the authoritative local checksum remains unchanged in the release
-    manifest.
+    Most files are persisted byte-for-byte under ``remote_prefix``. Lossless
+    transport transformations are declared by the uploader relative to the
+    layer/shard root; the expected remote checksum/size describes the stored
+    representation while the release manifest remains authoritative locally.
     """
     shard = _normalize(shard)
     prefix = _normalize(remote_prefix)
@@ -87,3 +85,51 @@ def expected_remote_paths(
     if not rows:
         raise ValueError(f"release manifest contains no files for shard {shard}")
     return rows
+
+
+def build_verified_release_status(
+    decision: dict[str, Any],
+    hf_verification: dict[str, Any],
+    *,
+    github_final_run_id: int,
+    github_final_artifact_id: int,
+    github_artifact_verified: bool,
+) -> dict[str, Any]:
+    """Create the only status object authorized to unlock destructive cleanup."""
+    failures: list[str] = []
+    if decision.get("dataset_release_status") != "READY":
+        failures.append("dataset_release_status")
+    if hf_verification.get("status") != "PASS" or hf_verification.get("full_remote_download_verified") is not True:
+        failures.append("hf_verification")
+    remote_prefix = _normalize(hf_verification.get("remote_prefix", ""))
+    if not remote_prefix.startswith("v3/final/"):
+        failures.append("hf_final_path")
+    try:
+        run_id = int(github_final_run_id)
+        artifact_id = int(github_final_artifact_id)
+    except (TypeError, ValueError):
+        run_id = artifact_id = 0
+    if run_id <= 0:
+        failures.append("github_final_run_id")
+    if artifact_id <= 0:
+        failures.append("github_final_artifact_id")
+    if github_artifact_verified is not True:
+        failures.append("github_artifact_verified")
+    if failures:
+        raise RuntimeError("V3 verified release status failed: " + ",".join(failures))
+
+    return {
+        "schema_version": 3,
+        "dataset_release_status": "READY",
+        "technical_status": "READY",
+        "research_status": str(decision.get("research_status", "UNKNOWN")),
+        "scale_decision": str(decision.get("scale_decision", "STOP_AT_1K")),
+        "hf_verified": True,
+        "hf_final_path": remote_prefix,
+        "hf_verified_files": int(hf_verification.get("verified_files", 0)),
+        "hf_verified_bytes": int(hf_verification.get("verified_bytes", 0)),
+        "github_artifact_verified": True,
+        "github_final_run_id": run_id,
+        "github_final_artifact_id": artifact_id,
+        "cleanup_policy": "B_after_verified_v3_only",
+    }
