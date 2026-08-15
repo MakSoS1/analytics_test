@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 
 from .online_features import EveFeatureState
+from .wire_paths import expected_wire_tuples
 
 
 def _is_missing(value: Any) -> bool:
@@ -75,13 +76,12 @@ def map_suricata_flows_to_sessions(
     *,
     tolerance_seconds: float = 2.0,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Map only direct remote-admin flow tuples and retain background accounting.
+    """Map expected remote-admin wire hops and retain background accounting.
 
     Offline captures legitimately contain NetBIOS helper traffic, IPv6/router
-    chatter, and internal ProxyJump second-hop flows. Those records are valuable
-    raw Silver evidence but cannot map to the direct scenario tuple recorded in
-    the session manifest. They therefore stay visible as `background_conn_count`
-    instead of depressing the correspondence coverage denominator.
+    chatter and other lab background.  Bounded approved SSH forwarding is not
+    background: both client->jump and jump->target are explicit expected wire
+    hops for the same orchestrated session and are eligible for correspondence.
     """
     from .features import map_zeek_flows_to_sessions
 
@@ -94,15 +94,16 @@ def map_suricata_flows_to_sessions(
     if missing_flows:
         raise ValueError(f"normalized Suricata flows missing columns: {sorted(missing_flows)}")
 
-    direct_tuples = {
-        (str(row["src_ip"]), str(row["dst_ip"]), int(row["dst_port"]))
+    expected_tuples = {
+        hop
         for row in sessions.to_dict("records")
+        for hop in expected_wire_tuples(row)
     }
     if normalized_flows.empty:
         eligible = normalized_flows.copy()
     else:
         mask = normalized_flows.apply(
-            lambda row: (str(row["id.orig_h"]), str(row["id.resp_h"]), int(row["id.resp_p"])) in direct_tuples,
+            lambda row: (str(row["id.orig_h"]), str(row["id.resp_h"]), int(row["id.resp_p"])) in expected_tuples,
             axis=1,
         )
         eligible = normalized_flows[mask].copy().reset_index(drop=True)
@@ -123,7 +124,7 @@ def map_suricata_flows_to_sessions(
         "unmapped_eligible_conn_count": eligible_count - mapped_count,
         "conn_count": eligible_count,
         "conn_mapping_coverage": float(mapped_count / eligible_count) if eligible_count else 0.0,
-        "mapping_scope": "direct_manifest_remote_admin_tuple_only",
+        "mapping_scope": "expected_manifest_wire_hops_only",
     })
 
     session_count_by_protocol: dict[str, int] = {}
