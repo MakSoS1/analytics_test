@@ -249,13 +249,25 @@ def build_campaign_pcaps(session_evidence: Iterable[PcapEvidence], sessions: Ite
 
 
 def build_pcap_index(evidence: Iterable[PcapEvidence], sessions: Iterable[SessionRecord]) -> pd.DataFrame:
-    rows = [item.__dict__.copy() for item in evidence]
+    rows: list[dict[str, object]] = []
+    for item in evidence:
+        row = item.__dict__.copy()
+        relative = str(row.pop("relative_path", "")).strip()
+        if not relative:
+            raise ValueError(f"PCAP evidence missing relative path: {item}")
+        row["relative_pcap_path"] = relative
+        rows.append(row)
     columns = [
         "kind", "label_binary", "label_name", "protocol", "semantic_family", "session_id", "campaign_id", "start_ts",
         "src_host_id", "dst_host_id", "implementation_id", "semantic_fidelity", "relative_pcap_path", "packet_count",
         "pcap_bytes", "sha256",
     ]
-    return pd.DataFrame(rows, columns=columns).sort_values(
+    frame = pd.DataFrame(rows, columns=columns)
+    if frame.empty:
+        return frame
+    if frame["relative_pcap_path"].isna().any() or (frame["relative_pcap_path"].astype(str).str.strip() == "").any():
+        raise ValueError("PCAP index contains missing relative paths")
+    return frame.sort_values(
         ["kind", "label_name", "protocol", "campaign_id", "session_id"], ignore_index=True
     )
 
@@ -276,11 +288,14 @@ def verify_sample_pcaps(output_root: Path, frame: pd.DataFrame, *, sample_size: 
     with tempfile.TemporaryDirectory(prefix="v3-pcap-verify-") as tmp_dir:
         tmp = Path(tmp_dir)
         for index, row in sampled.reset_index(drop=True).iterrows():
-            compressed = Path(output_root) / str(row["relative_pcap_path"])
+            relative = str(row["relative_pcap_path"]).strip()
+            if not relative or relative.lower() == "nan":
+                raise ValueError("sample PCAP index has invalid relative path")
+            compressed = Path(output_root) / relative
             raw = tmp / f"sample-{index:03d}.pcap"
             _decompress_pcap(compressed, raw)
             packets = _packet_count(raw)
             if packets <= 0:
                 raise ValueError(f"sample PCAP failed reparse: {compressed}")
-            verified.append(str(row["relative_pcap_path"]))
+            verified.append(relative)
     return verified
