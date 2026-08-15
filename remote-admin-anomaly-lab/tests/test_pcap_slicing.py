@@ -70,5 +70,15 @@ def test_slice_and_campaign_builder_create_indexable_authoritative_tree(tmp_path
     assert isinstance(frame, pd.DataFrame)
     assert {"kind", "label_name", "protocol", "session_id", "campaign_id", "relative_pcap_path", "packet_count", "pcap_bytes", "sha256"} <= set(frame.columns)
     assert set(frame["kind"]) == {"session", "campaign"}
+    assert frame["relative_pcap_path"].notna().all()
+    assert not (frame["relative_pcap_path"].astype(str).str.strip() == "").any()
+    assert set(frame.loc[frame["kind"] == "session", "relative_pcap_path"]) == {
+        "sessions/benign/ssh/b-1.pcap.zst",
+        "sessions/suspicious/smb/s-1.pcap.zst",
+    }
+    assert set(frame.loc[frame["kind"] == "campaign", "relative_pcap_path"]) == {
+        "campaigns/benign/camp-b.pcap.zst",
+        "campaigns/suspicious/camp-s.pcap.zst",
+    }
     # The source merged capture is outside the authoritative Bronze tree.
     assert not any("merged" in item.relative_path for item in evidence + campaign_evidence)
