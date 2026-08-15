@@ -1,6 +1,6 @@
 authorized=true
-revision=3
-contract_run=31884551800
+revision=4
+contract_run=31885331216
 smoke_run=31884532071
 smoke_artifact_id=9246946749
 smoke_session_mapping=1.0
@@ -10,3 +10,4 @@ smoke_session_pcap_coverage=1.0
 smoke_campaign_pcap_coverage=1.0
 lanl_cli_fix=netflow-rows,wls-rows
 lanl_quality_schema_fix=remote_admin_flow_rows_alias
+zeek_runtime=pinned_docker_image_via_host_shim
