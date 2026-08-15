@@ -57,5 +57,16 @@ printf 'optional_extended_packages installed=%s missing=%s\n' \
   "${installed_optional[*]:-none}" "${missing_optional[*]:-none}"
 
 # Keep the offline parser deterministic across hosted runner image updates.
+# Zeek itself remains containerized. The tiny host shim exists only so generic
+# runtime checks and ad-hoc `zeek --version` calls resolve to the exact pinned
+# image rather than depending on a runner-provided host package.
 docker pull zeek/zeek:8.2.1 >/dev/null
-echo 'zeek_parser_image=zeek/zeek:8.2.1'
+sudo tee /usr/local/bin/zeek >/dev/null <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+exec docker run --rm -v "$PWD:$PWD" -w "$PWD" zeek/zeek:8.2.1 zeek "$@"
+SH
+sudo chmod 0755 /usr/local/bin/zeek
+command -v zeek >/dev/null
+zeek --version >/dev/null
+echo 'zeek_parser_image=zeek/zeek:8.2.1 host_shim=/usr/local/bin/zeek'
