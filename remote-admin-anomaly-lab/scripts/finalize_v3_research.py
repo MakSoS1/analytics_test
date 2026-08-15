@@ -78,11 +78,24 @@ def main() -> int:
     hard_fpr = as_float(hard.get("fpr"), 1.0) if hard.get("status") == "ok" else 1.0
     ext_inputs = external.get("external_gate_inputs", {}) if isinstance(external.get("external_gate_inputs"), dict) else {}
 
+    research_cfg = cfg.get("research", {})
     leakage_pass = bool(production.get("leakage_ok", False))
+    protocol_coverage = {
+        str(key): as_float(value)
+        for key, value in (production.get("session_mapping_coverage_by_protocol", {}) or {}).items()
+    }
+    required_protocols = {"ssh", "smb", "rdp", "vnc"}
+    min_protocol_coverage = as_float(research_cfg.get("min_protocol_session_mapping_coverage"), 0.95)
+    protocol_mapping_pass = (
+        required_protocols <= set(protocol_coverage)
+        and min(protocol_coverage[name] for name in required_protocols) >= min_protocol_coverage
+    )
+
     technical_release_ready = (
         planner.get("status") == "PASS"
         and leakage_pass
-        and as_float(production.get("session_mapping_coverage")) >= as_float(cfg.get("research", {}).get("min_session_mapping_coverage"), 0.98)
+        and as_float(production.get("session_mapping_coverage")) >= as_float(research_cfg.get("min_session_mapping_coverage"), 0.98)
+        and protocol_mapping_pass
         and as_float(production.get("flow_mapping_coverage")) >= 0.90
         and int(hierarchical.get("session_rows", 0)) > 0
         and int(hierarchical.get("campaign_rows", 0)) > 0
@@ -95,6 +108,8 @@ def main() -> int:
         "technical_release_ready": technical_release_ready,
         "leakage_pass": leakage_pass,
         "session_mapping_coverage": as_float(production.get("session_mapping_coverage")),
+        "protocol_mapping_pass": protocol_mapping_pass,
+        "min_protocol_mapping_coverage": min((protocol_coverage.get(name, 0.0) for name in required_protocols), default=0.0),
         "hard_benign_fpr": hard_fpr,
     }
     external_inputs = {
@@ -116,10 +131,10 @@ def main() -> int:
         "max_time_only_pr_auc": as_float(cfg.get("shortcut", {}).get("max_time_only_pr_auc"), 0.55),
         "min_full_over_current_session_margin": as_float(cfg.get("shortcut", {}).get("min_full_over_current_session_margin"), 0.05),
         "min_full_over_best_nuisance_margin": as_float(cfg.get("shortcut", {}).get("min_full_over_best_nuisance_margin"), 0.05),
-        "min_validation_pr_auc": as_float(cfg.get("research", {}).get("min_validation_pr_auc"), 0.60),
-        "min_test_pr_auc": as_float(cfg.get("research", {}).get("min_test_pr_auc"), 0.58),
-        "min_session_mapping_coverage": as_float(cfg.get("research", {}).get("min_session_mapping_coverage"), 0.98),
-        "max_hard_benign_fpr": as_float(cfg.get("research", {}).get("max_hard_benign_fpr"), 0.05),
+        "min_validation_pr_auc": as_float(research_cfg.get("min_validation_pr_auc"), 0.60),
+        "min_test_pr_auc": as_float(research_cfg.get("min_test_pr_auc"), 0.58),
+        "min_session_mapping_coverage": as_float(research_cfg.get("min_session_mapping_coverage"), 0.98),
+        "max_hard_benign_fpr": as_float(research_cfg.get("max_hard_benign_fpr"), 0.05),
     }
     decision = evaluate_v3_gate(
         metrics=metric_inputs,
@@ -128,14 +143,17 @@ def main() -> int:
         external=external_inputs,
         thresholds=thresholds,
     )
+    if not protocol_mapping_pass:
+        decision["technical_status"] = "INCOMPLETE"
+        decision.setdefault("technical_failures", []).append("protocol_mapping_coverage")
 
     result = {
         "schema_version": 3,
         "dataset_release_status": "READY" if decision["technical_status"] == "READY" else "INCOMPLETE",
         "technical_status": decision["technical_status"],
-        "technical_failures": decision["technical_failures"],
+        "technical_failures": list(dict.fromkeys(decision["technical_failures"])),
         "research_status": decision["research_status"],
-        "scale_decision": decision["scale_decision"],
+        "scale_decision": decision["scale_decision"] if decision["technical_status"] == "READY" else "STOP_AT_1K",
         "research_decision": decision,
         "learning_curve": curve,
         "release_semantics": {
@@ -147,6 +165,13 @@ def main() -> int:
             "external_holdouts_used_for_threshold_tuning": False,
             "merged_bronze_pcap_persisted": False,
             "complete_raw_wire_preserved_as_chunks": True,
+        },
+        "mapping_fidelity": {
+            "session_mapping_coverage": production.get("session_mapping_coverage"),
+            "flow_mapping_coverage": production.get("flow_mapping_coverage"),
+            "session_mapping_coverage_by_protocol": protocol_coverage,
+            "min_protocol_required": min_protocol_coverage,
+            "protocol_mapping_pass": protocol_mapping_pass,
         },
         "windows_fidelity": {
             "validated_protocols": windows.get("validated_protocols", []),
@@ -171,7 +196,9 @@ def main() -> int:
         "research_status": result["research_status"],
         "scale_decision": result["scale_decision"],
         "failed_gates": decision["failed_gates"],
+        "technical_failures": result["technical_failures"],
         "observed": decision["observed"],
+        "mapping_fidelity": result["mapping_fidelity"],
         "windows_validated": windows.get("validated_protocols", []),
     }, indent=2, sort_keys=True))
     if result["dataset_release_status"] != "READY":
