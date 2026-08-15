@@ -77,42 +77,72 @@ def write_status(path: Path | None, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _quality_transport_ignore(source: Path):
-    windows_dir = (source / "external" / "windows").resolve()
+def _is_binary_like_text(path: Path) -> bool:
+    """Return True for text-named evidence that is unsafe for HF text handling.
+
+    pktmon commonly emits UTF-16 files with a .txt suffix. Hugging Face treats
+    .txt paths as text in its commit pipeline, so the persistence copy stores
+    such files as deterministic lossless gzip while the authoritative release
+    remains byte-for-byte unchanged.
+    """
+    if not path.is_file() or path.stat().st_size <= 0:
+        return False
+    with path.open("rb") as fh:
+        sample = fh.read(1024 * 1024)
+    if b"\x00" in sample:
+        return True
+    try:
+        sample.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        return True
+    return False
+
+
+def _binary_windows_texts(source: Path) -> list[Path]:
+    windows = source / "external" / "windows"
+    if not windows.is_dir():
+        return []
+    return sorted(
+        (path for path in windows.rglob("*.txt") if _is_binary_like_text(path)),
+        key=lambda path: path.as_posix(),
+    )
+
+
+def _quality_transport_ignore(source: Path, binary_texts: list[Path]):
+    ignored = {path.resolve() for path in binary_texts}
 
     def ignore(directory: str, names: list[str]) -> list[str]:
         current = Path(directory).resolve()
-        if current == windows_dir and "capture.txt" in names:
-            return ["capture.txt"]
-        return []
+        return sorted(name for name in names if (current / name).resolve() in ignored)
 
     return ignore
 
 
 def stage_quality_for_hf(source: Path, target: Path) -> list[dict]:
     """Create a recoverable HF transport copy without mutating source data."""
-    raw_source = source / "external" / "windows" / "capture.txt"
-    shutil.copytree(source, target, ignore=_quality_transport_ignore(source))
+    binary_texts = _binary_windows_texts(source)
+    shutil.copytree(source, target, ignore=_quality_transport_ignore(source, binary_texts))
     transforms: list[dict] = []
-    if raw_source.is_file() and raw_source.stat().st_size > 0:
+    for raw_source in binary_texts:
+        relative = raw_source.relative_to(source)
         original_bytes = raw_source.stat().st_size
         original_sha = sha256_file(raw_source)
-        compressed = target / "external" / "windows" / "capture.txt.gz"
+        compressed = target / Path(str(relative) + ".gz")
         compressed.parent.mkdir(parents=True, exist_ok=True)
         with raw_source.open("rb") as src, compressed.open("wb") as dst:
-            with gzip.GzipFile(filename="capture.txt", mode="wb", fileobj=dst, mtime=0) as gz:
+            with gzip.GzipFile(filename=raw_source.name, mode="wb", fileobj=dst, mtime=0) as gz:
                 shutil.copyfileobj(src, gz, length=1024 * 1024)
         compressed_sha = sha256_file(compressed)
         compressed_bytes = compressed.stat().st_size
         transforms.append({
-            "original_path": "external/windows/capture.txt",
-            "stored_path": "external/windows/capture.txt.gz",
+            "original_path": relative.as_posix(),
+            "stored_path": Path(str(relative) + ".gz").as_posix(),
             "transform": "gzip_lossless_mtime0",
             "original_sha256": original_sha,
             "original_bytes": original_bytes,
             "stored_sha256": compressed_sha,
             "stored_bytes": compressed_bytes,
-            "restore": "gzip -dc capture.txt.gz > capture.txt",
+            "restore": f"gzip -dc {raw_source.name}.gz > {raw_source.name}",
         })
     manifest = {
         "schema_version": 1,
