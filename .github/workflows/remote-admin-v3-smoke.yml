@@ -5,7 +5,9 @@ on:
   push:
     branches: [remote-admin-anomaly-lab-v3]
     paths:
-      - 'remote-admin-anomaly-lab/src/adminlab/v3_*.py'
+      - 'remote-admin-anomaly-lab/src/adminlab/v3_signal.py'
+      - 'remote-admin-anomaly-lab/src/adminlab/v3_campaigns.py'
+      - 'remote-admin-anomaly-lab/src/adminlab/v3_splits.py'
       - 'remote-admin-anomaly-lab/src/adminlab/pcap_slicing.py'
       - 'remote-admin-anomaly-lab/src/adminlab/session_gold.py'
       - 'remote-admin-anomaly-lab/src/adminlab/features.py'
@@ -16,7 +18,7 @@ on:
       - 'remote-admin-anomaly-lab/scripts/build_hierarchical_gold_v3.py'
       - 'remote-admin-anomaly-lab/scripts/run_scenarios_extended_v2.py'
       - 'remote-admin-anomaly-lab/scripts/install_extended_runner_v2.sh'
-      - 'remote-admin-anomaly-lab/configs/v3_*.yaml'
+      - 'remote-admin-anomaly-lab/configs/v3_feature_contract.yaml'
       - '.github/workflows/remote-admin-v3-smoke.yml'
 
 permissions:
