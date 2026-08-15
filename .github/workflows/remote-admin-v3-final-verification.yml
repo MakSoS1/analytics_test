@@ -5,6 +5,9 @@ on:
     branches: [remote-admin-anomaly-lab-v3]
     paths:
       - '.github/workflows/remote-admin-v3-final-verification.yml'
+      - 'remote-admin-anomaly-lab/tests/**'
+      - 'remote-admin-anomaly-lab/FINAL_STATUS_V3.json'
+      - 'remote-admin-anomaly-lab/docs/IMPLEMENTATION_STATUS_V3.md'
   workflow_dispatch:
 
 permissions:
