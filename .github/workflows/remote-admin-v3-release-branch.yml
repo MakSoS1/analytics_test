@@ -80,7 +80,7 @@ jobs:
           python scripts/build_lanl_reference.py \
             --config configs/v3_research.yaml \
             --out /tmp/v3-lanl \
-            --flow-limit 5000 --auth-limit 5000
+            --netflow-rows 5000 --wls-rows 5000
           python - <<'PY'
           import json
           from pathlib import Path
