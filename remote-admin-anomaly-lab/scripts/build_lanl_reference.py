@@ -30,7 +30,7 @@ def stream_http_lines(
     than pretending a partially streamed file has the checksum of the complete
     upstream object.
     """
-    headers = {"User-Agent": "remote-admin-anomaly-lab-v2/1.0"}
+    headers = {"User-Agent": "remote-admin-anomaly-lab-v3/1.0"}
     request = urllib.request.Request(url, headers=headers)
     sha = hashlib.sha256()
     selected: list[str] = []
@@ -155,13 +155,15 @@ def main() -> int:
         count = int(((net["src_port"] == port) | (net["dst_port"] == port)).sum())
         if count:
             port_counts[str(port)] = count
+    remote_admin_rows = int(len(net))
     quality = {
-        "schema_version": 2,
+        "schema_version": 3,
         "status": "PASS",
         "environment_id": "lanl_reference",
         "external_only": True,
         "threshold_tuning_allowed": False,
-        "netflow_rows": int(len(net)),
+        "netflow_rows": remote_admin_rows,
+        "remote_admin_flow_rows": remote_admin_rows,
         "network_logon_rows": int(len(wls)),
         "remote_admin_port_counts": port_counts,
         "netflow_time_min": int(net["time"].min()),
@@ -179,7 +181,7 @@ def main() -> int:
     (args.out / "reference_quality.json").write_text(json.dumps(quality, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     manifest = {
-        "schema_version": 2,
+        "schema_version": 3,
         "dataset": lanl["dataset"],
         "year": int(lanl["year"]),
         "origin": lanl["origin"],
