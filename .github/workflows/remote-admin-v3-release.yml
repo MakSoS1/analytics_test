@@ -1,0 +1,475 @@
+name: Remote Admin Anomaly V3 Research Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: remote-admin-v3-release
+  cancel-in-progress: false
+
+jobs:
+  windows-native:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run base bounded Windows-native probes
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v3-windows'
+          & .\remote-admin-anomaly-lab\windows\capture_native.ps1 -OutputDir $out
+      - name: Normalize base pktmon evidence
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v3-windows'
+          python .\remote-admin-anomaly-lab\windows\mark_wire.py (Join-Path $out 'windows_fidelity.json') (Join-Path $out 'capture.txt')
+      - name: Probe network-addressed DCOM and mstsc fail-closed
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v3-windows'
+          & .\remote-admin-anomaly-lab\windows\v3_extra_probes.ps1 -OutputDir $out
+      - name: Validate V3 Windows fidelity
+        shell: pwsh
+        env:
+          PYTHONPATH: remote-admin-anomaly-lab/src
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v3-windows'
+          python .\remote-admin-anomaly-lab\windows\validate_v3.py `
+            --base-report (Join-Path $out 'windows_fidelity.json') `
+            --extra-report (Join-Path $out 'v3-extra.json') `
+            --extra-capture (Join-Path $out 'v3-extra.txt') `
+            --out (Join-Path $out 'windows_v3_fidelity.json')
+          $report = Get-Content (Join-Path $out 'windows_v3_fidelity.json') -Raw | ConvertFrom-Json
+          if ($report.validated_protocols.Count -lt 1) { throw 'No V3 native Windows protocol validated' }
+          if (-not (Test-Path (Join-Path $out 'capture.pcapng'))) { throw 'Base Windows PCAPNG missing' }
+          if (-not (Test-Path (Join-Path $out 'v3-extra.pcapng'))) { throw 'V3 extra Windows PCAPNG missing' }
+      - name: Upload same-run Windows evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-release-windows-${{ github.run_id }}
+          path: ${{ runner.temp }}/remote-admin-v3-windows
+          retention-days: 30
+          compression-level: 0
+
+  lanl-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Build same-run independent LANL reference
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m pip install -r requirements.txt
+          python scripts/build_lanl_reference.py \
+            --config configs/v3_research.yaml \
+            --out /tmp/v3-lanl \
+            --flow-limit 5000 --auth-limit 5000
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          q=json.loads(Path('/tmp/v3-lanl/reference_quality.json').read_text())
+          assert q['external_only'] is True
+          assert q['threshold_tuning_allowed'] is False
+          assert q['remote_admin_flow_rows'] >= 5000
+          assert q['network_logon_rows'] >= 5000
+          print(json.dumps(q,sort_keys=True))
+          PY
+      - name: Upload same-run LANL reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-release-lanl-${{ github.run_id }}
+          path: /tmp/v3-lanl
+          retention-days: 30
+          compression-level: 0
+
+  linux-v3-release:
+    needs: [windows-native, lanl-reference]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      ROOT_OUT: /tmp/remote-admin-v3
+      RELEASE_ROOT: /tmp/remote-admin-v3/release
+      SHARD: V3-1k
+      SEED: '2026081403'
+    outputs:
+      final_artifact_id: ${{ steps.upload-final.outputs.artifact-id }}
+      scale_decision: ${{ steps.decision-output.outputs.scale_decision }}
+      research_status: ${{ steps.decision-output.outputs.research_status }}
+      remote_prefix: ${{ steps.decision-output.outputs.remote_prefix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install full V3 wire parser and test runtime
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m pip install -r requirements.txt
+          bash scripts/install_extended_runner_v2.sh
+          pytest -q tests
+          command -v editcap
+          command -v mergecap
+          command -v tshark
+          command -v suricata
+          command -v zeek
+      - name: Exact V3 1k planner gate before PCAP
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p "$RELEASE_ROOT/quality/$SHARD"
+          python scripts/v3_planner_audit.py \
+            --count 1000 --seed "$SEED" --config configs/v3_research.yaml \
+            --out "$RELEASE_ROOT/quality/$SHARD/V3_PLANNER_AUDIT.json"
+      - name: Capture 1000 V3 sessions on real isolated wire
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          py="$(command -v python)"
+          sudo -E env \
+            ADMINLAB_PYTHON="$py" \
+            ADMINLAB_OUTPUT_UID="$(id -u)" \
+            ADMINLAB_OUTPUT_GID="$(id -g)" \
+            ADMINLAB_V3_MATCHED_FRACTION=0.40 \
+            bash scripts/capture_shard_v3.sh H "$SHARD" 1000 "$SEED" "$ROOT_OUT"
+      - name: Validate exact executed V3 corpus before parser/model stages
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          from adminlab.manifest import SessionRecord
+          from adminlab.v3_signal import audit_v3_signal_plan
+          from adminlab.v3_campaigns import audit_v3_campaigns
+          root=Path('/tmp/remote-admin-v3/release'); shard='V3-1k'
+          rows=[SessionRecord.from_dict(json.loads(line)) for line in (root/'bronze'/shard/'manifests/sessions.jsonl').read_text().splitlines() if line.strip()]
+          assert len(rows)==1000,len(rows)
+          assert all(r.status=='success' for r in rows),Counter(r.status for r in rows)
+          assert Counter(int(r.label_binary) for r in rows)==Counter({0:500,1:500})
+          assert Counter(r.protocol for r in rows)==Counter({'ssh':250,'smb':250,'rdp':250,'vnc':250})
+          signal=audit_v3_signal_plan(rows); campaigns=audit_v3_campaigns(rows)
+          assert signal['counterfactual_row_fraction']>=0.40,signal
+          assert signal['matched_hour_pair_fraction']>=0.80,signal
+          assert signal['max_hour_label_fraction_gap']<=0.10,signal
+          assert not signal['invalid_counterfactual_pairs'],signal
+          assert campaigns['campaign_count']>=180,campaigns
+          assert campaigns['max_campaign_fraction']<=0.025,campaigns
+          q=root/'quality'/shard
+          (q/'V3_EXECUTED_SIGNAL.json').write_text(json.dumps({'signal':signal,'campaigns':campaigns},indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'signal':signal,'campaigns':campaigns},sort_keys=True))
+          PY
+      - name: Build Suricata and Zeek Silver plus production flow Gold
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          ADMINLAB_PYTHON="$(command -v python)" bash scripts/build_silver.sh "$RELEASE_ROOT" "$SHARD"
+          bash scripts/build_rule_baseline.sh "$RELEASE_ROOT" "$SHARD"
+          python scripts/build_gold.py \
+            --release "$RELEASE_ROOT" --shard "$SHARD" \
+            --feature-contract configs/feature_contract.yaml --split-seed "$SEED"
+          python scripts/build_flow_gold_v2.py \
+            --release "$RELEASE_ROOT" --shard "$SHARD" \
+            --feature-contract configs/feature_contract.yaml --split-seed "$SEED"
+      - name: Finalize browsable V3 Bronze without persisted giant merged PCAP
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/finalize_v3_bronze.py \
+            --release "$RELEASE_ROOT" --shard "$SHARD" \
+            --sample-size 20 --raw-chunk-packets 50000 --min-session-coverage 0.99
+          test ! -e "$RELEASE_ROOT/bronze/$SHARD/captures/$SHARD.pcap.zst"
+      - name: Build causal grouped session and campaign Gold
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          python scripts/build_hierarchical_gold_v3.py \
+            --release "$RELEASE_ROOT" --shard "$SHARD" \
+            --contract configs/v3_feature_contract.yaml --split-seed "$SEED"
+      - name: Train flow baseline session primary and campaign views
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"
+          python scripts/train_v3_models.py \
+            --flow "$GOLD/production_model_matrix.parquet" \
+            --session "$GOLD/session_model_matrix.parquet" \
+            --campaign "$GOLD/campaign_model_matrix.parquet" \
+            --out "$GOLD/models" --seed "$SEED"
+      - name: Evaluate hard benign and grouped learning curve
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"; QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/evaluate_hard_benign.py \
+            --model "$GOLD/models/session-primary.joblib" \
+            --metrics "$GOLD/models/session-primary.metrics.json" \
+            --model-matrix "$GOLD/session_model_matrix.parquet" \
+            --labels "$GOLD/session_labels.parquet" \
+            --out "$QUALITY/hard_benign_session.json"
+          python scripts/learning_curve_grouped.py \
+            --model-matrix "$GOLD/session_model_matrix.parquet" \
+            --labels "$GOLD/session_labels.parquet" \
+            --out "$QUALITY/session_learning_curve.json" --seed "$SEED"
+      - name: Download same-run Windows native holdout
+        uses: actions/download-artifact@v4
+        with:
+          name: v3-release-windows-${{ github.run_id }}
+          path: /tmp/v3-external/windows
+      - name: Download same-run LANL reference
+        uses: actions/download-artifact@v4
+        with:
+          name: v3-release-lanl-${{ github.run_id }}
+          path: /tmp/v3-external/lanl
+      - name: Score independent external holdouts without fit or threshold tuning
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"; QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/evaluate_v2_external.py \
+            --model "$GOLD/models/session-primary.joblib" \
+            --metrics "$GOLD/models/session-primary.metrics.json" \
+            --lanl-root /tmp/v3-external/lanl \
+            --windows-root /tmp/v3-external/windows \
+            --out "$QUALITY/v3_external_evaluation.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/remote-admin-v3/release/quality/V3-1k/v3_external_evaluation.json')
+          d=json.loads(p.read_text()); d['schema_version']=3; d['fixed_threshold_source']='linux_v3_validation_only'
+          d['training_or_threshold_tuning_on_external']=False
+          d.setdefault('external_gate_inputs',{})['threshold_tuning_on_external']=False
+          v3=json.loads(Path('/tmp/v3-external/windows/windows_v3_fidelity.json').read_text())
+          d['windows_v3_fidelity']={'validated_protocols':v3.get('validated_protocols',[]),'dcom':v3.get('protocols',{}).get('dcom',{}),'rdp':v3.get('protocols',{}).get('rdp',{})}
+          p.write_text(json.dumps(d,indent=2,sort_keys=True)+'\n')
+          PY
+          mkdir -p "$QUALITY/external/windows" "$QUALITY/external/lanl"
+          cp -a /tmp/v3-external/windows/. "$QUALITY/external/windows/"
+          cp -a /tmp/v3-external/lanl/. "$QUALITY/external/lanl/"
+      - name: Finalize fail-closed V3 research and technical decision
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"; QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/finalize_v3_research.py \
+            --config configs/v3_research.yaml \
+            --session-metrics "$GOLD/models/session-primary.metrics.json" \
+            --shortcut "$GOLD/models/shortcut-audit.json" \
+            --hard-benign "$QUALITY/hard_benign_session.json" \
+            --external "$QUALITY/v3_external_evaluation.json" \
+            --learning-curve "$QUALITY/session_learning_curve.json" \
+            --planner-audit "$QUALITY/V3_PLANNER_AUDIT.json" \
+            --production-quality "$QUALITY/production_flow_gold.json" \
+            --hierarchical-quality "$GOLD/hierarchical_gold_quality.json" \
+            --bronze-quality "$QUALITY/v3_bronze_quality.json" \
+            --windows-v3 "$QUALITY/external/windows/windows_v3_fidelity.json" \
+            --out "$QUALITY/V3_RESEARCH_DECISION.json"
+      - name: Build immutable V3 data/provenance manifest
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/build_v3_release_manifest.py \
+            --release "$RELEASE_ROOT" --shard "$SHARD" \
+            --decision "$QUALITY/V3_RESEARCH_DECISION.json" \
+            --out "$QUALITY/V3_RELEASE_MANIFEST.json"
+      - name: Persist technically complete V3 to final Hugging Face prefix
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          remote="v3/final/run-${GITHUB_RUN_ID}"
+          python scripts/upload_hf.py \
+            --release "$RELEASE_ROOT" --shard "$SHARD" \
+            --repo Maksim123321/remote-admin-anomaly-v1 \
+            --remote-path "$remote" \
+            --status "$QUALITY/hf_upload_status.json"
+      - name: Full-download verify every expected HF V3 object
+        working-directory: remote-admin-anomaly-lab
+        env:
+          PYTHONPATH: src
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          remote="v3/final/run-${GITHUB_RUN_ID}"
+          python scripts/verify_v3_hf.py \
+            --manifest "$QUALITY/V3_RELEASE_MANIFEST.json" \
+            --upload-status "$QUALITY/hf_upload_status.json" \
+            --repo Maksim123321/remote-admin-anomaly-v1 \
+            --shard "$SHARD" --remote-prefix "$remote" \
+            --out "$QUALITY/HF_REMOTE_VERIFICATION.json"
+      - name: Export release decision outputs
+        id: decision-output
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json,os
+          d=json.load(open('/tmp/remote-admin-v3/release/quality/V3-1k/V3_RESEARCH_DECISION.json'))
+          print('scale_decision='+str(d['scale_decision']))
+          print('research_status='+str(d['research_status']))
+          print('remote_prefix=v3/final/run-'+os.environ['GITHUB_RUN_ID'])
+          PY
+      - name: Upload complete V3 release artifact
+        id: upload-final
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-v3-release-${{ github.run_id }}
+          path: /tmp/remote-admin-v3/release
+          retention-days: 90
+          compression-level: 0
+
+  verify-persist-and-clean:
+    needs: linux-v3-release
+    if: needs.linux-v3-release.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      PYTHONPATH: remote-admin-anomaly-lab/src
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: remote-admin-anomaly-lab-v3
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install verification runtime
+        working-directory: remote-admin-anomaly-lab
+        run: python -m pip install -r requirements.txt
+      - name: Download uploaded V3 GitHub artifact back from Actions
+        uses: actions/download-artifact@v4
+        with:
+          name: remote-admin-v3-release-${{ github.run_id }}
+          path: /tmp/v3-final
+      - name: Verify downloaded GitHub artifact byte-for-byte from immutable manifest
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('/tmp/v3-final'); q=root/'quality/V3-1k'
+          manifest=json.loads((q/'V3_RELEASE_MANIFEST.json').read_text())
+          failures=[]; verified=0; total=0
+          for row in manifest['files']:
+              p=root/row['path']
+              if not p.is_file(): failures.append((row['path'],'missing')); continue
+              size=p.stat().st_size
+              if size != int(row['bytes']): failures.append((row['path'],'size',size,row['bytes'])); continue
+              h=hashlib.sha256()
+              with p.open('rb') as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b''): h.update(chunk)
+              if h.hexdigest()!=row['sha256']: failures.append((row['path'],'sha256')); continue
+              verified+=1; total+=size
+          assert not failures,failures[:20]
+          assert verified==manifest['file_count'],(verified,manifest['file_count'])
+          hf=json.loads((q/'HF_REMOTE_VERIFICATION.json').read_text())
+          assert hf['status']=='PASS' and hf['full_remote_download_verified'] is True,hf
+          evidence={'status':'PASS','verified_files':verified,'verified_bytes':total,'manifest_file_count':manifest['file_count']}
+          (q/'GITHUB_ARTIFACT_VERIFICATION.json').write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(evidence,sort_keys=True))
+          PY
+      - name: Create cleanup-authorizing verified V3 status
+        working-directory: remote-admin-anomaly-lab
+        run: |
+          Q=/tmp/v3-final/quality/V3-1k
+          python scripts/finalize_v3_persistence.py \
+            --decision "$Q/V3_RESEARCH_DECISION.json" \
+            --hf-verification "$Q/HF_REMOTE_VERIFICATION.json" \
+            --github-final-run-id "${GITHUB_RUN_ID}" \
+            --github-final-artifact-id "${{ needs.linux-v3-release.outputs.final_artifact_id }}" \
+            --github-artifact-verified \
+            --out "$Q/V3_VERIFIED_STATUS.json"
+      - name: Delete superseded V1 V2 and intermediate V3 storage only after verification
+        working-directory: remote-admin-anomaly-lab
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/cleanup_v3_superseded.py \
+            --status /tmp/v3-final/quality/V3-1k/V3_VERIFIED_STATUS.json \
+            --hf-repo Maksim123321/remote-admin-anomaly-v1 \
+            --out /tmp/v3-final/quality/V3-1k/V3_CLEANUP_REPORT.json
+      - name: Commit final V3 status and archive superseded Remote Admin workflows on V3 branch
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          q=Path('/tmp/v3-final/quality/V3-1k')
+          decision=json.loads((q/'V3_RESEARCH_DECISION.json').read_text())
+          verified=json.loads((q/'V3_VERIFIED_STATUS.json').read_text())
+          cleanup=json.loads((q/'V3_CLEANUP_REPORT.json').read_text())
+          models=json.loads(Path('/tmp/v3-final/gold/V3-1k/models/V3_MODEL_SUMMARY.json').read_text())
+          bronze=json.loads((q/'v3_bronze_quality.json').read_text())
+          mapping=json.loads((q/'production_flow_gold.json').read_text())
+          lines=[
+            '# Remote Admin Anomaly V3 — Final Status','',
+            f"- Dataset release: **{decision['dataset_release_status']}**",
+            f"- Research status: **{decision['research_status']}**",
+            f"- Scale decision: **{decision['scale_decision']}**",
+            f"- HF verified: **{verified['hf_verified']}** at `{verified['hf_final_path']}`",
+            f"- GitHub artifact verified: **{verified['github_artifact_verified']}**, artifact ID `{verified['github_final_artifact_id']}`",
+            f"- V1/V2 cleanup: **{cleanup['status']}**, deleted runs `{cleanup['github_deleted_run_count']}`, deleted HF files `{cleanup['hf_deleted_file_count']}`",'',
+            '## V3 corpus','',
+            '- 1000 real-wire sessions; 500 benign / 500 suspicious; 250 each SSH/SMB/RDP/VNC.',
+            '- Current-session counterfactuals are time matched; intended discriminative signal is prior history/graph/sequence.',
+            f"- Session PCAP coverage: `{bronze['session_pcap_coverage']}`; campaign PCAP coverage: `{bronze['campaign_pcap_coverage']}`.",
+            '- Authoritative Bronze contains per-session PCAPs, per-campaign PCAPs and complete raw packet chunks; merged PCAP is not persisted.',
+            f"- Session mapping coverage: `{mapping['session_mapping_coverage']}`; per protocol: `{mapping.get('session_mapping_coverage_by_protocol')}`.",'',
+            '## Model evidence','',
+            f"```json\n{json.dumps(models,indent=2,sort_keys=True)}\n```",'',
+            'Scientific PASS is not required for technical dataset completeness; 4k is authorized only when the committed scale decision is `ALLOW_4K`.',''
+          ]
+          Path('remote-admin-anomaly-lab/docs/IMPLEMENTATION_STATUS_V3.md').write_text('\n'.join(lines),encoding='utf-8')
+          Path('remote-admin-anomaly-lab/FINAL_STATUS_V3.json').write_text(json.dumps({'decision':decision,'verified':verified,'cleanup':cleanup},indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+          find .github/workflows -maxdepth 1 -type f -name 'remote-admin*.yml' ! -name 'remote-admin-v3-*.yml' -print -delete
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add remote-admin-anomaly-lab/docs/IMPLEMENTATION_STATUS_V3.md remote-admin-anomaly-lab/FINAL_STATUS_V3.json .github/workflows
+          if ! git diff --cached --quiet; then
+            git commit -m 'docs(remote-admin): finalize verified V3 and retire V1 V2 workflows'
+            git push origin HEAD:remote-admin-anomaly-lab-v3
+          fi
+      - name: Retain compact V3 verification and cleanup evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-v3-verified-${{ github.run_id }}
+          path: |
+            /tmp/v3-final/quality/V3-1k/V3_VERIFIED_STATUS.json
+            /tmp/v3-final/quality/V3-1k/V3_CLEANUP_REPORT.json
+            /tmp/v3-final/quality/V3-1k/GITHUB_ARTIFACT_VERIFICATION.json
+            /tmp/v3-final/quality/V3-1k/HF_REMOTE_VERIFICATION.json
+            /tmp/v3-final/quality/V3-1k/V3_RESEARCH_DECISION.json
+          retention-days: 90
+          compression-level: 0
