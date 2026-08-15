@@ -8,6 +8,9 @@ on:
       - 'remote-admin-anomaly-lab/src/adminlab/v3_*.py'
       - 'remote-admin-anomaly-lab/src/adminlab/pcap_slicing.py'
       - 'remote-admin-anomaly-lab/src/adminlab/session_gold.py'
+      - 'remote-admin-anomaly-lab/src/adminlab/features.py'
+      - 'remote-admin-anomaly-lab/src/adminlab/suricata_gold.py'
+      - 'remote-admin-anomaly-lab/src/adminlab/wire_paths.py'
       - 'remote-admin-anomaly-lab/scripts/capture_shard_v3.sh'
       - 'remote-admin-anomaly-lab/scripts/finalize_v3_bronze.py'
       - 'remote-admin-anomaly-lab/scripts/build_hierarchical_gold_v3.py'
@@ -132,6 +135,7 @@ jobs:
           b=json.loads((quality/'v3_bronze_quality.json').read_text())
           assert prod['session_mapping_coverage']>=0.95,prod
           assert prod['flow_mapping_coverage']>=0.90,prod
+          assert min(prod['session_mapping_coverage_by_protocol'].values())>=0.95,prod
           assert leak['ok'] is True,leak
           assert b['session_pcap_coverage']>=0.9875,b
           assert b['campaign_pcap_coverage']>=0.99,b
