@@ -9,6 +9,8 @@ min_validation_sessions: 120
 min_test_sessions: 120
 challenge_fraction_min: 0.15
 challenge_fraction_max: 0.25
+hf_repo: Maksim123321/remote-admin-anomaly-v1
+hf_final_prefix: v3/final
 shortcut:
   max_time_only_pr_auc: 0.55
   min_full_over_current_session_margin: 0.05
@@ -34,3 +36,18 @@ external:
   lanl_training_allowed: false
   windows_training_allowed: false
   threshold_tuning_allowed: false
+lanl:
+  dataset: Unified Host and Network Data Set
+  year: 2017
+  origin: Los Alamos National Laboratory
+  origin_page: https://csr.lanl.gov/data/2017/
+  transport: rocketgraph_xgt_mirror
+  mirror_page: https://datasets.rocketgraph.com/cyber/LANL/index.html
+  netflow_day: 2
+  netflow_url: https://datasets.rocketgraph.com/LANL/xgt/nf_day-02.csv
+  auth_url: https://datasets.rocketgraph.com/LANL/xgt/wls_day-02_2v.csv
+  mirror_transforms:
+    - PortXXXX converted to integer ports
+    - Windows Logging Service JSON converted to CSV
+    - empty Source or Destination filled from LogHost by mirror publisher
+  remote_admin_ports: [22, 135, 445, 3389, 5985, 5986]
