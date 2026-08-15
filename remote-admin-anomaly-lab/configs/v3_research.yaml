@@ -19,6 +19,7 @@ research:
   min_validation_pr_auc: 0.60
   min_test_pr_auc: 0.58
   min_session_mapping_coverage: 0.98
+  min_protocol_session_mapping_coverage: 0.95
   max_hard_benign_fpr: 0.05
   require_nonzero_challenge_recall_at_fpr_1pct: true
 bronze:
