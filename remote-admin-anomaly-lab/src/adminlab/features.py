@@ -10,6 +10,8 @@ from typing import Any
 
 import pandas as pd
 
+from .wire_paths import expand_sessions_for_wire_mapping
+
 WINDOWS = {
     "1m": 60,
     "5m": 300,
@@ -51,8 +53,15 @@ def map_zeek_flows_to_sessions(sessions: pd.DataFrame, conn: pd.DataFrame, *, to
     required_conn = {"ts", "id.orig_h", "id.resp_h", "id.resp_p"}
     missing_conn = required_conn - set(conn.columns)
     if missing_conn: raise ValueError(f"conn log missing required columns: {sorted(missing_conn)}")
-    start_col, end_col, time_source = _mapping_time_columns(sessions)
-    s = sessions.copy().reset_index(drop=True); s["_start"] = _epoch(s[start_col]); s["_end"] = _epoch(s[end_col])
+
+    # Preserve logical session identity/history while expanding only the
+    # correspondence view into expected wire hops.  Most sessions have one hop;
+    # bounded approved SSH forwarding has client->jump and jump->target legs.
+    original = sessions.copy().reset_index(drop=True)
+    start_col, end_col, time_source = _mapping_time_columns(original)
+    s = expand_sessions_for_wire_mapping(original).reset_index(drop=True)
+    s["_start"] = _epoch(s[start_col]); s["_end"] = _epoch(s[end_col])
+
     groups: dict[tuple[str, str, int], tuple[list[float], list[dict[str, Any]]]] = {}
     for key, frame in s.groupby(["src_ip", "dst_ip", "dst_port"], sort=False):
         ordered = frame.sort_values("_start")
@@ -72,15 +81,17 @@ def map_zeek_flows_to_sessions(sessions: pd.DataFrame, conn: pd.DataFrame, *, to
         if best is None: unmapped += 1; continue
         out = dict(row); out["session_id"] = str(best["session_id"]); mapped.append(out)
     mapped_df = pd.DataFrame(mapped); mapped_sessions = set(mapped_df["session_id"].astype(str)) if not mapped_df.empty else set()
+    session_count = int(len(original))
     report = {
-        "session_count": int(len(s)), "mapped_session_count": int(len(mapped_sessions)),
-        "session_mapping_coverage": float(len(mapped_sessions) / len(s)) if len(s) else 0.0,
+        "session_count": session_count, "mapped_session_count": int(len(mapped_sessions)),
+        "session_mapping_coverage": float(len(mapped_sessions) / session_count) if session_count else 0.0,
         "conn_count": int(len(conn)), "mapped_conn_count": int(len(mapped_df)),
         "conn_mapping_coverage": float(len(mapped_df) / len(conn)) if len(conn) else 0.0,
         "unmapped_conn_count": int(unmapped),
-        "mapping_policy": "src_ip+dst_ip+dst_port+execution-time-window",
+        "mapping_policy": "expected-wire-hop+execution-time-window",
         "mapping_time_source": time_source,
         "session_to_many_flows": True,
+        "expanded_wire_hop_rows": int(len(s)),
     }
     return mapped_df, report
 
