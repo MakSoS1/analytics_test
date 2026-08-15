@@ -20,8 +20,10 @@ def test_windows_native_validator_requires_wire_and_completion():
     assert "native_windows_validated" in text
 
 
-def test_windows_native_workflow_uses_windows_runner_and_retains_artifact():
-    text = (REPO / ".github/workflows/remote-admin-v2-windows-native.yml").read_text(encoding="utf-8")
+def test_windows_native_workflow_uses_windows_runner_and_retains_artifact_after_v2_cleanup():
+    assert not (REPO / ".github/workflows/remote-admin-v2-windows-native.yml").exists()
+    text = (REPO / ".github/workflows/remote-admin-v3-windows.yml").read_text(encoding="utf-8")
     assert "windows-2025" in text
     assert "actions/upload-artifact@v4" in text
     assert "if: always()" in text
+    assert "validate_v3.py" in text
