@@ -1,5 +1,5 @@
 authorized=true
-revision=2
+revision=3
 contract_run=31884551800
 smoke_run=31884532071
 smoke_artifact_id=9246946749
@@ -9,3 +9,4 @@ smoke_protocol_mapping=ssh:1.0,smb:1.0,rdp:1.0,vnc:1.0
 smoke_session_pcap_coverage=1.0
 smoke_campaign_pcap_coverage=1.0
 lanl_cli_fix=netflow-rows,wls-rows
+lanl_quality_schema_fix=remote_admin_flow_rows_alias
