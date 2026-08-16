@@ -18,13 +18,21 @@ def test_install_runner_installs_real_protocol_tools():
 
 def test_service_script_binds_ssh_and_smb_inside_namespaces():
     text = SERVICES.read_text(encoding="utf-8")
-    assert "ip netns exec" in text
-    assert "start_ssh ra-linux01 10.77.0.21" in text
-    assert "start_ssh ra-linux02 10.77.0.22" in text
-    assert "/usr/sbin/sshd" in text
-    assert "ip netns exec ra-file01" in text
-    assert "smbd" in text
-    assert "10.77.0.23" in text
+    assert 'ip netns exec "$ns" /usr/sbin/sshd' in text
+    assert 'ip netns exec "$ns" /usr/sbin/smbd' in text
+    for expected in (
+        "start_ssh ra-linux01 10.77.0.21 linux01",
+        "start_ssh ra-linux02 10.77.0.22 linux02",
+        "start_ssh ra-linux03 10.77.0.60 linux03",
+        "start_ssh ra-linux04 10.77.0.61 linux04",
+        "start_samba ra-file01 10.77.0.23 file01",
+        "start_samba ra-file02 10.77.0.62 file02",
+        "start_samba ra-file03 10.77.0.63 file03",
+        "start_samba ra-file04 10.77.0.64 file04",
+    ):
+        assert expected in text
+    assert "AdminlabSMB-2026!" in text
+    assert "authenticated SMB fixture unexpectedly allowed guest access" in text
 
 
 def test_service_process_groups_are_isolated_and_cleanup_is_narrow():
