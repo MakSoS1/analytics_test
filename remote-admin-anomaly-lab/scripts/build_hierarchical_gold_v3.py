@@ -15,8 +15,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from adminlab.campaign_gold import build_campaign_gold
-from adminlab.session_gold import build_session_gold
 from adminlab.v2_modeling import assert_feature_frame_safe
+from adminlab.v3_split_state import build_split_isolated_session_gold
 from adminlab.v3_splits import assign_grouped_splits_v3
 
 
@@ -76,6 +76,9 @@ def main() -> int:
     flow_features = pd.read_parquet(flow_features_path)
     flow_labels = pd.read_parquet(flow_labels_path)
 
+    # Grouped split assignment happens before state construction. Pair/campaign
+    # connected components remain intact, then every split receives its own
+    # strictly-prior replay below.
     session_meta = _session_split_frame(flow_labels)
     session_splits, split_report = assign_grouped_splits_v3(session_meta, seed=args.split_seed)
     split_map = session_splits.set_index("session_id")[["split", "challenge_reason"]]
@@ -85,7 +88,11 @@ def main() -> int:
         raise SystemExit("V3 flow label split assignment incomplete")
     flow_labels.to_parquet(flow_labels_path, index=False)
 
-    session_features, session_labels = build_session_gold(flow_features, flow_labels, environment_id="linux_v3")
+    session_features, session_labels = build_split_isolated_session_gold(
+        flow_features,
+        flow_labels,
+        environment_id="linux_v3",
+    )
     campaign_features, campaign_labels = build_campaign_gold(session_features, session_labels, environment_id="linux_v3")
 
     for required in contract["session_required_features"]:
@@ -106,7 +113,7 @@ def main() -> int:
     campaign_matrix.to_parquet(gold / "campaign_model_matrix.parquet", index=False)
 
     quality = {
-        "schema_version": 3,
+        "schema_version": 4,
         "environment_id": "linux_v3",
         "flow_rows": int(len(flow_features)),
         "session_rows": int(len(session_features)),
@@ -117,7 +124,9 @@ def main() -> int:
         "campaign_class_counts": {str(k): int(v) for k, v in campaign_labels["label_binary"].value_counts().to_dict().items()},
         "session_feature_count": int(len(session_matrix.columns) - 2),
         "campaign_feature_count": int(len(campaign_matrix.columns) - 2),
-        "causal_history_policy": "strictly_prior_session_event_time_with_7d_30d_graph_state",
+        "causal_history_policy": "strictly_prior_event_time_with_independent_state_per_split",
+        "cross_split_state_dependency": False,
+        "state_partition": "split",
         "external_rows_in_training_gold": 0,
         "split_report": split_report,
     }
