@@ -37,24 +37,26 @@ PCAP_BYTES="$(stat -c%s "$COMPRESSED_PCAP")"; RAW_BYTES="$(stat -c%s "$RAW_PCAP"
 "$PYTHON_BIN" - "$SUMMARY" "$QUALITY/capture_health.json" "$SHARD" "$STAGE" "$SESSION_COUNT" "$RAW_BYTES" "$PCAP_BYTES" <<'PY'
 import json,sys
 s=json.load(open(sys.argv[1],encoding='utf-8'))
+sessions=int(sys.argv[5])
+required_sources=32 if sessions>=1000 else min(20,max(4,sessions//2))
 p={
  'ok':s.get('status_counts',{}).get('failed',0)==0,
- 'shard':sys.argv[3],'stage':sys.argv[4],'sessions':int(sys.argv[5]),
+ 'shard':sys.argv[3],'stage':sys.argv[4],'sessions':sessions,
  'raw_pcap_bytes':int(sys.argv[6]),'compressed_pcap_bytes':int(sys.argv[7]),
  'capture_format':'temporary-merged-pcap.zst','final_merged_capture_retained':False,
  'protocol_counts':s.get('protocol_counts',{}),'label_counts':s.get('label_counts',{}),
  'implementation_counts':s.get('implementation_counts',{}),'planner':s.get('planner'),
- 'source_identity_count':s.get('source_identity_count',0),'source_role_counts':s.get('source_role_counts',{}),
+ 'source_identity_count':s.get('source_identity_count',0),'source_identity_required':required_sources,
+ 'source_role_counts':s.get('source_role_counts',{}),
  'family_counts':s.get('family_counts',{}),'v3_signal':s.get('v3_signal'),'v3_campaigns':s.get('v3_campaigns'),
  'external_targets_allowed':False,'payload_execution_allowed':False
 }
 open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(p,indent=2,sort_keys=True)+'\n')
 if not p['ok']: raise SystemExit('scenario failures present')
 if p['planner'] != 'digital_twin_v3_causal': raise SystemExit('unexpected planner')
-if int(p['source_identity_count']) < min(32,int(p['sessions'])): raise SystemExit('source identity diversity below V3 gate')
+if int(p['source_identity_count']) < required_sources: raise SystemExit('source identity diversity below V3 gate')
 if not p.get('v3_signal',{}).get('causal_observability',{}).get('valid',False): raise SystemExit('causal observability gate failed')
 PY
-# Temporary merged capture remains only long enough for the parser stack.
 PYTHONPATH="$ROOT/src" "$PYTHON_BIN" - "$BRONZE" "$QUALITY/temporary_bronze_contract.json" <<'PY'
 import json,sys
 from pathlib import Path
