@@ -1,0 +1,24 @@
+[Unit]
+Description=Remote Admin Anomaly V3 Suricata EVE scorer
+After=network-online.target suricata.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=remoteadminml
+Group=suricata
+WorkingDirectory=/opt/remote-admin-v3
+ExecStart=/bin/bash -lc 'set -o pipefail; tail -n0 -F /var/log/suricata/eve.json | /opt/remote-admin-v3/venv/bin/python /opt/remote-admin-v3/scripts/score_eve_sidecar.py --model /opt/remote-admin-v3/models/M1-lightgbm.joblib --metrics /opt/remote-admin-v3/models/M1-lightgbm.metrics.json --eve - --state-file /var/lib/remote-admin-v3/state.json --checkpoint-every 100'
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/remote-admin-v3/alerts.jsonl
+StandardError=append:/var/log/remote-admin-v3/service.log
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/var/log/suricata
+ReadWritePaths=/var/lib/remote-admin-v3 /var/log/remote-admin-v3
+
+[Install]
+WantedBy=multi-user.target
