@@ -1,0 +1,321 @@
+name: Remote Admin Anomaly V3 Causal Final
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v3]
+    paths:
+      - '.github/workflows/remote-admin-v3-causal-final.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: remote-admin-v3-causal-final
+  cancel-in-progress: false
+
+jobs:
+  causal-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 130
+    env:
+      PYTHONPATH: src
+      ROOT_OUT: /tmp/remote-admin-v3-final-smoke
+      RELEASE_ROOT: /tmp/remote-admin-v3-final-smoke/release
+      SHARD: V3-causal-smoke
+      SEED: '2026081601'
+    defaults:
+      run:
+        working-directory: remote-admin-anomaly-lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install complete runtime
+        run: |
+          python -m pip install -r requirements.txt
+          bash scripts/install_extended_runner_v2.sh
+          command -v tcpdump
+          command -v suricata
+          command -v zeek
+      - name: Full regression suite
+        run: pytest -q tests
+      - name: Capture 80 corrected causal sessions
+        run: |
+          py="$(command -v python)"
+          sudo -E env ADMINLAB_PYTHON="$py" ADMINLAB_OUTPUT_UID="$(id -u)" ADMINLAB_OUTPUT_GID="$(id -g)" ADMINLAB_V3_MATCHED_FRACTION=0.40 \
+            bash scripts/capture_shard_v3.sh H "$SHARD" 80 "$SEED" "$ROOT_OUT"
+      - name: Verify executed causal wire corpus
+        run: |
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          from adminlab.manifest import SessionRecord
+          from adminlab.v3_signal import audit_v3_signal_plan
+          p=Path('/tmp/remote-admin-v3-final-smoke/release/bronze/V3-causal-smoke/manifests/sessions.jsonl')
+          rows=[SessionRecord.from_dict(json.loads(x)) for x in p.read_text().splitlines() if x.strip()]
+          assert len(rows)==80 and all(r.status=='success' for r in rows)
+          assert Counter(int(r.label_binary) for r in rows)==Counter({0:40,1:40})
+          assert Counter(r.protocol for r in rows)==Counter({'ssh':20,'smb':20,'rdp':20,'vnc':20})
+          assert len({r.src_host_id for r in rows})>=20
+          assert len({r.dst_host_id for r in rows})>=8
+          signal=audit_v3_signal_plan(rows)
+          assert signal['counterfactual_row_fraction']>=0.40,signal
+          assert signal['causal_observability']['valid'] is True,signal
+          assert not signal['causal_observability']['semantic_only_counterfactual_pairs'],signal
+          print(json.dumps({'sessions':len(rows),'sources':len({r.src_host_id for r in rows}),'destinations':len({r.dst_host_id for r in rows}),'causal_pairs':signal['causal_observability']['causally_separated_counterfactual_pairs']},sort_keys=True))
+          PY
+      - name: Build smoke Silver and production Gold
+        run: |
+          bash scripts/build_silver.sh "$RELEASE_ROOT" "$SHARD"
+          python scripts/build_flow_gold_v2.py --release "$RELEASE_ROOT" --shard "$SHARD" --feature-contract configs/feature_contract.yaml --split-seed "$SEED"
+          python scripts/build_hierarchical_gold_v3.py --release "$RELEASE_ROOT" --shard "$SHARD" --contract configs/v3_feature_contract.yaml --split-seed "$SEED"
+      - name: Train smoke flow-primary
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"
+          python scripts/train_v3_models.py --flow "$GOLD/production_model_matrix.parquet" --session "$GOLD/session_model_matrix.parquet" --campaign "$GOLD/campaign_model_matrix.parquet" --out "$GOLD/models" --seed "$SEED"
+      - name: Prove pure-EVE sidecar and persistent state
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"
+          zstd -dc "$RELEASE_ROOT/silver/$SHARD/suricata/eve.json.zst" > /tmp/v3-smoke-eve.json
+          python scripts/score_eve_sidecar.py --model "$GOLD/models/M1-lightgbm.joblib" --metrics "$GOLD/models/M1-lightgbm.metrics.json" --eve /tmp/v3-smoke-eve.json --emit-all --state-file /tmp/v3-smoke-state.json --checkpoint-every 10 > /tmp/v3-smoke-sidecar.jsonl
+          test -s /tmp/v3-smoke-sidecar.jsonl
+          test -s /tmp/v3-smoke-state.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          rows=[json.loads(x) for x in Path('/tmp/v3-smoke-sidecar.jsonl').read_text().splitlines() if x.strip()]
+          state=json.loads(Path('/tmp/v3-smoke-state.json').read_text())
+          assert rows and state['schema_version']==1
+          assert all(r['candidate_stream']=='remote-admin' and r['state_persistent'] for r in rows)
+          print(json.dumps({'sidecar_rows':len(rows),'alerts':sum(bool(r['alert']) for r in rows),'state_sources':len(state['history'])},sort_keys=True))
+          PY
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-v3-final-smoke-${{ github.run_id }}
+          path: |
+            /tmp/remote-admin-v3-final-smoke/release/quality/V3-causal-smoke
+            /tmp/remote-admin-v3-final-smoke/release/gold/V3-causal-smoke/models
+            /tmp/remote-admin-v3-final-smoke/work/V3-causal-smoke/scenarios/summary.json
+            /tmp/v3-smoke-sidecar.jsonl
+            /tmp/v3-smoke-state.json
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
+
+  windows-native:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Capture native Windows evidence
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'remote-admin-v3-windows'
+          & .\remote-admin-anomaly-lab\windows\capture_native.ps1 -OutputDir $out
+          python .\remote-admin-anomaly-lab\windows\mark_wire.py (Join-Path $out 'windows_fidelity.json') (Join-Path $out 'capture.txt')
+          & .\remote-admin-anomaly-lab\windows\v3_extra_probes.ps1 -OutputDir $out
+          python .\remote-admin-anomaly-lab\windows\validate_v3.py `
+            --base-report (Join-Path $out 'windows_fidelity.json') `
+            --extra-report (Join-Path $out 'v3-extra.json') `
+            --extra-capture (Join-Path $out 'v3-extra.txt') `
+            --out (Join-Path $out 'windows_v3_fidelity.json')
+          $report = Get-Content (Join-Path $out 'windows_v3_fidelity.json') -Raw | ConvertFrom-Json
+          if ($report.validated_protocols.Count -lt 1) { throw 'No native Windows protocol validated' }
+          if (-not (Test-Path (Join-Path $out 'capture.pcapng'))) { throw 'Base Windows PCAPNG missing' }
+          if (-not (Test-Path (Join-Path $out 'v3-extra.pcapng'))) { throw 'Extra Windows PCAPNG missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v3-causal-final-windows-${{ github.run_id }}
+          path: ${{ runner.temp }}/remote-admin-v3-windows
+          retention-days: 30
+          compression-level: 0
+
+  lanl-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: remote-admin-anomaly-lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Build independent LANL reference
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m pip install -r requirements.txt
+          python scripts/build_lanl_reference.py --config configs/v3_research.yaml --out /tmp/v3-lanl --flow-limit 5000 --auth-limit 5000
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          q=json.loads(Path('/tmp/v3-lanl/reference_quality.json').read_text())
+          assert q['external_only'] is True and q['threshold_tuning_allowed'] is False
+          assert q['remote_admin_flow_rows']>=5000 and q['network_logon_rows']>=5000
+          print(json.dumps(q,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v3-causal-final-lanl-${{ github.run_id }}
+          path: /tmp/v3-lanl
+          retention-days: 30
+          compression-level: 0
+
+  final-1k:
+    needs: [causal-smoke, windows-native, lanl-reference]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 380
+    env:
+      PYTHONPATH: src
+      ROOT_OUT: /tmp/remote-admin-v3-causal-final
+      RELEASE_ROOT: /tmp/remote-admin-v3-causal-final/release
+      SHARD: V3-1k
+      SEED: '2026081603'
+      HF_HUB_DISABLE_XET: '1'
+    defaults:
+      run:
+        working-directory: remote-admin-anomaly-lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: remote-admin-anomaly-lab/requirements.txt
+      - name: Install full V3 runtime
+        run: |
+          python -m pip install -r requirements.txt
+          bash scripts/install_extended_runner_v2.sh
+          pytest -q tests
+          command -v editcap; command -v mergecap; command -v tshark; command -v suricata; command -v zeek
+      - name: Exact causal 1k planner gate
+        run: |
+          mkdir -p "$RELEASE_ROOT/quality/$SHARD"
+          python scripts/v3_planner_audit.py --count 1000 --seed "$SEED" --config configs/v3_research.yaml --out "$RELEASE_ROOT/quality/$SHARD/V3_PLANNER_AUDIT.json"
+      - name: Capture 1000 causal real-wire sessions
+        run: |
+          py="$(command -v python)"
+          sudo -E env ADMINLAB_PYTHON="$py" ADMINLAB_OUTPUT_UID="$(id -u)" ADMINLAB_OUTPUT_GID="$(id -g)" ADMINLAB_V3_MATCHED_FRACTION=0.40 \
+            bash scripts/capture_shard_v3.sh H "$SHARD" 1000 "$SEED" "$ROOT_OUT"
+      - name: Validate executed 1k corpus
+        run: |
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          from adminlab.manifest import SessionRecord
+          from adminlab.v3_signal import audit_v3_signal_plan
+          root=Path('/tmp/remote-admin-v3-causal-final/release'); shard='V3-1k'
+          rows=[SessionRecord.from_dict(json.loads(x)) for x in (root/'bronze'/shard/'manifests/sessions.jsonl').read_text().splitlines() if x.strip()]
+          assert len(rows)==1000 and all(r.status=='success' for r in rows)
+          assert Counter(int(r.label_binary) for r in rows)==Counter({0:500,1:500})
+          assert Counter(r.protocol for r in rows)==Counter({'ssh':250,'smb':250,'rdp':250,'vnc':250})
+          for protocol in ('ssh','smb','rdp','vnc'):
+              assert Counter(int(r.label_binary) for r in rows if r.protocol==protocol)==Counter({0:125,1:125})
+          assert len({r.src_host_id for r in rows})>=32
+          assert len({r.dst_host_id for r in rows})>=12
+          signal=audit_v3_signal_plan(rows)
+          assert signal['counterfactual_row_fraction']>=0.40 and signal['causal_observability']['valid']
+          assert not signal['causal_observability']['semantic_only_counterfactual_pairs']
+          print(json.dumps({'sources':len({r.src_host_id for r in rows}),'destinations':len({r.dst_host_id for r in rows}),'pairs':signal['causal_observability']['causally_separated_counterfactual_pairs']},sort_keys=True))
+          PY
+      - name: Build Silver and Gold
+        run: |
+          bash scripts/build_silver.sh "$RELEASE_ROOT" "$SHARD"
+          bash scripts/build_rule_baseline.sh "$RELEASE_ROOT" "$SHARD"
+          python scripts/build_flow_gold_v2.py --release "$RELEASE_ROOT" --shard "$SHARD" --feature-contract configs/feature_contract.yaml --split-seed "$SEED"
+          python scripts/build_hierarchical_gold_v3.py --release "$RELEASE_ROOT" --shard "$SHARD" --contract configs/v3_feature_contract.yaml --split-seed "$SEED"
+      - name: Finalize browsable recoverable Bronze
+        run: |
+          python scripts/finalize_v3_bronze.py --release "$RELEASE_ROOT" --shard "$SHARD" --sample-size 20 --raw-chunk-packets 50000 --min-session-coverage 0.99
+          test ! -e "$RELEASE_ROOT/bronze/$SHARD/captures/$SHARD.pcap.zst"
+      - name: Train NGFW flow-primary model
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"
+          python scripts/train_v3_models.py --flow "$GOLD/production_model_matrix.parquet" --session "$GOLD/session_model_matrix.parquet" --campaign "$GOLD/campaign_model_matrix.parquet" --out "$GOLD/models" --seed "$SEED"
+      - name: Evaluate hard benign and learning curve
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"; QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/evaluate_hard_benign.py --model "$GOLD/models/flow-primary.joblib" --metrics "$GOLD/models/flow-primary.metrics.json" --model-matrix "$GOLD/production_model_matrix.parquet" --labels "$GOLD/production_flow_labels.parquet" --out "$QUALITY/hard_benign_flow.json"
+          python scripts/learning_curve_grouped.py --model-matrix "$GOLD/production_model_matrix.parquet" --labels "$GOLD/production_flow_labels.parquet" --out "$QUALITY/flow_learning_curve.json" --seed "$SEED"
+      - name: Prove deployment sidecar and restart-safe state
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"
+          zstd -dc "$RELEASE_ROOT/silver/$SHARD/suricata/eve.json.zst" > /tmp/v3-eve.json
+          head -n 3000 /tmp/v3-eve.json > /tmp/v3-eve-head.json
+          python scripts/score_eve_sidecar.py --model "$GOLD/models/M1-lightgbm.joblib" --metrics "$GOLD/models/M1-lightgbm.metrics.json" --eve /tmp/v3-eve-head.json --emit-all --state-file /tmp/v3-ngfw-state.json --checkpoint-every 25 > /tmp/v3-sidecar.jsonl
+          test -s /tmp/v3-sidecar.jsonl; test -s /tmp/v3-ngfw-state.json
+      - name: Download same-run Windows evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: v3-causal-final-windows-${{ github.run_id }}
+          path: /tmp/v3-external/windows
+      - name: Download same-run LANL evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: v3-causal-final-lanl-${{ github.run_id }}
+          path: /tmp/v3-external/lanl
+      - name: Score independent LANL via exact NGFW state
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"; QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/evaluate_v3_flow_external.py --model "$GOLD/models/flow-primary.joblib" --metrics "$GOLD/models/flow-primary.metrics.json" --lanl-root /tmp/v3-external/lanl --windows-v3 /tmp/v3-external/windows/windows_v3_fidelity.json --out "$QUALITY/v3_external_evaluation.json"
+          mkdir -p "$QUALITY/external/windows" "$QUALITY/external/lanl"
+          cp -a /tmp/v3-external/windows/. "$QUALITY/external/windows/"
+          cp -a /tmp/v3-external/lanl/. "$QUALITY/external/lanl/"
+      - name: Finalize fail-closed research decision
+        run: |
+          GOLD="$RELEASE_ROOT/gold/$SHARD"; QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/finalize_v3_research.py --config configs/v3_research.yaml --primary-metrics "$GOLD/models/flow-primary.metrics.json" --shortcut "$GOLD/models/shortcut-audit.json" --hard-benign "$QUALITY/hard_benign_flow.json" --external "$QUALITY/v3_external_evaluation.json" --learning-curve "$QUALITY/flow_learning_curve.json" --planner-audit "$QUALITY/V3_PLANNER_AUDIT.json" --production-quality "$QUALITY/production_flow_gold.json" --hierarchical-quality "$GOLD/hierarchical_gold_quality.json" --bronze-quality "$QUALITY/v3_bronze_quality.json" --windows-v3 "$QUALITY/external/windows/windows_v3_fidelity.json" --out "$QUALITY/V3_RESEARCH_DECISION.json"
+      - name: Build immutable V3 manifest
+        run: |
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"
+          python scripts/build_v3_release_manifest.py --release "$RELEASE_ROOT" --shard "$SHARD" --decision "$QUALITY/V3_RESEARCH_DECISION.json" --out "$QUALITY/V3_RELEASE_MANIFEST.json"
+      - name: Persist corrected V3 to immutable HF prefix
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"; remote="v3/final/run-${GITHUB_RUN_ID}"
+          python scripts/upload_hf.py --release "$RELEASE_ROOT" --shard "$SHARD" --repo Maksim123321/remote-admin-anomaly-v1 --remote-path "$remote" --status "$QUALITY/hf_upload_status.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('/tmp/remote-admin-v3-causal-final/release/quality/V3-1k/hf_upload_status.json').read_text())
+          assert d.get('status')=='uploaded',d
+          PY
+      - name: Full remote HF verification
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          QUALITY="$RELEASE_ROOT/quality/$SHARD"; remote="v3/final/run-${GITHUB_RUN_ID}"
+          python scripts/verify_v3_hf.py --manifest "$QUALITY/V3_RELEASE_MANIFEST.json" --upload-status "$QUALITY/hf_upload_status.json" --repo Maksim123321/remote-admin-anomaly-v1 --shard "$SHARD" --remote-prefix "$remote" --out "$QUALITY/V3_HF_REMOTE_VERIFY.json"
+      - name: Write final status
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          q=Path('/tmp/remote-admin-v3-causal-final/release/quality/V3-1k')
+          d=json.loads((q/'V3_RESEARCH_DECISION.json').read_text()); h=json.loads((q/'V3_HF_REMOTE_VERIFY.json').read_text())
+          status={'schema_version':4,'github_run_id':os.environ['GITHUB_RUN_ID'],'git_sha':os.environ['GITHUB_SHA'],'dataset_release_status':d['dataset_release_status'],'research_status':d['research_status'],'scale_decision':d['scale_decision'],'primary_unit':'suricata_eve_flow','deployment_model':'gold/V3-1k/models/M1-lightgbm.joblib','hf_remote_prefix':h['remote_prefix'],'hf_full_download_verified':h['full_remote_download_verified']}
+          (q/'V3_CAUSAL_FINAL_STATUS.json').write_text(json.dumps(status,indent=2,sort_keys=True)+'\n'); print(json.dumps(status,indent=2,sort_keys=True))
+          PY
+      - name: Upload authoritative corrected V3 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-admin-v3-causal-final-${{ github.run_id }}
+          path: /tmp/remote-admin-v3-causal-final/release
+          retention-days: 90
+          compression-level: 0
