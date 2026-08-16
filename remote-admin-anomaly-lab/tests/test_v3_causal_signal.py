@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -23,7 +22,7 @@ def _row(
     src: str,
     dst: str,
     protocol: str = "ssh",
-    minute: int = 0,
+    minute: int = 30,
     pair_id: str = "",
     family: str = "routine_admin",
 ) -> SessionRecord:
@@ -84,7 +83,6 @@ def test_counterfactual_pair_must_match_current_session_but_differ_in_causal_his
     pair_id = "cf-1"
     benign = _row("benign", label=0, src="src-a", dst="dst-known", pair_id=pair_id)
     suspicious = _row("suspicious", label=1, src="src-b", dst="dst-new", pair_id=pair_id, family="rare_pair")
-    # The current wire/session shape is deliberately identical.
     assert v3_current_signature(benign) == v3_current_signature(suspicious)
 
     benign_history = [
@@ -106,7 +104,6 @@ def test_causal_observability_rejects_semantic_only_opposite_labels():
     pair_id = "cf-semantic-only"
     benign = _row("benign", label=0, src="src-a", dst="dst-a", pair_id=pair_id)
     suspicious = _row("suspicious", label=1, src="src-b", dst="dst-b", pair_id=pair_id, family="rare_pair")
-    # Deliberately give both sides the same observable history shape.
     history = {
         "benign": [_row("bh", label=0, src="src-a", dst="dst-a", minute=1)],
         "suspicious": [_row("sh", label=0, src="src-b", dst="dst-b", minute=1)],
