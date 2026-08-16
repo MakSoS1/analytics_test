@@ -43,13 +43,7 @@ def _stable_shuffle(rows: list[SessionRecord], seed: int, salt: str) -> list[Ses
 
 
 def _redistribute_time_of_day(records: list[SessionRecord], *, seed: int) -> list[SessionRecord]:
-    """Give both labels the same deterministic time-of-day distribution.
-
-    Dates are preserved, so causal history remains on the original simulated day.
-    Only time-of-day slots are redistributed.  The slot schedule is derived from
-    the combined bucket and then applied independently to each label, preventing
-    either class from owning a special hour distribution.
-    """
+    """Give both labels the same deterministic time-of-day distribution."""
     buckets: dict[tuple[str, int], list[SessionRecord]] = defaultdict(list)
     for row in records:
         buckets[(row.protocol, _weekend(row))].append(row)
@@ -59,7 +53,6 @@ def _redistribute_time_of_day(records: list[SessionRecord], *, seed: int) -> lis
         slots = sorted({_slot(row) for row in bucket})
         if not slots:
             continue
-        # Preserve observed support but make its ordering independent of label.
         slot_cycle = list(slots)
         random.Random(f"{seed}|slot-cycle|{key}").shuffle(slot_cycle)
         for label in (0, 1):
@@ -71,11 +64,7 @@ def _redistribute_time_of_day(records: list[SessionRecord], *, seed: int) -> lis
 
 
 def v3_current_signature(row: SessionRecord) -> tuple[object, ...]:
-    """Network/current-session controls that matched twins must share.
-
-    Identity, label, semantic family, campaign identity and prior-history fields
-    are deliberately excluded because those carry the intended relational signal.
-    """
+    """Network/current-session controls that matched twins must share."""
     start = _dt(row.start_ts)
     return (
         row.protocol,
@@ -185,13 +174,12 @@ def _assign_exact_time_pairs(records: list[SessionRecord], *, seed: int, matched
 def build_v3_signal_plan(
     records: list[SessionRecord], *, seed: int, matched_fraction: float = 0.40
 ) -> list[SessionRecord]:
-    """Build V3 current-session-matched data while preserving intended history.
+    """Compatibility V3 preparation: balance time and current-session controls.
 
-    The operation never changes labels or source/destination identity.  Time of
-    day is first redistributed identically for both labels, then an exact-time
-    subset is paired and current controls are copied.  V2 semantic assignment is
-    re-run *after* these adjustments so campaign/intent metadata reflects the
-    final causal order rather than stale pre-matching timestamps.
+    The causal Stage-H planner builds observable histories before calling this
+    compatibility layer. This function intentionally does not invent a malicious
+    signal from the label; it only removes nuisance/time shortcuts and constructs
+    matched current-session pairs.
     """
     if not records:
         return []
@@ -202,6 +190,108 @@ def build_v3_signal_plan(
     if {row.session_id: int(row.label_binary) for row in enriched} != labels_before:
         raise AssertionError("V3 signal preparation changed ground-truth labels")
     return sorted(enriched, key=lambda row: (_dt(row.start_ts), row.session_id))
+
+
+def _strict_prior_for_source(current: SessionRecord, history: list[SessionRecord]) -> list[SessionRecord]:
+    start = _dt(current.start_ts)
+    return sorted(
+        [row for row in history if row.src_host_id == current.src_host_id and _dt(row.start_ts) < start],
+        key=lambda row: (_dt(row.start_ts), row.session_id),
+    )
+
+
+def causal_history_signature(current: SessionRecord, history: list[SessionRecord]) -> dict[str, int | float]:
+    """Return only production-observable relational history statistics.
+
+    Host identities are used as ephemeral state keys, but never returned. The
+    signature deliberately contains no label, persona, scenario, campaign or
+    semantic fields.
+    """
+    prior = _strict_prior_for_source(current, history)
+    pair_rows = [row for row in prior if row.dst_host_id == current.dst_host_id]
+    protocol_rows = [row for row in prior if row.protocol == current.protocol]
+    distinct_dst = {row.dst_host_id for row in prior}
+    distinct_protocols = {row.protocol for row in prior}
+    recent_1h = [row for row in prior if _dt(current.start_ts) - _dt(row.start_ts) <= timedelta(hours=1)]
+    recent_24h = [row for row in prior if _dt(current.start_ts) - _dt(row.start_ts) <= timedelta(hours=24)]
+    pair_recency = -1.0
+    if pair_rows:
+        pair_recency = float((_dt(current.start_ts) - max(_dt(row.start_ts) for row in pair_rows)).total_seconds())
+    switches = 0
+    ordered = sorted(prior, key=lambda row: (_dt(row.start_ts), row.session_id))
+    for left, right in zip(ordered, ordered[1:]):
+        switches += int(left.protocol != right.protocol)
+    return {
+        "source_sessions_prior": len(prior),
+        "pair_seen_count_prior": len(pair_rows),
+        "pair_recency_s_prior": pair_recency,
+        "distinct_dst_prior": len(distinct_dst),
+        "protocol_seen_count_prior": len(protocol_rows),
+        "protocol_diversity_prior": len(distinct_protocols),
+        "new_destination_for_source": int(current.dst_host_id not in distinct_dst),
+        "new_protocol_for_source": int(current.protocol not in distinct_protocols),
+        "recent_sessions_1h_prior": len(recent_1h),
+        "recent_sessions_24h_prior": len(recent_24h),
+        "recent_new_target_count_1h_prior": len({row.dst_host_id for row in recent_1h}),
+        "recent_protocol_switch_count_prior": switches,
+    }
+
+
+def build_history_by_session(records: list[SessionRecord]) -> dict[str, list[SessionRecord]]:
+    """Build strictly-prior source-local histories for planner/evaluation audits."""
+    history: dict[str, list[SessionRecord]] = defaultdict(list)
+    out: dict[str, list[SessionRecord]] = {}
+    for row in sorted(records, key=lambda item: (_dt(item.start_ts), item.session_id)):
+        out[row.session_id] = list(history[row.src_host_id])
+        history[row.src_host_id].append(row)
+    return out
+
+
+def _history_vector(signature: dict[str, int | float]) -> tuple[int | float, ...]:
+    return tuple(signature[key] for key in sorted(signature))
+
+
+def audit_causal_observability(
+    records: list[SessionRecord], *, history_by_session: dict[str, list[SessionRecord]] | None = None
+) -> dict:
+    """Fail closed when opposite labels differ only in semantic metadata.
+
+    For every matched counterfactual pair the current-session signature must be
+    equal and the prior production-observable history signature must differ.
+    """
+    histories = history_by_session if history_by_session is not None else build_history_by_session(records)
+    by_pair: dict[str, list[SessionRecord]] = defaultdict(list)
+    for row in records:
+        if row.pair_id:
+            by_pair[row.pair_id].append(row)
+
+    semantic_only: list[str] = []
+    invalid_current: list[str] = []
+    separated = 0
+    for pair_id, pair in sorted(by_pair.items()):
+        if len(pair) != 2 or {int(row.label_binary) for row in pair} != {0, 1}:
+            invalid_current.append(pair_id)
+            continue
+        if len({v3_current_signature(row) for row in pair}) != 1:
+            invalid_current.append(pair_id)
+            continue
+        vectors = {
+            _history_vector(causal_history_signature(row, histories.get(row.session_id, [])))
+            for row in pair
+        }
+        if len(vectors) == 1:
+            semantic_only.append(pair_id)
+        else:
+            separated += 1
+
+    return {
+        "valid": not semantic_only and not invalid_current,
+        "counterfactual_pairs": len(by_pair),
+        "causally_separated_counterfactual_pairs": separated,
+        "semantic_only_counterfactual_pairs": semantic_only[:50],
+        "invalid_current_session_pairs": invalid_current[:50],
+        "history_fields": sorted(causal_history_signature(records[0], histories.get(records[0].session_id, [])).keys()) if records else [],
+    }
 
 
 def audit_v3_signal_plan(records: list[SessionRecord]) -> dict:
@@ -255,6 +345,7 @@ def audit_v3_signal_plan(records: list[SessionRecord]) -> dict:
             }
             for protocol, hours in sorted(protocol_hour_counts.items())
         },
+        "causal_observability": audit_causal_observability(records),
         "time_matching_fallback_allowed": False,
         "wire_controls_label_dependent": False,
     }
