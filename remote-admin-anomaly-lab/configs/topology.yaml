@@ -42,7 +42,6 @@ hosts:
   - {id: remote03, namespace: ra-remote03, ip: 10.77.0.57/24, role: RemoteWorker, services: []}
   - {id: remote04, namespace: ra-remote04, ip: 10.77.0.58/24, role: RemoteWorker, services: []}
 
-  # SSH and SMB use independent namespaces/processes to create real target diversity.
   - {id: linux01, namespace: ra-linux01, ip: 10.77.0.21/24, role: LinuxServer, services: [ssh]}
   - {id: linux02, namespace: ra-linux02, ip: 10.77.0.22/24, role: LinuxServer, services: [ssh]}
   - {id: linux03, namespace: ra-linux03, ip: 10.77.0.60/24, role: LinuxServer, services: [ssh]}
@@ -52,17 +51,14 @@ hosts:
   - {id: file03, namespace: ra-file03, ip: 10.77.0.63/24, role: FileServer, services: [smb]}
   - {id: file04, namespace: ra-file04, ip: 10.77.0.64/24, role: FileServer, services: [smb]}
 
-  # RDP/VNC aliases are multiple L3 service endpoints on the same validated
-  # xrdp/TigerVNC stack. This gives graph/pair diversity without changing the
-  # client/server implementation fingerprint between endpoint identities.
   - {id: rdp01, namespace: ra-rdp01, ip: 10.77.0.24/24, role: RDPServer, services: [rdp]}
-  - {id: rdp02, namespace: ra-rdp01, ip: 10.77.0.65/24, role: RDPServer, services: [rdp]}
-  - {id: rdp03, namespace: ra-rdp01, ip: 10.77.0.66/24, role: RDPServer, services: [rdp]}
-  - {id: rdp04, namespace: ra-rdp01, ip: 10.77.0.67/24, role: RDPServer, services: [rdp]}
+  - {id: rdp02, namespace: ra-rdp01, ip: 10.77.0.65/24, role: RDPServer, services: [rdp], endpoint_alias_of: rdp01}
+  - {id: rdp03, namespace: ra-rdp01, ip: 10.77.0.66/24, role: RDPServer, services: [rdp], endpoint_alias_of: rdp01}
+  - {id: rdp04, namespace: ra-rdp01, ip: 10.77.0.67/24, role: RDPServer, services: [rdp], endpoint_alias_of: rdp01}
   - {id: vnc01, namespace: ra-vnc01, ip: 10.77.0.25/24, role: VNCServer, services: [vnc]}
-  - {id: vnc02, namespace: ra-vnc01, ip: 10.77.0.68/24, role: VNCServer, services: [vnc]}
-  - {id: vnc03, namespace: ra-vnc01, ip: 10.77.0.69/24, role: VNCServer, services: [vnc]}
-  - {id: vnc04, namespace: ra-vnc01, ip: 10.77.0.70/24, role: VNCServer, services: [vnc]}
+  - {id: vnc02, namespace: ra-vnc01, ip: 10.77.0.68/24, role: VNCServer, services: [vnc], endpoint_alias_of: vnc01}
+  - {id: vnc03, namespace: ra-vnc01, ip: 10.77.0.69/24, role: VNCServer, services: [vnc], endpoint_alias_of: vnc01}
+  - {id: vnc04, namespace: ra-vnc01, ip: 10.77.0.70/24, role: VNCServer, services: [vnc], endpoint_alias_of: vnc01}
   - {id: rpc01, namespace: ra-rpc01, ip: 10.77.0.26/24, role: RPCServer, services: [dcerpc]}
   - {id: mgmt01, namespace: ra-mgmt01, ip: 10.77.0.27/24, role: ManagementServer, services: [winrm]}
 
