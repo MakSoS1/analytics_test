@@ -40,12 +40,36 @@ def validate_topology(data: dict[str, Any]) -> None:
     bridge = ip_interface(str(lab["bridge_ip"]))
     if bridge.ip not in network:
         raise ValueError("bridge ip outside lab cidr")
+
     ids = [str(h["id"]) for h in hosts]
-    namespaces = [str(h["namespace"]) for h in hosts]
     ips = [str(h["ip"]) for h in hosts]
     _require_unique(ids, "host id")
-    _require_unique(namespaces, "host namespace")
     _require_unique(ips, "host ip")
+    by_id = {str(host["id"]): host for host in hosts}
+
+    # Namespaces stay unique for real endpoint instances. The only exception is
+    # an explicit logical L3 alias of one validated service endpoint. This is
+    # useful for RDP/VNC target-graph diversity without pretending that several
+    # separate desktop OS instances exist on one hosted runner.
+    primary_namespaces: list[str] = []
+    for host in hosts:
+        alias_of = str(host.get("endpoint_alias_of", "") or "")
+        if not alias_of:
+            primary_namespaces.append(str(host["namespace"]))
+            continue
+        if alias_of not in by_id:
+            raise ValueError(f"endpoint alias references unknown host: {host['id']} -> {alias_of}")
+        primary = by_id[alias_of]
+        if primary.get("endpoint_alias_of"):
+            raise ValueError(f"endpoint alias cannot target another alias: {host['id']}")
+        if str(host["namespace"]) != str(primary["namespace"]):
+            raise ValueError(f"endpoint alias namespace mismatch: {host['id']}")
+        if str(host["role"]) != str(primary["role"]):
+            raise ValueError(f"endpoint alias role mismatch: {host['id']}")
+        if sorted(map(str, host.get("services", []))) != sorted(map(str, primary.get("services", []))):
+            raise ValueError(f"endpoint alias service mismatch: {host['id']}")
+    _require_unique(primary_namespaces, "host namespace")
+
     known_roles = set(map(str, data.get("known_roles", [])))
     known_protocols = set(map(str, data.get("known_protocols", [])))
     if not known_roles or not known_protocols:
