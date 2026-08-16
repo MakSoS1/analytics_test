@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 WINDOWS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000}
+REMOTE_ADMIN_PORTS = {22, 445, 3389, 5900, 5985, 5986}
+REMOTE_ADMIN_APP_PROTOS = {"ssh", "smb", "smb2", "rdp", "rfb", "vnc", "winrm", "http"}
 
 
 def _missing(value: Any) -> bool:
@@ -58,6 +60,31 @@ def _clock(ts: float) -> tuple[float, float, int]:
     return math.sin(angle), math.cos(angle), int(dt.weekday() >= 5)
 
 
+def _protocol_switch_count(events: list[tuple[float, str, str]]) -> int:
+    if len(events) < 2:
+        return 0
+    return sum(1 for left, right in zip(events, events[1:]) if left[2] != right[2])
+
+
+def is_remote_admin_flow(event: dict[str, Any]) -> bool:
+    """Return whether an EVE flow belongs to the primary remote-admin candidate stream.
+
+    The production model is not a general all-network classifier. It scores
+    remote-admin candidate flows and maintains state over the same candidate
+    stream used to build training Gold. This prevents unrelated web/DNS traffic
+    from silently changing production state while being absent from training.
+    """
+    if event.get("event_type") != "flow":
+        return False
+    dport = _integer(event.get("dest_port"))
+    app_proto = _text(event.get("app_proto")).lower()
+    if dport in REMOTE_ADMIN_PORTS:
+        return True
+    if app_proto in {"ssh", "smb", "smb2", "rdp", "rfb", "vnc", "winrm"}:
+        return True
+    return False
+
+
 class EveFeatureState:
     """Stateful production feature extractor for Suricata EVE flow events.
 
@@ -70,6 +97,10 @@ class EveFeatureState:
         self.history: dict[str, deque[tuple[float, str, str]]] = defaultdict(deque)
         self.seen_dst: dict[str, set[str]] = defaultdict(set)
         self.pair_seen: Counter[tuple[str, str]] = Counter()
+        self.pair_last_ts: dict[tuple[str, str], float] = {}
+        self.destination_seen: Counter[str] = Counter()
+        self.source_protocol_seen: Counter[tuple[str, str]] = Counter()
+        self.source_pair_protocol_seen: Counter[tuple[str, str, str]] = Counter()
         self.graph: deque[tuple[float, str, str, bool]] = deque()
         self.out_edges: dict[str, Counter[str]] = defaultdict(Counter)
         self.in_edges: dict[str, Counter[str]] = defaultdict(Counter)
@@ -107,8 +138,11 @@ class EveFeatureState:
         h30 = history
 
         pair = (src, dst)
+        source_protocol = (src, proto)
+        source_pair_protocol = (src, dst, proto)
         new_dst = dst not in self.seen_dst[src]
         new_pair = self.pair_seen[pair] == 0
+        pair_recency = ts - self.pair_last_ts[pair] if pair in self.pair_last_ts else -1.0
 
         def pair_count(events):
             return sum(1 for entry in events if entry[1] == dst)
@@ -132,6 +166,11 @@ class EveFeatureState:
         end = _epoch(flow.get("end"))
         duration = max(0.0, end - start)
         hour_sin, hour_cos, is_weekend = _clock(ts)
+        prior_source_protocol_count = int(self.source_protocol_seen[source_protocol])
+        prior_pair_protocol_count = int(self.source_pair_protocol_seen[source_pair_protocol])
+        prior_destination_count = int(self.destination_seen[dst])
+        prior_new_edges_1h = max(0, int(self.new_edges[src]))
+        prior_connections_1h = len(h1h)
 
         features = {
             "flow_count": 1,
@@ -168,12 +207,19 @@ class EveFeatureState:
             "new_dst_7d": int(pair_count(h7) == 0),
             "new_dst_30d": int(pair_count(h30) == 0),
             "pair_seen_count": int(self.pair_seen[pair]),
+            "pair_recency_s": float(pair_recency),
             "pair_connections_24h": pair_count(h24),
             "pair_connections_7d": pair_count(h7),
             "pair_connections_30d": pair_count(h30),
+            "source_protocol_seen_count_prior": prior_source_protocol_count,
+            "source_protocol_novelty": int(prior_source_protocol_count == 0),
+            "source_pair_protocol_seen_count_prior": prior_pair_protocol_count,
+            "destination_seen_count_prior": prior_destination_count,
             "src_out_degree_1h": len(self.out_edges[src]),
             "dst_in_degree_1h": len(self.in_edges[dst]),
-            "new_edge_count_1h": int(self.new_edges[src]),
+            "new_edge_count_1h": prior_new_edges_1h,
+            "new_edge_ratio_1h": float(prior_new_edges_1h / max(1, prior_connections_1h)),
+            "recent_protocol_switch_count_1h": int(_protocol_switch_count(h1h)),
             "protocol_entropy_1h": _entropy(Counter(entry[2] for entry in h1h)),
             "protocol_entropy_24h": _entropy(Counter(entry[2] for entry in h24)),
         }
@@ -182,6 +228,10 @@ class EveFeatureState:
         hist.append((ts, dst, proto))
         self.seen_dst[src].add(dst)
         self.pair_seen[pair] += 1
+        self.pair_last_ts[pair] = ts
+        self.destination_seen[dst] += 1
+        self.source_protocol_seen[source_protocol] += 1
+        self.source_pair_protocol_seen[source_pair_protocol] += 1
         self.ever_edges.add(pair)
         self.graph.append((ts, src, dst, was_new))
         self.out_edges[src][dst] += 1
