@@ -41,10 +41,17 @@ def as_float(value, default: float = 0.0) -> float:
         return float(default)
 
 
+def baseline_score(shortcut: dict, name: str, default: float) -> float:
+    direct = shortcut.get(f"{name}_pr_auc")
+    if direct is not None:
+        return as_float(direct, default)
+    return as_float(nested(shortcut, "baselines", name, "validation_pr_auc"), default)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--session-metrics", type=Path, required=True)
+    parser.add_argument("--primary-metrics", type=Path, required=True)
     parser.add_argument("--shortcut", type=Path, required=True)
     parser.add_argument("--hard-benign", type=Path, required=True)
     parser.add_argument("--external", type=Path, required=True)
@@ -58,7 +65,7 @@ def main() -> int:
     args = parser.parse_args()
 
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8")) or {}
-    metrics = load_json(args.session_metrics)
+    metrics = load_json(args.primary_metrics)
     shortcut = load_json(args.shortcut)
     hard = load_json(args.hard_benign)
     external = load_json(args.external)
@@ -71,6 +78,7 @@ def main() -> int:
 
     validation_pr = as_float(nested(metrics, "splits", "validation", "pr_auc"))
     test_pr = as_float(nested(metrics, "splits", "test", "pr_auc"))
+    challenge_pr = as_float(nested(metrics, "splits", "challenge", "pr_auc"))
     challenge_recall = as_float(
         nested(metrics, "splits", "challenge", "strict_operating_points", "operating_points", "fpr_1pct", "recall"),
         default=as_float(nested(metrics, "splits", "challenge", "recall")),
@@ -79,24 +87,40 @@ def main() -> int:
     ext_inputs = external.get("external_gate_inputs", {}) if isinstance(external.get("external_gate_inputs"), dict) else {}
 
     research_cfg = cfg.get("research", {})
+    shortcut_cfg = cfg.get("shortcut", {})
     leakage_pass = bool(production.get("leakage_ok", False))
     protocol_coverage = {
         str(key): as_float(value)
         for key, value in (production.get("session_mapping_coverage_by_protocol", {}) or {}).items()
     }
     required_protocols = {"ssh", "smb", "rdp", "vnc"}
-    min_protocol_coverage = as_float(research_cfg.get("min_protocol_session_mapping_coverage"), 0.95)
+    min_protocol_coverage = as_float(research_cfg.get("min_protocol_session_mapping_coverage"), 0.99)
+    min_observed_protocol_coverage = min(
+        (protocol_coverage.get(name, 0.0) for name in required_protocols),
+        default=0.0,
+    )
     protocol_mapping_pass = (
         required_protocols <= set(protocol_coverage)
-        and min(protocol_coverage[name] for name in required_protocols) >= min_protocol_coverage
+        and min_observed_protocol_coverage >= min_protocol_coverage
     )
+    causal_observability_pass = bool(nested(planner, "signal", "causal_observability", "valid", default=False))
+    candidate_stream_parity = (
+        production.get("production_candidate_stream") == "remote-admin flows only"
+        and production.get("train_serve_feature_code") == "adminlab.online_features.EveFeatureState"
+    )
+    cross_heldout_state_dependency = bool(production.get("cross_heldout_state_dependency", True))
+    source_identity_count = int(planner.get("source_identity_count", 0) or 0)
 
     technical_release_ready = (
         planner.get("status") == "PASS"
+        and causal_observability_pass
+        and source_identity_count >= int(cfg.get("min_source_identities", 32))
         and leakage_pass
-        and as_float(production.get("session_mapping_coverage")) >= as_float(research_cfg.get("min_session_mapping_coverage"), 0.98)
+        and as_float(production.get("session_mapping_coverage")) >= as_float(research_cfg.get("min_session_mapping_coverage"), 0.995)
+        and as_float(production.get("flow_mapping_coverage")) >= as_float(research_cfg.get("min_flow_mapping_coverage"), 0.98)
         and protocol_mapping_pass
-        and as_float(production.get("flow_mapping_coverage")) >= 0.90
+        and candidate_stream_parity
+        and cross_heldout_state_dependency is False
         and int(hierarchical.get("session_rows", 0)) > 0
         and int(hierarchical.get("campaign_rows", 0)) > 0
         and bronze.get("status") == "PASS"
@@ -104,12 +128,16 @@ def main() -> int:
         and bool(bronze.get("full_raw_traffic_preserved_in_chunks"))
         and not bool(bronze.get("merged_pcap_persisted"))
     )
+
     quality_inputs = {
         "technical_release_ready": technical_release_ready,
         "leakage_pass": leakage_pass,
+        "causal_observability_pass": causal_observability_pass,
+        "candidate_stream_parity": candidate_stream_parity,
+        "cross_heldout_state_dependency": cross_heldout_state_dependency,
         "session_mapping_coverage": as_float(production.get("session_mapping_coverage")),
-        "protocol_mapping_pass": protocol_mapping_pass,
-        "min_protocol_mapping_coverage": min((protocol_coverage.get(name, 0.0) for name in required_protocols), default=0.0),
+        "flow_mapping_coverage": as_float(production.get("flow_mapping_coverage")),
+        "min_protocol_mapping_coverage": min_observed_protocol_coverage,
         "hard_benign_fpr": hard_fpr,
     }
     external_inputs = {
@@ -119,22 +147,31 @@ def main() -> int:
     metric_inputs = {
         "validation_pr_auc": validation_pr,
         "test_pr_auc": test_pr,
+        "challenge_pr_auc": challenge_pr,
         "challenge_recall_fpr_1pct": challenge_recall,
     }
     shortcut_inputs = {
         "full_model_pr_auc": as_float(shortcut.get("full_model_pr_auc"), validation_pr),
-        "time_only_pr_auc": as_float(shortcut.get("time_only_pr_auc"), 1.0),
-        "current_session_only_pr_auc": as_float(shortcut.get("current_session_only_pr_auc"), 1.0),
+        "time_only_pr_auc": baseline_score(shortcut, "time_only", 1.0),
+        "protocol_only_pr_auc": baseline_score(shortcut, "protocol_only", 1.0),
+        "current_session_only_pr_auc": as_float(shortcut.get("current_session_only_pr_auc"), baseline_score(shortcut, "current_session_only", 1.0)),
         "best_nuisance_pr_auc": as_float(shortcut.get("best_nuisance_pr_auc"), 1.0),
+        "prevalence_pr_auc": as_float(shortcut.get("prevalence_pr_auc"), 0.5),
+        "history_only_pr_auc": as_float(shortcut.get("history_only_pr_auc"), baseline_score(shortcut, "history_only", 0.0)),
     }
     thresholds = {
-        "max_time_only_pr_auc": as_float(cfg.get("shortcut", {}).get("max_time_only_pr_auc"), 0.55),
-        "min_full_over_current_session_margin": as_float(cfg.get("shortcut", {}).get("min_full_over_current_session_margin"), 0.05),
-        "min_full_over_best_nuisance_margin": as_float(cfg.get("shortcut", {}).get("min_full_over_best_nuisance_margin"), 0.05),
-        "min_validation_pr_auc": as_float(research_cfg.get("min_validation_pr_auc"), 0.60),
-        "min_test_pr_auc": as_float(research_cfg.get("min_test_pr_auc"), 0.58),
-        "min_session_mapping_coverage": as_float(research_cfg.get("min_session_mapping_coverage"), 0.98),
-        "max_hard_benign_fpr": as_float(research_cfg.get("max_hard_benign_fpr"), 0.05),
+        "max_time_only_pr_auc": as_float(shortcut_cfg.get("max_time_only_pr_auc"), 0.55),
+        "max_protocol_only_pr_auc": as_float(shortcut_cfg.get("max_protocol_only_pr_auc"), 0.60),
+        "min_full_over_current_session_margin": as_float(shortcut_cfg.get("min_full_over_current_session_margin"), 0.05),
+        "min_full_over_best_nuisance_margin": as_float(shortcut_cfg.get("min_full_over_best_nuisance_margin"), 0.05),
+        "min_history_over_prevalence_margin": as_float(shortcut_cfg.get("min_history_over_prevalence_margin"), 0.05),
+        "min_validation_pr_auc": as_float(research_cfg.get("min_validation_pr_auc"), 0.70),
+        "min_test_pr_auc": as_float(research_cfg.get("min_test_pr_auc"), 0.65),
+        "min_challenge_pr_auc": as_float(research_cfg.get("min_challenge_pr_auc"), 0.65),
+        "min_session_mapping_coverage": as_float(research_cfg.get("min_session_mapping_coverage"), 0.995),
+        "min_flow_mapping_coverage": as_float(research_cfg.get("min_flow_mapping_coverage"), 0.98),
+        "min_protocol_mapping_coverage": min_protocol_coverage,
+        "max_hard_benign_fpr": as_float(research_cfg.get("max_hard_benign_fpr"), 0.01),
     }
     decision = evaluate_v3_gate(
         metrics=metric_inputs,
@@ -143,12 +180,9 @@ def main() -> int:
         external=external_inputs,
         thresholds=thresholds,
     )
-    if not protocol_mapping_pass:
-        decision["technical_status"] = "INCOMPLETE"
-        decision.setdefault("technical_failures", []).append("protocol_mapping_coverage")
 
     result = {
-        "schema_version": 3,
+        "schema_version": 4,
         "dataset_release_status": "READY" if decision["technical_status"] == "READY" else "INCOMPLETE",
         "technical_status": decision["technical_status"],
         "technical_failures": list(dict.fromkeys(decision["technical_failures"])),
@@ -158,13 +192,21 @@ def main() -> int:
         "learning_curve": curve,
         "release_semantics": {
             "research_fail_is_preserved_as_valid_dataset_release": True,
-            "primary_model_unit": "session",
-            "baseline_model_unit": "flow",
-            "sequence_model_unit": "campaign",
+            "primary_model_unit": "suricata_eve_flow",
+            "session_model_unit": "research_only",
+            "campaign_model_unit": "research_only",
+            "orchestrator_session_boundary_required_at_runtime": False,
+            "production_candidate_stream": "remote-admin flows only",
             "external_holdouts_used_for_fit": False,
             "external_holdouts_used_for_threshold_tuning": False,
             "merged_bronze_pcap_persisted": False,
             "complete_raw_wire_preserved_as_chunks": True,
+        },
+        "causal_signal": {
+            "planner": planner.get("planner"),
+            "label_assignment_policy": planner.get("label_assignment_policy"),
+            "causal_observability_pass": causal_observability_pass,
+            "source_identity_count": source_identity_count,
         },
         "mapping_fidelity": {
             "session_mapping_coverage": production.get("session_mapping_coverage"),
@@ -172,6 +214,12 @@ def main() -> int:
             "session_mapping_coverage_by_protocol": protocol_coverage,
             "min_protocol_required": min_protocol_coverage,
             "protocol_mapping_pass": protocol_mapping_pass,
+        },
+        "train_serve": {
+            "feature_state": production.get("train_serve_feature_code"),
+            "candidate_stream": production.get("production_candidate_stream"),
+            "candidate_stream_parity": candidate_stream_parity,
+            "cross_heldout_state_dependency": cross_heldout_state_dependency,
         },
         "windows_fidelity": {
             "validated_protocols": windows.get("validated_protocols", []),
@@ -198,8 +246,8 @@ def main() -> int:
         "failed_gates": decision["failed_gates"],
         "technical_failures": result["technical_failures"],
         "observed": decision["observed"],
+        "causal_signal": result["causal_signal"],
         "mapping_fidelity": result["mapping_fidelity"],
-        "windows_validated": windows.get("validated_protocols", []),
     }, indent=2, sort_keys=True))
     if result["dataset_release_status"] != "READY":
         raise SystemExit("V3 technical release incomplete: " + ",".join(result["technical_failures"]))
