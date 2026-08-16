@@ -1,0 +1,173 @@
+causal-smoke	Build smoke Silver and production Gold	﻿2026-08-16T15:53:04.5921816Z ##[group]Run bash scripts/build_silver.sh "$RELEASE_ROOT" "$SHARD"
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5922284Z ^[[36;1mbash scripts/build_silver.sh "$RELEASE_ROOT" "$SHARD"^[[0m
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5922976Z ^[[36;1mpython scripts/build_flow_gold_v2.py --release "$RELEASE_ROOT" --shard "$SHARD" --feature-contract configs/feature_contract.yaml --split-seed "$SEED"^[[0m
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5924282Z ^[[36;1mpython scripts/build_hierarchical_gold_v3.py --release "$RELEASE_ROOT" --shard "$SHARD" --contract configs/v3_feature_contract.yaml --split-seed "$SEED"^[[0m
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5948317Z shell: /usr/bin/bash -e {0}
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5948587Z env:
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5948774Z   PYTHONPATH: src
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5949070Z   ROOT_OUT: /tmp/remote-admin-v3-final-smoke
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5949586Z   RELEASE_ROOT: /tmp/remote-admin-v3-final-smoke/release
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5950094Z   SHARD: V3-causal-smoke
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5950453Z   SEED: 2026081601
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5950867Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5951585Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5952280Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5952861Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5953551Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5953936Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.5954250Z ##[endgroup]
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.6039589Z configured ADMINLAB_PYTHON is not executable: python3
+causal-smoke	Build smoke Silver and production Gold	2026-08-16T15:53:04.6056610Z ##[error]Process completed with exit code 2.
+lanl-reference	Build independent LANL reference	﻿2026-08-16T15:49:17.4138805Z ##[group]Run python -m pip install -r requirements.txt
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4139414Z ^[[36;1mpython -m pip install -r requirements.txt^[[0m
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4140115Z ^[[36;1mpython scripts/build_lanl_reference.py --config configs/v3_research.yaml --out /tmp/v3-lanl --flow-limit 5000 --auth-limit 5000^[[0m
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4140965Z ^[[36;1mpython - <<'PY'^[[0m
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4141309Z ^[[36;1mimport json^[[0m
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4141696Z ^[[36;1mfrom pathlib import Path^[[0m
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4142156Z ^[[36;1mq=json.loads(Path('/tmp/v3-lanl/reference_quality.json').read_text())^[[0m
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4142733Z ^[[36;1massert q['external_only'] is True and q['threshold_tuning_allowed'] is False^[[0m
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4143365Z ^[[36;1massert q['remote_admin_flow_rows']>=5000 and q['network_logon_rows']>=5000^[[0m
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4143843Z ^[[36;1mprint(json.dumps(q,sort_keys=True))^[[0m
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4144224Z ^[[36;1mPY^[[0m
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4178080Z shell: /usr/bin/bash -e {0}
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4178732Z env:
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4179144Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4179748Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4180443Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4180938Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4181380Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4181827Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4182522Z   PYTHONPATH: src
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:17.4182895Z ##[endgroup]
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:18.9369727Z Collecting PyYAML<7,>=6.0 (from -r requirements.txt (line 1))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:18.9386180Z   Using cached pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.1029397Z Collecting numpy<3,>=1.26 (from -r requirements.txt (line 2))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.1042337Z   Using cached numpy-2.5.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.1869724Z Collecting pandas<3,>=2.2 (from -r requirements.txt (line 3))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.1882132Z   Using cached pandas-2.3.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (91 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.2686126Z Collecting pyarrow<23,>=17 (from -r requirements.txt (line 4))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.2699588Z   Using cached pyarrow-22.0.0-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (3.2 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.3592508Z Collecting scipy<2,>=1.13 (from -r requirements.txt (line 5))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.3606493Z   Using cached scipy-1.18.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.4303244Z Collecting scikit-learn<2,>=1.5 (from -r requirements.txt (line 6))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.4317762Z   Using cached scikit_learn-1.9.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (11 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.4494354Z Collecting lightgbm<5,>=4.5 (from -r requirements.txt (line 7))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.4505536Z   Using cached lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (18 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.4652324Z Collecting joblib<2,>=1.4 (from -r requirements.txt (line 8))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.4663505Z   Using cached joblib-1.5.3-py3-none-any.whl.metadata (5.5 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.4810498Z Collecting paramiko<5,>=3.5 (from -r requirements.txt (line 9))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.4821502Z   Using cached paramiko-4.0.0-py3-none-any.whl.metadata (3.9 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.4920284Z Collecting smbprotocol<2,>=1.15 (from -r requirements.txt (line 10))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.4930911Z   Using cached smbprotocol-1.17.0-py3-none-any.whl.metadata (12 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.5256775Z Collecting huggingface_hub<2,>=0.25 (from -r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.5268088Z   Using cached huggingface_hub-1.27.0-py3-none-any.whl.metadata (16 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.5548655Z Collecting pytest<9,>=8 (from -r requirements.txt (line 12))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.5559483Z   Using cached pytest-8.4.2-py3-none-any.whl.metadata (7.7 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.5665815Z Collecting python-dateutil>=2.8.2 (from pandas<3,>=2.2->-r requirements.txt (line 3))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.5677435Z   Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.5929022Z Collecting pytz>=2020.1 (from pandas<3,>=2.2->-r requirements.txt (line 3))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.5940032Z   Using cached pytz-2026.3.post1-py2.py3-none-any.whl.metadata (22 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.6043037Z Collecting tzdata>=2022.7 (from pandas<3,>=2.2->-r requirements.txt (line 3))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.6054113Z   Using cached tzdata-2026.3-py2.py3-none-any.whl.metadata (1.4 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.6512017Z Collecting narwhals>=2.0.1 (from scikit-learn<2,>=1.5->-r requirements.txt (line 6))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.6523033Z   Using cached narwhals-2.24.0-py3-none-any.whl.metadata (15 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.6615484Z Collecting threadpoolctl>=3.5.0 (from scikit-learn<2,>=1.5->-r requirements.txt (line 6))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.6627442Z   Using cached threadpoolctl-3.6.0-py3-none-any.whl.metadata (13 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.6973838Z Collecting bcrypt>=3.2 (from paramiko<5,>=3.5->-r requirements.txt (line 9))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.6984747Z   Using cached bcrypt-5.0.0-cp39-abi3-manylinux_2_34_x86_64.whl.metadata (10 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.8393837Z Collecting cryptography>=3.3 (from paramiko<5,>=3.5->-r requirements.txt (line 9))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.8411952Z   Using cached cryptography-50.0.0-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.3 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.8540245Z Collecting invoke>=2.0 (from paramiko<5,>=3.5->-r requirements.txt (line 9))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.8552039Z   Using cached invoke-3.0.3-py3-none-any.whl.metadata (3.2 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.8711695Z Collecting pynacl>=1.5 (from paramiko<5,>=3.5->-r requirements.txt (line 9))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.8723546Z   Using cached pynacl-1.6.2-cp38-abi3-manylinux_2_34_x86_64.whl.metadata (10.0 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.9036620Z Collecting pyspnego (from smbprotocol<2,>=1.15->-r requirements.txt (line 10))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.9048936Z   Using cached pyspnego-0.12.1-py3-none-any.whl.metadata (4.1 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.9245066Z Collecting click<9.0.0,>=8.4.2 (from huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.9257976Z   Using cached click-8.4.2-py3-none-any.whl.metadata (2.6 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.9412625Z Collecting filelock>=3.10.0 (from huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.9424358Z   Using cached filelock-3.32.3-py3-none-any.whl.metadata (2.0 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.9583527Z Collecting fsspec>=2023.5.0 (from huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:19.9595044Z   Using cached fsspec-2026.7.0-py3-none-any.whl.metadata (10 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0012190Z Collecting hf-xet<2.0.0,>=1.5.2 (from huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0023280Z   Using cached hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0145128Z Collecting httpx<1,>=0.23.0 (from huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0157367Z   Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0272861Z Collecting packaging>=20.9 (from huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0284694Z   Using cached packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0479942Z Collecting tqdm>=4.42.1 (from huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0491963Z   Using cached tqdm-4.70.0-py3-none-any.whl.metadata (57 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0642428Z Collecting typing-extensions>=4.1.0 (from huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0660634Z   Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0744240Z Collecting iniconfig>=1 (from pytest<9,>=8->-r requirements.txt (line 12))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0755134Z   Using cached iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0848420Z Collecting pluggy<2,>=1.5 (from pytest<9,>=8->-r requirements.txt (line 12))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0859095Z   Using cached pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0983908Z Collecting pygments>=2.7.2 (from pytest<9,>=8->-r requirements.txt (line 12))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.0994803Z   Using cached pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.1136108Z Collecting anyio (from httpx<1,>=0.23.0->huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.1147055Z   Using cached anyio-4.14.2-py3-none-any.whl.metadata (4.6 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.1281137Z Collecting certifi (from httpx<1,>=0.23.0->huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.1292428Z   Using cached certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.1402792Z Collecting httpcore==1.* (from httpx<1,>=0.23.0->huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.1413657Z   Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.1526572Z Collecting idna (from httpx<1,>=0.23.0->huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.1537524Z   Using cached idna-3.18-py3-none-any.whl.metadata (6.1 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.1619250Z Collecting h11>=0.16 (from httpcore==1.*->httpx<1,>=0.23.0->huggingface_hub<2,>=0.25->-r requirements.txt (line 11))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.1629878Z   Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.2612293Z Collecting cffi>=2.0.0 (from cryptography>=3.3->paramiko<5,>=3.5->-r requirements.txt (line 9))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.2624505Z   Using cached cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.2713294Z Collecting pycparser (from cffi>=2.0.0->cryptography>=3.3->paramiko<5,>=3.5->-r requirements.txt (line 9))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.2723739Z   Using cached pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.2857498Z Collecting six>=1.5 (from python-dateutil>=2.8.2->pandas<3,>=2.2->-r requirements.txt (line 3))
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.2870063Z   Using cached six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.2956925Z Using cached pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.2972258Z Using cached numpy-2.5.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3042614Z Using cached pandas-2.3.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (12.4 MB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3096537Z Using cached pyarrow-22.0.0-cp312-cp312-manylinux_2_28_x86_64.whl (47.7 MB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3273180Z Using cached scipy-1.18.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.3 MB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3405451Z Using cached scikit_learn-1.9.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (9.1 MB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3448831Z Using cached lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (3.5 MB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3472662Z Using cached joblib-1.5.3-py3-none-any.whl (309 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3484842Z Using cached paramiko-4.0.0-py3-none-any.whl (223 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3497041Z Using cached smbprotocol-1.17.0-py3-none-any.whl (128 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3508492Z Using cached huggingface_hub-1.27.0-py3-none-any.whl (784 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3523234Z Using cached pytest-8.4.2-py3-none-any.whl (365 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3535847Z Using cached click-8.4.2-py3-none-any.whl (119 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3547596Z Using cached hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.5 MB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3574510Z Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3585924Z Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3597185Z Using cached pluggy-1.6.0-py3-none-any.whl (20 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3608635Z Using cached bcrypt-5.0.0-cp39-abi3-manylinux_2_34_x86_64.whl (278 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3621503Z Using cached cryptography-50.0.0-cp311-abi3-manylinux_2_34_x86_64.whl (4.7 MB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3650343Z Using cached cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3662079Z Using cached filelock-3.32.3-py3-none-any.whl (98 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3673502Z Using cached fsspec-2026.7.0-py3-none-any.whl (206 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3685099Z Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3695671Z Using cached iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3706132Z Using cached invoke-3.0.3-py3-none-any.whl (160 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3717506Z Using cached narwhals-2.24.0-py3-none-any.whl (461 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3730619Z Using cached packaging-26.3-py3-none-any.whl (129 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3742146Z Using cached pygments-2.20.0-py3-none-any.whl (1.2 MB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3758531Z Using cached pynacl-1.6.2-cp38-abi3-manylinux_2_34_x86_64.whl (1.4 MB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3774951Z Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3787111Z Using cached pytz-2026.3.post1-py2.py3-none-any.whl (508 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3800440Z Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3810946Z Using cached threadpoolctl-3.6.0-py3-none-any.whl (18 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3821561Z Using cached tqdm-4.70.0-py3-none-any.whl (80 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3832839Z Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3843817Z Using cached tzdata-2026.3-py2.py3-none-any.whl (348 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3856478Z Using cached anyio-4.14.2-py3-none-any.whl (125 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3868022Z Using cached idna-3.18-py3-none-any.whl (65 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3878921Z Using cached certifi-2026.7.22-py3-none-any.whl (136 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3890494Z Using cached pycparser-3.0-py3-none-any.whl (48 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.3901638Z Using cached pyspnego-0.12.1-py3-none-any.whl (130 kB)
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:20.9147392Z Installing collected packages: pytz, tzdata, typing-extensions, tqdm, threadpoolctl, six, PyYAML, pygments, pycparser, pyarrow, pluggy, packaging, numpy, narwhals, joblib, invoke, iniconfig, idna, hf-xet, h11, fsspec, filelock, click, certifi, bcrypt, scipy, python-dateutil, pytest, httpcore, cffi, anyio, scikit-learn, pynacl, pandas, lightgbm, httpx, cryptography, pyspnego, paramiko, huggingface_hub, smbprotocol
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:37.2465154Z 
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:37.2498640Z Successfully installed PyYAML-6.0.3 anyio-4.14.2 bcrypt-5.0.0 certifi-2026.7.22 cffi-2.1.1 click-8.4.2 cryptography-50.0.0 filelock-3.32.3 fsspec-2026.7.0 h11-0.16.0 hf-xet-1.6.0 httpcore-1.0.9 httpx-0.28.1 huggingface_hub-1.27.0 idna-3.18 iniconfig-2.3.0 invoke-3.0.3 joblib-1.5.3 lightgbm-4.7.0 narwhals-2.24.0 numpy-2.5.2 packaging-26.3 pandas-2.3.3 paramiko-4.0.0 pluggy-1.6.0 pyarrow-22.0.0 pycparser-3.0 pygments-2.20.0 pynacl-1.6.2 pyspnego-0.12.1 pytest-8.4.2 python-dateutil-2.9.0.post0 pytz-2026.3.post1 scikit-learn-1.9.0 scipy-1.18.0 six-1.17.0 smbprotocol-1.17.0 threadpoolctl-3.6.0 tqdm-4.70.0 typing-extensions-4.16.0 tzdata-2026.3
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:37.8839836Z usage: build_lanl_reference.py [-h] [--config CONFIG] --out OUT
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:37.8840866Z                                [--netflow-rows NETFLOW_ROWS]
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:37.8841558Z                                [--wls-rows WLS_ROWS]
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:37.8842190Z                                [--max-download-mb MAX_DOWNLOAD_MB]
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:37.8843034Z build_lanl_reference.py: error: unrecognized arguments: --flow-limit 5000 --auth-limit 5000
+lanl-reference	Build independent LANL reference	2026-08-16T15:49:37.9431096Z ##[error]Process completed with exit code 2.
