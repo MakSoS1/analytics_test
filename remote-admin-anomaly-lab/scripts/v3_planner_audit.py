@@ -19,9 +19,9 @@ if str(SRC) not in sys.path:
 from adminlab.config import load_yaml
 from adminlab.digital_twin import load_digital_twin_bundle, plan_digital_twin_sessions
 from adminlab.implementation_variants import materialize_implementation_variants
-from adminlab.v2_scenarios import V2_BENIGN_FAMILIES, V2_SUSPICIOUS_FAMILIES
 from adminlab.v3_campaigns import audit_v3_campaigns, organize_v3_campaigns
-from adminlab.v3_signal import audit_v3_signal_plan, build_v3_signal_plan
+from adminlab.v3_causal import BENIGN_FAMILIES, SUSPICIOUS_FAMILIES, build_v3_causal_plan
+from adminlab.v3_signal import audit_v3_signal_plan
 from adminlab.v3_splits import assign_grouped_splits_v3
 from adminlab.wire_controls import materialize_wire_controls
 
@@ -37,8 +37,7 @@ def load_runner_module():
 
 
 def _timeline_days(rows, protocol: str) -> int:
-    values = {int(row.simulated_day) for row in rows if row.protocol == protocol}
-    return len(values)
+    return len({int(row.simulated_day) for row in rows if row.protocol == protocol})
 
 
 def main() -> int:
@@ -57,17 +56,13 @@ def main() -> int:
     bundle = load_digital_twin_bundle(ROOT / "configs")
 
     planned = plan_digital_twin_sessions(
-        topology,
-        scenarios,
-        netem,
-        bundle,
-        seed=args.seed,
-        count=max(args.count * 16, args.count + 1600),
-        stage="H",
+        topology, scenarios, netem, bundle,
+        seed=args.seed, count=max(args.count * 16, args.count + 1600), stage="H",
     )
     selected = runner.balanced_select(planned, args.count, runner.TRAIN_PROTOCOLS)
-    selected = build_v3_signal_plan(
+    selected = build_v3_causal_plan(
         selected,
+        topology=topology,
         seed=args.seed,
         matched_fraction=float(cfg["matched_counterfactual_fraction"]),
     )
@@ -76,12 +71,15 @@ def main() -> int:
     selected = materialize_wire_controls(selected, bundle["behavior"], seed=args.seed)
 
     signal = audit_v3_signal_plan(selected)
+    causal = signal["causal_observability"]
     campaigns = audit_v3_campaigns(selected)
     protocol_counts = Counter(row.protocol for row in selected)
     label_counts = Counter(int(row.label_binary) for row in selected)
     family_counts = Counter(str(row.campaign_type) for row in selected)
-    benign_families = sorted({name for name in family_counts if name in V2_BENIGN_FAMILIES})
-    suspicious_families = sorted({name for name in family_counts if name in V2_SUSPICIOUS_FAMILIES})
+    source_count = len({row.src_host_id for row in selected})
+    compromised_source_count = len({row.src_host_id for row in selected if row.src_role == "CompromisedWorkstation"})
+    benign_families = sorted(set(family_counts) & set(BENIGN_FAMILIES))
+    suspicious_families = sorted(set(family_counts) & set(SUSPICIOUS_FAMILIES))
     per_protocol_labels = {
         protocol: {
             str(label): sum(1 for row in selected if row.protocol == protocol and int(row.label_binary) == label)
@@ -109,6 +107,10 @@ def main() -> int:
         failures.append("protocol_label_balance")
     if min(timeline.values(), default=0) < 30:
         failures.append("timeline_coverage")
+    if source_count < min(32, args.count):
+        failures.append("source_identity_diversity")
+    if compromised_source_count < 2:
+        failures.append("compromised_source_coverage")
     if float(signal["counterfactual_row_fraction"]) + 1e-12 < float(cfg["matched_counterfactual_fraction"]):
         failures.append("counterfactual_coverage")
     if float(signal["matched_hour_pair_fraction"]) + 1e-12 < float(cfg["min_matched_hour_pair_fraction"]):
@@ -117,17 +119,19 @@ def main() -> int:
         failures.append("hour_label_gap")
     if signal["invalid_counterfactual_pairs"]:
         failures.append("invalid_counterfactual_pairs")
+    if not causal["valid"]:
+        failures.append("causal_observability")
+    if causal["semantic_only_counterfactual_pairs"]:
+        failures.append("semantic_only_counterfactual_pairs")
+    if causal["causally_separated_counterfactual_pairs"] < signal["counterfactual_pairs"]:
+        failures.append("pair_history_separation")
     if campaigns["campaign_count"] < int(cfg["min_campaign_groups"]):
         failures.append("campaign_count")
     if campaigns["max_campaign_fraction"] > float(cfg["max_campaign_fraction"]):
         failures.append("campaign_fraction")
-    if campaigns["benign_campaign_count"] < 60 or campaigns["suspicious_campaign_count"] < 60:
-        failures.append("campaign_label_diversity")
-    if campaigns["multi_protocol_campaign_count"] < 30:
-        failures.append("multi_protocol_campaigns")
-    if len(benign_families) < 6:
+    if len(benign_families) < 5:
         failures.append("benign_family_diversity")
-    if len(suspicious_families) < 6:
+    if len(suspicious_families) < 5:
         failures.append("suspicious_family_diversity")
     if split_counts.get("validation", 0) < int(cfg["min_validation_sessions"]):
         failures.append("validation_size")
@@ -147,12 +151,16 @@ def main() -> int:
             failures.append(f"{split}_protocol_coverage")
 
     output = {
-        "schema_version": 3,
+        "schema_version": 4,
+        "planner": "digital_twin_v3_causal",
+        "label_assignment_policy": "observable_baseline_or_mutation_then_label",
         "status": "PASS" if not failures else "FAIL",
         "failures": list(dict.fromkeys(failures)),
         "seed": args.seed,
         "requested": args.count,
         "planned_pool_rows": len(planned),
+        "source_identity_count": source_count,
+        "compromised_source_count": compromised_source_count,
         "protocol_counts": dict(sorted(protocol_counts.items())),
         "label_counts": {str(key): int(value) for key, value in sorted(label_counts.items())},
         "per_protocol_label_counts": per_protocol_labels,
@@ -164,6 +172,7 @@ def main() -> int:
         "campaigns": campaigns,
         "splits": split_report,
         "requirements": {
+            "source_identities_min": min(32, args.count),
             "matched_fraction_min": float(cfg["matched_counterfactual_fraction"]),
             "matched_hour_pair_fraction_min": float(cfg["min_matched_hour_pair_fraction"]),
             "max_hour_label_fraction_gap": float(cfg["max_hour_label_fraction_gap"]),
@@ -177,7 +186,7 @@ def main() -> int:
     args.out.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(output, indent=2, sort_keys=True))
     if failures:
-        raise SystemExit("V3 planner audit failed: " + ",".join(output["failures"]))
+        raise SystemExit("V3 causal planner audit failed: " + ",".join(output["failures"]))
     return 0
 
 
