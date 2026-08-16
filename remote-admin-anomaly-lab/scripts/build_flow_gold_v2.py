@@ -16,13 +16,14 @@ if str(SRC) not in sys.path:
 from adminlab.auth_features import build_split_isolated_outcome_features, enrich_ssh_auth_by_uid  # noqa: E402
 from adminlab.config import load_yaml, validate_feature_contract  # noqa: E402
 from adminlab.features import map_zeek_flows_to_sessions, read_zstd_json_lines, select_model_columns  # noqa: E402
-from adminlab.splits import assign_grouped_splits, audit_leakage  # noqa: E402
+from adminlab.splits import audit_leakage  # noqa: E402
 from adminlab.suricata_gold import (  # noqa: E402
     attach_behavior_time,
     build_reference_context_suricata_features,
     map_suricata_flows_to_sessions,
     normalize_suricata_flow_events,
 )
+from adminlab.v3_splits import assign_grouped_splits_v3  # noqa: E402
 
 
 def write_json(path: Path, payload: dict) -> None:
@@ -60,7 +61,7 @@ def main() -> int:
     parser.add_argument("--release", type=Path, required=True)
     parser.add_argument("--shard", required=True)
     parser.add_argument("--feature-contract", type=Path, default=ROOT / "configs/feature_contract.yaml")
-    parser.add_argument("--split-seed", type=int, default=20260814)
+    parser.add_argument("--split-seed", type=int, default=2026081403)
     args = parser.parse_args()
 
     release = args.release.resolve()
@@ -95,12 +96,18 @@ def main() -> int:
         raise SystemExit("Suricata normalized flow_uid must be non-null and unique")
 
     mapped = attach_behavior_time(mapped, sessions)
-    splits, split_report = assign_grouped_splits(sessions, seed=args.split_seed)
+    # Corrected V3 uses the same campaign/pair-connected, impact-bounded split
+    # policy for both production flow Gold and hierarchical research views.
+    splits, split_report = assign_grouped_splits_v3(sessions, seed=args.split_seed)
     split_index = splits.set_index("session_id")
     mapped["split"] = mapped["session_id"].map(split_index["split"])
     if mapped["split"].isna().any():
         raise SystemExit("mapped Suricata flow missing split before state computation")
 
+    # Deployment-realistic evaluation: each held-out split gets causal prior train
+    # context plus its own earlier rows, never another held-out split. This mirrors
+    # an NGFW whose state was warmed before scoring future traffic while avoiding
+    # validation<->test covariate contamination.
     production_features = build_reference_context_suricata_features(mapped)
     if production_features.empty or len(production_features) != len(mapped):
         raise SystemExit("Suricata train/serve feature replay incomplete")
@@ -156,6 +163,7 @@ def main() -> int:
     write_json(quality / "production_leakage.json", leakage)
 
     summary = {
+        "schema_version": 4,
         "rows": int(len(model_matrix)),
         "feature_count": int(len(selected.columns)),
         "raw_suricata_flow_count": mapping_report["raw_conn_count"],
@@ -167,15 +175,16 @@ def main() -> int:
         "session_mapping_coverage_by_protocol": protocol_coverage,
         "uid_alignment_coverage": float(len(aligned) / len(production_features)),
         "leakage_ok": True,
-        "state_partition_policy": "causal prior-train reference context plus prior rows from each target split; no cross-heldout context",
+        "split_policy": split_report.get("policy"),
+        "state_partition_policy": "prior train reference context plus prior rows from target split only; no validation/test/challenge cross-context",
+        "cross_heldout_state_dependency": False,
         "time_policy": "Suricata flow.start for execution mapping; captured flow offset projected to simulated organization timestamp",
         "production_unit": "suricata_eve_flow",
         "production_source": "suricata_eve_flow",
+        "production_candidate_stream": "remote-admin flows only",
         "train_serve_feature_code": "adminlab.online_features.EveFeatureState",
         "label_join_keys": ["flow_uid", "session_id"],
         "challenge_reason_counts": split_report.get("challenge_reason_counts", {}),
-        "heldout_personas": split_report.get("heldout_personas", []),
-        "heldout_client_implementations": split_report.get("heldout_client_implementations", []),
         "zeek_features_in_primary_model": False,
         "zeek_research_status": zeek_report.get("status"),
         "evaluation_metadata_in_model_matrix": False,
