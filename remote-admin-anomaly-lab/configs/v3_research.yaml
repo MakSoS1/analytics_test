@@ -1,8 +1,9 @@
-version: v3
+version: v3-causal-ngfw
 sessions_1k: 1000
 matched_counterfactual_fraction: 0.40
 min_matched_hour_pair_fraction: 0.80
 max_hour_label_fraction_gap: 0.10
+min_source_identities: 32
 min_campaign_groups: 180
 max_campaign_fraction: 0.025
 min_validation_sessions: 120
@@ -11,32 +12,46 @@ challenge_fraction_min: 0.15
 challenge_fraction_max: 0.25
 hf_repo: Maksim123321/remote-admin-anomaly-v1
 hf_final_prefix: v3/final
+
 shortcut:
   max_time_only_pr_auc: 0.55
+  max_protocol_only_pr_auc: 0.60
   min_full_over_current_session_margin: 0.05
   min_full_over_best_nuisance_margin: 0.05
+  min_history_over_prevalence_margin: 0.05
+
 research:
-  min_validation_pr_auc: 0.60
-  min_test_pr_auc: 0.58
-  min_session_mapping_coverage: 0.98
-  min_protocol_session_mapping_coverage: 0.95
-  max_hard_benign_fpr: 0.05
+  primary_unit: suricata_eve_flow
+  min_validation_pr_auc: 0.70
+  min_test_pr_auc: 0.65
+  min_challenge_pr_auc: 0.65
+  min_session_mapping_coverage: 0.995
+  min_protocol_session_mapping_coverage: 0.99
+  min_flow_mapping_coverage: 0.98
+  max_hard_benign_fpr: 0.01
   require_nonzero_challenge_recall_at_fpr_1pct: true
+  require_causal_observability: true
+  require_cross_heldout_state_dependency_false: true
+  require_remote_admin_candidate_stream_parity: true
+
 bronze:
   min_session_pcap_coverage: 0.99
   persist_merged_pcap: false
   reparse_sample_size: 20
   preserve_complete_raw_chunks: true
   raw_chunk_packet_target: 50000
+
 windows:
   runner: windows-2025
   require_same_release_job: true
   dcom_requires_tcp_135_wire_evidence: true
   rdp_fail_closed: true
+
 external:
   lanl_training_allowed: false
   windows_training_allowed: false
   threshold_tuning_allowed: false
+
 lanl:
   dataset: Unified Host and Network Data Set
   year: 2017
