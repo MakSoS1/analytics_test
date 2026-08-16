@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -8,6 +9,8 @@ import yaml
 from adminlab.manifest import SessionRecord
 from adminlab.v3_signal import (
     audit_causal_observability,
+    audit_v3_signal_plan,
+    build_v3_causal_plan,
     causal_history_signature,
     v3_current_signature,
 )
@@ -63,7 +66,7 @@ def _row(
         auth_outcome="success",
         client_stack="openssh",
         server_stack="openssh-server",
-        implementation_id="ssh:openssh->openssh-server",
+        implementation_id=f"{protocol}:client->server",
         simulated_day=9,
         wire_attempts=1,
         wire_transfer_bytes=0,
@@ -131,3 +134,52 @@ def test_causal_observability_accepts_rare_pair_with_real_prior_difference():
     assert report["valid"] is True
     assert report["causally_separated_counterfactual_pairs"] == 1
     assert report["semantic_only_counterfactual_pairs"] == []
+
+
+def test_causal_planner_builds_balanced_observable_signal_before_labels():
+    topology = yaml.safe_load((ROOT / "configs/topology.yaml").read_text())
+    protocols = ("ssh", "smb", "rdp", "vnc")
+    rows: list[SessionRecord] = []
+    for index in range(80):
+        protocol = protocols[index % len(protocols)]
+        row = _row(
+            f"plan-{index:03d}",
+            label=index % 2,
+            src="placeholder-src",
+            dst="placeholder-dst",
+            protocol=protocol,
+            minute=1 + (index % 50),
+        )
+        start = datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc) + timedelta(hours=index * 4)
+        rows.append(
+            SessionRecord.from_dict(
+                {
+                    **row.to_dict(),
+                    "start_ts": start.isoformat(),
+                    "end_ts": (start + timedelta(seconds=90)).isoformat(),
+                    "simulated_day": (start.date() - datetime(2026, 6, 1, tzinfo=timezone.utc).date()).days,
+                }
+            )
+        )
+
+    prepared = build_v3_causal_plan(rows, topology=topology, seed=17, matched_fraction=0.40)
+    assert len(prepared) == 80
+    assert Counter(row.label_binary for row in prepared) == Counter({0: 40, 1: 40})
+    for protocol in protocols:
+        part = [row for row in prepared if row.protocol == protocol]
+        assert Counter(row.label_binary for row in part) == Counter({0: 10, 1: 10})
+    assert len({row.src_host_id for row in prepared}) >= 20
+    suspicious_families = {row.campaign_type for row in prepared if row.label_binary == 1}
+    assert len(suspicious_families) >= 4
+
+    by_pair = defaultdict(list)
+    for row in prepared:
+        if row.pair_id:
+            by_pair[row.pair_id].append(row)
+    assert len(by_pair) >= 16
+    for pair in by_pair.values():
+        if len(pair) == 2:
+            assert v3_current_signature(pair[0]) == v3_current_signature(pair[1])
+    signal = audit_v3_signal_plan(prepared)
+    assert signal["causal_observability"]["valid"] is True
+    assert signal["causal_observability"]["causally_separated_counterfactual_pairs"] >= 16
