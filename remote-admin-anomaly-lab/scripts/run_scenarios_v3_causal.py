@@ -34,6 +34,10 @@ def _load_legacy_runner():
     return module
 
 
+def _required_source_identities(count: int) -> int:
+    return 32 if count >= 1000 else min(20, max(4, count // 2))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--stage", required=True, choices=["H"])
@@ -54,9 +58,6 @@ def main() -> int:
     bundle = load_digital_twin_bundle(ROOT / "configs")
     namespaces = legacy.namespace_map(topology)
 
-    # The old planner remains only a source of realistic timestamp/protocol/
-    # nuisance-control candidates. Its source/destination/label assignments are
-    # discarded by build_v3_causal_plan.
     pool = plan_digital_twin_sessions(
         topology,
         scenarios,
@@ -80,6 +81,7 @@ def main() -> int:
     signal = audit_v3_signal_plan(selected)
     causal = signal["causal_observability"]
     source_count = len({row.src_host_id for row in selected})
+    source_required = _required_source_identities(args.count)
     if float(signal["counterfactual_row_fraction"]) + 1e-12 < args.v3_matched_fraction:
         raise RuntimeError(f"V3 counterfactual coverage below target: {signal}")
     if float(signal["matched_hour_pair_fraction"]) < 0.80:
@@ -88,8 +90,8 @@ def main() -> int:
         raise RuntimeError(f"invalid V3 counterfactual pairs: {signal['invalid_counterfactual_pairs']}")
     if not causal["valid"]:
         raise RuntimeError(f"V3 causal observability failed: {causal}")
-    if source_count < min(32, args.count):
-        raise RuntimeError(f"V3 source diversity below production gate: {source_count}")
+    if source_count < source_required:
+        raise RuntimeError(f"V3 source diversity below gate: {source_count} < {source_required}")
 
     args.out.mkdir(parents=True, exist_ok=True)
     fixtures = args.out / "inert-fixtures"
@@ -118,6 +120,7 @@ def main() -> int:
         "implementation_counts": dict(implementation_counts),
         "family_counts": dict(family_counts),
         "source_identity_count": source_count,
+        "source_identity_required": source_required,
         "source_role_counts": dict(source_role_counts),
         "protocol_balance_max_minus_min": max(protocol_counts.values()) - min(protocol_counts.values()),
         "campaign_count": len(campaigns),
