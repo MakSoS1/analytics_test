@@ -5,59 +5,64 @@ lab:
   external_routing: false
 
 hosts:
-  # Production-observable source identities. These are lightweight network
-  # namespaces, not additional VMs. V3 needs enough independent source state to
-  # model per-source behavior without collapsing dozens of personas onto 7 IPs.
   - {id: paw01, namespace: ra-paw01, ip: 10.77.0.11/24, role: DomainAdmin, services: []}
   - {id: paw02, namespace: ra-paw02, ip: 10.77.0.31/24, role: DomainAdmin, services: []}
   - {id: paw03, namespace: ra-paw03, ip: 10.77.0.32/24, role: DomainAdmin, services: []}
   - {id: paw04, namespace: ra-paw04, ip: 10.77.0.33/24, role: DomainAdmin, services: []}
-
   - {id: jump01, namespace: ra-jump01, ip: 10.77.0.12/24, role: JumpHost, services: []}
   - {id: jump02, namespace: ra-jump02, ip: 10.77.0.34/24, role: JumpHost, services: []}
   - {id: jump03, namespace: ra-jump03, ip: 10.77.0.35/24, role: JumpHost, services: []}
   - {id: jump04, namespace: ra-jump04, ip: 10.77.0.36/24, role: JumpHost, services: []}
-
   - {id: dev01, namespace: ra-dev01, ip: 10.77.0.13/24, role: Developer, services: []}
   - {id: dev02, namespace: ra-dev02, ip: 10.77.0.37/24, role: Developer, services: []}
   - {id: dev03, namespace: ra-dev03, ip: 10.77.0.38/24, role: Developer, services: []}
   - {id: dev04, namespace: ra-dev04, ip: 10.77.0.39/24, role: Developer, services: []}
   - {id: dev05, namespace: ra-dev05, ip: 10.77.0.40/24, role: Developer, services: []}
   - {id: dev06, namespace: ra-dev06, ip: 10.77.0.41/24, role: Developer, services: []}
-
   - {id: user01, namespace: ra-user01, ip: 10.77.0.14/24, role: RegularUser, services: []}
   - {id: user02, namespace: ra-user02, ip: 10.77.0.42/24, role: RegularUser, services: []}
   - {id: user03, namespace: ra-user03, ip: 10.77.0.43/24, role: RegularUser, services: []}
   - {id: user04, namespace: ra-user04, ip: 10.77.0.44/24, role: RegularUser, services: []}
   - {id: user05, namespace: ra-user05, ip: 10.77.0.45/24, role: RegularUser, services: []}
   - {id: user06, namespace: ra-user06, ip: 10.77.0.46/24, role: RegularUser, services: []}
-
   - {id: help01, namespace: ra-help01, ip: 10.77.0.15/24, role: Helpdesk, services: []}
   - {id: help02, namespace: ra-help02, ip: 10.77.0.47/24, role: Helpdesk, services: []}
   - {id: help03, namespace: ra-help03, ip: 10.77.0.48/24, role: Helpdesk, services: []}
   - {id: help04, namespace: ra-help04, ip: 10.77.0.49/24, role: Helpdesk, services: []}
-
   - {id: comp01, namespace: ra-comp01, ip: 10.77.0.16/24, role: CompromisedWorkstation, services: []}
   - {id: comp02, namespace: ra-comp02, ip: 10.77.0.50/24, role: CompromisedWorkstation, services: []}
   - {id: comp03, namespace: ra-comp03, ip: 10.77.0.51/24, role: CompromisedWorkstation, services: []}
   - {id: comp04, namespace: ra-comp04, ip: 10.77.0.52/24, role: CompromisedWorkstation, services: []}
-
   - {id: svc01, namespace: ra-svc01, ip: 10.77.0.17/24, role: ServiceAccount, services: []}
   - {id: svc02, namespace: ra-svc02, ip: 10.77.0.53/24, role: ServiceAccount, services: []}
   - {id: svc03, namespace: ra-svc03, ip: 10.77.0.54/24, role: ServiceAccount, services: []}
   - {id: svc04, namespace: ra-svc04, ip: 10.77.0.55/24, role: ServiceAccount, services: []}
-
   - {id: remote01, namespace: ra-remote01, ip: 10.77.0.18/24, role: RemoteWorker, services: []}
   - {id: remote02, namespace: ra-remote02, ip: 10.77.0.56/24, role: RemoteWorker, services: []}
   - {id: remote03, namespace: ra-remote03, ip: 10.77.0.57/24, role: RemoteWorker, services: []}
   - {id: remote04, namespace: ra-remote04, ip: 10.77.0.58/24, role: RemoteWorker, services: []}
 
-  # Bounded destination services retained from the validated V3 wire stack.
+  # SSH and SMB use independent namespaces/processes to create real target diversity.
   - {id: linux01, namespace: ra-linux01, ip: 10.77.0.21/24, role: LinuxServer, services: [ssh]}
   - {id: linux02, namespace: ra-linux02, ip: 10.77.0.22/24, role: LinuxServer, services: [ssh]}
+  - {id: linux03, namespace: ra-linux03, ip: 10.77.0.60/24, role: LinuxServer, services: [ssh]}
+  - {id: linux04, namespace: ra-linux04, ip: 10.77.0.61/24, role: LinuxServer, services: [ssh]}
   - {id: file01, namespace: ra-file01, ip: 10.77.0.23/24, role: FileServer, services: [smb]}
+  - {id: file02, namespace: ra-file02, ip: 10.77.0.62/24, role: FileServer, services: [smb]}
+  - {id: file03, namespace: ra-file03, ip: 10.77.0.63/24, role: FileServer, services: [smb]}
+  - {id: file04, namespace: ra-file04, ip: 10.77.0.64/24, role: FileServer, services: [smb]}
+
+  # RDP/VNC aliases are multiple L3 service endpoints on the same validated
+  # xrdp/TigerVNC stack. This gives graph/pair diversity without changing the
+  # client/server implementation fingerprint between endpoint identities.
   - {id: rdp01, namespace: ra-rdp01, ip: 10.77.0.24/24, role: RDPServer, services: [rdp]}
+  - {id: rdp02, namespace: ra-rdp01, ip: 10.77.0.65/24, role: RDPServer, services: [rdp]}
+  - {id: rdp03, namespace: ra-rdp01, ip: 10.77.0.66/24, role: RDPServer, services: [rdp]}
+  - {id: rdp04, namespace: ra-rdp01, ip: 10.77.0.67/24, role: RDPServer, services: [rdp]}
   - {id: vnc01, namespace: ra-vnc01, ip: 10.77.0.25/24, role: VNCServer, services: [vnc]}
+  - {id: vnc02, namespace: ra-vnc01, ip: 10.77.0.68/24, role: VNCServer, services: [vnc]}
+  - {id: vnc03, namespace: ra-vnc01, ip: 10.77.0.69/24, role: VNCServer, services: [vnc]}
+  - {id: vnc04, namespace: ra-vnc01, ip: 10.77.0.70/24, role: VNCServer, services: [vnc]}
   - {id: rpc01, namespace: ra-rpc01, ip: 10.77.0.26/24, role: RPCServer, services: [dcerpc]}
   - {id: mgmt01, namespace: ra-mgmt01, ip: 10.77.0.27/24, role: ManagementServer, services: [winrm]}
 
