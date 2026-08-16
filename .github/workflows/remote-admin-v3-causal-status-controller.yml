@@ -1,0 +1,126 @@
+name: Remote Admin Anomaly V3 Causal Status Controller
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v3]
+    paths:
+      - '.github/workflows/remote-admin-v3-causal-status-controller.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: remote-admin-v3-causal-status-controller
+  cancel-in-progress: false
+
+jobs:
+  run-and-record:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: remote-admin-anomaly-lab-v3
+          fetch-depth: 0
+      - name: Dispatch authoritative final on this exact branch head
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin remote-admin-anomaly-lab-v3
+          TESTED_SHA="$(git rev-parse origin/remote-admin-anomaly-lab-v3)"
+          echo "tested_sha=$TESTED_SHA" >> "$GITHUB_OUTPUT"
+          before="$(date -u +%s)"
+          gh workflow run remote-admin-v3-causal-final.yml --repo "$REPO" --ref remote-admin-anomaly-lab-v3
+          run_id=""
+          for _ in $(seq 1 60); do
+            candidate="$(gh run list --repo "$REPO" --workflow remote-admin-v3-causal-final.yml --branch remote-admin-anomaly-lab-v3 --event workflow_dispatch --limit 10 --json databaseId,headSha,createdAt --jq ".[] | select(.headSha == \"$TESTED_SHA\") | .databaseId" | head -n1)"
+            if [[ "$candidate" =~ ^[0-9]+$ ]]; then run_id="$candidate"; break; fi
+            sleep 2
+          done
+          [[ "$run_id" =~ ^[0-9]+$ ]] || { echo 'unable to resolve dispatched final run id' >&2; exit 1; }
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "authoritative_run_id=$run_id tested_sha=$TESTED_SHA dispatched_after_epoch=$before"
+
+      - name: Wait for authoritative final conclusion
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 345); do
+            status="$(gh run view "$RUN_ID" --repo "$REPO" --json status --jq .status)"
+            conclusion="$(gh run view "$RUN_ID" --repo "$REPO" --json conclusion --jq '.conclusion // ""')"
+            echo "run=$RUN_ID status=$status conclusion=${conclusion:-pending}"
+            if [[ "$status" == "completed" ]]; then
+              echo "conclusion=$conclusion" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 60
+          done
+          echo "conclusion=controller_timeout" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Record exact status and failed logs in V3 branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+          TESTED_SHA: ${{ steps.dispatch.outputs.tested_sha }}
+          CONTROLLER_RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p remote-admin-anomaly-lab/.ci
+          status="unknown"; conclusion="unknown"
+          if [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            status="$(gh run view "$RUN_ID" --repo "$REPO" --json status --jq .status 2>/dev/null || echo unknown)"
+            conclusion="$(gh run view "$RUN_ID" --repo "$REPO" --json conclusion --jq '.conclusion // ""' 2>/dev/null || echo unknown)"
+            gh run view "$RUN_ID" --repo "$REPO" --log-failed > remote-admin-anomaly-lab/.ci/v3_causal_final_failed.log 2>&1 || true
+            gh run view "$RUN_ID" --repo "$REPO" --json jobs > /tmp/v3-final-jobs.json 2>/dev/null || echo '{"jobs":[]}' >/tmp/v3-final-jobs.json
+          else
+            echo 'authoritative run id was not resolved' > remote-admin-anomaly-lab/.ci/v3_causal_final_failed.log
+            echo '{"jobs":[]}' >/tmp/v3-final-jobs.json
+          fi
+          STATUS="$status" CONCLUSION="$conclusion" python - <<'PY'
+          import json, os
+          from pathlib import Path
+          jobs=json.loads(Path('/tmp/v3-final-jobs.json').read_text()).get('jobs',[])
+          payload={
+              'schema_version':1,
+              'tested_sha':os.environ.get('TESTED_SHA',''),
+              'authoritative_final_run_id':os.environ.get('RUN_ID',''),
+              'controller_run_id':os.environ.get('CONTROLLER_RUN_ID',''),
+              'status':os.environ.get('STATUS','unknown'),
+              'conclusion':os.environ.get('CONCLUSION','unknown'),
+              'jobs':[
+                  {'name':j.get('name'),'status':j.get('status'),'conclusion':j.get('conclusion'),'startedAt':j.get('startedAt'),'completedAt':j.get('completedAt')}
+                  for j in jobs
+              ],
+          }
+          Path('remote-admin-anomaly-lab/.ci/v3_causal_final_status.json').write_text(json.dumps(payload,indent=2,sort_keys=True)+'\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add remote-admin-anomaly-lab/.ci/v3_causal_final_status.json remote-admin-anomaly-lab/.ci/v3_causal_final_failed.log
+          git diff --cached --quiet && exit 0
+          git commit -m "ci(remote-admin): record authoritative V3 final ${conclusion:-unknown} run ${RUN_ID:-unknown}"
+          git pull --rebase origin remote-admin-anomaly-lab-v3
+          git push origin HEAD:remote-admin-anomaly-lab-v3
+
+      - name: Fail controller if authoritative final did not pass
+        if: always()
+        env:
+          CONCLUSION: ${{ steps.wait.outputs.conclusion }}
+        shell: bash
+        run: |
+          [[ "$CONCLUSION" == "success" ]] || { echo "authoritative V3 final conclusion=$CONCLUSION" >&2; exit 1; }
