@@ -19,10 +19,10 @@ bash "$ROOT/scripts/start_services.sh" start "$STATE_DIR/core"
 "$PYTHON_BIN" "$ROOT/scripts/start_extended_services_v2.py" verify "$STATE_DIR/extended"
 setsid tcpdump -i br-adminlab -U -s 0 -n -w "$RAW_PCAP" >"$RUN_DIR/tcpdump.log" 2>&1 & TCPDUMP_PGID=$!; sleep 1; kill -0 -- "-$TCPDUMP_PGID"
 
-PYTHONPATH="$ROOT/src" "$PYTHON_BIN" "$ROOT/scripts/run_scenarios_extended_v2.py" \
+PYTHONPATH="$ROOT/src" "$PYTHON_BIN" "$ROOT/scripts/run_scenarios_v3_causal.py" \
   --stage "$STAGE" --count "$COUNT" --seed "$SEED" \
   --core-state "$STATE_DIR/core" --out "$RUN_DIR/scenarios" \
-  --v3-signal --v3-matched-fraction "${ADMINLAB_V3_MATCHED_FRACTION:-0.40}"
+  --v3-matched-fraction "${ADMINLAB_V3_MATCHED_FRACTION:-0.40}"
 
 stop_capture; TCPDUMP_PGID=""
 [[ -s "$RAW_PCAP" ]]; tcpdump -nn -r "$RAW_PCAP" -c 1 >/dev/null 2>&1
@@ -44,15 +44,17 @@ p={
  'capture_format':'temporary-merged-pcap.zst','final_merged_capture_retained':False,
  'protocol_counts':s.get('protocol_counts',{}),'label_counts':s.get('label_counts',{}),
  'implementation_counts':s.get('implementation_counts',{}),'planner':s.get('planner'),
- 'v3_signal':s.get('v3_signal'),'v3_campaigns':s.get('v3_campaigns'),
+ 'source_identity_count':s.get('source_identity_count',0),'source_role_counts':s.get('source_role_counts',{}),
+ 'family_counts':s.get('family_counts',{}),'v3_signal':s.get('v3_signal'),'v3_campaigns':s.get('v3_campaigns'),
  'external_targets_allowed':False,'payload_execution_allowed':False
 }
 open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(p,indent=2,sort_keys=True)+'\n')
 if not p['ok']: raise SystemExit('scenario failures present')
-if p['planner'] != 'digital_twin_v3_signal': raise SystemExit('unexpected planner')
+if p['planner'] != 'digital_twin_v3_causal': raise SystemExit('unexpected planner')
+if int(p['source_identity_count']) < min(32,int(p['sessions'])): raise SystemExit('source identity diversity below V3 gate')
+if not p.get('v3_signal',{}).get('causal_observability',{}).get('valid',False): raise SystemExit('causal observability gate failed')
 PY
-# The temporary Bronze shape is intentionally V2-compatible so existing Silver
-# parsers can consume it. finalize_v3_bronze.py replaces it after Silver/Gold.
+# Temporary merged capture remains only long enough for the parser stack.
 PYTHONPATH="$ROOT/src" "$PYTHON_BIN" - "$BRONZE" "$QUALITY/temporary_bronze_contract.json" <<'PY'
 import json,sys
 from pathlib import Path
@@ -62,4 +64,4 @@ Path(sys.argv[2]).write_text(json.dumps(r,indent=2,sort_keys=True)+'\n',encoding
 if not r['ok']: raise SystemExit(json.dumps(r,sort_keys=True))
 PY
 rm -f "$RAW_PCAP"; trap - EXIT INT TERM; cleanup
-echo "v3_temporary_bronze_ready=$BRONZE sessions=$SESSION_COUNT pcap_zst_bytes=$PCAP_BYTES"
+echo "v3_causal_temporary_bronze_ready=$BRONZE sessions=$SESSION_COUNT pcap_zst_bytes=$PCAP_BYTES"
