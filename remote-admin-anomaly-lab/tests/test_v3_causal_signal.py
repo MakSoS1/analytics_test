@@ -7,10 +7,10 @@ from pathlib import Path
 import yaml
 
 from adminlab.manifest import SessionRecord
+from adminlab.v3_causal import build_v3_causal_plan
 from adminlab.v3_signal import (
     audit_causal_observability,
     audit_v3_signal_plan,
-    build_v3_causal_plan,
     causal_history_signature,
     v3_current_signature,
 )
