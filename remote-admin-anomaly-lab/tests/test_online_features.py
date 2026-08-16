@@ -43,3 +43,17 @@ def test_current_event_is_inserted_only_after_scoring_new_edge_ratio():
     assert a['features']['new_edge_ratio_1h'] == 0.0
     assert b['features']['new_edge_ratio_1h'] == 1.0
     assert 0.0 < c['features']['new_edge_ratio_1h'] <= 1.0
+
+
+def test_state_snapshot_restore_preserves_next_feature_vector_exactly():
+    original=EveFeatureState()
+    original.consume_flow(flow('2026-08-14T09:00:00+00:00','10.0.0.1','10.0.0.2',1))
+    original.consume_flow(flow('2026-08-14T09:05:00+00:00','10.0.0.1','10.0.0.3',2,port=445,app_proto='smb'))
+    snapshot=original.to_dict()
+    restored=EveFeatureState.from_dict(snapshot)
+    event=flow('2026-08-14T09:10:00+00:00','10.0.0.1','10.0.0.2',3)
+    expected=original.consume_flow(event)
+    actual=restored.consume_flow(event)
+    assert actual['features']==expected['features']
+    assert actual['context']==expected['context']
+    assert restored.to_dict()==original.to_dict()
