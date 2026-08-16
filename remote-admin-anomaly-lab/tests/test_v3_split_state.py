@@ -1,6 +1,7 @@
 import pandas as pd
 
-from adminlab.session_gold import build_session_gold, build_split_isolated_session_gold
+from adminlab.session_gold import build_session_gold
+from adminlab.v3_split_state import build_split_isolated_session_gold
 
 
 def _fixture():
