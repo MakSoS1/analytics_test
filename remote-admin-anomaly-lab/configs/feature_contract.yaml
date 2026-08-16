@@ -1,4 +1,4 @@
-feature_contract_version: 7
+feature_contract_version: 8
 production_source: suricata_eve_flow
 
 production_allowlist:
@@ -36,12 +36,19 @@ production_allowlist:
   - new_dst_7d
   - new_dst_30d
   - pair_seen_count
+  - pair_recency_s
   - pair_connections_24h
   - pair_connections_7d
   - pair_connections_30d
+  - source_protocol_seen_count_prior
+  - source_protocol_novelty
+  - source_pair_protocol_seen_count_prior
+  - destination_seen_count_prior
   - src_out_degree_1h
   - dst_in_degree_1h
   - new_edge_count_1h
+  - new_edge_ratio_1h
+  - recent_protocol_switch_count_1h
   - protocol_entropy_1h
   - protocol_entropy_24h
 
@@ -59,6 +66,13 @@ production_required:
   - new_dst_for_src
   - new_src_dst_pair
   - pair_seen_count
+  - pair_recency_s
+  - source_protocol_seen_count_prior
+  - source_protocol_novelty
+  - source_pair_protocol_seen_count_prior
+  - destination_seen_count_prior
+  - new_edge_ratio_1h
+  - recent_protocol_switch_count_1h
   - protocol_entropy_1h
 
 research_optional_zeek:
