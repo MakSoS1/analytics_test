@@ -4,10 +4,22 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import confusion_matrix
 
 HARD_TASKS = {"emergency_admin", "approved_forwarding", "backup", "fix_incident"}
-HARD_RELATIONS = {"novel_but_ticketed", "recently_added_pair"}
+HARD_RELATIONS = {
+    "novel_but_ticketed",
+    "recently_added_pair",
+    "approved_new_pair",
+    "known_or_expected_pair",
+}
+HARD_FAMILIES = {
+    "scheduled_patch_fanout",
+    "helpdesk",
+    "backup_burst",
+    "benign_first_seen",
+    "offhours_emergency",
+    "service_automation",
+}
 
 
 def hard_benign_mask(labels: pd.DataFrame) -> pd.Series:
@@ -19,6 +31,8 @@ def hard_benign_mask(labels: pd.DataFrame) -> pd.Series:
         context |= labels["task_id"].fillna("").astype(str).isin(HARD_TASKS)
     if "historical_relation" in labels.columns:
         context |= labels["historical_relation"].fillna("").astype(str).isin(HARD_RELATIONS)
+    if "campaign_type" in labels.columns:
+        context |= labels["campaign_type"].fillna("").astype(str).isin(HARD_FAMILIES)
     return mask & context
 
 
@@ -41,22 +55,14 @@ def evaluate_hard_benign(labels: pd.DataFrame, scores: np.ndarray, *, threshold:
         "fp_per_10k_hard_benign": float(10000.0 * fp / n),
         "threshold": float(threshold),
     }
-    if "task_id" in subset.columns:
-        result["by_task"] = {
-            str(task): {
-                "n": int(len(part)),
-                "false_positives": int((part["score"] >= threshold).sum()),
-                "fpr": float((part["score"] >= threshold).mean()),
+    for field in ("task_id", "historical_relation", "campaign_type"):
+        if field in subset.columns:
+            result[f"by_{field}"] = {
+                str(value): {
+                    "n": int(len(part)),
+                    "false_positives": int((part["score"] >= threshold).sum()),
+                    "fpr": float((part["score"] >= threshold).mean()),
+                }
+                for value, part in subset.groupby(field, dropna=False, sort=True)
             }
-            for task, part in subset.groupby("task_id", dropna=False, sort=True)
-        }
-    if "historical_relation" in subset.columns:
-        result["by_relation"] = {
-            str(rel): {
-                "n": int(len(part)),
-                "false_positives": int((part["score"] >= threshold).sum()),
-                "fpr": float((part["score"] >= threshold).mean()),
-            }
-            for rel, part in subset.groupby("historical_relation", dropna=False, sort=True)
-        }
     return result
