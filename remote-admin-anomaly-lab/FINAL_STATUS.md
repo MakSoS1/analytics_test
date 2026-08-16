@@ -1,137 +1,221 @@
-# Remote Admin Anomaly Lab V1 — Final Status
+# Remote Admin Anomaly Lab V3 — Corrected Causal / NGFW Status
 
-**Status:** CLOSED AS VALIDATED NEGATIVE RESEARCH RESULT  
-**Decision:** `STOP_AT_1K`  
-**Model promotion:** `NONE`  
-**Branch:** `remote-admin-anomaly-lab-v1`
+**Branch:** `remote-admin-anomaly-lab-v3`  
+**Dataset generation:** V3 in-place; no V4 fork  
+**Primary production unit:** Suricata EVE `flow`  
+**Production feature implementation:** `adminlab.online_features.EveFeatureState`  
+**Deployment model alias:** `gold/V3-1k/models/M1-lightgbm.joblib`
 
-## What is complete
+## Authoritative evidence
 
-The V1 engineering/data pipeline is complete and reproducible:
-
-- isolated 15-namespace topology;
-- real-wire SSH, SMB, RDP and VNC traffic;
-- alternate SSH/SMB clients (Paramiko and smbprotocol);
-- 45-day simulated organization timeline;
-- balanced 1000-session research corpus;
-- immutable Bronze full PCAP/manifests/checksums;
-- Suricata + Zeek Silver;
-- deterministic Suricata rule pass stored separately from raw EVE;
-- production-compatible Suricata-flow Gold using `EveFeatureState`;
-- causal held-out state replay;
-- grouped campaign/counterfactual splits;
-- strict challenge holdout impact budgets;
-- leakage and train/serve checks;
-- M0/M1/M2 training;
-- low-FPR, hard-benign, unseen implementation/persona/pair/temporal and campaign evaluation;
-- grouped learning curve and shortcut audit;
-- private HF quarantine persistence;
-- fail-closed scale/promotion conclusion.
-
-## Final evidence chain
-
-| Gate | Run | Result |
-|---|---:|---|
-| Planner audit | `31817778803` | GREEN |
-| Final contract before wire barriers | `31817735933` | GREEN |
-| V4 40-session full-pipeline barrier | `31817920754` | GREEN |
-| 160-session implementation barrier | `31817953836` | GREEN |
-| Final 1k research | `31818445960` | pipeline/evaluation complete; scientific quality rejection on `shortcut_risk` |
-| Negative-result/HF finalizer | `31821404669` | GREEN |
-| Finalizer code contract | `31821362433` | GREEN |
-
-## Final 1k corpus
-
-- Behavioral sessions: **1000/1000 successful**.
-- Labels: **500 benign / 500 suspicious**.
-- SSH / SMB / RDP / VNC: **250 each**.
-- Timeline: **45 simulated days** represented by every protocol.
-- Compressed full Bronze PCAP: **227,883,905 B**.
-- Suricata raw flows: **2,705**.
-- Direct eligible flows: **2,271**.
-- Mapped direct flows: **2,263**.
-- Background flows retained: **434**.
-- Flow mapping coverage: **0.9964773**.
-- Session mapping coverage: **0.993**.
-- Per protocol: RDP `1.0`, SMB `1.0`, SSH `0.972`, VNC `1.0`.
-- UID alignment: **1.0**.
-- Leakage audit: **PASS**.
-
-## Model conclusion
-
-M1 LightGBM:
-
-| Split | PR-AUC | ROC-AUC |
-|---|---:|---:|
-| validation | `0.5074707204` | `0.4480471079` |
-| test | `0.5137590769` | `0.4605629446` |
-| challenge | `0.4222839299` | `0.4989922318` |
-
-- Challenge campaign recall at primary low-FPR threshold: **0.0**.
-- Hard-benign FPR: `0.0033613445` (2/595).
-- Nuisance-only feature-family baselines outperform full M1 on validation.
-- Automatic research failure: `shortcut_risk`.
-- Final grouped learning-curve delta PR-AUC: `-0.0138075260`.
-- Learning-curve recommendation: `prefer_diversity_or_holdout_analysis`.
-
-Interpretation: the corrected evaluation does not support a robust suspicious-vs-benign decision from the current V1 network-flow feature/data hypothesis. More rows from the same generator distribution are not justified.
-
-## Storage
-
-### Private durable quarantine
+Do not infer scientific readiness from this Markdown file. For every corrected V3 release, the authoritative machine-readable files are:
 
 ```text
-Maksim123321/remote-admin-anomaly-v1/
-└── quarantine/rejected/gh-31818445960/
-    ├── release/
-    │   ├── bronze/H-research-1k/
-    │   ├── silver/H-research-1k/
-    │   ├── gold/H-research-1k/
-    │   └── quality/H-research-1k/
-    ├── models/
-    ├── evaluation/
-    ├── RESEARCH_GATE.json
-    └── NEGATIVE_RESEARCH_VERIFIED.json
+quality/V3-1k/V3_RESEARCH_DECISION.json
+quality/V3-1k/V3_RELEASE_MANIFEST.json
+quality/V3-1k/V3_HF_REMOTE_VERIFY.json
+quality/V3-1k/V3_CAUSAL_FINAL_STATUS.json
+quality/V3-1k/production_flow_gold.json
+gold/V3-1k/models/flow-primary.metrics.json
+gold/V3-1k/models/shortcut-audit.json
+quality/V3-1k/hard_benign_flow.json
+quality/V3-1k/flow_learning_curve.json
 ```
 
-HF verification status: `UPLOADED_AND_VERIFIED_QUARANTINE`; repository privacy verified.
+`dataset_release_status=READY` and `research_status=PASS` are deliberately separate. A technically complete dataset is retained even if its detector hypothesis fails the promotion gates.
 
-### GitHub fallback
+## What was corrected in V3
 
-- Run `31818445960`.
-- Artifact `remote-admin-research-gate-v2-31818445960`.
-- Artifact ID `9226887886`.
-- Size `718,832,312` B.
-- Digest `sha256:40a463b9f16d4251d3b40b8915ef7a7425a883edd2916484acab660328fbbf72`.
-- Retention: 90 days.
+The original V3 generated a balanced binary label largely independently of the network process and added much of the benign/malicious distinction later as forbidden semantic metadata. That made the production feature matrix close to non-identifiable.
 
-## NGFW decision
+Corrected V3 changes the causal direction:
 
-- Suricata deterministic remote-admin rules: visibility/audit telemetry only.
-- M1 LightGBM: shadow/research only.
-- M2 Isolation Forest: shadow/research only.
-- Automatic drop/block/quarantine: **not justified by V1**.
+```text
+source baseline / prior relations
+          ↓
+benign activity or suspicious mutation
+          ↓
+real application session on isolated wire
+          ↓
+Suricata EVE flow
+          ↓
+prior-only production state
+          ↓
+label used only for training/evaluation
+```
 
-## What is deliberately not complete/claimed
+The incoming legacy labels from the candidate pool are not used to choose the corrected target class. The candidate pool supplies realistic protocol/timestamp/current-session nuisance variation; `v3_causal_ngfw` constructs the observable relation before the final label is materialized.
 
-These are external fidelity/validation gaps, not hidden unfinished V1 tasks:
+## Network identities and endpoints
 
-- native Windows DCOM/DCE-RPC fidelity;
-- native Windows WinRM fidelity;
-- independent real/reference external corpus;
-- independent enterprise OS/identity/network environments;
-- adversarial C2-framework challenge traffic.
+The corrected topology has at least 32 independent source identities for the 1k gate and explicitly includes compromised-workstation sources. It no longer collapses the organizational baseline to the old handful of source IPs.
 
-V1 does not fabricate evidence for those items.
+SSH and SMB use several independent target namespaces/service instances. RDP and VNC use several explicitly marked L3 endpoint aliases on the same validated xrdp/TigerVNC service stack. Alias endpoints exist to provide pair/graph diversity without falsely claiming several independent Windows desktops on a GitHub-hosted Linux runner.
 
-## Reopening criteria for V2
+All endpoints stay inside `10.77.0.0/24`. External routing and payload execution remain disabled.
 
-Do not restart by changing only seed or row count. A V2 must introduce a materially different hypothesis, then pass a fresh 1k gate before scale. Candidate changes include independently collected environments, native Windows cohorts, real/reference administration traffic, richer longitudinal policy/user context available at inference time, or redesigned session/campaign features.
+## Counterfactual pairs
 
-The positive V1 promotion files `RESULTS_AUTOGENERATED.json` and `SCALE_DECISION_AUTOGENERATED.json` intentionally do not exist. The authoritative final files are:
+At least 40% of the corrected 1k corpus must belong to matched benign/suspicious current-session pairs.
 
-- `RESULTS_NEGATIVE_AUTOGENERATED.md/json`;
-- `SCALE_DECISION_NEGATIVE.md/json`;
-- `HF_NEGATIVE_PERSISTENCE.json`;
-- this `FINAL_STATUS.md`;
-- `PLAN.md`.
+A pair is accepted only when:
+
+1. current-session nuisance controls match;
+2. labels are opposite;
+3. the strictly-prior production-observable history differs;
+4. the difference still exists after the final current-session timestamp copy and a complete chronological replay of all already accepted pairs.
+
+A semantic-only pair is a hard planner failure.
+
+## Production model boundary
+
+The production candidate is **flow-primary**. Session and campaign views remain research/SOC views and are not required at inference time.
+
+The NGFW scorer consumes Suricata EVE `flow` records for remote-administration candidate traffic only. Unrelated DNS/HTTP/TLS flows do not mutate this model's rolling baseline.
+
+Production state includes prior-only quantities such as:
+
+- connection counts over 1m/5m/15m/1h/24h/7d/30d;
+- unique destination counts;
+- source/destination pair frequency and recency;
+- new-destination/new-pair state;
+- source-protocol and source-pair-protocol familiarity;
+- destination prevalence;
+- short-window graph degree/new-edge rate;
+- protocol switches and entropy.
+
+Raw IPs are state keys only and never model features.
+
+## Train / serve parity
+
+Offline production Gold and the online sidecar use the same `EveFeatureState` implementation. The current flow is scored before it is inserted into history.
+
+The online state can be atomically checkpointed and restored, so a sensor restart does not erase its 7d/30d baseline.
+
+The production sidecar does not require:
+
+- orchestrator `session_id`;
+- campaign IDs;
+- personas or labels;
+- Zeek;
+- PCAP;
+- EDR telemetry.
+
+Deployment files are in:
+
+```text
+deploy/ngfw/install_v3.sh
+deploy/ngfw/remote-admin-v3.service
+deploy/ngfw/README.md
+scripts/score_eve_sidecar.py
+```
+
+## Split and leakage policy
+
+Campaign/counterfactual connected groups never cross split boundaries. The session/campaign research view uses independent state replay per split.
+
+For the production flow benchmark, held-out streams may receive only causally prior reference context permitted by the production replay policy; validation/test/challenge do not mutate one another's state. Ground-truth, generator, netem, identity and fidelity metadata remain forbidden model columns.
+
+## Shortcut audit
+
+The old V3 compared different estimator families for full vs nuisance-only models. Corrected V3 trains the full model and every ablation with the same LightGBM pipeline/hyperparameters.
+
+The promotion decision separately measures:
+
+- time-only;
+- protocol-only;
+- bytes/packets-only;
+- duration/current-session-only;
+- history-only;
+- full production feature set.
+
+A high PR-AUC is not sufficient if the full model does not materially beat nuisance views or the intended history view does not beat prevalence.
+
+## Corrected 1k promotion gates
+
+The corrected release is fail-closed. The committed gate currently requires, among other checks:
+
+- exactly 1000 successful labeled sessions for the 1k gate;
+- 500 benign / 500 suspicious;
+- 250 SSH / 250 SMB / 250 RDP / 250 VNC;
+- 125/125 class balance inside each protocol;
+- at least 32 source identities;
+- at least 40% causal counterfactual rows;
+- overall session mapping >= 99.5%;
+- each protocol session mapping >= 99%;
+- flow mapping >= 98%;
+- validation flow PR-AUC >= 0.70;
+- test and challenge flow PR-AUC >= 0.65;
+- full model margin over best nuisance >= 0.05;
+- history-only margin over prevalence >= 0.05;
+- hard-benign FPR <= 1%;
+- non-zero challenge recall at the strict low-FPR operating point;
+- no external data in fit or threshold tuning;
+- exact Suricata/EveFeatureState train-serve candidate-stream parity.
+
+Failure of a scientific gate means `STOP_AT_1K`, not silent threshold relaxation and not automatic generation of 4k rows.
+
+## Bronze / rollback
+
+Final Bronze remains recoverable and manually inspectable:
+
+```text
+bronze/V3-1k/
+├── sessions/
+├── campaigns/
+├── raw_chunks/
+└── manifests/
+```
+
+The giant merged capture is a temporary parsing object and is not retained in the final HF payload. Session PCAPs, campaign PCAPs and complete raw packet chunks preserve the ability to rebuild Silver/Gold with later Suricata/Zeek/feature code.
+
+## External evidence
+
+LANL-derived reference traffic and native-Windows evidence remain external holdouts. They are forbidden from training and threshold selection.
+
+The LANL flow evaluation is transformed into an EVE-like stream and replayed through the same `EveFeatureState` instead of being pushed through the old session adapter with missing columns filled by zeros.
+
+Native Windows protocols are reported fail-closed: a protocol is never called validated without corresponding wire evidence. In particular, native RDP/DCOM limitations of hosted runners are not converted into synthetic success claims.
+
+## Release and storage policy
+
+A corrected release is uploaded only under a new immutable V3 prefix:
+
+```text
+Maksim123321/remote-admin-anomaly-v1
+└── v3/final/run-<github-run-id>/
+```
+
+The prior verified V3 payload is not deleted before the corrected payload has passed its own manifest, HF upload and full remote-download/hash verification.
+
+The final Actions workflow is:
+
+```text
+.github/workflows/remote-admin-v3-causal-final.yml
+```
+
+Its dependency order is fail-closed:
+
+```text
+full regression suite
+        ↓
+80-session real-wire causal smoke
+        ↓
+Windows + LANL external evidence
+        ↓
+1k real-wire corrected corpus
+        ↓
+Silver / production Gold
+        ↓
+flow-primary model + ablations
+        ↓
+low-FPR / hard-benign / learning-curve gates
+        ↓
+immutable manifest
+        ↓
+HF upload
+        ↓
+full remote download + hash verification
+```
+
+Do not replace the JSON evidence with remembered metric values in this file. The release JSON is the source of truth.
