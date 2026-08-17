@@ -32,12 +32,12 @@ def _row(*, session_id: str, label: int, protocol: str, campaign: str, start: st
     )
 
 
-def test_session_path_is_human_browsable():
+def test_session_path_is_human_browsable_raw_pcap():
     row = _row(session_id="abc", label=1, protocol="ssh", campaign="camp-a", start="2026-06-01T10:00:00+00:00", end="2026-06-01T10:01:00+00:00")
-    assert session_relative_path(row).as_posix() == "sessions/suspicious/ssh/abc.pcap.zst"
+    assert session_relative_path(row).as_posix() == "sessions/suspicious/ssh/abc.pcap"
 
 
-def test_slice_and_campaign_builder_create_indexable_authoritative_tree(tmp_path, monkeypatch):
+def test_slice_and_campaign_builder_create_raw_indexable_authoritative_tree(tmp_path, monkeypatch):
     merged = tmp_path / "ephemeral-merged.pcap"
     merged.write_bytes(b"temporary merged capture")
     sessions = [
@@ -58,13 +58,17 @@ def test_slice_and_campaign_builder_create_indexable_authoritative_tree(tmp_path
     monkeypatch.setattr("adminlab.pcap_slicing._merge_pcaps", fake_merge)
     monkeypatch.setattr("adminlab.pcap_slicing._packet_count", lambda path: 7)
 
-    evidence = slice_session_pcaps(merged, sessions, tmp_path / "bronze")
+    bronze = tmp_path / "bronze"
+    evidence = slice_session_pcaps(merged, sessions, bronze)
     assert len(evidence) == 2
     assert all(item.packet_count == 7 for item in evidence)
     assert all(item.pcap_bytes > 0 for item in evidence)
     assert all(len(item.sha256) == 64 for item in evidence)
-    campaign_evidence = build_campaign_pcaps(evidence, sessions, tmp_path / "bronze")
+    assert not list(bronze.rglob("*.pcap.zst"))
+
+    campaign_evidence = build_campaign_pcaps(evidence, sessions, bronze)
     assert len(campaign_evidence) == 2
+    assert not list(bronze.rglob("*.pcap.zst"))
 
     frame = build_pcap_index(evidence + campaign_evidence, sessions)
     assert isinstance(frame, pd.DataFrame)
@@ -73,12 +77,11 @@ def test_slice_and_campaign_builder_create_indexable_authoritative_tree(tmp_path
     assert frame["relative_pcap_path"].notna().all()
     assert not (frame["relative_pcap_path"].astype(str).str.strip() == "").any()
     assert set(frame.loc[frame["kind"] == "session", "relative_pcap_path"]) == {
-        "sessions/benign/ssh/b-1.pcap.zst",
-        "sessions/suspicious/smb/s-1.pcap.zst",
+        "sessions/benign/ssh/b-1.pcap",
+        "sessions/suspicious/smb/s-1.pcap",
     }
     assert set(frame.loc[frame["kind"] == "campaign", "relative_pcap_path"]) == {
-        "campaigns/benign/camp-b.pcap.zst",
-        "campaigns/suspicious/camp-s.pcap.zst",
+        "campaigns/benign/camp-b.pcap",
+        "campaigns/suspicious/camp-s.pcap",
     }
-    # The source merged capture is outside the authoritative Bronze tree.
     assert not any("merged" in item.relative_path for item in evidence + campaign_evidence)
