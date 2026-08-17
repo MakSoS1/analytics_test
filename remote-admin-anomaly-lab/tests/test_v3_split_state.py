@@ -1,7 +1,7 @@
 import pandas as pd
 
 from adminlab.session_gold import build_session_gold
-from adminlab.v3_split_state import build_split_isolated_session_gold
+from adminlab.v3_split_state import apply_research_session_splits, build_split_isolated_session_gold
 
 
 def _fixture():
@@ -52,3 +52,34 @@ def test_split_isolation_is_independent_of_other_split_rows():
         after.loc[after.session_id == "val-s", cols].iloc[0],
         check_names=False,
     )
+
+
+def test_research_session_splits_are_detached_from_production_flow_labels():
+    _, production = _fixture()
+    original = production.copy(deep=True)
+    session_splits = pd.DataFrame([
+        {"session_id":"train-s","split":"challenge","challenge_reason":"unseen_src_host"},
+        {"session_id":"val-s","split":"test","challenge_reason":""},
+    ])
+    research = apply_research_session_splits(production, session_splits)
+
+    # Production flow-primary labels remain byte-for-byte equivalent at the
+    # dataframe level; only the detached research copy receives new splits.
+    pd.testing.assert_frame_equal(production, original)
+    assert research.set_index("session_id").loc["train-s", "split"] == "challenge"
+    assert research.set_index("session_id").loc["val-s", "split"] == "test"
+    assert production.set_index("session_id").loc["train-s", "split"] == "train"
+    assert production.set_index("session_id").loc["val-s", "split"] == "validation"
+
+
+def test_research_session_splits_fail_closed_on_missing_session():
+    _, production = _fixture()
+    incomplete = pd.DataFrame([
+        {"session_id":"train-s","split":"train","challenge_reason":""},
+    ])
+    try:
+        apply_research_session_splits(production, incomplete)
+    except ValueError as exc:
+        assert "incomplete" in str(exc)
+    else:
+        raise AssertionError("missing research split assignment must fail closed")
