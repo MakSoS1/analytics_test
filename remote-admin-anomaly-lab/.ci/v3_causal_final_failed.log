@@ -1,31 +1,21 @@
-final-1k	Build Silver and Gold	﻿2026-08-17T08:47:38.8350547Z ##[group]Run bash scripts/build_silver.sh "$RELEASE_ROOT" "$SHARD"
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8351260Z ^[[36;1mbash scripts/build_silver.sh "$RELEASE_ROOT" "$SHARD"^[[0m
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8351704Z ^[[36;1mbash scripts/build_rule_baseline.sh "$RELEASE_ROOT" "$SHARD"^[[0m
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8352492Z ^[[36;1mpython scripts/build_flow_gold_v2.py --release "$RELEASE_ROOT" --shard "$SHARD" --feature-contract configs/feature_contract.yaml --split-seed "$SEED"^[[0m
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8353579Z ^[[36;1mpython scripts/build_hierarchical_gold_v3.py --release "$RELEASE_ROOT" --shard "$SHARD" --contract configs/v3_feature_contract.yaml --split-seed "$SEED"^[[0m
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8395196Z shell: /usr/bin/bash -e {0}
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8395494Z env:
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8395799Z   PYTHONPATH: src
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8396251Z   ROOT_OUT: /tmp/remote-admin-v3-causal-final
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8396675Z   RELEASE_ROOT: /tmp/remote-admin-v3-causal-final/release
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8397010Z   SHARD: V3-1k
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8397216Z   SEED: 2026081603
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8398050Z   HF_HUB_DISABLE_XET: 1
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8398488Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8398956Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8399410Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8399799Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8400191Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8400585Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
-final-1k	Build Silver and Gold	2026-08-17T08:47:38.8400922Z ##[endgroup]
-final-1k	Build Silver and Gold	2026-08-17T08:47:39.0323847Z i: suricata: This is Suricata version 7.0.3 RELEASE running in USER mode
-final-1k	Build Silver and Gold	2026-08-17T08:47:39.0960753Z W: detect: No rule files match the pattern /var/lib/suricata/rules/suricata.rules
-final-1k	Build Silver and Gold	2026-08-17T08:47:39.0961777Z W: detect: 1 rule files specified, but no rules were loaded!
-final-1k	Build Silver and Gold	2026-08-17T08:47:39.1047063Z W: unix-manager: Unix socket: UNIX socket bind(/var/run/suricata-command.socket) error: Address already in use
-final-1k	Build Silver and Gold	2026-08-17T08:47:39.1048268Z W: unix-manager: Unable to create unix command socket
-final-1k	Build Silver and Gold	2026-08-17T08:47:39.1051576Z i: threads: Threads created -> W: 1 FM: 1 FR: 1   Engine started.
-final-1k	Build Silver and Gold	2026-08-17T08:47:39.6998521Z i: suricata: Signal Received.  Stopping engine.
-final-1k	Build Silver and Gold	2026-08-17T08:47:39.7322016Z i: pcap: read 1 file, 309417 packets, 504701640 bytes
-final-1k	Build Silver and Gold	2026-08-17T08:47:45.2645405Z {"conn_bytes": 125149, "errors": [], "eve_bytes": 387643, "ok": true, "shard": "V3-1k"}
-final-1k	Build Silver and Gold	2026-08-17T08:47:45.2986251Z silver_ready=/tmp/remote-admin-v3-causal-final/release/silver/V3-1k eve_lines=15496 zeek_conn_lines=2986
-final-1k	Build Silver and Gold	2026-08-17T08:47:45.3081817Z ##[error]Process completed with exit code 1.
+final-1k	Evaluate hard benign and learning curve	﻿2026-08-17T09:33:30.8658575Z ##[group]Run GOLD="$RELEASE_ROOT/gold/$SHARD"; QUALITY="$RELEASE_ROOT/quality/$SHARD"
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8659206Z ^[[36;1mGOLD="$RELEASE_ROOT/gold/$SHARD"; QUALITY="$RELEASE_ROOT/quality/$SHARD"^[[0m
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8660481Z ^[[36;1mpython scripts/evaluate_hard_benign.py --model "$GOLD/models/flow-primary.joblib" --metrics "$GOLD/models/flow-primary.metrics.json" --model-matrix "$GOLD/production_model_matrix.parquet" --labels "$GOLD/production_flow_labels.parquet" --out "$QUALITY/hard_benign_flow.json"^[[0m
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8662460Z ^[[36;1mpython scripts/learning_curve_grouped.py --model-matrix "$GOLD/production_model_matrix.parquet" --labels "$GOLD/production_flow_labels.parquet" --out "$QUALITY/flow_learning_curve.json" --seed "$SEED"^[[0m
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8700632Z shell: /usr/bin/bash -e {0}
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8701124Z env:
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8701317Z   PYTHONPATH: src
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8701578Z   ROOT_OUT: /tmp/remote-admin-v3-causal-final
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8701948Z   RELEASE_ROOT: /tmp/remote-admin-v3-causal-final/release
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8702296Z   SHARD: V3-1k
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8702487Z   SEED: 2026081603
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8702685Z   HF_HUB_DISABLE_XET: 1
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8702975Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8703414Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8703873Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8704258Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8704643Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8705034Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:30.8705356Z ##[endgroup]
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:31.3241186Z matrix/labels split mismatch
+final-1k	Evaluate hard benign and learning curve	2026-08-17T09:33:31.3923532Z ##[error]Process completed with exit code 1.
