@@ -1,0 +1,28 @@
+name: Remote Admin V3 Final Kick
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v3]
+    paths:
+      - '.github/workflows/remote-admin-v3-final-kick.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-final:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Dispatch authoritative corrected V3 final
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api \
+            --method POST \
+            "repos/${GH_REPO}/actions/workflows/remote-admin-v3-causal-final.yml/dispatches" \
+            -f ref=remote-admin-anomaly-lab-v3
+          echo "Dispatched Remote Admin Anomaly V3 Causal Final on remote-admin-anomaly-lab-v3"
