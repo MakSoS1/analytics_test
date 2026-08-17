@@ -5,6 +5,42 @@ import pandas as pd
 from .session_gold import build_session_gold
 
 
+def apply_research_session_splits(
+    flow_labels: pd.DataFrame,
+    session_splits: pd.DataFrame,
+) -> pd.DataFrame:
+    """Return a research-only flow-label copy with session-level split assignment.
+
+    The production flow labels are the source of truth for the NGFW flow-primary
+    benchmark and MUST NOT be mutated or overwritten by session/campaign research
+    views. Hierarchical research can use a different grouped session split, but it
+    receives that split only on this detached copy.
+    """
+    required_labels = {"flow_uid", "session_id", "label_binary"}
+    missing_labels = required_labels - set(flow_labels.columns)
+    if missing_labels:
+        raise ValueError(f"flow labels missing research split columns: {sorted(missing_labels)}")
+    required_splits = {"session_id", "split", "challenge_reason"}
+    missing_splits = required_splits - set(session_splits.columns)
+    if missing_splits:
+        raise ValueError(f"session splits missing columns: {sorted(missing_splits)}")
+    if session_splits["session_id"].astype(str).duplicated().any():
+        raise ValueError("session split table contains duplicate session_id")
+
+    out = flow_labels.drop(
+        columns=[column for column in ("split", "challenge_reason") if column in flow_labels.columns]
+    ).copy()
+    split_map = session_splits[["session_id", "split", "challenge_reason"]].copy()
+    split_map["session_id"] = split_map["session_id"].astype(str)
+    out["session_id"] = out["session_id"].astype(str)
+    out = out.merge(split_map, on="session_id", how="left", validate="many_to_one", sort=False)
+    if out[["split", "challenge_reason"]].isna().any().any():
+        raise ValueError("research flow label split assignment incomplete")
+    if len(out) != len(flow_labels):
+        raise ValueError("research flow label row count changed")
+    return out
+
+
 def build_split_isolated_session_gold(
     flow_features: pd.DataFrame,
     flow_labels: pd.DataFrame,
