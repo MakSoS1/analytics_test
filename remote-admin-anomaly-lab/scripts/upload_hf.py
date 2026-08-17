@@ -31,14 +31,17 @@ def _validate_v3_bronze(bronze: Path) -> None:
     giant = list((bronze / "captures").rglob("*.pcap*")) if (bronze / "captures").exists() else []
     if giant:
         raise ValueError("V3 Bronze must not persist merged/full capture files")
+    compressed = list(bronze.rglob("*.pcap.zst"))
+    if compressed:
+        raise ValueError(f"corrected V3 Bronze must contain raw .pcap only; compressed PCAPs present: {len(compressed)}")
     required_dirs = {
-        "sessions": list((bronze / "sessions").rglob("*.pcap.zst")),
-        "campaigns": list((bronze / "campaigns").rglob("*.pcap.zst")),
-        "raw_chunks": list((bronze / "raw_chunks").glob("*.pcap.zst")),
+        "sessions": list((bronze / "sessions").rglob("*.pcap")),
+        "campaigns": list((bronze / "campaigns").rglob("*.pcap")),
+        "raw_chunks": list((bronze / "raw_chunks").glob("*.pcap")),
     }
     empty = [name for name, rows in required_dirs.items() if not rows]
     if empty:
-        raise ValueError(f"V3 Bronze missing authoritative PCAP groups: {empty}")
+        raise ValueError(f"V3 Bronze missing authoritative raw PCAP groups: {empty}")
     for name in ("pcap_index.csv", "pcap_index.parquet"):
         path = bronze / "manifests" / name
         if not path.is_file() or path.stat().st_size <= 0:
@@ -78,13 +81,6 @@ def write_status(path: Path | None, payload: dict) -> None:
 
 
 def _is_binary_like_text(path: Path) -> bool:
-    """Return True for text-named evidence that is unsafe for HF text handling.
-
-    pktmon commonly emits UTF-16 files with a .txt suffix. Hugging Face treats
-    .txt paths as text in its commit pipeline, so the persistence copy stores
-    such files as deterministic lossless gzip while the authoritative release
-    remains byte-for-byte unchanged.
-    """
     if not path.is_file() or path.stat().st_size <= 0:
         return False
     with path.open("rb") as fh:
@@ -102,24 +98,18 @@ def _binary_windows_texts(source: Path) -> list[Path]:
     windows = source / "external" / "windows"
     if not windows.is_dir():
         return []
-    return sorted(
-        (path for path in windows.rglob("*.txt") if _is_binary_like_text(path)),
-        key=lambda path: path.as_posix(),
-    )
+    return sorted((path for path in windows.rglob("*.txt") if _is_binary_like_text(path)), key=lambda path: path.as_posix())
 
 
 def _quality_transport_ignore(source: Path, binary_texts: list[Path]):
     ignored = {path.resolve() for path in binary_texts}
-
     def ignore(directory: str, names: list[str]) -> list[str]:
         current = Path(directory).resolve()
         return sorted(name for name in names if (current / name).resolve() in ignored)
-
     return ignore
 
 
 def stage_quality_for_hf(source: Path, target: Path) -> list[dict]:
-    """Create a recoverable HF transport copy without mutating source data."""
     binary_texts = _binary_windows_texts(source)
     shutil.copytree(source, target, ignore=_quality_transport_ignore(source, binary_texts))
     transforms: list[dict] = []
@@ -132,16 +122,14 @@ def stage_quality_for_hf(source: Path, target: Path) -> list[dict]:
         with raw_source.open("rb") as src, compressed.open("wb") as dst:
             with gzip.GzipFile(filename=raw_source.name, mode="wb", fileobj=dst, mtime=0) as gz:
                 shutil.copyfileobj(src, gz, length=1024 * 1024)
-        compressed_sha = sha256_file(compressed)
-        compressed_bytes = compressed.stat().st_size
         transforms.append({
             "original_path": relative.as_posix(),
             "stored_path": Path(str(relative) + ".gz").as_posix(),
             "transform": "gzip_lossless_mtime0",
             "original_sha256": original_sha,
             "original_bytes": original_bytes,
-            "stored_sha256": compressed_sha,
-            "stored_bytes": compressed_bytes,
+            "stored_sha256": sha256_file(compressed),
+            "stored_bytes": compressed.stat().st_size,
             "restore": f"gzip -dc {raw_source.name}.gz > {raw_source.name}",
         })
     manifest = {
@@ -150,9 +138,7 @@ def stage_quality_for_hf(source: Path, target: Path) -> list[dict]:
         "release_mutated": False,
         "transforms": transforms,
     }
-    (target / "HF_PERSISTENCE_TRANSFORMS.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    (target / "HF_PERSISTENCE_TRANSFORMS.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return transforms
 
 
@@ -166,14 +152,13 @@ def main() -> int:
     args = parser.parse_args()
 
     token = os.environ.get("HF_TOKEN", "").strip()
-    token_present = bool(token)
     base = {
         "repo": args.repo,
         "repo_type": "dataset",
         "private": True,
         "shard": args.shard,
         "remote_path": args.remote_path.strip("/"),
-        "token_present": token_present,
+        "token_present": bool(token),
     }
     if not token:
         payload = {**base, "status": "skipped", "reason": "HF_TOKEN missing"}
@@ -211,7 +196,8 @@ def main() -> int:
     payload = {
         **base,
         "status": "uploaded",
-        "reason": "complete recoverable shard uploaded; transport-only transforms are lossless and documented",
+        "reason": "complete recoverable shard uploaded; V3 PCAPs are raw .pcap and quality-only transport transforms are lossless",
+        "pcap_storage": "raw_uncompressed",
         "layer_bytes_original_release": sizes,
         "uploaded_paths": uploaded,
         "transport_transforms": transforms,
