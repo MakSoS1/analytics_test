@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -56,7 +57,7 @@ def _label_name(row: SessionRecord) -> str:
 
 
 def session_relative_path(row: SessionRecord) -> Path:
-    return Path("sessions") / _label_name(row) / _safe_component(row.protocol) / f"{_safe_component(row.session_id)}.pcap.zst"
+    return Path("sessions") / _label_name(row) / _safe_component(row.protocol) / f"{_safe_component(row.session_id)}.pcap"
 
 
 def campaign_relative_path(rows: list[SessionRecord]) -> Path:
@@ -64,7 +65,7 @@ def campaign_relative_path(rows: list[SessionRecord]) -> Path:
         raise ValueError("campaign rows are empty")
     labels = {int(row.label_binary) for row in rows}
     label_name = "mixed" if len(labels) != 1 else ("suspicious" if next(iter(labels)) else "benign")
-    return Path("campaigns") / label_name / f"{_safe_component(rows[0].campaign_id)}.pcap.zst"
+    return Path("campaigns") / label_name / f"{_safe_component(rows[0].campaign_id)}.pcap"
 
 
 def _capture_time(value: datetime) -> str:
@@ -97,22 +98,6 @@ def _packet_count(path: Path) -> int:
     return sum(1 for line in result.stdout.splitlines() if line.strip())
 
 
-def _compress_pcap(source: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["zstd", "-q", "-f", "-10", str(source), "-o", str(destination)],
-        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
-    )
-
-
-def _decompress_pcap(source: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["zstd", "-q", "-d", "-f", str(source), "-o", str(destination)],
-        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
-    )
-
-
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -139,31 +124,27 @@ def slice_session_pcaps(merged_pcap: Path, sessions: Iterable[SessionRecord], ou
         raise ValueError(f"merged PCAP is missing/empty: {merged_pcap}")
     evidence: list[PcapEvidence] = []
     pad = timedelta(milliseconds=padding_ms)
-    with tempfile.TemporaryDirectory(prefix="v3-session-pcap-") as tmp_dir:
-        tmp = Path(tmp_dir)
-        for row in sessions:
-            if str(row.status) != "success":
-                continue
-            if not row.execution_start_ts or not row.execution_end_ts:
-                raise ValueError(f"missing execution timestamps for successful session {row.session_id}")
-            start = _dt(row.execution_start_ts) - pad
-            end = _dt(row.execution_end_ts) + pad
-            if end <= start:
-                raise ValueError(f"invalid execution interval for {row.session_id}")
-            raw = tmp / f"{_safe_component(row.session_id)}.pcap"
-            _slice_pcap(merged_pcap, raw, start, end)
-            packets = _packet_count(raw)
-            if packets <= 0 or raw.stat().st_size <= 0:
-                raise ValueError(f"empty session PCAP for {row.session_id}")
-            relative = session_relative_path(row)
-            final_path = output_root / relative
-            _compress_pcap(raw, final_path)
-            evidence.append(_session_evidence(row, relative, final_path, packets))
+    for row in sessions:
+        if str(row.status) != "success":
+            continue
+        if not row.execution_start_ts or not row.execution_end_ts:
+            raise ValueError(f"missing execution timestamps for successful session {row.session_id}")
+        start = _dt(row.execution_start_ts) - pad
+        end = _dt(row.execution_end_ts) + pad
+        if end <= start:
+            raise ValueError(f"invalid execution interval for {row.session_id}")
+        relative = session_relative_path(row)
+        final_path = output_root / relative
+        _slice_pcap(merged_pcap, final_path, start, end)
+        packets = _packet_count(final_path)
+        if packets <= 0 or final_path.stat().st_size <= 0:
+            raise ValueError(f"empty session PCAP for {row.session_id}")
+        evidence.append(_session_evidence(row, relative, final_path, packets))
     return evidence
 
 
 def split_raw_chunks(merged_pcap: Path, output_root: Path, *, packets_per_chunk: int = 50000) -> list[PcapEvidence]:
-    """Persist every raw packet as several browsable chunks, never one giant final PCAP."""
+    """Persist every raw packet as browsable uncompressed PCAP chunks."""
     if packets_per_chunk <= 0:
         raise ValueError("packets_per_chunk must be positive")
     merged_pcap = Path(merged_pcap)
@@ -188,9 +169,10 @@ def split_raw_chunks(merged_pcap: Path, output_root: Path, *, packets_per_chunk:
             packets = _packet_count(raw)
             if packets <= 0:
                 continue
-            relative = Path("raw_chunks") / f"chunk-{index:04d}.pcap.zst"
+            relative = Path("raw_chunks") / f"chunk-{index:04d}.pcap"
             final_path = output_root / relative
-            _compress_pcap(raw, final_path)
+            final_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(raw, final_path)
             evidence.append(PcapEvidence(
                 kind="raw_chunk", relative_path=relative.as_posix(), label_binary=-1, label_name="unlabeled_raw",
                 protocol="mixed", semantic_family="complete_raw_capture", session_id="", campaign_id="", start_ts="",
@@ -210,41 +192,34 @@ def build_campaign_pcaps(session_evidence: Iterable[PcapEvidence], sessions: Ite
         if row.session_id in by_session:
             rows_by_campaign.setdefault(str(row.campaign_id), []).append(row)
     output: list[PcapEvidence] = []
-    with tempfile.TemporaryDirectory(prefix="v3-campaign-pcap-") as tmp_dir:
-        tmp = Path(tmp_dir)
-        for campaign_id, rows in sorted(rows_by_campaign.items()):
-            rows = sorted(rows, key=lambda row: (row.execution_start_ts, row.session_id))
-            raw_inputs: list[Path] = []
-            for index, row in enumerate(rows):
-                compressed = output_root / by_session[row.session_id].relative_path
-                raw = tmp / f"{_safe_component(campaign_id)}-{index:03d}.pcap"
-                _decompress_pcap(compressed, raw)
-                raw_inputs.append(raw)
-            merged = tmp / f"{_safe_component(campaign_id)}-campaign.pcap"
-            _merge_pcaps(raw_inputs, merged)
-            packets = _packet_count(merged)
-            if packets <= 0:
-                raise ValueError(f"empty campaign PCAP for {campaign_id}")
-            relative = campaign_relative_path(rows)
-            final_path = output_root / relative
-            _compress_pcap(merged, final_path)
-            first = rows[0]
-            labels = {int(row.label_binary) for row in rows}
-            label_binary = next(iter(labels)) if len(labels) == 1 else -1
-            label_name = "mixed" if label_binary < 0 else ("suspicious" if label_binary else "benign")
-            protocols = sorted({row.protocol for row in rows})
-            semantic_families = sorted({str(row.campaign_type or row.label_family) for row in rows})
-            output.append(PcapEvidence(
-                kind="campaign", relative_path=relative.as_posix(), label_binary=label_binary, label_name=label_name,
-                protocol=protocols[0] if len(protocols) == 1 else "multi_protocol",
-                semantic_family=semantic_families[0] if len(semantic_families) == 1 else "multi_family",
-                session_id="", campaign_id=campaign_id, start_ts=min(row.start_ts for row in rows),
-                src_host_id=first.src_host_id if len({row.src_host_id for row in rows}) == 1 else "multi_source",
-                dst_host_id=first.dst_host_id if len({row.dst_host_id for row in rows}) == 1 else "multi_target",
-                implementation_id=first.implementation_id if len({row.implementation_id for row in rows}) == 1 else "multi_implementation",
-                semantic_fidelity=first.semantic_fidelity if len({row.semantic_fidelity for row in rows}) == 1 else "mixed",
-                packet_count=int(packets), pcap_bytes=int(final_path.stat().st_size), sha256=_sha256(final_path),
-            ))
+    for campaign_id, rows in sorted(rows_by_campaign.items()):
+        rows = sorted(rows, key=lambda row: (row.execution_start_ts, row.session_id))
+        raw_inputs = [output_root / by_session[row.session_id].relative_path for row in rows]
+        if any(not path.is_file() for path in raw_inputs):
+            raise ValueError(f"missing session PCAP while building campaign {campaign_id}")
+        relative = campaign_relative_path(rows)
+        final_path = output_root / relative
+        _merge_pcaps(raw_inputs, final_path)
+        packets = _packet_count(final_path)
+        if packets <= 0:
+            raise ValueError(f"empty campaign PCAP for {campaign_id}")
+        first = rows[0]
+        labels = {int(row.label_binary) for row in rows}
+        label_binary = next(iter(labels)) if len(labels) == 1 else -1
+        label_name = "mixed" if label_binary < 0 else ("suspicious" if label_binary else "benign")
+        protocols = sorted({row.protocol for row in rows})
+        semantic_families = sorted({str(row.campaign_type or row.label_family) for row in rows})
+        output.append(PcapEvidence(
+            kind="campaign", relative_path=relative.as_posix(), label_binary=label_binary, label_name=label_name,
+            protocol=protocols[0] if len(protocols) == 1 else "multi_protocol",
+            semantic_family=semantic_families[0] if len(semantic_families) == 1 else "multi_family",
+            session_id="", campaign_id=campaign_id, start_ts=min(row.start_ts for row in rows),
+            src_host_id=first.src_host_id if len({row.src_host_id for row in rows}) == 1 else "multi_source",
+            dst_host_id=first.dst_host_id if len({row.dst_host_id for row in rows}) == 1 else "multi_target",
+            implementation_id=first.implementation_id if len({row.implementation_id for row in rows}) == 1 else "multi_implementation",
+            semantic_fidelity=first.semantic_fidelity if len({row.semantic_fidelity for row in rows}) == 1 else "mixed",
+            packet_count=int(packets), pcap_bytes=int(final_path.stat().st_size), sha256=_sha256(final_path),
+        ))
     return output
 
 
@@ -267,6 +242,8 @@ def build_pcap_index(evidence: Iterable[PcapEvidence], sessions: Iterable[Sessio
         return frame
     if frame["relative_pcap_path"].isna().any() or (frame["relative_pcap_path"].astype(str).str.strip() == "").any():
         raise ValueError("PCAP index contains missing relative paths")
+    if frame["relative_pcap_path"].astype(str).str.endswith(".pcap.zst").any():
+        raise ValueError("corrected V3 PCAP index must reference raw .pcap files")
     return frame.sort_values(
         ["kind", "label_name", "protocol", "campaign_id", "session_id"], ignore_index=True
     )
@@ -285,17 +262,15 @@ def verify_sample_pcaps(output_root: Path, frame: pd.DataFrame, *, sample_size: 
         raise ValueError("no session PCAPs available for reparse")
     sampled = sessions.sample(n=min(sample_size, len(sessions)), random_state=seed)
     verified: list[str] = []
-    with tempfile.TemporaryDirectory(prefix="v3-pcap-verify-") as tmp_dir:
-        tmp = Path(tmp_dir)
-        for index, row in sampled.reset_index(drop=True).iterrows():
-            relative = str(row["relative_pcap_path"]).strip()
-            if not relative or relative.lower() == "nan":
-                raise ValueError("sample PCAP index has invalid relative path")
-            compressed = Path(output_root) / relative
-            raw = tmp / f"sample-{index:03d}.pcap"
-            _decompress_pcap(compressed, raw)
-            packets = _packet_count(raw)
-            if packets <= 0:
-                raise ValueError(f"sample PCAP failed reparse: {compressed}")
-            verified.append(relative)
+    for _, row in sampled.reset_index(drop=True).iterrows():
+        relative = str(row["relative_pcap_path"]).strip()
+        if not relative or relative.lower() == "nan":
+            raise ValueError("sample PCAP index has invalid relative path")
+        raw = Path(output_root) / relative
+        if raw.suffix != ".pcap" or not raw.is_file():
+            raise ValueError(f"sample PCAP must be an existing raw .pcap: {raw}")
+        packets = _packet_count(raw)
+        if packets <= 0:
+            raise ValueError(f"sample PCAP failed reparse: {raw}")
+        verified.append(relative)
     return verified
