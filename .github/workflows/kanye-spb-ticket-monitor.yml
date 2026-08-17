@@ -1,0 +1,181 @@
+name: Kanye West SPb official ticket monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/kanye-spb-ticket-monitor.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: kanye-spb-ticket-monitor
+  cancel-in-progress: false
+
+jobs:
+  check-official-sale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      OFFICIAL_URL: https://yerussia2026.ru/
+      OCT10_URL: https://iframeab-pre12680.intickets.ru/seance/74394837/
+      OCT11_URL: https://iframeab-pre12680.intickets.ru/seance/74394840/
+      NOTICE_TITLE: Kanye West official ticket sale detected
+
+    steps:
+      - name: Check official SAY Agency landing page and Intickets links
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+
+          curl -fsSL \
+            --connect-timeout 10 \
+            --max-time 45 \
+            --retry 3 \
+            --retry-delay 2 \
+            -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36' \
+            "$OFFICIAL_URL" \
+            -o output/yerussia2026.html
+
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          html = Path('output/yerussia2026.html').read_text(encoding='utf-8', errors='replace')
+          normalized = re.sub(r'\s+', ' ', html).lower()
+
+          required_text = [
+              'kanye',
+              '10.10.2026',
+              '11.10.2026',
+              'газпром',
+              'sayagency',
+              '9718079275',
+          ]
+          required_links = [
+              '74394837',
+              '74394840',
+              'intickets',
+          ]
+
+          missing = [x for x in required_text + required_links if x.lower() not in normalized]
+          if missing:
+              print('Official-sale markers missing:', ', '.join(missing))
+              raise SystemExit(2)
+
+          print('Official SAY Agency page contains both 10 and 11 October Intickets sale links.')
+          PY
+
+          # Verify that both official Intickets endpoints are reachable.
+          for url in "$OCT10_URL" "$OCT11_URL"; do
+            code=$(curl -L -sS -o /dev/null -w '%{http_code}' \
+              --connect-timeout 10 \
+              --max-time 30 \
+              --retry 2 \
+              -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36' \
+              "$url" || true)
+            echo "$url -> HTTP $code"
+            case "$code" in
+              2*|3*) ;;
+              *) echo "Intickets endpoint is not reachable: $url" >&2; exit 3 ;;
+            esac
+          done
+
+          echo 'sale=true' >> "$GITHUB_OUTPUT"
+
+      - name: Check whether notification was already sent
+        if: steps.check.outputs.sale == 'true'
+        id: state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          count=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state all \
+            --search "\"$NOTICE_TITLE\" in:title" \
+            --json number \
+            --jq 'length')
+
+          if [ "$count" -gt 0 ]; then
+            echo 'already_notified=true' >> "$GITHUB_OUTPUT"
+            echo 'Notification marker issue already exists.'
+          else
+            echo 'already_notified=false' >> "$GITHUB_OUTPUT"
+            echo 'This is the first confirmed detection.'
+          fi
+
+      - name: Prepare notification
+        if: steps.check.outputs.sale == 'true' && steps.state.outputs.already_notified == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          cat > output/email_body.txt <<EOF
+          Билеты на Kanye West (Ye) в Санкт-Петербурге официально в продаже.
+
+          Организатор: SAY Agency
+          Площадка: Газпром Арена
+          Даты: 10 и 11 октября 2026
+
+          Официальная страница организатора:
+          $OFFICIAL_URL
+
+          10 октября — официальный Intickets:
+          $OCT10_URL
+
+          11 октября — официальный Intickets:
+          $OCT11_URL
+
+          Проверка выполнена GitHub Actions в репозитории $GITHUB_REPOSITORY.
+          Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          EOF
+
+      - name: Send one-time email notification
+        if: steps.check.outputs.sale == 'true' && steps.state.outputs.already_notified == 'false'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: maks.kostromitin.80@gmail.com
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject: 'Kanye West SPb: официальные билеты уже в продаже'
+          to: maks.kostromitin.80@gmail.com
+          from: Kanye Ticket Monitor <maks.kostromitin.80@gmail.com>
+          body: file://output/email_body.txt
+          priority: high
+
+      - name: Create GitHub notification marker issue
+        if: steps.check.outputs.sale == 'true' && steps.state.outputs.already_notified == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$NOTICE_TITLE" \
+            --body "Official SAY Agency ticket sale detected for Kanye West (Ye), Gazprom Arena, Saint Petersburg, 10 and 11 October 2026. Official page: $OFFICIAL_URL — Intickets: $OCT10_URL and $OCT11_URL. Detection run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Write job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Kanye West SPb ticket monitor'
+            echo
+            echo "- Official source: $OFFICIAL_URL"
+            echo "- 10 Oct: $OCT10_URL"
+            echo "- 11 Oct: $OCT11_URL"
+            echo "- Sale detected: ${{ steps.check.outputs.sale || 'false' }}"
+            echo "- Already notified before this run: ${{ steps.state.outputs.already_notified || 'unknown' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
