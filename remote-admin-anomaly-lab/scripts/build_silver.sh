@@ -8,13 +8,15 @@ fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON_BIN="${ADMINLAB_PYTHON:-python3}"
+if [[ "$PYTHON_BIN" != */* ]]; then PYTHON_BIN="$(command -v "$PYTHON_BIN" || true)"; fi
 RELEASE="$(realpath -m "$1")"
 SHARD="$2"
 BRONZE="$RELEASE/bronze/$SHARD"
 SILVER="$RELEASE/silver/$SHARD"
 QUALITY="$RELEASE/quality/$SHARD"
 WORK="${RUNNER_TEMP:-/tmp}/adminlab-silver-$SHARD"
-PCAP_ZST="$BRONZE/captures/$SHARD.pcap.zst"
+RAW_BRONZE_PCAP="$BRONZE/captures/$SHARD.pcap"
+LEGACY_PCAP_ZST="$BRONZE/captures/$SHARD.pcap.zst"
 PCAP="$WORK/$SHARD.pcap"
 SURI_RAW="$WORK/suricata"
 ZEEK_RAW="$WORK/zeek"
@@ -33,21 +35,23 @@ fi
 rm -rf "$WORK"
 mkdir -p "$WORK" "$SURI_RAW" "$ZEEK_RAW" "$SILVER/suricata" "$SILVER/zeek" "$QUALITY"
 
-if [[ ! -s "$PCAP_ZST" ]]; then
-  echo "Bronze PCAP missing: $PCAP_ZST" >&2
+if [[ -s "$RAW_BRONZE_PCAP" ]]; then
+  cp --reflink=auto "$RAW_BRONZE_PCAP" "$PCAP"
+elif [[ -s "$LEGACY_PCAP_ZST" ]]; then
+  # Compatibility for older V1/V2 shards only. Corrected V3 capture emits raw .pcap.
+  zstd -q -d -f "$LEGACY_PCAP_ZST" -o "$PCAP"
+else
+  echo "Bronze PCAP missing: expected $RAW_BRONZE_PCAP (or legacy $LEGACY_PCAP_ZST)" >&2
   exit 1
 fi
 
-zstd -q -d -f "$PCAP_ZST" -o "$PCAP"
 tcpdump -nn -r "$PCAP" -c 1 >/dev/null 2>&1
-
 suricata -r "$PCAP" -c /etc/suricata/suricata.yaml -l "$SURI_RAW" --runmode=single
 if [[ ! -s "$SURI_RAW/eve.json" ]]; then
   echo "Suricata did not produce non-empty eve.json" >&2
   exit 1
 fi
 
-# Pinned Zeek Docker image keeps parser behavior reproducible across runners.
 docker image inspect "$ZEEK_IMAGE" >/dev/null 2>&1 || docker pull "$ZEEK_IMAGE"
 docker run --rm \
   -v "$WORK:/work" \
@@ -67,9 +71,7 @@ for log in "$ZEEK_RAW"/*.log; do
 done
 
 SURICATA_VERSION="$(suricata --build-info 2>/dev/null | sed -n 's/^This is Suricata version //p' | head -n1)"
-if [[ -z "$SURICATA_VERSION" ]]; then
-  SURICATA_VERSION="$(suricata -V 2>&1 | head -n1)"
-fi
+if [[ -z "$SURICATA_VERSION" ]]; then SURICATA_VERSION="$(suricata -V 2>&1 | head -n1)"; fi
 ZEEK_VERSION="$(docker run --rm "$ZEEK_IMAGE" zeek --version 2>&1 | head -n1)"
 cat > "$SILVER/parser_versions.json" <<JSON
 {
@@ -84,18 +86,15 @@ FLOW_EVENTS="$(jq -c 'select(.event_type == "flow")' "$SURI_RAW/eve.json" | wc -
 SSH_EVENTS="$(jq -c 'select(.event_type == "ssh" or .app_proto == "ssh")' "$SURI_RAW/eve.json" | wc -l)"
 SMB_EVENTS="$(jq -c 'select(.event_type == "smb" or .app_proto == "smb")' "$SURI_RAW/eve.json" | wc -l)"
 ZEEK_CONN_LINES="$(wc -l < "$ZEEK_RAW/conn.log")"
-ZEEK_SSH_LINES=0
-[[ -s "$ZEEK_RAW/ssh.log" ]] && ZEEK_SSH_LINES="$(wc -l < "$ZEEK_RAW/ssh.log")"
+ZEEK_SSH_LINES=0; [[ -s "$ZEEK_RAW/ssh.log" ]] && ZEEK_SSH_LINES="$(wc -l < "$ZEEK_RAW/ssh.log")"
 ZEEK_SMB_LINES=0
-for f in "$ZEEK_RAW"/smb*.log; do
-  [[ -s "$f" ]] || continue
-  ZEEK_SMB_LINES=$((ZEEK_SMB_LINES + $(wc -l < "$f")))
-done
+for f in "$ZEEK_RAW"/smb*.log; do [[ -s "$f" ]] || continue; ZEEK_SMB_LINES=$((ZEEK_SMB_LINES + $(wc -l < "$f"))); done
 
 cat > "$QUALITY/parser_health.json" <<JSON
 {
   "ok": true,
   "shard": "$SHARD",
+  "bronze_capture_format": "$( [[ -s "$RAW_BRONZE_PCAP" ]] && echo pcap || echo legacy-pcap.zst )",
   "suricata_eve_lines": $EVE_LINES,
   "suricata_flow_events": $FLOW_EVENTS,
   "suricata_ssh_events": $SSH_EVENTS,
@@ -107,9 +106,7 @@ cat > "$QUALITY/parser_health.json" <<JSON
 JSON
 
 if [[ "$EVE_LINES" -le 0 || "$FLOW_EVENTS" -le 0 || "$ZEEK_CONN_LINES" -le 0 ]]; then
-  echo "parser quality gate failed" >&2
-  cat "$QUALITY/parser_health.json" >&2
-  exit 1
+  echo "parser quality gate failed" >&2; cat "$QUALITY/parser_health.json" >&2; exit 1
 fi
 
 PYTHONPATH="$ROOT/src" "$PYTHON_BIN" - "$SILVER" "$QUALITY/silver_contract.json" <<'PY'
@@ -118,8 +115,7 @@ from pathlib import Path
 from adminlab.quality import validate_silver_tree
 report = validate_silver_tree(Path(sys.argv[1]))
 Path(sys.argv[2]).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-if not report["ok"]:
-    raise SystemExit(json.dumps(report, sort_keys=True))
+if not report["ok"]: raise SystemExit(json.dumps(report, sort_keys=True))
 print(json.dumps(report, sort_keys=True))
 PY
 
