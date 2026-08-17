@@ -17,40 +17,57 @@ def _touch(path: Path, data: bytes = b"x"):
     path.write_bytes(data)
 
 
-def test_upload_validator_accepts_v3_browsable_bronze_without_merged_capture(tmp_path):
+def _raw_v3_bronze(release: Path, shard: str) -> None:
+    root = release / "bronze" / shard
+    _touch(root / "sessions" / "benign" / "ssh" / "s1.pcap")
+    _touch(root / "campaigns" / "benign" / "c1.pcap")
+    _touch(root / "raw_chunks" / "chunk-0000.pcap")
+    _touch(root / "manifests" / "pcap_index.csv", b"kind,path\n")
+    _touch(root / "manifests" / "pcap_index.parquet")
+
+
+def test_upload_validator_accepts_v3_raw_browsable_bronze_without_merged_capture(tmp_path):
     module = _load_upload_module()
     release = tmp_path / "release"; shard = "V3-1k"
     for layer in ("bronze", "silver", "gold", "quality"):
         _touch(release / layer / shard / "placeholder.bin")
-    # Remove generic Bronze placeholder and build authoritative V3 layout.
     (release / "bronze" / shard / "placeholder.bin").unlink()
-    _touch(release / "bronze" / shard / "sessions" / "benign" / "ssh" / "s1.pcap.zst")
-    _touch(release / "bronze" / shard / "campaigns" / "benign" / "c1.pcap.zst")
-    _touch(release / "bronze" / shard / "raw_chunks" / "chunk-0000.pcap.zst")
-    _touch(release / "bronze" / shard / "manifests" / "pcap_index.csv", b"kind,path\n")
-    _touch(release / "bronze" / shard / "manifests" / "pcap_index.parquet")
+    _raw_v3_bronze(release, shard)
     sizes = module.validate_release_shard(release, shard)
     assert sizes["bronze"] > 0
+    assert not list((release / "bronze" / shard).rglob("*.pcap.zst"))
 
 
-def test_upload_validator_rejects_v3_browsable_layout_if_giant_capture_is_still_present(tmp_path):
+def test_upload_validator_rejects_v3_raw_layout_if_giant_capture_is_still_present(tmp_path):
     module = _load_upload_module()
     release = tmp_path / "release"; shard = "V3-1k"
     for layer in ("bronze", "silver", "gold", "quality"):
         _touch(release / layer / shard / "placeholder.bin")
     (release / "bronze" / shard / "placeholder.bin").unlink()
-    _touch(release / "bronze" / shard / "sessions" / "benign" / "ssh" / "s1.pcap.zst")
-    _touch(release / "bronze" / shard / "campaigns" / "benign" / "c1.pcap.zst")
-    _touch(release / "bronze" / shard / "raw_chunks" / "chunk-0000.pcap.zst")
-    _touch(release / "bronze" / shard / "manifests" / "pcap_index.csv", b"kind,path\n")
-    _touch(release / "bronze" / shard / "manifests" / "pcap_index.parquet")
-    _touch(release / "bronze" / shard / "captures" / "V3-1k.pcap.zst")
+    _raw_v3_bronze(release, shard)
+    _touch(release / "bronze" / shard / "captures" / "V3-1k.pcap")
     try:
         module.validate_release_shard(release, shard)
     except ValueError as exc:
         assert "merged" in str(exc).lower() or "V3" in str(exc)
     else:
         raise AssertionError("V3 authoritative layout must reject persisted merged capture")
+
+
+def test_upload_validator_rejects_compressed_v3_pcaps(tmp_path):
+    module = _load_upload_module()
+    release = tmp_path / "release"; shard = "V3-1k"
+    for layer in ("bronze", "silver", "gold", "quality"):
+        _touch(release / layer / shard / "placeholder.bin")
+    (release / "bronze" / shard / "placeholder.bin").unlink()
+    _raw_v3_bronze(release, shard)
+    _touch(release / "bronze" / shard / "sessions" / "benign" / "ssh" / "legacy.pcap.zst")
+    try:
+        module.validate_release_shard(release, shard)
+    except ValueError as exc:
+        assert "compressed" in str(exc).lower() or "pcap.zst" in str(exc).lower()
+    else:
+        raise AssertionError("corrected V3 HF layout must contain raw .pcap only")
 
 
 def test_hf_quality_transport_losslessly_gzips_every_binary_like_windows_txt(tmp_path):
