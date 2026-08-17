@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -37,15 +38,33 @@ def _expected_columns(model) -> list[str]:
     raise ValueError("flow model does not expose feature_names_in_")
 
 
+def _finite_float(value, default: float = 0.0) -> float:
+    """Convert an optional numeric external field to a finite float.
+
+    LANL/Rocketgraph may encode unavailable source ports or counters as NaN.
+    Those fields are optional for the NGFW feature state, so missing/non-finite
+    values are represented as zero rather than crashing the external holdout.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    return number if math.isfinite(number) else float(default)
+
+
+def _finite_int(value, default: int = 0) -> int:
+    return int(_finite_float(value, float(default)))
+
+
 def _event(row: pd.Series, flow_id: int) -> dict:
-    ts = float(row["time"])
-    duration = max(0.0, float(row.get("duration", 0.0)))
-    dport = int(row["dst_port"])
-    sport = int(row.get("src_port", 0) or 0)
-    src_packets = float(row.get("src_packets", 0.0) or 0.0)
-    dst_packets = float(row.get("dst_packets", 0.0) or 0.0)
-    src_bytes = float(row.get("src_bytes", 0.0) or 0.0)
-    dst_bytes = float(row.get("dst_bytes", 0.0) or 0.0)
+    ts = _finite_float(row["time"])
+    duration = max(0.0, _finite_float(row.get("duration", 0.0)))
+    dport = _finite_int(row["dst_port"])
+    sport = _finite_int(row.get("src_port", 0))
+    src_packets = max(0.0, _finite_float(row.get("src_packets", 0.0)))
+    dst_packets = max(0.0, _finite_float(row.get("dst_packets", 0.0)))
+    src_bytes = max(0.0, _finite_float(row.get("src_bytes", 0.0)))
+    dst_bytes = max(0.0, _finite_float(row.get("dst_bytes", 0.0)))
     app = PORT_APP.get(dport, "unknown")
     return {
         "timestamp": ts,
@@ -75,7 +94,25 @@ def build_external_flow_features(netflow: pd.DataFrame, expected: list[str]) -> 
         raise ValueError(f"external netflow missing columns: {sorted(missing)}")
     frame = netflow.copy()
     frame["time"] = pd.to_numeric(frame["time"], errors="coerce")
-    frame = frame.dropna(subset=["time"]).sort_values("time", kind="stable").reset_index(drop=True)
+    frame["dst_port"] = pd.to_numeric(frame["dst_port"], errors="coerce")
+    before = len(frame)
+    frame = frame[
+        frame["time"].notna()
+        & np.isfinite(frame["time"].astype(float))
+        & frame["dst_port"].notna()
+        & np.isfinite(frame["dst_port"].astype(float))
+    ].copy()
+    frame = frame.sort_values("time", kind="stable").reset_index(drop=True)
+    dropped_required_rows = int(before - len(frame))
+
+    optional_numeric = ["src_port", "duration", "src_packets", "dst_packets", "src_bytes", "dst_bytes"]
+    sanitized_optional_values = 0
+    for column in optional_numeric:
+        if column not in frame.columns:
+            continue
+        numeric = pd.to_numeric(frame[column], errors="coerce")
+        sanitized_optional_values += int((numeric.isna() | ~np.isfinite(numeric.fillna(0.0).astype(float))).sum())
+
     state = EveFeatureState()
     rows = []
     for index, raw in frame.iterrows():
@@ -85,7 +122,7 @@ def build_external_flow_features(netflow: pd.DataFrame, expected: list[str]) -> 
             if column == "app_proto":
                 row[column] = str(features.get(column, "unknown"))
             else:
-                row[column] = float(features.get(column, 0.0) or 0.0)
+                row[column] = _finite_float(features.get(column, 0.0))
         rows.append(row)
     out = pd.DataFrame(rows, columns=expected)
     return out, {
@@ -93,6 +130,10 @@ def build_external_flow_features(netflow: pd.DataFrame, expected: list[str]) -> 
         "derived_feature_count": len(expected),
         "imputed_feature_count": 0,
         "coverage_fraction": 1.0,
+        "input_rows": int(before),
+        "derived_rows": int(len(out)),
+        "dropped_invalid_required_rows": dropped_required_rows,
+        "sanitized_optional_numeric_values": int(sanitized_optional_values),
         "feature_state": "adminlab.online_features.EveFeatureState",
         "raw_identity_emitted": False,
     }
@@ -165,6 +206,7 @@ def main() -> int:
         "external_gate_inputs": {
             "lanl_reference_complete": bool(len(features) > 0 and np.isfinite(scores).all()),
             "lanl_feature_coverage": float(coverage["coverage_fraction"]),
+            "lanl_invalid_required_rows": int(coverage["dropped_invalid_required_rows"]),
             "windows_validated_protocol_count": len(validated),
             "threshold_tuning_on_external": False,
         },
