@@ -1,0 +1,23 @@
+name: Remote Admin V3 Cancel Stale Run
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v3]
+    paths:
+      - '.github/workflows/remote-admin-v3-cancel-stale.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel-stale:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Cancel intermediate V3 run only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh run cancel 32016095785 --repo "$REPO" || true
+          echo 'cancel requested for stale intermediate run 32016095785'
