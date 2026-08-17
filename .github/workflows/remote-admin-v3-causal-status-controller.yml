@@ -5,6 +5,13 @@ on:
     branches: [remote-admin-anomaly-lab-v3]
     paths:
       - '.github/workflows/remote-admin-v3-causal-status-controller.yml'
+      - '.github/workflows/remote-admin-v3-causal-final.yml'
+      - 'remote-admin-anomaly-lab/configs/**'
+      - 'remote-admin-anomaly-lab/src/adminlab/**'
+      - 'remote-admin-anomaly-lab/scripts/**'
+      - 'remote-admin-anomaly-lab/tests/**'
+      - 'remote-admin-anomaly-lab/deploy/ngfw/**'
+      - 'remote-admin-anomaly-lab/windows/**'
   workflow_dispatch:
 
 permissions:
@@ -13,7 +20,7 @@ permissions:
 
 concurrency:
   group: remote-admin-v3-causal-status-controller
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   run-and-record:
@@ -96,7 +103,7 @@ jobs:
           from pathlib import Path
           jobs=json.loads(Path('/tmp/v3-final-jobs.json').read_text()).get('jobs',[])
           payload={
-              'schema_version':1,
+              'schema_version':2,
               'tested_sha':os.environ.get('TESTED_SHA',''),
               'authoritative_final_run_id':os.environ.get('RUN_ID',''),
               'controller_run_id':os.environ.get('CONTROLLER_RUN_ID',''),
