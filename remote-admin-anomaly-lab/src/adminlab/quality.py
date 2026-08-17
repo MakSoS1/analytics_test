@@ -29,12 +29,17 @@ def _parse_checksums(path: Path) -> dict[str, str]:
 def validate_bronze_tree(shard_dir: Path | str, *, verify_checksums: bool = True) -> dict:
     shard = Path(shard_dir)
     errors: list[str] = []
-    captures = sorted((shard / "captures").glob("*.pcap.zst")) if (shard / "captures").is_dir() else []
+    capture_dir = shard / "captures"
+    raw = sorted(capture_dir.glob("*.pcap")) if capture_dir.is_dir() else []
+    compressed = sorted(capture_dir.glob("*.pcap.zst")) if capture_dir.is_dir() else []
+    captures = raw + compressed
     if len(captures) != 1:
-        errors.append(f"expected exactly one compressed capture, found {len(captures)}")
+        errors.append(f"expected exactly one capture (.pcap or legacy .pcap.zst), found {len(captures)}")
         pcap_bytes = 0
+        capture_format = "missing_or_ambiguous"
     else:
         pcap_bytes = captures[0].stat().st_size
+        capture_format = "pcap" if captures[0].suffix == ".pcap" else "pcap.zst"
         if pcap_bytes <= 0:
             errors.append("capture is empty")
 
@@ -65,6 +70,7 @@ def validate_bronze_tree(shard_dir: Path | str, *, verify_checksums: bool = True
         "ok": not errors,
         "errors": errors,
         "pcap_bytes": pcap_bytes,
+        "capture_format": capture_format,
         "checksum_entries_verified": checksum_checked,
         "shard": shard.name,
     }
