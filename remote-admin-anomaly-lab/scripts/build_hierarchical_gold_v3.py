@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -16,8 +17,16 @@ if str(SRC) not in sys.path:
 
 from adminlab.campaign_gold import build_campaign_gold
 from adminlab.v2_modeling import assert_feature_frame_safe
-from adminlab.v3_split_state import build_split_isolated_session_gold
+from adminlab.v3_split_state import apply_research_session_splits, build_split_isolated_session_gold
 from adminlab.v3_splits import assign_grouped_splits_v3
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _model_matrix(features: pd.DataFrame, labels: pd.DataFrame, key: str) -> pd.DataFrame:
@@ -74,23 +83,20 @@ def main() -> int:
 
     contract = yaml.safe_load(args.contract.read_text(encoding="utf-8"))
     flow_features = pd.read_parquet(flow_features_path)
-    flow_labels = pd.read_parquet(flow_labels_path)
+    production_flow_labels = pd.read_parquet(flow_labels_path)
+    production_flow_labels_sha_before = _sha256(flow_labels_path)
 
-    # Grouped split assignment happens before state construction. Pair/campaign
-    # connected components remain intact, then every split receives its own
-    # strictly-prior replay below.
-    session_meta = _session_split_frame(flow_labels)
+    # Hierarchical research derives its own grouped session split from the mapped
+    # session universe, but MUST NOT rewrite production_flow_labels.parquet. The
+    # NGFW flow-primary benchmark has already been materialized against its own
+    # production split in build_flow_gold_v2.py.
+    session_meta = _session_split_frame(production_flow_labels)
     session_splits, split_report = assign_grouped_splits_v3(session_meta, seed=args.split_seed)
-    split_map = session_splits.set_index("session_id")[["split", "challenge_reason"]]
-    flow_labels = flow_labels.drop(columns=[column for column in ("split", "challenge_reason") if column in flow_labels.columns])
-    flow_labels = flow_labels.merge(split_map, left_on="session_id", right_index=True, how="left", validate="many_to_one")
-    if flow_labels["split"].isna().any():
-        raise SystemExit("V3 flow label split assignment incomplete")
-    flow_labels.to_parquet(flow_labels_path, index=False)
+    research_flow_labels = apply_research_session_splits(production_flow_labels, session_splits)
 
     session_features, session_labels = build_split_isolated_session_gold(
         flow_features,
-        flow_labels,
+        research_flow_labels,
         environment_id="linux_v3",
     )
     campaign_features, campaign_labels = build_campaign_gold(session_features, session_labels, environment_id="linux_v3")
@@ -112,8 +118,12 @@ def main() -> int:
     session_matrix.to_parquet(gold / "session_model_matrix.parquet", index=False)
     campaign_matrix.to_parquet(gold / "campaign_model_matrix.parquet", index=False)
 
+    production_flow_labels_sha_after = _sha256(flow_labels_path)
+    if production_flow_labels_sha_after != production_flow_labels_sha_before:
+        raise SystemExit("hierarchical Gold mutated production flow labels")
+
     quality = {
-        "schema_version": 4,
+        "schema_version": 5,
         "environment_id": "linux_v3",
         "flow_rows": int(len(flow_features)),
         "session_rows": int(len(session_features)),
@@ -128,6 +138,9 @@ def main() -> int:
         "cross_split_state_dependency": False,
         "state_partition": "split",
         "external_rows_in_training_gold": 0,
+        "production_flow_labels_immutable": True,
+        "production_flow_labels_sha256": production_flow_labels_sha_after,
+        "research_split_scope": "detached flow-label copy for session/campaign research only",
         "split_report": split_report,
     }
     if quality["session_rows"] <= 0 or quality["campaign_rows"] <= 0:
