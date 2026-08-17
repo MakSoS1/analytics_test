@@ -7,11 +7,8 @@ import json
 import shutil
 import subprocess
 import sys
-import tempfile
 from collections import Counter
 from pathlib import Path
-
-import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -30,11 +27,7 @@ from adminlab.pcap_slicing import (
 
 
 def read_sessions(path: Path) -> list[SessionRecord]:
-    rows: list[SessionRecord] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            rows.append(SessionRecord.from_dict(json.loads(line)))
-    return rows
+    return [SessionRecord.from_dict(json.loads(line)) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def sha256(path: Path) -> str:
@@ -47,9 +40,7 @@ def sha256(path: Path) -> str:
 
 def write_checksums(bronze: Path) -> None:
     target = bronze / "checksums.sha256"
-    lines = []
-    for path in sorted(p for p in bronze.rglob("*") if p.is_file() and p != target):
-        lines.append(f"{sha256(path)}  {path.relative_to(bronze).as_posix()}")
+    lines = [f"{sha256(path)}  {path.relative_to(bronze).as_posix()}" for path in sorted(p for p in bronze.rglob("*") if p.is_file() and p != target)]
     target.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -74,10 +65,13 @@ def main() -> int:
 
     bronze = args.release / "bronze" / args.shard
     quality = args.release / "quality" / args.shard
-    merged_zst = bronze / "captures" / f"{args.shard}.pcap.zst"
+    merged_raw = bronze / "captures" / f"{args.shard}.pcap"
     sessions_path = bronze / "manifests" / "sessions.jsonl"
-    if not merged_zst.is_file() or not sessions_path.is_file():
-        raise SystemExit("temporary merged Bronze and session manifest are required")
+    if not merged_raw.is_file() or not sessions_path.is_file():
+        raise SystemExit("temporary raw merged Bronze and session manifest are required")
+    if list((bronze / "captures").glob("*.pcap.zst")):
+        raise SystemExit("corrected V3 must not create a compressed merged PCAP")
+
     sessions = read_sessions(sessions_path)
     successful = [row for row in sessions if row.status == "success"]
     if not successful:
@@ -85,28 +79,20 @@ def main() -> int:
 
     quality.mkdir(parents=True, exist_ok=True)
     merged_source = {
-        "relative_path_before_removal": f"captures/{args.shard}.pcap.zst",
-        "compressed_bytes": int(merged_zst.stat().st_size),
-        "compressed_sha256": sha256(merged_zst),
+        "relative_path_before_removal": f"captures/{args.shard}.pcap",
+        "raw_bytes": int(merged_raw.stat().st_size),
+        "raw_sha256": sha256(merged_raw),
+        "compression": "none",
         "authoritative_after_finalization": False,
         "purpose": "ephemeral parser/slicing source only",
     }
+    merged_source["raw_packet_count"] = int(
+        subprocess.check_output(["tshark", "-r", str(merged_raw), "-T", "fields", "-e", "frame.number"], text=True, stderr=subprocess.DEVNULL).count("\n")
+    )
 
-    with tempfile.TemporaryDirectory(prefix="v3-final-bronze-") as tmp_dir:
-        merged_raw = Path(tmp_dir) / f"{args.shard}.pcap"
-        subprocess.run(["zstd", "-q", "-d", "-f", str(merged_zst), "-o", str(merged_raw)], check=True)
-        merged_source["raw_bytes"] = int(merged_raw.stat().st_size)
-        merged_source["raw_sha256"] = sha256(merged_raw)
-        merged_source["raw_packet_count"] = int(
-            subprocess.check_output(
-                ["tshark", "-r", str(merged_raw), "-T", "fields", "-e", "frame.number"],
-                text=True,
-                stderr=subprocess.DEVNULL,
-            ).count("\n")
-        )
-        session_evidence = slice_session_pcaps(merged_raw, successful, bronze)
-        campaign_evidence = build_campaign_pcaps(session_evidence, successful, bronze)
-        raw_evidence = split_raw_chunks(merged_raw, bronze, packets_per_chunk=args.raw_chunk_packets)
+    session_evidence = slice_session_pcaps(merged_raw, successful, bronze)
+    campaign_evidence = build_campaign_pcaps(session_evidence, successful, bronze)
+    raw_evidence = split_raw_chunks(merged_raw, bronze, packets_per_chunk=args.raw_chunk_packets)
 
     evidence = raw_evidence + session_evidence + campaign_evidence
     index = build_pcap_index(evidence, successful)
@@ -123,29 +109,23 @@ def main() -> int:
         raise SystemExit(f"V3 campaign PCAP coverage below threshold: {campaign_coverage:.6f}")
     if sum(item.packet_count for item in raw_evidence) != int(merged_source["raw_packet_count"]):
         raise SystemExit("raw chunk packet total differs from merged source")
+    if any(str(path).endswith(".pcap.zst") for path in bronze.rglob("*.pcap.zst")):
+        raise SystemExit("compressed PCAP remains in corrected V3 Bronze")
 
-    # Remove the giant capture only after all parser/slicing/index checks passed.
     captures = bronze / "captures"
     if captures.exists():
         shutil.rmtree(captures)
     if any(bronze.glob("captures/*.pcap*")):
         raise SystemExit("persisted merged capture remains after V3 finalization")
 
-    (bronze / "manifests" / "ephemeral_merged_source.json").write_text(
-        json.dumps(merged_source, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    (bronze / "manifests" / "ephemeral_merged_source.json").write_text(json.dumps(merged_source, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     write_checksums(bronze)
     verify_checksums(bronze)
 
     kinds = Counter(index["kind"].astype(str))
-    label_protocol = (
-        index[index["kind"] == "session"]
-        .groupby(["label_name", "protocol"])
-        .size()
-        .to_dict()
-    )
+    label_protocol = index[index["kind"] == "session"].groupby(["label_name", "protocol"]).size().to_dict()
     report = {
-        "schema_version": 3,
+        "schema_version": 4,
         "status": "PASS",
         "shard": args.shard,
         "successful_sessions": len(successful),
@@ -162,12 +142,14 @@ def main() -> int:
         "session_label_protocol_counts": {f"{label}/{protocol}": int(value) for (label, protocol), value in sorted(label_protocol.items())},
         "reparsed_session_sample": verified_sample,
         "merged_pcap_persisted": False,
+        "pcap_compression": "none",
+        "compressed_pcaps_present": False,
         "full_raw_traffic_preserved_in_chunks": True,
         "checksums_verified": True,
         "inspection_layout": {
-            "session": "sessions/<label>/<protocol>/<session_id>.pcap.zst",
-            "campaign": "campaigns/<label>/<campaign_id>.pcap.zst",
-            "raw": "raw_chunks/chunk-XXXX.pcap.zst",
+            "session": "sessions/<label>/<protocol>/<session_id>.pcap",
+            "campaign": "campaigns/<label>/<campaign_id>.pcap",
+            "raw": "raw_chunks/chunk-XXXX.pcap",
             "index_csv": "manifests/pcap_index.csv",
         },
     }
