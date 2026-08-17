@@ -1,0 +1,131 @@
+name: Archive corrected V3 Bronze on Hugging Face
+
+on:
+  push:
+    branches: [remote-admin-anomaly-lab-v3]
+    paths:
+      - '.github/workflows/archive-bronze-hf.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  archive-bronze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      HF_REPO: Maksim123321/remote-admin-anomaly-v1
+      HF_PREFIX: v3/final/run-32020068998
+      ARCHIVE_NAME: bronze.zip
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Hugging Face client
+        run: python -m pip install --quiet 'huggingface_hub>=1.0.0'
+
+      - name: Download only corrected V3 Bronze
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HF_TOKEN"
+          python - <<'PY'
+          import os
+          from huggingface_hub import snapshot_download
+
+          repo = os.environ['HF_REPO']
+          prefix = os.environ['HF_PREFIX']
+          snapshot_download(
+              repo_id=repo,
+              repo_type='dataset',
+              token=os.environ['HF_TOKEN'],
+              allow_patterns=[f'{prefix}/bronze/**'],
+              local_dir='hf-snapshot',
+          )
+          PY
+          SRC="hf-snapshot/$HF_PREFIX/bronze"
+          test -d "$SRC"
+          echo "BRONZE_FILES=$(find "$SRC" -type f | wc -l)"
+          du -sh "$SRC"
+
+      - name: Build and test ZIP archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, shutil
+          from pathlib import Path
+
+          prefix = os.environ['HF_PREFIX']
+          src = Path('hf-snapshot') / prefix / 'bronze'
+          out = Path(os.environ['ARCHIVE_NAME']).resolve()
+          shutil.make_archive(str(out.with_suffix('')), 'zip', root_dir=src.parent, base_dir=src.name)
+          print(f'ARCHIVE={out}')
+          print(f'ARCHIVE_BYTES={out.stat().st_size}')
+          PY
+          unzip -t "$ARCHIVE_NAME" >/tmp/unzip-test.txt
+          tail -n 2 /tmp/unzip-test.txt
+          sha256sum "$ARCHIVE_NAME"
+          ls -lh "$ARCHIVE_NAME"
+
+      - name: Upload archive beside Bronze folder
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from huggingface_hub import HfApi
+
+          repo = os.environ['HF_REPO']
+          prefix = os.environ['HF_PREFIX']
+          archive = Path(os.environ['ARCHIVE_NAME'])
+          remote_path = f'{prefix}/{archive.name}'
+          api = HfApi(token=os.environ['HF_TOKEN'])
+          info = api.upload_file(
+              path_or_fileobj=str(archive),
+              path_in_repo=remote_path,
+              repo_id=repo,
+              repo_type='dataset',
+              commit_message='Add downloadable ZIP archive for corrected V3 Bronze',
+          )
+          print(f'UPLOAD_URL={info}')
+          print(f'REMOTE_PATH={remote_path}')
+          PY
+
+      - name: Verify archive exists remotely with matching size
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from huggingface_hub import HfApi
+
+          repo = os.environ['HF_REPO']
+          prefix = os.environ['HF_PREFIX']
+          archive = Path(os.environ['ARCHIVE_NAME'])
+          remote_path = f'{prefix}/{archive.name}'
+          local_size = archive.stat().st_size
+          api = HfApi(token=os.environ['HF_TOKEN'])
+          found = None
+          for item in api.list_repo_tree(repo_id=repo, repo_type='dataset', path_in_repo=prefix, recursive=False, expand=True):
+              if getattr(item, 'path', None) == remote_path:
+                  found = item
+                  break
+          if found is None:
+              raise SystemExit(f'Remote archive not found: {remote_path}')
+          remote_size = getattr(found, 'size', None)
+          print(f'LOCAL_BYTES={local_size}')
+          print(f'REMOTE_BYTES={remote_size}')
+          if remote_size is not None and int(remote_size) != local_size:
+              raise SystemExit(f'Size mismatch: local={local_size} remote={remote_size}')
+          print('REMOTE_ARCHIVE_VERIFY=PASS')
+          PY
