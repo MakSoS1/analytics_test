@@ -1,31 +1,38 @@
 {
-  "authoritative_final_run_id": "32016095785",
-  "conclusion": "",
-  "controller_run_id": "32016084245",
+  "authoritative_final_run_id": "32016155268",
+  "conclusion": "failure",
+  "controller_run_id": "32016139615",
   "jobs": [
     {
-      "completedAt": "0001-01-01T00:00:00Z",
-      "conclusion": "",
-      "name": "lanl-reference",
-      "startedAt": "2026-08-17T09:36:36Z",
-      "status": "in_progress"
-    },
-    {
-      "completedAt": "0001-01-01T00:00:00Z",
-      "conclusion": "",
-      "name": "windows-native",
-      "startedAt": "2026-08-17T09:36:38Z",
-      "status": "in_progress"
-    },
-    {
-      "completedAt": "0001-01-01T00:00:00Z",
-      "conclusion": "",
+      "completedAt": "2026-08-17T09:43:31Z",
+      "conclusion": "success",
       "name": "causal-smoke",
-      "startedAt": "2026-08-17T09:36:36Z",
-      "status": "in_progress"
+      "startedAt": "2026-08-17T09:38:50Z",
+      "status": "completed"
+    },
+    {
+      "completedAt": "2026-08-17T09:39:34Z",
+      "conclusion": "success",
+      "name": "windows-native",
+      "startedAt": "2026-08-17T09:38:45Z",
+      "status": "completed"
+    },
+    {
+      "completedAt": "2026-08-17T09:39:26Z",
+      "conclusion": "success",
+      "name": "lanl-reference",
+      "startedAt": "2026-08-17T09:38:45Z",
+      "status": "completed"
+    },
+    {
+      "completedAt": "2026-08-17T10:19:39Z",
+      "conclusion": "failure",
+      "name": "final-1k",
+      "startedAt": "2026-08-17T09:43:33Z",
+      "status": "completed"
     }
   ],
   "schema_version": 2,
-  "status": "in_progress",
-  "tested_sha": "92ecd39eccc5ce8e466409ca4d747ce56c43f93b"
+  "status": "completed",
+  "tested_sha": "1c6df31158eb03b0a6cc785aa011dba602282fd2"
 }

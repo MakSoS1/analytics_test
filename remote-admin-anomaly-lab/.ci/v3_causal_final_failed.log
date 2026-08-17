@@ -1,1 +1,36 @@
-run 32016095785 is still in progress; logs will be available when it is complete
+final-1k	Score independent LANL via exact NGFW state	﻿2026-08-17T10:19:36.3202482Z ##[group]Run GOLD="$RELEASE_ROOT/gold/$SHARD"; QUALITY="$RELEASE_ROOT/quality/$SHARD"
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3203079Z ^[[36;1mGOLD="$RELEASE_ROOT/gold/$SHARD"; QUALITY="$RELEASE_ROOT/quality/$SHARD"^[[0m
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3205194Z ^[[36;1mpython scripts/evaluate_v3_flow_external.py --model "$GOLD/models/flow-primary.joblib" --metrics "$GOLD/models/flow-primary.metrics.json" --lanl-root /tmp/v3-external/lanl --windows-v3 /tmp/v3-external/windows/windows_v3_fidelity.json --out "$QUALITY/v3_external_evaluation.json"^[[0m
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3206329Z ^[[36;1mmkdir -p "$QUALITY/external/windows" "$QUALITY/external/lanl"^[[0m
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3206775Z ^[[36;1mcp -a /tmp/v3-external/windows/. "$QUALITY/external/windows/"^[[0m
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3207205Z ^[[36;1mcp -a /tmp/v3-external/lanl/. "$QUALITY/external/lanl/"^[[0m
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3231565Z shell: /usr/bin/bash -e {0}
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3231866Z env:
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3232078Z   PYTHONPATH: src
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3232349Z   ROOT_OUT: /tmp/remote-admin-v3-causal-final
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3232775Z   RELEASE_ROOT: /tmp/remote-admin-v3-causal-final/release
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3233110Z   SHARD: V3-1k
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3233319Z   SEED: 2026081603
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3233661Z   HF_HUB_DISABLE_XET: 1
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3234092Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3234520Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3234941Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3235323Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3235695Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3236085Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:36.3236566Z ##[endgroup]
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4947994Z Traceback (most recent call last):
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4957374Z   File "/home/runner/work/analytics_test/analytics_test/remote-admin-anomaly-lab/scripts/evaluate_v3_flow_external.py", line 183, in <module>
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4958704Z     raise SystemExit(main())
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4959186Z                      ^^^^^^
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4960202Z   File "/home/runner/work/analytics_test/analytics_test/remote-admin-anomaly-lab/scripts/evaluate_v3_flow_external.py", line 140, in main
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4961393Z     features, coverage = build_external_flow_features(netflow, expected)
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4962111Z                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4963344Z   File "/home/runner/work/analytics_test/analytics_test/remote-admin-anomaly-lab/scripts/evaluate_v3_flow_external.py", line 82, in build_external_flow_features
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4964714Z     features = state.consume_flow(_event(raw, index + 1))["features"]
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4965398Z                                   ^^^^^^^^^^^^^^^^^^^^^^
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4966461Z   File "/home/runner/work/analytics_test/analytics_test/remote-admin-anomaly-lab/scripts/evaluate_v3_flow_external.py", line 44, in _event
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4967488Z     sport = int(row.get("src_port", 0) or 0)
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4968022Z             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.4968571Z ValueError: cannot convert float NaN to integer
+final-1k	Score independent LANL via exact NGFW state	2026-08-17T10:19:37.6527800Z ##[error]Process completed with exit code 1.
