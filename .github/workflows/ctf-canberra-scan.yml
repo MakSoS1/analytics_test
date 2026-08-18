@@ -1,0 +1,166 @@
+name: Temporary wide Canberra historical scan
+
+on:
+  pull_request:
+    branches: [ctf-geolocate-20260731]
+    paths:
+      - 'ctf/canberra-scan/**'
+      - '.github/workflows/ctf-canberra-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ctf-geolocate-20260731
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet streetview pillow py360convert numpy requests torch torchvision 'transformers==4.44.2'
+
+      - name: Scan historical inner-south Canberra panoramas
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results/contact
+          python3 - <<'PY'
+          import io, json, math, time
+          from pathlib import Path
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          import requests, numpy as np, py360convert, torch
+          from PIL import Image, ImageDraw, ImageFont
+          from streetview import search_panoramas
+          from transformers import CLIPModel, CLIPProcessor, AutoImageProcessor, AutoModel
+
+          # Covers the GeoCLIP Canberra cluster and planned inner-south residential suburbs.
+          lat_values=np.arange(-35.3570,-35.2769,0.0040)
+          lon_values=np.arange(149.0960,149.1761,0.0040)
+          def hav(a,b,c,d):
+              p1,p2=map(math.radians,(a,c)); dp=math.radians(c-a); dl=math.radians(d-b)
+              x=math.sin(dp/2)**2+math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+              return 12742000*math.asin(math.sqrt(x))
+
+          raw={}; errors=[]
+          for qi,(lat,lon) in enumerate((float(a),float(b)) for a in lat_values for b in lon_values):
+              try: found=search_panoramas(lat=lat,lon=lon)
+              except Exception as exc:
+                  errors.append({'lat':lat,'lon':lon,'error':repr(exc)}); continue
+              for p in found:
+                  d=hav(lat,lon,float(p.lat),float(p.lon))
+                  if d>750: continue
+                  row={'pano_id':p.pano_id,'lat':float(p.lat),'lon':float(p.lon),'date':p.date,
+                       'heading_meta':float(p.heading),'query_lat':lat,'query_lon':lon,'query_distance_m':d}
+                  old=raw.get(p.pano_id)
+                  if old is None or d<old['query_distance_m']: raw[p.pano_id]=row
+              if qi%30==0: print('search',qi,'unique',len(raw),flush=True)
+              time.sleep(.06)
+
+          groups={}
+          for r in raw.values(): groups.setdefault((round(r['lat'],4),round(r['lon'],4)),[]).append(r)
+          selected=[]
+          for rows in groups.values():
+              rows.sort(key=lambda r:((int(r['date'][:4]) if r['date'] else 9999),r['date'] or ''))
+              picks=[rows[0],rows[-1]]
+              winter=[r for r in rows if r['date'] and len(r['date'].split('-'))>1 and int(r['date'].split('-')[1]) in (5,6,7,8)]
+              early=[r for r in rows if r['date'] and int(r['date'][:4])<=2012]
+              if winter: picks.append(winter[0])
+              if len(early)>1: picks.append(early[-1])
+              seen=set()
+              for r in picks:
+                  if r['pano_id'] not in seen: selected.append(r); seen.add(r['pano_id'])
+          selected.sort(key=lambda r:((int(r['date'][:4]) if r['date'] else 9999),r['lat'],r['lon']))
+          if len(selected)>900: selected=selected[:900]
+          Path('results/search_errors.json').write_text(json.dumps(errors,indent=2))
+          Path('results/candidates.json').write_text(json.dumps(selected,indent=2))
+          print('raw',len(raw),'groups',len(groups),'selected',len(selected),flush=True)
+
+          session=requests.Session(); session.headers.update({'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36','Referer':'https://www.google.com/maps/'})
+          def fetch(r):
+              pano=Image.new('RGB',(1024,512)); pid=r['pano_id']
+              for x in range(2):
+                  resp=session.get('https://streetviewpixels-pa.googleapis.com/v1/tile',params={'cb_client':'maps_sv.tactile','panoid':pid,'x':x,'y':0,'zoom':1,'nbt':1,'fover':2},timeout=25)
+                  if resp.status_code!=200 or not resp.content.startswith(b'\xff\xd8'): raise RuntimeError(f'tile {resp.status_code}')
+                  pano.paste(Image.open(io.BytesIO(resp.content)).convert('RGB'),(x*512,0))
+              return r,pano
+
+          downloaded=[]; failures=[]
+          with ThreadPoolExecutor(max_workers=7) as ex:
+              jobs={ex.submit(fetch,r):r for r in selected}
+              for i,f in enumerate(as_completed(jobs)):
+                  try: downloaded.append(f.result())
+                  except Exception as exc: failures.append({**jobs[f],'error':repr(exc)})
+                  if i%75==0: print('download',i,'ok',len(downloaded),'fail',len(failures),flush=True)
+          Path('results/failures.json').write_text(json.dumps(failures,indent=2))
+
+          metas=[]; images=[]
+          for meta,pano in downloaded:
+              e=np.asarray(pano)
+              for h in range(0,360,36):
+                  for pitch in (0,-8):
+                      arr=py360convert.e2p(e,fov_deg=(82,62),u_deg=h,v_deg=pitch,out_hw=(252,336),mode='bilinear')
+                      images.append(Image.fromarray(np.uint8(np.clip(arr,0,255))))
+                      metas.append({**meta,'view_heading':h,'view_pitch':pitch})
+          print('downloaded',len(downloaded),'views',len(images),flush=True)
+
+          target=Image.open('ctf/geolocate/input-small.jpg').convert('RGB')
+          clip=CLIPModel.from_pretrained('openai/clip-vit-base-patch32'); clip.eval()
+          cp=CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')
+          dino=AutoModel.from_pretrained('facebook/dinov2-small'); dino.eval()
+          dp=AutoImageProcessor.from_pretrained('facebook/dinov2-small')
+          with torch.no_grad():
+              tc=clip.get_image_features(**cp(images=[target],return_tensors='pt')); tc=tc/tc.norm(dim=-1,keepdim=True)
+              td=dino(**dp(images=[target],return_tensors='pt')).last_hidden_state[:,0,:]; td=td/td.norm(dim=-1,keepdim=True)
+          cs=[]; ds=[]
+          for start in range(0,len(images),40):
+              batch=images[start:start+40]
+              with torch.no_grad():
+                  fc=clip.get_image_features(**cp(images=batch,return_tensors='pt')); fc=fc/fc.norm(dim=-1,keepdim=True)
+                  fd=dino(**dp(images=batch,return_tensors='pt')).last_hidden_state[:,0,:]; fd=fd/fd.norm(dim=-1,keepdim=True)
+              cs.extend((fc@tc.T).squeeze(1).tolist()); ds.extend((fd@td.T).squeeze(1).tolist())
+              if start%1000==0: print('embed',start,'/',len(images),flush=True)
+          def rank(v):
+              order=sorted(range(len(v)),key=lambda i:v[i],reverse=True); out=[0.0]*len(v)
+              for r,i in enumerate(order): out[i]=1-r/max(1,len(v)-1)
+              return out
+          rc,rd=rank(cs),rank(ds)
+          rows=[{**m,'clip_score':float(cs[i]),'dino_score':float(ds[i]),'ensemble':float(.58*rc[i]+.42*rd[i]),'image_index':i} for i,m in enumerate(metas)]
+          rows.sort(key=lambda r:r['ensemble'],reverse=True)
+          Path('results/ranking.json').write_text(json.dumps(rows,indent=2))
+          diverse=[]; seen=set()
+          for r in rows:
+              if r['pano_id'] in seen: continue
+              seen.add(r['pano_id']); diverse.append(r)
+              if len(diverse)>=400: break
+          Path('results/diverse_ranking.json').write_text(json.dumps(diverse,indent=2))
+
+          font=ImageFont.load_default()
+          for page in range((min(400,len(diverse))+19)//20):
+              sheet=Image.new('RGB',(1800,1200),'white'); draw=ImageDraw.Draw(sheet)
+              for j,r in enumerate(diverse[page*20:(page+1)*20]):
+                  im=images[r['image_index']].copy(); im.thumbnail((350,245)); x=(j%5)*360; y=(j//5)*300; sheet.paste(im,(x,y))
+                  txt=f"#{page*20+j+1} {r['date'] or '?'} {r['ensemble']:.3f}\n{r['lat']:.5f},{r['lon']:.5f} h={r['view_heading']} p={r['view_pitch']}\nC={r['clip_score']:.3f} D={r['dino_score']:.3f}"
+                  draw.multiline_text((x+2,y+248),txt,fill='black',font=font,spacing=2)
+              sheet.save(f'results/contact/top_{page+1:02d}.jpg',quality=91)
+          print('TOP',json.dumps(diverse[:30]),flush=True)
+          PY
+
+      - name: Upload shortlist
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canberra-wide-scan
+          path: |
+            results/*.json
+            results/contact/
+          retention-days: 1
+          if-no-files-found: error

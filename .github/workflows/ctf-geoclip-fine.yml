@@ -1,0 +1,92 @@
+name: Temporary fine-grained GeoCLIP scan
+
+on:
+  pull_request:
+    branches: [ctf-geolocate-20260731]
+    paths:
+      - 'ctf/geoclip-fine/**'
+      - '.github/workflows/ctf-geoclip-fine.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  infer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ctf-geolocate-20260731
+
+      - name: Install compatible GeoCLIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet geoclip pillow numpy 'transformers==4.44.2'
+
+      - name: Score dense coordinate grids
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import numpy as np
+          import torch
+          import torch.nn.functional as F
+          from PIL import Image
+          from geoclip import GeoCLIP
+
+          torch.manual_seed(0)
+          model=GeoCLIP(); model.eval()
+          image=Image.open('ctf/geolocate/input-small.jpg').convert('RGB')
+          image=model.image_encoder.preprocess_image(image)
+          with torch.no_grad():
+              image_feat=model.image_encoder(image)
+              image_feat=F.normalize(image_feat,dim=1)
+              scale=model.logit_scale.exp()
+
+          boxes={
+            'Armidale':(-30.555,-30.470,151.610,151.720,0.0005),
+            'Canberra_inner':(-35.385,-35.245,149.045,149.205,0.0005),
+            'Goulburn':(-34.790,-34.700,149.640,149.800,0.0005),
+            'Bathurst':(-33.470,-33.340,149.500,149.650,0.0006),
+            'Orange':(-33.340,-33.190,149.000,149.180,0.0006),
+            'Young':(-34.390,-34.240,148.220,148.390,0.0006),
+          }
+          all_city={}; global_rows=[]
+          for city,(lat0,lat1,lon0,lon1,step) in boxes.items():
+              lats=np.arange(lat0,lat1+step/2,step,dtype=np.float32)
+              lons=np.arange(lon0,lon1+step/2,step,dtype=np.float32)
+              coords=np.stack(np.meshgrid(lats,lons,indexing='ij'),axis=-1).reshape(-1,2)
+              scored=[]
+              for start in range(0,len(coords),8192):
+                  c=torch.from_numpy(coords[start:start+8192])
+                  with torch.no_grad():
+                      f=model.location_encoder(c)
+                      f=F.normalize(f,dim=1)
+                      logits=(scale*(image_feat@f.T)).squeeze(0).cpu().numpy()
+                  scored.append(logits)
+              scores=np.concatenate(scored)
+              idx=np.argpartition(scores,-100)[-100:]
+              idx=idx[np.argsort(scores[idx])[::-1]]
+              rows=[{'city':city,'lat':float(coords[i,0]),'lon':float(coords[i,1]),'logit':float(scores[i])} for i in idx]
+              all_city[city]={'grid_points':int(len(coords)),'top':rows}
+              global_rows.extend(rows)
+              print(city,len(coords),rows[:5],flush=True)
+          global_rows.sort(key=lambda r:r['logit'],reverse=True)
+          Path('results/fine_city_scores.json').write_text(json.dumps(all_city,indent=2))
+          Path('results/fine_global_top.json').write_text(json.dumps(global_rows[:300],indent=2))
+          print('GLOBAL',global_rows[:30])
+          PY
+
+      - name: Upload scores
+        uses: actions/upload-artifact@v4
+        with:
+          name: geoclip-fine-scores
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
