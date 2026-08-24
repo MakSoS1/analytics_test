@@ -28,9 +28,11 @@ jobs:
           set -euo pipefail
           echo 'wireshark-common wireshark-common/install-setuid boolean false' | sudo debconf-set-selections
           sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq suricata tcpdump tshark
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq suricata tcpdump tshark python3-venv
           sudo mkdir -p /var/lib/suricata/rules
           sudo touch /var/lib/suricata/rules/suricata.rules
+          python3 -m venv /tmp/rentry-client
+          /tmp/rentry-client/bin/python -m pip install -q --disable-pip-version-check rentry
           suricata --build-info | head -40
           tcpdump --version | head -2
           editcap --version | head -2
@@ -52,6 +54,57 @@ jobs:
           echo "capture_interface=$IFACE"
           echo "source_sha=$SOURCE_SHA"
 
+          # Create one temporary harmless paste. The edit code is kept only under /tmp and is
+          # never printed or uploaded. The page is removed when this step exits.
+          GITHUB_RUN_ID="$GITHUB_RUN_ID" /tmp/rentry-client/bin/python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from rentry_client import RentryClient
+
+          client = RentryClient()
+          response = client.new(
+              text=(
+                  '{"kind":"lots-detector-eval","command":"noop",'
+                  f'"run":"{os.environ["GITHUB_RUN_ID"]}"}}'
+              )
+          )
+          if str(response.get('status')) != '200':
+              raise SystemExit(f"rentry create failed: {response.get('content') or response.get('errors')}")
+          nested = response.get('content') if isinstance(response.get('content'), dict) else {}
+          url = response.get('url') or nested.get('url')
+          url_short = response.get('url_short') or nested.get('url_short')
+          edit_code = response.get('edit_code') or nested.get('edit_code')
+          if not url or not url_short or not edit_code:
+              raise SystemExit('rentry create returned an incomplete response')
+          Path('/tmp/rentry_page.json').write_text(
+              json.dumps({'url': url, 'url_short': url_short, 'edit_code': edit_code}),
+              encoding='utf-8',
+          )
+          print('temporary Rentry evaluation paste created')
+          PY
+          chmod 600 /tmp/rentry_page.json
+          RENTRY_URL="$(python3 -c 'import json; print(json.load(open("/tmp/rentry_page.json"))["url"])')"
+
+          cleanup_rentry() {
+            /tmp/rentry-client/bin/python - <<'PY' || true
+          import json
+          from pathlib import Path
+          from rentry_client import RentryClient
+
+          path = Path('/tmp/rentry_page.json')
+          if path.exists():
+              page = json.loads(path.read_text(encoding='utf-8'))
+              response = RentryClient().delete(page['url_short'], page['edit_code'])
+              if str(response.get('status')) == '200':
+                  print('temporary Rentry evaluation paste deleted')
+              else:
+                  print('warning: temporary Rentry paste cleanup failed')
+              path.unlink(missing_ok=True)
+          PY
+          }
+          trap cleanup_rentry EXIT
+
           capture_segment() {
             local scenario="$1"
             local idx="$2"
@@ -68,28 +121,37 @@ jobs:
               --connect-timeout 10 --max-time 20 \
               -A 'LOTS-Detector-Eval/1.0' \
               -H 'Connection: close' \
+              -H 'Cache-Control: no-cache' \
               -o /dev/null -w '%{http_code}' "$url" || true)"
-            echo "$scenario request=$idx http_status=$code url=$url"
+            echo "$scenario request=$idx http_status=$code"
 
             wait "$cap_pid" || true
             sudo chown "$USER:$USER" "$pcap" || true
             test -s "$pcap"
+            test "$code" = "200"
           }
 
+          # LOTS Project: raw.githubusercontent.com used for periodic C2 command fetches.
           for i in $(seq 0 11); do
             capture_segment github_c2 "$i" \
               "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/lots-eval/marker.json?poll=${GITHUB_RUN_ID}-${i}"
           done
 
+          # LOTS Project: raw.githubusercontent.com also used as a download channel.
           for i in $(seq 0 2); do
             capture_segment github_download "$i" \
               "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${SOURCE_SHA}/3.ipynb?download=${GITHUB_RUN_ID}-${i}"
           done
 
+          # Unseen-service C2 probe: poll a real temporary Rentry paste containing only a noop
+          # marker. No malicious content, credentials, or sensitive data are transferred.
           for i in $(seq 0 11); do
             capture_segment rentry_c2 "$i" \
-              "https://rentry.co/?lots_eval=${GITHUB_RUN_ID}-${i}"
+              "${RENTRY_URL}?lots_eval=${GITHUB_RUN_ID}-${i}"
           done
+
+          cleanup_rentry
+          trap - EXIT
 
       - name: Build event-time stretched PCAPs
         shell: bash
@@ -115,6 +177,8 @@ jobs:
             capinfos "lots-eval/out/pcap/${scenario}.pcap" | sed -n '1,30p'
           }
 
+          # Packet bytes and per-flow durations are real. Only inter-flow event time is shifted
+          # so a 20-minute detector window can be evaluated within one CI run.
           stretch_and_merge github_c2 120
           stretch_and_merge github_download 300
           stretch_and_merge rentry_c2 120
@@ -211,7 +275,7 @@ jobs:
               'time_transform': 'packet contents and per-flow duration retained; inter-flow timestamps shifted with editcap',
               'github_c2': '12 harmless periodic GETs to raw.githubusercontent.com marker.json',
               'github_download': '3 harmless downloads of repository 3.ipynb through raw.githubusercontent.com',
-              'rentry_c2': '12 harmless periodic GETs to rentry.co; no uploads or sensitive data',
+              'rentry_c2': '12 harmless periodic GETs to a temporary noop Rentry paste; paste deleted after capture',
               'scenarios': scenarios,
           }
           (root / 'MANIFEST.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
