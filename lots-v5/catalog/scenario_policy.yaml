@@ -1,0 +1,40 @@
+version: 1
+mechanisms:
+  c2:
+    - mechanism: c2_poll
+      variants:
+        - {timing_profile: fast_25s_j10, payload_profile: tiny_response, client_profile: curl_h1}
+        - {timing_profile: medium_90s_j20, payload_profile: tiny_response, client_profile: python_tls}
+        - {timing_profile: slow_900s_j120, payload_profile: tiny_response, client_profile: curl_h1}
+        - {timing_profile: jitter_45_180s, payload_profile: tiny_response, client_profile: python_tls}
+    - mechanism: dead_drop
+      variants:
+        - {timing_profile: medium_90s_j20, payload_profile: small_read, client_profile: curl_h1}
+        - {timing_profile: slow_900s_j120, payload_profile: small_read, client_profile: python_tls}
+    - mechanism: c2_bidirectional
+      variants:
+        - {timing_profile: fast_25s_j10, payload_profile: small_duplex, client_profile: curl_h1}
+        - {timing_profile: medium_90s_j20, payload_profile: small_duplex, client_profile: python_tls}
+  download:
+    - mechanism: staging_download
+      variants:
+        - {timing_profile: single, payload_profile: medium_download, client_profile: curl_h1}
+        - {timing_profile: burst_5s, payload_profile: medium_download, client_profile: python_tls}
+        - {timing_profile: staged_60s, payload_profile: mixed_download, client_profile: curl_h1}
+        - {timing_profile: slow_300s, payload_profile: large_download, client_profile: python_tls}
+  exfiltration:
+    - mechanism: exfil_upload
+      variants:
+        - {timing_profile: single, payload_profile: large_upload, client_profile: curl_h1}
+        - {timing_profile: chunked_30s, payload_profile: medium_upload, client_profile: python_tls}
+        - {timing_profile: slow_300s, payload_profile: small_upload, client_profile: curl_h1}
+        - {timing_profile: burst_5s, payload_profile: medium_upload, client_profile: python_tls}
+phishing_only:
+  mechanisms:
+    - mechanism: phishing_hard_negative
+      variants:
+        - {timing_profile: single, payload_profile: small_read, client_profile: curl_h1}
+        - {timing_profile: browse_burst, payload_profile: medium_download, client_profile: python_tls}
+reference_probe:
+  enabled: true
+  concrete_domains_only: true
