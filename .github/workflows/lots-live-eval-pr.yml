@@ -29,6 +29,8 @@ jobs:
           echo 'wireshark-common wireshark-common/install-setuid boolean false' | sudo debconf-set-selections
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq suricata tcpdump tshark
+          sudo mkdir -p /var/lib/suricata/rules
+          sudo touch /var/lib/suricata/rules/suricata.rules
           suricata --build-info | head -40
           tcpdump --version | head -2
           editcap --version | head -2
