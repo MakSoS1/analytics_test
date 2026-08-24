@@ -1,0 +1,109 @@
+name: LOTS v5 Real Observation Corpus
+
+on:
+  push:
+    branches: [lots-prod-v5-20260825]
+    paths:
+      - 'lots-v5/catalog/**'
+      - 'lots-v5/src/real_*.py'
+      - 'lots-v5/requirements-ci.txt'
+      - '.github/workflows/lots-v5-real-observation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lots-v5-real-observation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observe:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install capture and Suricata tooling
+        run: |
+          set -euo pipefail
+          echo 'wireshark-common wireshark-common/install-setuid boolean false' | sudo debconf-set-selections
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq suricata tcpdump
+          sudo mkdir -p /var/lib/suricata/rules
+          sudo touch /var/lib/suricata/rules/suricata.rules
+          python3 -m pip install -r lots-v5/requirements-ci.txt
+          sudo suricata -T -c /etc/suricata/suricata.yaml
+
+      - name: Capture real HTTPS observations
+        working-directory: lots-v5
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="out/real/shard-${{ matrix.shard }}"
+          mkdir -p "$out/suricata"
+          iface=$(ip route show default | awk '{print $5; exit}')
+          test -n "$iface"
+          echo "capture interface=$iface"
+          sudo tcpdump -i "$iface" -nn -s0 -U -w "$out/raw.pcap" 'tcp port 443' >"$out/tcpdump.log" 2>&1 &
+          cap_pid=$!
+          sleep 0.5
+
+          python3 -m src.real_catalog_probe \
+            --catalog catalog/lots_project_2026-08-25.csv \
+            --shard-index ${{ matrix.shard }} --shard-count 6 \
+            --timeout-s 6 --retries 2 --max-body-bytes 32768 \
+            --out "$out/manifest.json" --accepted-out "$out/accepted_manifest.json"
+
+          sleep 0.5
+          sudo kill -INT "$cap_pid" 2>/dev/null || true
+          wait "$cap_pid" 2>/dev/null || true
+          sudo chown "$USER:$USER" "$out/raw.pcap" || true
+          test -s "$out/raw.pcap"
+
+      - name: Parse the actual PCAP with Suricata
+        working-directory: lots-v5
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="out/real/shard-${{ matrix.shard }}"
+          sudo suricata -k none -r "$out/raw.pcap" -c /etc/suricata/suricata.yaml -l "$out/suricata" --runmode=single
+          sudo chown -R "$USER:$USER" "$out/suricata"
+          test -s "$out/suricata/eve.json"
+
+      - name: Exact action to EVE correlation
+        working-directory: lots-v5
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="out/real/shard-${{ matrix.shard }}"
+          python3 -m src.real_extract \
+            --manifest "$out/manifest.json" --eve "$out/suricata/eve.json" \
+            --out "$out/observed_flows.jsonl" --summary "$out/correlation_summary.json" \
+            --min-match-fraction 0.95
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          shard=os.environ['SHARD']
+          p=Path(f'out/real/shard-{shard}/manifest.json')
+          m=json.loads(p.read_text())
+          c=m['coverage']
+          print(json.dumps(c,indent=2,sort_keys=True))
+          assert c['attempted'] >= 20, c
+          assert c['succeeded'] >= 8, c
+          PY
+        env:
+          SHARD: ${{ matrix.shard }}
+
+      - name: Upload raw real-traffic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lots-v5-real-observation-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: lots-v5/out/real/shard-${{ matrix.shard }}
+          retention-days: 14
+          compression-level: 6
