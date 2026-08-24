@@ -132,7 +132,9 @@ jobs:
             local outdir="lots-eval/out/suricata/${scenario}"
             mkdir -p "$outdir"
 
-            sudo suricata -r "$pcap" -c /etc/suricata/suricata.yaml -l "$outdir" --runmode=single
+            # Locally captured outbound packets have checksum-offload placeholders.
+            # -k none is required for offline app-layer parsing of these PCAPs.
+            sudo suricata -k none -r "$pcap" -c /etc/suricata/suricata.yaml -l "$outdir" --runmode=single
             sudo chown -R "$USER:$USER" "$outdir"
             test -s "$outdir/eve.json"
 
