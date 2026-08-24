@@ -1,0 +1,6 @@
+{
+  "kind": "benign-lots-evaluation-marker",
+  "command": "noop",
+  "sequence": 1,
+  "message": "This file is intentionally harmless and exists only to generate reproducible HTTPS GET traffic for LOTS detector evaluation."
+}
