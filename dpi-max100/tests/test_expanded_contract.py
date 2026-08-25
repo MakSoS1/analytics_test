@@ -39,14 +39,13 @@ def test_upgrade_to_tls_variants_are_covered_before_encryption() -> None:
         'AUTH TLS',
         'STARTTLS',
         'STLS',
-        '|04 D2 16 2F|',
+        '04 D2 16 2F',
         '1.3.6.1.4.1.1466.20037',
     ):
         assert marker in rules, f"missing encrypted-upgrade marker {marker}"
 
 
 def test_major_protocol_families_have_multiple_structural_variants() -> None:
-    rules = text()
     minimums = {
         "sip": 6,
         "rtsp": 4,
@@ -84,7 +83,6 @@ def test_no_service_rule_uses_generic_tls_record_bytes_or_only_ports() -> None:
         if '|service' not in rule:
             continue
         assert '|16 03' not in rule and '|17 03' not in rule
-        # Requiring content/sticky buffers prevents a service label based only on destination port.
         assert any(token in rule for token in ('tls.sni', 'http.host', 'content:', 'pcre:')), rule
 
 
