@@ -16,7 +16,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -38,27 +38,27 @@ jobs:
           .venv/bin/pip install pytest scapy
 
       - name: Static contract
-        run: .venv/bin/pytest -q dpi-max100/tests/test_contract.py
+        run: .venv/bin/pytest -q dpi-max100/tests
 
       - name: Suricata syntax check
         run: |
-          sudo mkdir -p dpi-max100/artifacts/syntax
-          sudo suricata -T \
+          mkdir -p dpi-max100/artifacts/syntax
+          suricata -T \
             -c /etc/suricata/suricata.yaml \
-            -S "$GITHUB_WORKSPACE/dpi-max100/rules/dpi_max100.rules"
+            -S "$GITHUB_WORKSPACE/dpi-max100/rules/dpi_max100.rules" \
+            | tee dpi-max100/artifacts/syntax/suricata-T.log
 
       - name: Generate deterministic PCAP corpus
         run: .venv/bin/python dpi-max100/generate_corpus.py
 
       - name: Replay corpus and check TP/FP matrix
         run: |
-          sudo .venv/bin/python dpi-max100/validate_alerts.py \
+          .venv/bin/python dpi-max100/validate_alerts.py \
             --suricata /usr/bin/suricata \
             --config /etc/suricata/suricata.yaml \
             --rules "$GITHUB_WORKSPACE/dpi-max100/rules/dpi_max100.rules" \
             --cases "$GITHUB_WORKSPACE/dpi-max100/artifacts/cases.json" \
             --output "$GITHUB_WORKSPACE/dpi-max100/artifacts"
-          sudo chown -R "$USER:$USER" dpi-max100/artifacts
           cat dpi-max100/artifacts/report.md
 
       - name: Upload validation evidence
