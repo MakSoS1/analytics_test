@@ -1,0 +1,71 @@
+name: DPI max100 Suricata validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'dpi-max100/**'
+      - '.github/workflows/dpi-max100-suricata.yml'
+      - 'docs/superpowers/specs/2026-08-25-dpi-max100-design.md'
+      - 'docs/superpowers/plans/2026-08-25-dpi-max100.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Suricata 8 and Python tooling
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common python3-venv
+          sudo add-apt-repository -y ppa:oisf/suricata-stable
+          sudo apt-get update
+          sudo apt-get install -y suricata
+          suricata -V
+          suricata --build-info
+          suricata -V | grep -Eq 'Suricata version 8\.'
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install pytest scapy
+
+      - name: Static contract
+        run: .venv/bin/pytest -q dpi-max100/tests/test_contract.py
+
+      - name: Suricata syntax check
+        run: |
+          sudo mkdir -p dpi-max100/artifacts/syntax
+          sudo suricata -T \
+            -c /etc/suricata/suricata.yaml \
+            -S "$GITHUB_WORKSPACE/dpi-max100/rules/dpi_max100.rules"
+
+      - name: Generate deterministic PCAP corpus
+        run: .venv/bin/python dpi-max100/generate_corpus.py
+
+      - name: Replay corpus and check TP/FP matrix
+        run: |
+          sudo .venv/bin/python dpi-max100/validate_alerts.py \
+            --suricata /usr/bin/suricata \
+            --config /etc/suricata/suricata.yaml \
+            --rules "$GITHUB_WORKSPACE/dpi-max100/rules/dpi_max100.rules" \
+            --cases "$GITHUB_WORKSPACE/dpi-max100/artifacts/cases.json" \
+            --output "$GITHUB_WORKSPACE/dpi-max100/artifacts"
+          sudo chown -R "$USER:$USER" dpi-max100/artifacts
+          cat dpi-max100/artifacts/report.md
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dpi-max100-validation
+          path: dpi-max100/artifacts
+          if-no-files-found: warn
+          retention-days: 14
