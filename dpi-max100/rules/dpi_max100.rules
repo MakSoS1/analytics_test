@@ -29,9 +29,9 @@ alert tcp any any -> any any (msg:"DPI|pop3|protocol"; flow:established; content
 # RDP
 alert tcp any any -> any any (msg:"DPI|rdp|protocol"; app-layer-protocol:rdp; sid:9500016; rev:2;)
 alert tcp any any -> any any (msg:"DPI|rdp|protocol"; flow:established,to_server; content:"|03 00|"; offset:0; depth:2; content:"|E0|"; offset:5; depth:1; sid:9500017; rev:2;)
-# SIP
-alert udp any any -> any any (msg:"DPI|sip|protocol"; app-layer-protocol:sip; sid:9500018; rev:2;)
-alert tcp any any -> any any (msg:"DPI|sip|protocol"; app-layer-protocol:sip; sid:9500019; rev:2;)
+# SIP. Require the parser to expose the actual SIP protocol token; this prevents ACK-like payload collisions.
+alert sip any any -> any any (msg:"DPI|sip|protocol"; flow:to_server; sip.protocol; content:"SIP/2.0"; startswith; endswith; sid:9500018; rev:3;)
+alert sip any any -> any any (msg:"DPI|sip|protocol"; flow:to_client; sip.protocol; content:"SIP/2.0"; startswith; endswith; sid:9500019; rev:3;)
 alert udp any any -> any any (msg:"DPI|sip|protocol"; content:"INVITE "; startswith; content:" SIP/2.0|0D 0A|"; distance:0; within:512; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500020; rev:2;)
 alert tcp any any -> any any (msg:"DPI|sip|protocol"; content:"INVITE "; startswith; content:" SIP/2.0|0D 0A|"; distance:0; within:512; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500021; rev:2;)
 # SNMP
@@ -57,8 +57,8 @@ alert tcp any any -> any any (msg:"DPI|bgp|protocol"; flow:established; content:
 alert tcp any any -> any any (msg:"DPI|bt-peer|protocol"; flow:established,to_server; content:"|13|BitTorrent protocol"; startswith; sid:9500034; rev:2;)
 # PostgreSQL
 alert tcp any any -> any any (msg:"DPI|postgresql|protocol"; flow:established,to_server; content:"|00 03 00 00|"; offset:4; depth:4; content:"user|00|"; distance:0; within:256; sid:9500035; rev:2;)
-# RADIUS
-alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|01|"; offset:0; depth:1; content:"|01|"; offset:20; depth:1; sid:9500036; rev:2;)
+# RADIUS Access-Request. Set flow state so response-only traffic cannot be labeled RADIUS.
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_server; content:"|01|"; offset:0; depth:1; content:"|01|"; offset:20; depth:1; flowbits:set,dpi.radius.access; sid:9500036; rev:3;)
 # RTSP raw stream fallbacks
 alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; content:" RTSP/1.0|0D 0A|"; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500037; rev:2;)
 alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; content:"RTSP/1.0 "; startswith; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500038; rev:2;)
@@ -142,7 +142,7 @@ alert tcp any any -> any any (msg:"DPI|rdp|protocol"; flow:established,to_client
 alert tcp any any -> any any (msg:"DPI|rdp|protocol"; flow:established,to_server; content:"|03 00|"; offset:0; depth:2; content:"Cookie: mstshash="; nocase; within:512; sid:9500113; rev:1;)
 # SIP methods and responses across UDP/TCP
 alert udp any any -> any any (msg:"DPI|sip|protocol"; pcre:"/^(REGISTER|OPTIONS|ACK|BYE|CANCEL|SUBSCRIBE|NOTIFY|MESSAGE|INFO|PRACK|UPDATE|REFER|PUBLISH) [^\r\n]{1,512} SIP\/2\.0\r\n/i"; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500114; rev:1;)
-alert tcp any any -> any any (msg:"DPI|sip|protocol"; flow:established; pcre:"/^(REGISTER|OPTIONS|ACK|BYE|CANCEL|SUBSCRIBE|NOTIFY|MESSAGE|INFO|PRACK|UPDATE|REFER|PUBLISH) [^\r\n]{1,512} SIP\/2\.0\r\n/i"; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500115; rev:1;)
+alert tcp any any -> any any (msg:"DPI|sip|protocol"; flow:established; pcre:"/^(REGISTER|OPTIONS|ACK|BYE|CANCEL|SUBSCRIBE|NOTIFY|MESSAGE|INFO|PRACK|UPDATE|REFER|PUBLISH) [^\r\n]{1,512} SIP\/2\.0\r\n(?:[^\r\n]*\r\n){0,16}Via:/i"; sid:9500115; rev:2;)
 alert udp any any -> any any (msg:"DPI|sip|protocol"; pcre:"/^SIP\/2\.0 [1-6][0-9][0-9] [^\r\n]{1,128}\r\n/"; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500116; rev:1;)
 alert tcp any any -> any any (msg:"DPI|sip|protocol"; flow:established; pcre:"/^SIP\/2\.0 [1-6][0-9][0-9] [^\r\n]{1,128}\r\n/"; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500117; rev:1;)
 # SNMP BER version fallbacks
@@ -151,8 +151,9 @@ alert udp any any -> any any (msg:"DPI|snmp|protocol"; pcre:"/^\x30.{1,3}\x02\x0
 alert udp any any -> any any (msg:"DPI|snmp|protocol"; pcre:"/^\x30.{1,3}\x02\x01\x03\x30/s"; sid:9500120; rev:1;)
 # Generic Telnet IAC negotiation
 alert tcp any any -> any any (msg:"DPI|telnet|protocol"; flow:established; pcre:"/^\xFF[\xFB-\xFE][\x00-\xFF]/s"; sid:9500121; rev:1;)
-# TLS Encrypted ClientHello extension. This marks ECH, not a hidden service.
-alert tls any any -> any any (msg:"DPI|tls-ech|protocol"; flow:established,to_server; ssl_state:client_hello; content:"|00 0D|"; depth:2048; content:"|00 2B|"; depth:2048; content:"|FE 0D|"; depth:2048; sid:9500122; rev:1;)
+# TLS Encrypted ClientHello extension. Check extension length and ECHClientHello type after 0xfe0d.
+# Type 0 is ClientHelloOuter; type 1 is retained as a compatibility/fuzz variant in the regression corpus.
+alert tls any any -> any any (msg:"DPI|tls-ech|protocol"; flow:established,to_server; ssl_state:client_hello; content:"|FE 0D|"; depth:2048; byte_test:2,>,7,0,relative; byte_test:2,<,2048,0,relative; byte_test:1,<,2,2,relative; sid:9500122; rev:2;)
 # SSH protocol 1.x legacy identification
 alert tcp any any -> any any (msg:"DPI|ssh|protocol"; flow:established; content:"SSH-1."; startswith; sid:9500123; rev:1;)
 # QUIC v2 and version-negotiation long headers
@@ -170,12 +171,12 @@ alert tcp any any -> any any (msg:"DPI|bgp|protocol"; flow:established; content:
 # PostgreSQL SSLRequest and CancelRequest remain visible before TLS/authentication
 alert tcp any any -> any any (msg:"DPI|postgresql|protocol"; flow:established,to_server; content:"|00 00 00 08 04 D2 16 2F|"; startswith; sid:9500133; rev:1;)
 alert tcp any any -> any any (msg:"DPI|postgresql|protocol"; flow:established,to_server; content:"|00 00 00 10 04 D2 16 2E|"; startswith; sid:9500134; rev:1;)
-# RADIUS response/accounting/challenge codes with minimum packet size
-alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|02|"; offset:0; depth:1; dsize:>20; sid:9500135; rev:1;)
-alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|03|"; offset:0; depth:1; dsize:>20; sid:9500136; rev:1;)
-alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|04|"; offset:0; depth:1; dsize:>20; sid:9500137; rev:1;)
-alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|05|"; offset:0; depth:1; dsize:>20; sid:9500138; rev:1;)
-alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|0B|"; offset:0; depth:1; dsize:>20; sid:9500139; rev:1;)
+# RADIUS responses are accepted only after the corresponding request direction established flow state.
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_client; flowbits:isset,dpi.radius.access; content:"|02|"; offset:0; depth:1; dsize:>19; sid:9500135; rev:2;)
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_client; flowbits:isset,dpi.radius.access; content:"|03|"; offset:0; depth:1; dsize:>19; sid:9500136; rev:2;)
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_server; content:"|04|"; offset:0; depth:1; dsize:>19; flowbits:set,dpi.radius.accounting; sid:9500137; rev:2;)
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_client; flowbits:isset,dpi.radius.accounting; content:"|05|"; offset:0; depth:1; dsize:>19; sid:9500138; rev:2;)
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_client; flowbits:isset,dpi.radius.access; content:"|0B|"; offset:0; depth:1; dsize:>19; sid:9500139; rev:2;)
 # RTSP/2.0 raw stream fallbacks
 alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; content:" RTSP/2.0|0D 0A|"; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500140; rev:1;)
 alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; content:"RTSP/2.0 "; startswith; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500141; rev:1;)
@@ -217,8 +218,8 @@ alert http any any -> any any (msg:"DPI|skype|service"; flow:established,to_serv
 alert http any any -> any any (msg:"DPI|teamviewer|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:teamviewer\.com|teamviewerapi\.com)$/i"; sid:9500170; rev:1;)
 alert http any any -> any any (msg:"DPI|webex|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:webex\.com|wbx2\.com|ciscospark\.com)$/i"; sid:9500171; rev:1;)
 alert http any any -> any any (msg:"DPI|youtube|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:youtube\.com|googlevideo\.com|ytimg\.com|youtube\-nocookie\.com)$/i"; sid:9500172; rev:1;)
-# RTSP parsed through LibHTP: classify using the parsed protocol field, not generic HTTP.
-alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; http.protocol; content:"RTSP/1.0"; startswith; endswith; sid:9500173; rev:1;)
-alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; http.protocol; content:"RTSP/1.0"; startswith; endswith; sid:9500174; rev:1;)
-alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; http.protocol; content:"RTSP/2.0"; startswith; endswith; sid:9500175; rev:1;)
-alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; http.protocol; content:"RTSP/2.0"; startswith; endswith; sid:9500176; rev:1;)
+# RTSP parsed through LibHTP: require both RTSP protocol token and CSeq header.
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; http.protocol; content:"RTSP/1.0"; startswith; endswith; http.header; content:"CSeq|3a|"; nocase; sid:9500173; rev:2;)
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; http.protocol; content:"RTSP/1.0"; startswith; endswith; http.header; content:"CSeq|3a|"; nocase; sid:9500174; rev:2;)
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; http.protocol; content:"RTSP/2.0"; startswith; endswith; http.header; content:"CSeq|3a|"; nocase; sid:9500175; rev:2;)
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; http.protocol; content:"RTSP/2.0"; startswith; endswith; http.header; content:"CSeq|3a|"; nocase; sid:9500176; rev:2;)
