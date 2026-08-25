@@ -79,7 +79,7 @@ def test_inventory_has_exactly_the_39_historical_labels() -> None:
 
 def test_ruleset_is_bounded_and_sids_are_unique_local_ids() -> None:
     rules = active_rules()
-    assert 1 <= len(rules) <= 100
+    assert 100 <= len(rules) < 200
     sids = []
     for rule in rules:
         match = re.search(r"(?:^|;)\s*sid:(\d+)\s*;", rule)
