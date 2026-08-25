@@ -11,8 +11,8 @@ alert tcp any any -> any any (msg:"DPI|dns|protocol"; app-layer-protocol:dns; si
 # FTP
 alert tcp any any -> any any (msg:"DPI|ftp|protocol"; app-layer-protocol:ftp; sid:9500005; rev:2;)
 alert tcp any any -> any any (msg:"DPI|ftp|protocol"; flow:established; content:"220 "; startswith; content:"FTP"; nocase; distance:0; within:128; sid:9500006; rev:2;)
-# HTTP
-alert tcp any any -> any any (msg:"DPI|http|protocol"; app-layer-protocol:http; sid:9500007; rev:2;)
+# HTTP. Use the parsed protocol field so RTSP parsed through LibHTP does not become HTTP DPI.
+alert http any any -> any any (msg:"DPI|http|protocol"; http.protocol; pcre:"/^HTTP\/(?:0\.9|1\.0|1\.1|2)$/i"; sid:9500007; rev:3;)
 # IMAP
 alert tcp any any -> any any (msg:"DPI|imap|protocol"; app-layer-protocol:imap; sid:9500008; rev:2;)
 alert tcp any any -> any any (msg:"DPI|imap|protocol"; flow:established; content:"* OK "; startswith; content:"IMAP"; nocase; distance:0; within:128; sid:9500009; rev:2;)
@@ -59,7 +59,7 @@ alert tcp any any -> any any (msg:"DPI|bt-peer|protocol"; flow:established,to_se
 alert tcp any any -> any any (msg:"DPI|postgresql|protocol"; flow:established,to_server; content:"|00 03 00 00|"; offset:4; depth:4; content:"user|00|"; distance:0; within:256; sid:9500035; rev:2;)
 # RADIUS
 alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|01|"; offset:0; depth:1; content:"|01|"; offset:20; depth:1; sid:9500036; rev:2;)
-# RTSP
+# RTSP raw stream fallbacks
 alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; content:" RTSP/1.0|0D 0A|"; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500037; rev:2;)
 alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; content:"RTSP/1.0 "; startswith; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500038; rev:2;)
 # SAP
@@ -176,7 +176,7 @@ alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|03|"; offset:
 alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|04|"; offset:0; depth:1; dsize:>20; sid:9500137; rev:1;)
 alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|05|"; offset:0; depth:1; dsize:>20; sid:9500138; rev:1;)
 alert udp any any -> any any (msg:"DPI|radius|protocol"; content:"|0B|"; offset:0; depth:1; dsize:>20; sid:9500139; rev:1;)
-# RTSP/2.0 alongside RTSP/1.0
+# RTSP/2.0 raw stream fallbacks
 alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; content:" RTSP/2.0|0D 0A|"; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500140; rev:1;)
 alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; content:"RTSP/2.0 "; startswith; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500141; rev:1;)
 # RFC6587 octet-counted syslog framing
@@ -217,3 +217,8 @@ alert http any any -> any any (msg:"DPI|skype|service"; flow:established,to_serv
 alert http any any -> any any (msg:"DPI|teamviewer|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:teamviewer\.com|teamviewerapi\.com)$/i"; sid:9500170; rev:1;)
 alert http any any -> any any (msg:"DPI|webex|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:webex\.com|wbx2\.com|ciscospark\.com)$/i"; sid:9500171; rev:1;)
 alert http any any -> any any (msg:"DPI|youtube|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:youtube\.com|googlevideo\.com|ytimg\.com|youtube\-nocookie\.com)$/i"; sid:9500172; rev:1;)
+# RTSP parsed through LibHTP: classify using the parsed protocol field, not generic HTTP.
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; http.protocol; content:"RTSP/1.0"; startswith; endswith; sid:9500173; rev:1;)
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; http.protocol; content:"RTSP/1.0"; startswith; endswith; sid:9500174; rev:1;)
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; http.protocol; content:"RTSP/2.0"; startswith; endswith; sid:9500175; rev:1;)
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; http.protocol; content:"RTSP/2.0"; startswith; endswith; sid:9500176; rev:1;)
