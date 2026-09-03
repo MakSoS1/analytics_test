@@ -1,12 +1,7 @@
 name: Kanye West SPb official ticket monitor
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/kanye-spb-ticket-monitor.yml'
 
 permissions:
   contents: read
