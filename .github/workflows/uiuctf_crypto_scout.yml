@@ -1,0 +1,63 @@
+name: UIUCTF Crypto Scout
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch public challenge metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+
+          urls = [
+              'https://2026.uiuc.tf/api/v1/challenges',
+              'https://2026.uiuc.tf/challenges',
+              'https://2026.uiuc.tf/login',
+          ]
+          report = {}
+          for u in urls:
+              req = urllib.request.Request(u, headers={'User-Agent':'Mozilla/5.0 UIUCTF-scout'})
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as r:
+                      body = r.read()
+                      report[u] = {
+                          'status': r.status,
+                          'content_type': r.headers.get('content-type'),
+                          'body_file': None,
+                      }
+                      name = 'response_' + str(len(report)) + '.bin'
+                      open('out/'+name,'wb').write(body)
+                      report[u]['body_file'] = name
+              except urllib.error.HTTPError as e:
+                  body = e.read()
+                  name = 'response_' + str(len(report)+1) + '.bin'
+                  open('out/'+name,'wb').write(body)
+                  report[u] = {
+                      'status': e.code,
+                      'content_type': e.headers.get('content-type'),
+                      'body_file': name,
+                  }
+              except Exception as e:
+                  report[u] = {'error': type(e).__name__ + ': ' + str(e)}
+          open('out/report.json','w',encoding='utf-8').write(json.dumps(report, indent=2))
+          print(json.dumps({u: {k:v for k,v in d.items() if k!='body_file'} for u,d in report.items()}, indent=2))
+          PY
+
+      - name: Upload scout output
+        uses: actions/upload-artifact@v4
+        with:
+          name: uiuctf-crypto-scout
+          path: out/
+          retention-days: 1
