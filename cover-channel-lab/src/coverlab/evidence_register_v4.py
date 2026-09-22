@@ -9,8 +9,10 @@ consumable by the existing validators/evaluation pipeline.
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .research_contract_v3 import (
@@ -44,6 +46,20 @@ def _copy_pcap(source: Path, root: Path, category: str, capture_id: str) -> tupl
     return dst, sha256(dst)
 
 
+def _private_ip(value: str) -> str:
+    ip = ipaddress.ip_address(value)
+    if not (ip.is_private or ip.is_loopback):
+        raise ValueError("external evidence source_ip must be private/loopback")
+    return str(ip)
+
+
+def _iso(value: str) -> str:
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def _upsert_jsonl(path: Path, key: str, record: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -65,6 +81,9 @@ def register_framework(
     lifecycle: list[str],
     tool_version: str,
     adapter_version: str,
+    source_ip: str,
+    started_at: str,
+    ended_at: str,
     model_score: float | None = None,
     decision_threshold: float = 0.5,
 ) -> dict:
@@ -92,6 +111,10 @@ def register_framework(
             "label_family": "web_c2_mimicry",
             "label_intent": "c2",
             "decision_threshold": float(decision_threshold),
+            "source_ip": _private_ip(source_ip),
+            "started_at": _iso(started_at),
+            "ended_at": _iso(ended_at),
+            "safe_lifecycle_only": True,
         }
     )
     if model_score is not None:
@@ -109,6 +132,10 @@ def register_ech(
     pair_id: str,
     label_binary: int,
     protocol: str,
+    source_ip: str,
+    started_at: str,
+    ended_at: str,
+    ech_enabled: bool,
     model_score: float | None,
     decision_threshold: float,
 ) -> dict:
@@ -119,7 +146,9 @@ def register_ech(
     dst, digest = _copy_pcap(pcap, root, "ech", capture_id)
     rec = {
         "capture_id": capture_id,
+        "campaign_id": capture_id,
         "ech_mode": ech_mode,
+        "ech_enabled": bool(ech_enabled),
         "pair_id": pair_id,
         "label_binary": label_binary,
         "protocol": protocol,
@@ -130,6 +159,10 @@ def register_ech(
         "dataset_role": "external_ech_holdout",
         "training_eligible": False,
         "decision_threshold": float(decision_threshold),
+        "source_ip": _private_ip(source_ip),
+        "started_at": _iso(started_at),
+        "ended_at": _iso(ended_at),
+        "experiment_stage": "M_ech_holdout",
     }
     if model_score is not None:
         rec["model_score"] = float(model_score)
@@ -258,7 +291,10 @@ def main() -> None:
     fw.add_argument("--protocol", required=True)
     fw.add_argument("--lifecycle", required=True)
     fw.add_argument("--tool-version", required=True)
-    fw.add_argument("--adapter-version", default="coverlab-v4")
+    fw.add_argument("--adapter-version", default="coverlab-v5")
+    fw.add_argument("--source-ip", required=True)
+    fw.add_argument("--started-at", required=True)
+    fw.add_argument("--ended-at", required=True)
     fw.add_argument("--model-score", type=float)
     fw.add_argument("--decision-threshold", type=float, default=0.5)
 
@@ -269,6 +305,10 @@ def main() -> None:
     ech.add_argument("--pair-id", required=True)
     ech.add_argument("--label-binary", required=True, type=int, choices=(0, 1))
     ech.add_argument("--protocol", required=True, choices=("h2", "h3", "https"))
+    ech.add_argument("--source-ip", required=True)
+    ech.add_argument("--started-at", required=True)
+    ech.add_argument("--ended-at", required=True)
+    ech.add_argument("--ech-enabled", required=True, choices=("true", "false"))
     ech.add_argument("--model-score", type=float)
     ech.add_argument("--decision-threshold", type=float, default=0.5)
 
@@ -297,9 +337,9 @@ def main() -> None:
     a = ap.parse_args()
     root = Path(a.root)
     if a.kind == "framework":
-        rec = register_framework(root, Path(a.pcap), framework=a.framework, campaign_id=a.campaign_id, protocol=a.protocol, lifecycle=_csv(a.lifecycle), tool_version=a.tool_version, adapter_version=a.adapter_version, model_score=a.model_score, decision_threshold=a.decision_threshold)
+        rec = register_framework(root, Path(a.pcap), framework=a.framework, campaign_id=a.campaign_id, protocol=a.protocol, lifecycle=_csv(a.lifecycle), tool_version=a.tool_version, adapter_version=a.adapter_version, source_ip=a.source_ip, started_at=a.started_at, ended_at=a.ended_at, model_score=a.model_score, decision_threshold=a.decision_threshold)
     elif a.kind == "ech":
-        rec = register_ech(root, Path(a.pcap), capture_id=a.capture_id, ech_mode=a.ech_mode, pair_id=a.pair_id, label_binary=a.label_binary, protocol=a.protocol, model_score=a.model_score, decision_threshold=a.decision_threshold)
+        rec = register_ech(root, Path(a.pcap), capture_id=a.capture_id, ech_mode=a.ech_mode, pair_id=a.pair_id, label_binary=a.label_binary, protocol=a.protocol, source_ip=a.source_ip, started_at=a.started_at, ended_at=a.ended_at, ech_enabled=a.ech_enabled == "true", model_score=a.model_score, decision_threshold=a.decision_threshold)
     elif a.kind == "environment":
         rec = register_environment(root, Path(a.pcap), capture_id=a.capture_id, session_count=a.session_count, client_stack=a.client_stack, server_stack=a.server_stack, network_evidence=a.network_evidence)
     elif a.kind == "long-timing":
