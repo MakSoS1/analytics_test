@@ -559,10 +559,11 @@ jobs:
               --ech-report "$RUNNER_TEMP/external-evidence/status/ech_status.json"
               --environment-report "$RUNNER_TEMP/external-evidence/status/environment_status.json"
               --long-timing-report "$RUNNER_TEMP/external-evidence/status/long_timing_status.json"
+              --office-report "$RUNNER_TEMP/external-evidence/office/office_b3_report.json"
               --dataset-valid "$dataset_valid"
             )
             python -m coverlab.model_acceptance_v3 "${common[@]}" --out "$RUNNER_TEMP/acceptance/core_acceptance.json"
-            python -m coverlab.model_acceptance_v3 "${common[@]}" --require-nine-point-evidence --out "$RUNNER_TEMP/acceptance/research_acceptance.json"
+            python -m coverlab.model_acceptance_v3 "${common[@]}" --require-nine-point-evidence --require-office-evidence --out "$RUNNER_TEMP/acceptance/research_acceptance.json"
           else
             printf '{"policy_revision":5,"dataset_valid":%s,"model_candidate":false,"nine_point_evidence_ready":false,"reason":"model/evaluation incomplete"}\n' "$dataset_valid" > "$RUNNER_TEMP/acceptance/core_acceptance.json"
             cp "$RUNNER_TEMP/acceptance/core_acceptance.json" "$RUNNER_TEMP/acceptance/research_acceptance.json"
