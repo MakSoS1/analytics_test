@@ -98,7 +98,7 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          python -m coverlab.external_evidence_status_v3             --framework-root "$RUNNER_TEMP/external-evidence/framework"             --ech-root "$RUNNER_TEMP/external-evidence/ech"             --environment-root "$RUNNER_TEMP/external-evidence/environment"             --long-timing-root "$RUNNER_TEMP/external-evidence/long-timing"             --out-dir "$RUNNER_TEMP/external-evidence/status"
+          python -m coverlab.external_evidence_status_v3             --framework-root "$RUNNER_TEMP/external-evidence/framework"             --ech-root "$RUNNER_TEMP/external-evidence/ech"             --environment-root "$RUNNER_TEMP/external-evidence/environment"             --long-timing-root "$RUNNER_TEMP/external-evidence/long-timing"             --office-root "$RUNNER_TEMP/external-evidence/office"             --out-dir "$RUNNER_TEMP/external-evidence/status"
 
       - uses: actions/upload-artifact@v4
         with:
