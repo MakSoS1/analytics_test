@@ -29,7 +29,10 @@ PYTHONPATH=src python -m coverlab.evidence_register_v4 \
   --protocol https \
   --lifecycle registration,idle,poll,synthetic_task,synthetic_result,sleep,reconnect \
   --tool-version 1.5.0 \
-  --adapter-version coverlab-v4
+  --adapter-version coverlab-v5 \
+  --source-ip 10.77.0.21 \
+  --started-at 2026-09-22T10:00:00Z \
+  --ended-at 2026-09-22T10:05:00Z
 ```
 
 Use `adaptix`, `mythic_httpx` and `mythic_websocket` for the other framework families.
@@ -46,7 +49,11 @@ PYTHONPATH=src python -m coverlab.evidence_register_v4 \
   --ech-mode accepted_h3 \
   --pair-id pair-001 \
   --label-binary 0 \
-  --protocol h3
+  --protocol h3 \
+  --source-ip 10.77.0.31 \
+  --started-at 2026-09-22T10:00:00Z \
+  --ended-at 2026-09-22T10:00:10Z \
+  --ech-enabled true
 ```
 
 Required modes are `grease`, `accepted_h2`, `accepted_h3`, `rejected`, `shared_frontend_benign` and `shared_frontend_suspicious`.
