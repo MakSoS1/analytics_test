@@ -25,7 +25,7 @@ clone_or_update() {
   local url="$1" dir="$2"
   if [[ -d "$dir/.git" ]]; then
     git -C "$dir" fetch --depth 1 origin
-    git -C "$dir" reset --hard origin/HEAD
+    git -C "$dir" reset --hard FETCH_HEAD
   else
     git clone --depth 1 "$url" "$dir"
   fi
