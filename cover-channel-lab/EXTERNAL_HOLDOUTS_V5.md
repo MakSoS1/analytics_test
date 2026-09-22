@@ -141,7 +141,7 @@ bash scripts/capture_isolated_ech_v5.sh \
   accepted_h3 \
   true \
   /opt/coverlab/evidence \
-  -- /opt/coverlab/drivers/run_local_ech_request.sh
+  -- bash "$PWD/scripts/run_local_ech_curl_v5.sh" https://ech-lab.test/ true h3
 ```
 
 Create the corresponding paired capture with ECH disabled and the same
