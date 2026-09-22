@@ -76,7 +76,23 @@ The contract covers Windows/SChannel, Firefox, Chromium, Java, Rust; nginx/envoy
 
 ## Long timing
 
-The hosted workflow generates real 5/30/120/300-second timing profiles. The 1200/3600-second evidence must come from a long-lived isolated lab and may not be accelerated.
+The hosted workflow generates real 5/30/120/300-second timing profiles. The 1200/3600-second evidence must come from a long-lived isolated lab and may not be accelerated. Register each benign/suspicious capture with concrete timing provenance:
+
+```bash
+PYTHONPATH=src python -m coverlab.evidence_register_v4 \
+  --root /opt/coverlab/evidence long-timing \
+  --pcap /captures/timing-1200-benign.pcap \
+  --campaign-id timing-1200-benign-01 \
+  --interval-seconds 1200 \
+  --event-count 5 \
+  --label-binary 0 \
+  --protocol https \
+  --source-ip 10.77.0.41 \
+  --started-at 2026-09-22T10:00:00Z \
+  --ended-at 2026-09-22T11:40:00Z
+```
+
+Repeat for a suspicious 1200-second capture and for benign/suspicious 3600-second captures. The external-holdout workflow processes these PCAPs with the same parser/Gold pipeline and scores them with the frozen B3 model.
 
 ## Office background
 
