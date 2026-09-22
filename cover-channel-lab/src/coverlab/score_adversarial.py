@@ -8,6 +8,9 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from .train_baseline_v2 import numeric_matrix
+from .train_baseline_v3 import availability_flags_v3
+
 
 def main():
     p = argparse.ArgumentParser()
@@ -17,13 +20,9 @@ def main():
     args = p.parse_args()
 
     bundle = joblib.load(args.model)
-    df = pd.read_parquet(args.features)
+    df = availability_flags_v3(pd.read_parquet(args.features))
     cols = list(bundle["features"])
-    x = df.select_dtypes(include=[np.number, "bool"]).copy()
-    for col in cols:
-        if col not in x.columns:
-            x[col] = 0
-    x = x[cols].replace([np.inf, -np.inf], np.nan).fillna(0)
+    x, _ = numeric_matrix(df, cols)
     raw = bundle["model"].predict_proba(x)[:, 1]
     calibrator = bundle.get("calibrator")
     score = calibrator.predict(raw) if calibrator is not None else raw
