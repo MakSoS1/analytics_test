@@ -65,22 +65,52 @@ jobs:
           [[ -d "$src/office" ]] && cp -a "$src/office/." "$dst/office/" || true
 
       - name: Process and score framework holdouts
-        if: ${{ hashFiles(format('{0}/framework/framework_holdout.jsonl', inputs.evidence_root)) != '' }}
         working-directory: cover-channel-lab
         env:
           PYTHONPATH: src
+        shell: bash
         run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/external-evidence/framework/framework_holdout.jsonl"
+          [[ -s "$manifest" ]] || { echo "framework evidence not present; leaving status as missing"; exit 0; }
           bash ./scripts/process_external_framework_v5.sh "$RUNNER_TEMP/external-evidence/framework" "$RUNNER_TEMP/framework-features"
-          python -m coverlab.score_framework_holdout_v5             --evidence-root "$RUNNER_TEMP/external-evidence/framework"             --features-root "$RUNNER_TEMP/framework-features"             --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib"             --out "$RUNNER_TEMP/external-evidence/framework/framework_model_metrics.json"
+          python -m coverlab.score_framework_holdout_v5 \
+            --evidence-root "$RUNNER_TEMP/external-evidence/framework" \
+            --features-root "$RUNNER_TEMP/framework-features" \
+            --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib" \
+            --out "$RUNNER_TEMP/external-evidence/framework/framework_model_metrics.json"
 
       - name: Process and score ECH holdouts
-        if: ${{ hashFiles(format('{0}/ech/ech_holdout.jsonl', inputs.evidence_root)) != '' }}
         working-directory: cover-channel-lab
         env:
           PYTHONPATH: src
+        shell: bash
         run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/external-evidence/ech/ech_holdout.jsonl"
+          [[ -s "$manifest" ]] || { echo "ECH evidence not present; leaving status as missing"; exit 0; }
           bash ./scripts/process_external_ech_v5.sh "$RUNNER_TEMP/external-evidence/ech" "$RUNNER_TEMP/ech-features"
-          python -m coverlab.score_ech_holdout_v5             --evidence-root "$RUNNER_TEMP/external-evidence/ech"             --features-root "$RUNNER_TEMP/ech-features"             --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib"             --out-manifest "$RUNNER_TEMP/external-evidence/ech/ech_holdout.jsonl"
+          python -m coverlab.score_ech_holdout_v5 \
+            --evidence-root "$RUNNER_TEMP/external-evidence/ech" \
+            --features-root "$RUNNER_TEMP/ech-features" \
+            --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib" \
+            --out-manifest "$RUNNER_TEMP/external-evidence/ech/ech_holdout.jsonl"
+
+      - name: Process and score external 1200/3600 second timing holdouts
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/external-evidence/long-timing/long_timing_evidence.jsonl"
+          [[ -s "$manifest" ]] || { echo "external long-timing evidence not present; leaving status as missing"; exit 0; }
+          bash ./scripts/process_external_long_timing_v5.sh "$RUNNER_TEMP/external-evidence/long-timing" "$RUNNER_TEMP/long-timing-features"
+          python -m coverlab.score_long_timing_holdout_v5 \
+            --evidence-root "$RUNNER_TEMP/external-evidence/long-timing" \
+            --features-root "$RUNNER_TEMP/long-timing-features" \
+            --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib" \
+            --out "$RUNNER_TEMP/external-evidence/long-timing/long_timing_model_metrics.json"
 
       - name: Score labeled environment-domain features
         shell: bash
@@ -122,5 +152,6 @@ jobs:
             ${{ runner.temp }}/external-evidence
             ${{ runner.temp }}/framework-features
             ${{ runner.temp }}/ech-features
+            ${{ runner.temp }}/long-timing-features
           retention-days: 90
           compression-level: 0
