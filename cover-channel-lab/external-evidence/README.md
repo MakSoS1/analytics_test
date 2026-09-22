@@ -88,7 +88,7 @@ PYTHONPATH=src python -m coverlab.evidence_register_v4 \
 For a frozen offline mixed holdout:
 
 ```bash
-./scripts/compose_office_holdout_v4.sh \
+bash ./scripts/compose_office_holdout_v4.sh \
   /captures/office-hour.pcap \
   /captures/cover-channel.pcap \
   /captures/office-cover-mixed.pcap \
