@@ -170,6 +170,13 @@ PYTHONPATH=src python -m coverlab.evidence_register_v4 \
   --network-evidence nat
 ```
 
+In addition to registered PCAP provenance, strict research promotion requires
+`/opt/coverlab/evidence/environment/session_features.parquet` from the same
+sensor/preprocessing pipeline used by B3. It must contain `capture_id` and
+`label_binary` for each session. Each required client/server/network domain
+must contain both benign and suspicious rows; V5 computes per-domain
+precision/recall/FPR and rejects missing or single-class cells.
+
 The existing validator requires coverage for:
 
 Clients:
