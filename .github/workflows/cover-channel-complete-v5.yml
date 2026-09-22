@@ -29,7 +29,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: cover-channel-complete-v5-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  # Smoke-only branch pushes may supersede each other, but an explicitly
+  # requested full recovery must never be cancelled by a later documentation
+  # or CI-only commit on the same branch.
+  group: cover-channel-complete-v5-${{ (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[coverlab-v5-full]')) && github.run_id || github.ref }}
   cancel-in-progress: true
 
 env:
