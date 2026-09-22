@@ -95,3 +95,23 @@ case "$MODE" in
     exit 2
     ;;
 esac
+
+
+VERSION_FILE="$INSTALL_ROOT/coverlab-tool-versions.env"
+mythic_version=""
+adaptix_version=""
+sliver_version=""
+[[ -d "$INSTALL_ROOT/Mythic/.git" ]] && mythic_version="$(git -C "$INSTALL_ROOT/Mythic" rev-parse HEAD)"
+[[ -d "$INSTALL_ROOT/AdaptixC2/.git" ]] && adaptix_version="$(git -C "$INSTALL_ROOT/AdaptixC2" rev-parse HEAD)"
+if command -v sliver-server >/dev/null 2>&1; then
+  sliver_version="$(sliver-server version 2>/dev/null | head -n1 || true)"
+elif command -v sliver >/dev/null 2>&1; then
+  sliver_version="$(sliver --version 2>/dev/null | head -n1 || true)"
+fi
+{
+  printf 'COVERLAB_MYTHIC_TOOL_VERSION=%q\n' "$mythic_version"
+  printf 'COVERLAB_ADAPTIX_TOOL_VERSION=%q\n' "$adaptix_version"
+  printf 'COVERLAB_SLIVER_TOOL_VERSION=%q\n' "$sliver_version"
+} > "$VERSION_FILE"
+echo "Tool provenance written to $VERSION_FILE"
+cat "$VERSION_FILE"
