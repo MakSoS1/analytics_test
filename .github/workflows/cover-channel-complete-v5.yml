@@ -330,6 +330,16 @@ jobs:
           path: ${{ runner.temp }}/coverlab/release
           retention-days: 90
           compression-level: 0
+      - name: Publish mixed capture
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          idx="${{ matrix.capture }}"
+          printf -v name "D-mixed-%02d" "$idx"
+          ./scripts/upload_hf.sh "$RUNNER_TEMP/coverlab/release" "releases/${{ needs.preflight.outputs.release_id }}/$name" "V5 $name $GITHUB_SHA"
 
   models:
     needs: [preflight, core-shards, benign-diversity, long-timing]
@@ -457,6 +467,13 @@ jobs:
           path: ${{ runner.temp }}/adversarial/release
           retention-days: 90
           compression-level: 0
+      - name: Publish adversarial traffic
+        if: needs.preflight.outputs.hf_enabled == 'true'
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/adversarial/release" "releases/${{ needs.preflight.outputs.release_id }}/adversarial-00" "V5 adversarial traffic $GITHUB_SHA"
 
   external-evidence:
     needs: [preflight, models]
