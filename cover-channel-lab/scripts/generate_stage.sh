@@ -37,7 +37,9 @@ for idx in 0 1 2 3; do
     PYTHONPATH="$ROOT/src" GITHUB_SHA="${GITHUB_SHA:-local}" COVERLAB_GO_CLIENT=/tmp/coverlab-go-client COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs" \
     COVERLAB_JAVA_CLIENT_DIR=/tmp/coverlab-java-client COVERLAB_RUST_CLIENT=/tmp/coverlab-rust-client \
     COVERLAB_WSS_CLIENT_LOCK="$WSS_LOCK" \
-    COVERLAB_BENIGN_SESSIONS="${COVERLAB_BENIGN_SESSIONS:-60000}" COVERLAB_LONG_REPETITIONS="${COVERLAB_LONG_REPETITIONS:-2}" \
+    COVERLAB_BENIGN_SESSIONS="${COVERLAB_BENIGN_SESSIONS:-60000}" \
+    COVERLAB_BENIGN_RANGE_START="${COVERLAB_BENIGN_RANGE_START:-0}" COVERLAB_BENIGN_RANGE_END="${COVERLAB_BENIGN_RANGE_END:-${COVERLAB_BENIGN_SESSIONS:-60000}}" \
+    COVERLAB_LONG_REPETITIONS="${COVERLAB_LONG_REPETITIONS:-2}" \
     NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
     "$PYTHON_BIN" -m coverlab.orchestrate_v3 --stage "$STAGE" --shard "$SHARD" --shards "$SHARDS" \
       --persona-index "$idx" --out "$pdir" --capture-file "$(basename "$PCAP")" &
