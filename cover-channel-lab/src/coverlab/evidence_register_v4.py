@@ -151,6 +151,8 @@ def register_ech(
         "ech_enabled": bool(ech_enabled),
         "pair_id": pair_id,
         "label_binary": label_binary,
+        "label_family": "web_c2_mimicry" if label_binary else "benign",
+        "label_intent": "c2" if label_binary else "benign",
         "protocol": protocol,
         "wire_real": True,
         "isolated_lab": True,
