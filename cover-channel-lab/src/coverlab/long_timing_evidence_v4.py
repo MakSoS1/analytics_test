@@ -33,7 +33,13 @@ def validate(root:Path)->dict:
     for interval,min_events in REQUIRED.items():
         rr=by.get(interval,[]);labels={int(x.get('label_binary',-1)) for x in rr};coverage[str(interval)]={'campaigns':len(rr),'labels':sorted(labels),'min_events':min((int(x.get('event_count',x.get('event_count_target',0)) or 0) for x in rr),default=0),'ready':len(rr)>=2 and {0,1}.issubset(labels)}
     ready=all(v['ready'] for v in coverage.values())
-    return {'validated':bool(rows) and not errors and ready,'records':len(rows),'errors':errors,'coverage':coverage,'required_intervals_seconds':sorted(REQUIRED),'dataset_role':'external_long_timing_challenge','training_eligible':False}
+    metrics={};mp=root/'long_timing_model_metrics.json'
+    if mp.exists():
+        try:metrics=json.loads(mp.read_text())
+        except Exception as e:errors.append(f'long_timing_model_metrics.json invalid: {e}')
+    cells=metrics.get('cells') if isinstance(metrics,dict) else {}
+    model_ready=bool(cells) and all(str(k) in cells and (cells[str(k)] or {}).get('status')=='ok' for k in REQUIRED)
+    return {'validated':bool(rows) and not errors and ready,'records':len(rows),'errors':errors,'coverage':coverage,'required_intervals_seconds':sorted(REQUIRED),'model_evaluation_ready':model_ready,'model_metrics':metrics,'dataset_role':'external_long_timing_challenge','training_eligible':False}
 
 
 def main():
