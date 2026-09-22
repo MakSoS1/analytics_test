@@ -61,6 +61,10 @@ installed using the official installer. Payload/agent generation is
 intentionally not automated by CoverLab: use a pre-approved lab-only agent and
 restrict it to the lifecycle above.
 
+The bootstrap writes exact tool provenance to
+`/opt/coverlab/tools/coverlab-tool-versions.env`. Source that file before
+capture and select the matching version variable.
+
 The four accepted framework labels are:
 
 - `sliver`
@@ -81,7 +85,8 @@ export PYTHONPATH="$PWD/src"
 export COVERLAB_FRAMEWORK_LIFECYCLE="registration,idle,poll,synthetic_task,synthetic_result,sleep,reconnect"
 
 export COVERLAB_ISOLATED_LAB=1
-export COVERLAB_FRAMEWORK_TOOL_VERSION="<exact release or git commit of the framework used>"
+source /opt/coverlab/tools/coverlab-tool-versions.env
+export COVERLAB_FRAMEWORK_TOOL_VERSION="$COVERLAB_MYTHIC_TOOL_VERSION"
 
 bash scripts/capture_isolated_framework_v5.sh \
   mythic_httpx \
