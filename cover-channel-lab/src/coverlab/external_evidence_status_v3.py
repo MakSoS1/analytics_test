@@ -8,6 +8,7 @@ from .ech_v3 import validate_ech_import, curl_ech_capability
 from .environment_evidence_v3 import validate as validate_environment
 from .framework_holdout_v3 import validate_source as validate_framework_source
 from .long_timing_evidence_v4 import validate as validate_long_timing
+from .office_background_v4 import validate as validate_office
 
 
 def framework_status(root:Path|None)->dict:
@@ -34,11 +35,17 @@ def long_timing_status(root:Path|None)->dict:
     return validate_long_timing(root)
 
 
+def office_status(root:Path|None)->dict:
+    if root is None or not root.exists():return {'validated':False,'records':0,'reason':'privacy-scrubbed office background evidence missing'}
+    return validate_office(root)
+
+
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--framework-root');ap.add_argument('--ech-root');ap.add_argument('--environment-root');ap.add_argument('--long-timing-root');ap.add_argument('--out-dir',required=True);a=ap.parse_args();out=Path(a.out_dir);out.mkdir(parents=True,exist_ok=True)
-    fw=framework_status(Path(a.framework_root) if a.framework_root else None);ech=ech_status(Path(a.ech_root) if a.ech_root else None);env=environment_status(Path(a.environment_root) if a.environment_root else None);long=long_timing_status(Path(a.long_timing_root) if a.long_timing_root else None)
-    (out/'framework_status.json').write_text(json.dumps(fw,indent=2,sort_keys=True)+'\n');(out/'ech_status.json').write_text(json.dumps(ech,indent=2,sort_keys=True)+'\n');(out/'environment_status.json').write_text(json.dumps(env,indent=2,sort_keys=True)+'\n');(out/'long_timing_status.json').write_text(json.dumps(long,indent=2,sort_keys=True)+'\n')
-    summary={'framework_ready':fw.get('validated',False),'framework_model_metrics_ready':fw.get('model_evaluation_ready',False),'wire_real_ech_ready':(ech.get('external_wire_real') or {}).get('validated',False),'ech_model_metrics_ready':(ech.get('external_wire_real') or {}).get('model_evaluation_ready',False),'environment_ready':env.get('validated',False),'external_long_timing_ready':long.get('validated',False)}
+    ap=argparse.ArgumentParser();ap.add_argument('--framework-root');ap.add_argument('--ech-root');ap.add_argument('--environment-root');ap.add_argument('--long-timing-root');ap.add_argument('--office-root');ap.add_argument('--out-dir',required=True);a=ap.parse_args();out=Path(a.out_dir);out.mkdir(parents=True,exist_ok=True)
+    fw=framework_status(Path(a.framework_root) if a.framework_root else None);ech=ech_status(Path(a.ech_root) if a.ech_root else None);env=environment_status(Path(a.environment_root) if a.environment_root else None);long=long_timing_status(Path(a.long_timing_root) if a.long_timing_root else None);office=office_status(Path(a.office_root) if a.office_root else None)
+    (out/'framework_status.json').write_text(json.dumps(fw,indent=2,sort_keys=True)+'\n');(out/'ech_status.json').write_text(json.dumps(ech,indent=2,sort_keys=True)+'\n');(out/'environment_status.json').write_text(json.dumps(env,indent=2,sort_keys=True)+'\n');(out/'long_timing_status.json').write_text(json.dumps(long,indent=2,sort_keys=True)+'\n');(out/'office_status.json').write_text(json.dumps(office,indent=2,sort_keys=True)+'\n')
+    summary={'framework_ready':fw.get('validated',False),'framework_model_metrics_ready':fw.get('model_evaluation_ready',False),'wire_real_ech_ready':(ech.get('external_wire_real') or {}).get('validated',False),'ech_model_metrics_ready':(ech.get('external_wire_real') or {}).get('model_evaluation_ready',False),'environment_ready':env.get('validated',False),'external_long_timing_ready':long.get('validated',False),'office_background_ready':office.get('validated',False)}
     (out/'external_evidence_summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n');print(json.dumps(summary,sort_keys=True))
+
 
 if __name__=='__main__':main()
