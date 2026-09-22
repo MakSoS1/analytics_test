@@ -206,7 +206,11 @@ PYTHONPATH=src python -m coverlab.evidence_register_v4 \
   --campaign-id timing-1200-benign-01 \
   --interval-seconds 1200 \
   --event-count 5 \
-  --label-binary 0
+  --label-binary 0 \
+  --protocol https \
+  --source-ip 10.77.0.41 \
+  --started-at 2026-09-22T10:00:00Z \
+  --ended-at 2026-09-22T11:40:00Z
 ```
 
 For 3600 seconds the validator requires at least four events per campaign.
