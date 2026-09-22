@@ -221,6 +221,10 @@ def register_long_timing(
     interval_seconds: int,
     event_count: int,
     label_binary: int,
+    protocol: str,
+    source_ip: str,
+    started_at: str,
+    ended_at: str,
 ) -> dict:
     if interval_seconds not in (1200, 3600):
         raise ValueError("external long timing interval must be 1200 or 3600 seconds")
@@ -237,6 +241,13 @@ def register_long_timing(
         "event_count_target": int(event_count),
         "timing_acceleration": 1,
         "label_binary": int(label_binary),
+        "label_family": "covert_timing" if label_binary else "benign",
+        "label_intent": "c2" if label_binary else "benign",
+        "protocol": protocol,
+        "source_ip": _private_ip(source_ip),
+        "started_at": _iso(started_at),
+        "ended_at": _iso(ended_at),
+        "experiment_stage": "L_long_timing",
         "wire_real": True,
         "isolated_lab": True,
         "pcap_file": str(dst.relative_to(root / "long-timing")),
@@ -328,6 +339,10 @@ def main() -> None:
     lt.add_argument("--interval-seconds", required=True, type=int, choices=(1200, 3600))
     lt.add_argument("--event-count", required=True, type=int)
     lt.add_argument("--label-binary", required=True, type=int, choices=(0, 1))
+    lt.add_argument("--protocol", required=True)
+    lt.add_argument("--source-ip", required=True)
+    lt.add_argument("--started-at", required=True)
+    lt.add_argument("--ended-at", required=True)
 
     office = sub.add_parser("office")
     office.add_argument("--pcap", required=True)
@@ -345,7 +360,7 @@ def main() -> None:
     elif a.kind == "environment":
         rec = register_environment(root, Path(a.pcap), capture_id=a.capture_id, session_count=a.session_count, client_stack=a.client_stack, server_stack=a.server_stack, network_evidence=a.network_evidence)
     elif a.kind == "long-timing":
-        rec = register_long_timing(root, Path(a.pcap), campaign_id=a.campaign_id, interval_seconds=a.interval_seconds, event_count=a.event_count, label_binary=a.label_binary)
+        rec = register_long_timing(root, Path(a.pcap), campaign_id=a.campaign_id, interval_seconds=a.interval_seconds, event_count=a.event_count, label_binary=a.label_binary, protocol=a.protocol, source_ip=a.source_ip, started_at=a.started_at, ended_at=a.ended_at)
     else:
         rec = register_office(root, Path(a.pcap), capture_id=a.capture_id, duration_seconds=a.duration_seconds, session_count=a.session_count, privacy_scrubbed=a.privacy_scrubbed)
     print(json.dumps(rec, indent=2, sort_keys=True))
