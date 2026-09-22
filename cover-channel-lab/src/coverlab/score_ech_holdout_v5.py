@@ -8,6 +8,7 @@ import joblib
 import pandas as pd
 
 from .train_baseline_v2 import numeric_matrix
+from .train_baseline_v3 import availability_flags_v3
 
 
 def main() -> None:
@@ -24,6 +25,8 @@ def main() -> None:
     manifest = pd.DataFrame(rows)
     parts = list(Path(args.features_root).rglob("session_features.parquet"))
     features = pd.concat([pd.read_parquet(p) for p in parts], ignore_index=True) if parts else pd.DataFrame()
+    if not features.empty:
+        features = availability_flags_v3(features)
     bundle = joblib.load(args.model)
     threshold = float(bundle.get("threshold", 0.5))
 
