@@ -502,7 +502,7 @@ jobs:
             python -m coverlab.score_office_background_v5 --features "$DST/office/session_features.parquet" --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib" --out "$DST/office/office_b3_report.json"
           fi
 
-          python -m coverlab.external_evidence_status_v3             --framework-root "$DST/framework"             --ech-root "$DST/ech"             --environment-root "$DST/environment"             --long-timing-root "$DST/long-timing"             --out-dir "$DST/status"
+          python -m coverlab.external_evidence_status_v3             --framework-root "$DST/framework"             --ech-root "$DST/ech"             --environment-root "$DST/environment"             --long-timing-root "$DST/long-timing"             --office-root "$DST/office"             --out-dir "$DST/status"
       - uses: actions/upload-artifact@v4
         with:
           name: external-evidence-v5-${{ github.run_id }}
