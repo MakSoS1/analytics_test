@@ -33,6 +33,9 @@ def test_framework_registration_is_challenge_only(tmp_path):
         lifecycle=["registration", "idle", "poll", "synthetic_task", "synthetic_result", "sleep", "reconnect"],
         tool_version="test",
         adapter_version="test",
+        source_ip="10.77.0.21",
+        started_at="2026-09-22T10:00:00Z",
+        ended_at="2026-09-22T10:01:00Z",
         model_score=0.99,
         decision_threshold=0.5,
     )
@@ -48,11 +51,11 @@ def test_framework_registration_is_challenge_only(tmp_path):
 
 def test_ech_registration_enforces_benign_ech_semantics(tmp_path):
     root = tmp_path / "external"
-    register_ech(root, _pcap(tmp_path, "ech.pcap"), capture_id="e1", ech_mode="accepted_h3", pair_id="p1", label_binary=0, protocol="h3", model_score=.01, decision_threshold=.5)
+    register_ech(root, _pcap(tmp_path, "ech.pcap"), capture_id="e1", ech_mode="accepted_h3", pair_id="p1", label_binary=0, protocol="h3", source_ip="10.77.0.31", started_at="2026-09-22T10:00:00Z", ended_at="2026-09-22T10:00:10Z", ech_enabled=True, model_score=.01, decision_threshold=.5)
     report = validate_ech_import(root / "ech")
     assert report["records"] == 1
     with pytest.raises(ValueError):
-        register_ech(root, _pcap(tmp_path, "bad.pcap"), capture_id="e2", ech_mode="accepted_h3", pair_id="p2", label_binary=1, protocol="h3", model_score=.9, decision_threshold=.5)
+        register_ech(root, _pcap(tmp_path, "bad.pcap"), capture_id="e2", ech_mode="accepted_h3", pair_id="p2", label_binary=1, protocol="h3", source_ip="10.77.0.31", started_at="2026-09-22T10:00:00Z", ended_at="2026-09-22T10:00:10Z", ech_enabled=True, model_score=.9, decision_threshold=.5)
 
 
 def test_environment_registration_is_wire_real_and_holdout(tmp_path):
@@ -79,3 +82,21 @@ def test_office_requires_privacy_scrub(tmp_path):
     rec = register_office(root, _pcap(tmp_path, "office-ok.pcap"), capture_id="office-2", duration_seconds=3600, session_count=100, privacy_scrubbed=True)
     assert rec["training_eligible"] is False
     assert rec["privacy_scrubbed"] is True
+
+
+def test_framework_registration_rejects_public_source_ip(tmp_path):
+    root = tmp_path / "external"
+    with pytest.raises(ValueError):
+        register_framework(
+            root,
+            _pcap(tmp_path, "public.pcap"),
+            framework="sliver",
+            campaign_id="j-public-rejected",
+            protocol="https",
+            lifecycle=["registration", "idle", "poll"],
+            tool_version="test",
+            adapter_version="test",
+            source_ip="8.8.8.8",
+            started_at="2026-09-22T10:00:00Z",
+            ended_at="2026-09-22T10:01:00Z",
+        )
