@@ -23,6 +23,8 @@ shift
   exit 2
 }
 
+: "${COVERLAB_FRAMEWORK_TOOL_VERSION:?set COVERLAB_FRAMEWORK_TOOL_VERSION to the concrete framework version/commit}"
+
 case "$FRAMEWORK" in
   sliver|adaptix|mythic_httpx|mythic_websocket) ;;
   *) echo "unsupported framework: $FRAMEWORK" >&2; exit 2 ;;
@@ -72,4 +74,4 @@ trap - EXIT
 ENDED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 test -s "$PCAP"
 
-PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.evidence_register_v4   --root "$EVIDENCE_ROOT" framework   --pcap "$PCAP"   --framework "$FRAMEWORK"   --campaign-id "$CAMPAIGN_ID"   --protocol "$PROTOCOL"   --lifecycle "${COVERLAB_FRAMEWORK_LIFECYCLE:-registration,idle,poll,synthetic_task,synthetic_result,sleep,reconnect}"   --tool-version "${COVERLAB_FRAMEWORK_TOOL_VERSION:-unknown}"   --adapter-version coverlab-v5   --source-ip "$SOURCE_IP"   --started-at "$STARTED_AT"   --ended-at "$ENDED_AT"
+PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.evidence_register_v4   --root "$EVIDENCE_ROOT" framework   --pcap "$PCAP"   --framework "$FRAMEWORK"   --campaign-id "$CAMPAIGN_ID"   --protocol "$PROTOCOL"   --lifecycle "${COVERLAB_FRAMEWORK_LIFECYCLE:-registration,idle,poll,synthetic_task,synthetic_result,sleep,reconnect}"   --tool-version "$COVERLAB_FRAMEWORK_TOOL_VERSION"   --adapter-version coverlab-v5   --source-ip "$SOURCE_IP"   --started-at "$STARTED_AT"   --ended-at "$ENDED_AT"
