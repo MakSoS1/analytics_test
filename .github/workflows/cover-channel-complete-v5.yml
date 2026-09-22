@@ -29,8 +29,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: cover-channel-complete-v5-${{ github.run_id }}
-  cancel-in-progress: false
+  group: cover-channel-complete-v5-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: true
 
 env:
   HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
