@@ -82,6 +82,21 @@ jobs:
           bash ./scripts/process_external_ech_v5.sh "$RUNNER_TEMP/external-evidence/ech" "$RUNNER_TEMP/ech-features"
           python -m coverlab.score_ech_holdout_v5             --evidence-root "$RUNNER_TEMP/external-evidence/ech"             --features-root "$RUNNER_TEMP/ech-features"             --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib"             --out-manifest "$RUNNER_TEMP/external-evidence/ech/ech_holdout.jsonl"
 
+      - name: Score labeled environment-domain features
+        shell: bash
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        run: |
+          f="$RUNNER_TEMP/external-evidence/environment/session_features.parquet"
+          if [[ -s "$f" ]]; then
+            python -m coverlab.score_environment_holdout_v5 \
+              --evidence-root "$RUNNER_TEMP/external-evidence/environment" \
+              --features "$f" \
+              --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib" \
+              --out "$RUNNER_TEMP/external-evidence/environment/environment_model_metrics.json"
+          fi
+
       - name: Score office benign features
         shell: bash
         working-directory: cover-channel-lab
