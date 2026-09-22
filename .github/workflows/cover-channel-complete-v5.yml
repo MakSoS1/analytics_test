@@ -107,7 +107,7 @@ jobs:
           PYTHONPATH: src
         run: |
           python -m compileall -q src tests scripts
-          bash -n scripts/generate_stage.sh scripts/upload_hf.sh scripts/process_external_framework_v5.sh scripts/process_external_ech_v5.sh scripts/capture_isolated_framework_v5.sh scripts/capture_isolated_ech_v5.sh scripts/bootstrap_framework_tools_v5.sh
+          bash -n scripts/generate_stage.sh scripts/upload_hf.sh scripts/process_external_framework_v5.sh scripts/process_external_ech_v5.sh scripts/capture_isolated_framework_v5.sh scripts/capture_isolated_ech_v5.sh scripts/run_local_ech_curl_v5.sh scripts/bootstrap_framework_tools_v5.sh
           pytest -q
       - name: Wire/parser smoke
         working-directory: cover-channel-lab
