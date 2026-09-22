@@ -41,9 +41,25 @@ def ech_campaign(row: dict) -> dict:
     return campaign
 
 
+def long_timing_campaign(row: dict) -> dict:
+    campaign = dict(row)
+    campaign.setdefault("scenario_id", "EXTERNAL_LONG_TIMING")
+    campaign.setdefault("expected_events", int(row.get("event_count", row.get("event_count_target", 0)) or 0))
+    campaign.setdefault("attack_mapping", [])
+    campaign.setdefault("persona", "external_long_timing")
+    campaign.setdefault("client_impl", "external_long_timing")
+    campaign.setdefault("visibility_mode", "opaque_and_ground_truth")
+    campaign.setdefault("inspection_policy", "bypass")
+    campaign.setdefault("sni_visibility", "clear")
+    campaign.setdefault("status", "success")
+    campaign.setdefault("external_dependency", False)
+    return campaign
+
+
 def prepare(kind: str, manifest: Path, evidence: Path, out: Path) -> dict:
     rows = [json.loads(x) for x in manifest.read_text().splitlines() if x.strip()]
-    adapter = framework_campaign if kind == "framework" else ech_campaign
+    adapters = {"framework": framework_campaign, "ech": ech_campaign, "long": long_timing_campaign}
+    adapter = adapters[kind]
     prepared = []
     for row in rows:
         cid = str(row["campaign_id"])
@@ -66,7 +82,7 @@ def prepare(kind: str, manifest: Path, evidence: Path, out: Path) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--kind", required=True, choices=("framework", "ech"))
+    ap.add_argument("--kind", required=True, choices=("framework", "ech", "long"))
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--evidence-root", required=True)
     ap.add_argument("--out-root", required=True)
