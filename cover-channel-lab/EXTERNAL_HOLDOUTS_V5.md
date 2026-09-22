@@ -81,6 +81,7 @@ export PYTHONPATH="$PWD/src"
 export COVERLAB_FRAMEWORK_LIFECYCLE="registration,idle,poll,synthetic_task,synthetic_result,sleep,reconnect"
 
 export COVERLAB_ISOLATED_LAB=1
+export COVERLAB_FRAMEWORK_TOOL_VERSION="<exact release or git commit of the framework used>"
 
 bash scripts/capture_isolated_framework_v5.sh \
   mythic_httpx \
