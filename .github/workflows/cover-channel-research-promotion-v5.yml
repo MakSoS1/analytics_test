@@ -53,6 +53,15 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.model_run_id }}
 
+      - name: Download adversarial holdout from the model run
+        uses: actions/download-artifact@v4
+        with:
+          name: adversarial-v5-${{ inputs.model_run_id }}
+          path: ${{ runner.temp }}/adversarial
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.model_run_id }}
+
       - name: Download external evidence scored against the same model run
         uses: actions/download-artifact@v4
         with:
@@ -70,6 +79,7 @@ jobs:
           test -s "$RUNNER_TEMP/mixed-reports/mixed_report.json"
           test -s "$RUNNER_TEMP/mixed-reports/advanced_mixed_report.json"
           test -s "$RUNNER_TEMP/original-acceptance/core_acceptance.json"
+          test -s "$RUNNER_TEMP/adversarial/quality/adversarial-00/adversarial_report.json"
           test -s "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/framework_status.json"
           test -s "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/ech_status.json"
           test -s "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/environment_status.json"
