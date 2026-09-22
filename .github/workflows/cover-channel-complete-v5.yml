@@ -533,6 +533,11 @@ jobs:
           name: mixed-evaluation-v5-${{ github.run_id }}
           path: ${{ runner.temp }}/mixed-reports
       - uses: actions/download-artifact@v4
+        if: needs.adversarial.result == 'success'
+        with:
+          name: adversarial-v5-${{ github.run_id }}
+          path: ${{ runner.temp }}/adversarial
+      - uses: actions/download-artifact@v4
         if: needs.external-evidence.result == 'success'
         with:
           name: external-evidence-v5-${{ github.run_id }}
@@ -560,6 +565,7 @@ jobs:
               --environment-report "$RUNNER_TEMP/external-evidence/status/environment_status.json"
               --long-timing-report "$RUNNER_TEMP/external-evidence/status/long_timing_status.json"
               --office-report "$RUNNER_TEMP/external-evidence/office/office_b3_report.json"
+              --adversarial-report "$RUNNER_TEMP/adversarial/quality/adversarial-00/adversarial_report.json"
               --dataset-valid "$dataset_valid"
             )
             python -m coverlab.model_acceptance_v3 "${common[@]}" --out "$RUNNER_TEMP/acceptance/core_acceptance.json"
