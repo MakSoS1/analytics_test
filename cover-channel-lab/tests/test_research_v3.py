@@ -6,6 +6,7 @@ from coverlab.pipeline_v3 import assign_split
 from coverlab.sequence_fusion_v3 import TinyTCN, OPAQUE_CHANNELS, VISIBLE_CHANNELS, encode_opaque_sequence, encode_visible_sequence
 from coverlab.train_baseline_v3 import availability_flags_v3
 from coverlab.orchestrate_v3 import _benign_event_count, _long_event_count, _timing_factor
+from coverlab.model_acceptance_v3 import adversarial_ok
 
 
 def test_validation_roles_are_four_way_and_deterministic():
@@ -80,3 +81,11 @@ def test_stage_l_is_multi_event_and_jittered():
     assert _long_event_count(5)==30 and _long_event_count(30)==30 and _long_event_count(120)==20 and _long_event_count(300)==10
     assert _timing_factor('jitter_20',1)!=_timing_factor('jitter_20',2)
     assert _timing_factor('burst_silence',4)>_timing_factor('burst_silence',1)
+
+
+def test_adversarial_acceptance_requires_exact_500_and_at_most_five_percent_evasion():
+    assert adversarial_ok({"sessions":500,"attack_success_rate":0.05},0.05)
+    assert adversarial_ok({"sessions":500,"attack_success_rate":0.0},0.05)
+    assert not adversarial_ok({"sessions":499,"attack_success_rate":0.0},0.05)
+    assert not adversarial_ok({"sessions":500,"attack_success_rate":0.050001},0.05)
+    assert adversarial_ok({},0.05,required=False)
