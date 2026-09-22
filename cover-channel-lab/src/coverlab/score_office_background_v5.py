@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from .train_baseline_v2 import numeric_matrix
+from .train_baseline_v3 import availability_flags_v3
 
 
 def main() -> None:
@@ -19,6 +20,8 @@ def main() -> None:
     args = ap.parse_args()
 
     df = pd.read_parquet(args.features)
+    if not df.empty:
+        df = availability_flags_v3(df)
     if df.empty:
         raise SystemExit("office feature table is empty")
     bundle = joblib.load(args.model)
