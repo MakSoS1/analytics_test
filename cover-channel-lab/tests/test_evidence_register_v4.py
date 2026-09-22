@@ -68,8 +68,30 @@ def test_environment_registration_is_wire_real_and_holdout(tmp_path):
 
 def test_long_timing_registration_uses_real_intervals(tmp_path):
     root = tmp_path / "external"
-    register_long_timing(root, _pcap(tmp_path, "long1.pcap"), campaign_id="l-1200-benign", interval_seconds=1200, event_count=5, label_binary=0)
-    register_long_timing(root, _pcap(tmp_path, "long2.pcap"), campaign_id="l-1200-positive", interval_seconds=1200, event_count=5, label_binary=1)
+    register_long_timing(
+        root,
+        _pcap(tmp_path, "long1.pcap"),
+        campaign_id="l-1200-benign",
+        interval_seconds=1200,
+        event_count=5,
+        label_binary=0,
+        protocol="https",
+        source_ip="10.77.0.41",
+        started_at="2026-09-22T10:00:00Z",
+        ended_at="2026-09-22T11:40:00Z",
+    )
+    register_long_timing(
+        root,
+        _pcap(tmp_path, "long2.pcap"),
+        campaign_id="l-1200-positive",
+        interval_seconds=1200,
+        event_count=5,
+        label_binary=1,
+        protocol="https",
+        source_ip="10.77.0.42",
+        started_at="2026-09-22T12:00:00Z",
+        ended_at="2026-09-22T13:40:00Z",
+    )
     report = validate_long_timing(root / "long-timing")
     assert report["records"] == 2
     assert report["coverage"]["1200"]["ready"] is True
