@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import confusion_matrix, precision_score, recall_score
 
-from .train_baseline_v2 import build_frames, numeric_matrix
+from .train_baseline_v2 import numeric_matrix
+from .train_baseline_v3 import build_frames_visibility_correct as build_frames
 
 
 def _score(bundle: dict, frame: pd.DataFrame) -> dict:
