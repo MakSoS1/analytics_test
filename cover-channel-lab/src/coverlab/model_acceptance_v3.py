@@ -32,6 +32,13 @@ def _metric_cells_ok(cells:dict,min_recall:float,max_fpr:float)->tuple[bool,list
     return bool(checks) and all(x['passed'] for x in checks),checks
 
 
+def adversarial_ok(report:dict,max_asr:float,required:bool=True)->bool:
+    if not required:return True
+    sessions=int(report.get('sessions',0) or 0)
+    asr=float(report.get('attack_success_rate',1.0) if sessions else 1.0)
+    return sessions==500 and asr<=max_asr
+
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument('--baseline-report',required=True);ap.add_argument('--advanced-report');ap.add_argument('--mixed-report');ap.add_argument('--advanced-mixed-report');ap.add_argument('--unseen-report');ap.add_argument('--framework-report');ap.add_argument('--ech-report');ap.add_argument('--environment-report');ap.add_argument('--long-timing-report');ap.add_argument('--research-readiness-report');ap.add_argument('--office-report');ap.add_argument('--adversarial-report');ap.add_argument('--out',required=True)
@@ -63,9 +70,7 @@ def main():
     nine_point_ready=all(evidence.values())
     office_rows=int(office.get('rows',0) or 0);office_fpr=float(office.get('fpr',1.0) if office_rows else 1.0);office_ready=office_rows>0 and office_fpr<=a.max_fpr
     adversarial_required=bool(a.adversarial_report)
-    adversarial_sessions=int(adversarial.get('sessions',0) or 0)
-    adversarial_asr=float(adversarial.get('attack_success_rate',1.0) if adversarial_sessions else 1.0)
-    adversarial_ready=(not adversarial_required) or (adversarial_sessions==500 and adversarial_asr<=a.max_adversarial_asr)
+    adversarial_ready=adversarial_ok(adversarial,a.max_adversarial_asr,adversarial_required)
     dataset_valid=a.dataset_valid=='true';quality_checks_pass=bool(checks) and all(c['passed'] for c in checks);advanced_mixed_pass=bool(advanced_mixed_checks) and all(c['passed'] for c in advanced_mixed_checks);model_quality=quality_checks_pass and (mixed_accept is True) and advanced_mixed_pass and unseen_ready and compositional_ready and adversarial_ready
     promotion_evidence_ok=(nine_point_ready if a.require_nine_point_evidence else True) and (office_ready if a.require_office_evidence else True)
     model_candidate=dataset_valid and model_quality and promotion_evidence_ok;model_artifacts_created=bool((baseline.get('models') or {})) and sequence_ready and fusion_ready
