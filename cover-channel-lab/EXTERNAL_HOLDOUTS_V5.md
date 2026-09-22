@@ -305,6 +305,19 @@ The workflow downloads the frozen B3 model from that run, processes framework
 and ECH PCAPs, scores office benign features, validates environment/long-timing
 coverage and uploads a complete external-evidence artifact.
 
+### Strict research promotion
+
+After **Cover Channel Complete V5** and **Cover Channel External Holdouts V5**
+have both completed, run **Cover Channel Research Promotion V5** with:
+
+- `model_run_id`: the Complete V5 run that produced the frozen model;
+- `external_run_id`: the External Holdouts V5 run that scored evidence against that same model.
+
+The promotion workflow downloads the frozen model/mixed reports, the original
+core acceptance, and the external-evidence artifact, then recomputes strict
+acceptance with both `--require-nine-point-evidence` and
+`--require-office-evidence`. No PCAP needs to be committed to Git.
+
 ## Promotion semantics
 
 `core_model_candidate=true` means the generated corpus, trained models,
