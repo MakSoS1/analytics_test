@@ -65,6 +65,8 @@ def register_framework(
     lifecycle: list[str],
     tool_version: str,
     adapter_version: str,
+    model_score: float | None = None,
+    decision_threshold: float = 0.5,
 ) -> dict:
     framework = framework.lower()
     if framework not in FRAMEWORKS:
@@ -86,8 +88,14 @@ def register_framework(
             "tool_version": tool_version,
             "adapter_version": adapter_version,
             "capture_provenance": "authorized_isolated_lab",
+            "label_binary": 1,
+            "label_family": "web_c2_mimicry",
+            "label_intent": "c2",
+            "decision_threshold": float(decision_threshold),
         }
     )
+    if model_score is not None:
+        rec["model_score"] = float(model_score)
     _upsert_jsonl(root / "framework" / "framework_holdout.jsonl", "campaign_id", rec)
     return rec
 
@@ -251,6 +259,8 @@ def main() -> None:
     fw.add_argument("--lifecycle", required=True)
     fw.add_argument("--tool-version", required=True)
     fw.add_argument("--adapter-version", default="coverlab-v4")
+    fw.add_argument("--model-score", type=float)
+    fw.add_argument("--decision-threshold", type=float, default=0.5)
 
     ech = sub.add_parser("ech")
     ech.add_argument("--pcap", required=True)
@@ -287,7 +297,7 @@ def main() -> None:
     a = ap.parse_args()
     root = Path(a.root)
     if a.kind == "framework":
-        rec = register_framework(root, Path(a.pcap), framework=a.framework, campaign_id=a.campaign_id, protocol=a.protocol, lifecycle=_csv(a.lifecycle), tool_version=a.tool_version, adapter_version=a.adapter_version)
+        rec = register_framework(root, Path(a.pcap), framework=a.framework, campaign_id=a.campaign_id, protocol=a.protocol, lifecycle=_csv(a.lifecycle), tool_version=a.tool_version, adapter_version=a.adapter_version, model_score=a.model_score, decision_threshold=a.decision_threshold)
     elif a.kind == "ech":
         rec = register_ech(root, Path(a.pcap), capture_id=a.capture_id, ech_mode=a.ech_mode, pair_id=a.pair_id, label_binary=a.label_binary, protocol=a.protocol, model_score=a.model_score, decision_threshold=a.decision_threshold)
     elif a.kind == "environment":
