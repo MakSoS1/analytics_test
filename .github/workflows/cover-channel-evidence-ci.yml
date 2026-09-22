@@ -5,6 +5,9 @@ on:
     branches: [main, coverlab-finish-2026-09]
     paths:
       - 'cover-channel-lab/src/coverlab/evidence_register_v4.py'
+      - 'cover-channel-lab/src/coverlab/external_campaign_adapter_v5.py'
+      - 'cover-channel-lab/src/coverlab/framework_holdout_v3.py'
+      - 'cover-channel-lab/src/coverlab/ech_v3.py'
       - 'cover-channel-lab/src/coverlab/framework_metrics_v4.py'
       - 'cover-channel-lab/src/coverlab/office_background_v4.py'
       - 'cover-channel-lab/src/coverlab/external_evidence_status_v3.py'
@@ -14,10 +17,14 @@ on:
       - 'cover-channel-lab/src/coverlab/score_office_background_v5.py'
       - 'cover-channel-lab/tests/test_evidence_register_v4.py'
       - 'cover-channel-lab/tests/test_benign_range_v5.py'
+      - 'cover-channel-lab/tests/test_external_campaign_adapter_v5.py'
       - '.github/workflows/cover-channel-evidence-ci.yml'
   pull_request:
     paths:
       - 'cover-channel-lab/src/coverlab/evidence_register_v4.py'
+      - 'cover-channel-lab/src/coverlab/external_campaign_adapter_v5.py'
+      - 'cover-channel-lab/src/coverlab/framework_holdout_v3.py'
+      - 'cover-channel-lab/src/coverlab/ech_v3.py'
       - 'cover-channel-lab/src/coverlab/framework_metrics_v4.py'
       - 'cover-channel-lab/src/coverlab/office_background_v4.py'
       - 'cover-channel-lab/src/coverlab/external_evidence_status_v3.py'
@@ -27,6 +34,7 @@ on:
       - 'cover-channel-lab/src/coverlab/score_office_background_v5.py'
       - 'cover-channel-lab/tests/test_evidence_register_v4.py'
       - 'cover-channel-lab/tests/test_benign_range_v5.py'
+      - 'cover-channel-lab/tests/test_external_campaign_adapter_v5.py'
 
 permissions:
   contents: read
@@ -49,4 +57,4 @@ jobs:
         env: {PYTHONPATH: src}
         run: |
           python -m compileall -q src tests
-          pytest -q tests/test_evidence_register_v4.py tests/test_benign_range_v5.py tests/test_research_v3.py
+          pytest -q tests/test_evidence_register_v4.py tests/test_benign_range_v5.py tests/test_external_campaign_adapter_v5.py tests/test_research_v3.py
