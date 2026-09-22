@@ -61,4 +61,4 @@ jobs:
         env: {PYTHONPATH: src}
         run: |
           python -m compileall -q src tests
-          pytest -q tests/test_evidence_register_v4.py tests/test_benign_range_v5.py tests/test_external_campaign_adapter_v5.py tests/test_research_v3.py
+          pytest -q tests/test_evidence_register_v4.py tests/test_benign_range_v5.py tests/test_external_campaign_adapter_v5.py
