@@ -1,0 +1,147 @@
+name: Cover Channel Archive Run V5
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Cover Channel Complete V5 run id to archive"
+        required: true
+        default: "35737103850"
+        type: string
+      release_id:
+        description: "HF release id"
+        required: true
+        default: "gh-35737103850-a1"
+        type: string
+  push:
+    branches: [coverlab-finish-2026-09]
+    paths:
+      - ".coverlab/archive-current-run.txt"
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve target
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            run_id="${{ inputs.source_run_id }}"
+            release_id="${{ inputs.release_id }}"
+          else
+            run_id="$(awk -F= '$1=="source_run_id"{print $2}' .coverlab/archive-current-run.txt | tail -1)"
+            release_id="$(awk -F= '$1=="release_id"{print $2}' .coverlab/archive-current-run.txt | tail -1)"
+          fi
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          [[ -n "$release_id" ]]
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
+      - name: Install HF client
+        run: python -m pip install -q 'huggingface_hub[hf_xet]>=1.0.0'
+
+      - name: Inventory source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ steps.target.outputs.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/archive-manifest"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts?per_page=100" > "$RUNNER_TEMP/archive-manifest/artifacts-pages.jsonl"
+          python - <<'PY'
+          import json, os, pathlib
+          src=pathlib.Path(os.environ["RUNNER_TEMP"])/"archive-manifest"/"artifacts-pages.jsonl"
+          artifacts=[]
+          for line in src.read_text().splitlines():
+              if not line.strip():
+                  continue
+              page=json.loads(line)
+              artifacts.extend(page.get("artifacts", []))
+          run_id=os.environ["SOURCE_RUN_ID"]
+          out={
+              "source_run_id": int(run_id),
+              "artifact_count": len(artifacts),
+              "artifacts": [
+                  {
+                      "id": a.get("id"),
+                      "name": a.get("name"),
+                      "size_in_bytes": a.get("size_in_bytes"),
+                      "digest": a.get("digest"),
+                      "expired": a.get("expired"),
+                      "created_at": a.get("created_at"),
+                      "expires_at": a.get("expires_at"),
+                  } for a in artifacts
+              ],
+          }
+          p=pathlib.Path(os.environ["RUNNER_TEMP"])/"archive-manifest"/"artifact_manifest.json"
+          p.write_text(json.dumps(out, indent=2, sort_keys=True)+"\n")
+          PY
+          cat "$RUNNER_TEMP/archive-manifest/artifact_manifest.json"
+
+      - name: Archive mixed and adversarial traffic to HF
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SOURCE_RUN_ID: ${{ steps.target.outputs.run_id }}
+          RELEASE_ID: ${{ steps.target.outputs.release_id }}
+        working-directory: cover-channel-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${HF_TOKEN:?HF_TOKEN is required for durable archive}"
+          mkdir -p "$RUNNER_TEMP/archive"
+          mapfile -t names < <(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts?per_page=100"               --jq '.artifacts[] | select(.expired == false) | .name' |
+            grep -E '^(dataset-v5-D-mixed-|adversarial-v5-)' |
+            sort -u
+          )
+          echo "Archiving ${#names[@]} traffic artifacts"
+          for name in "${names[@]}"; do
+            rm -rf "$RUNNER_TEMP/archive/$name"
+            gh run download "$SOURCE_RUN_ID" -n "$name" -D "$RUNNER_TEMP/archive/$name"
+            ./scripts/upload_hf.sh               "$RUNNER_TEMP/archive/$name"               "releases/$RELEASE_ID/archive/$name"               "Archive $name from GitHub run $SOURCE_RUN_ID"
+          done
+
+      - name: Publish archive manifest
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          RELEASE_ID: ${{ steps.target.outputs.release_id }}
+        working-directory: cover-channel-lab
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/archive-manifest" "releases/$RELEASE_ID/archive-manifest-v5" "Artifact manifest for run ${{ steps.target.outputs.run_id }}"
+
+      - name: Verify completeness if source run finished
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ steps.target.outputs.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" --jq '.status')"
+          conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" --jq '.conclusion // ""')"
+          mixed_count="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts?per_page=100"             --jq '.artifacts[].name' | grep -Ec '^dataset-v5-D-mixed-' || true)"
+          adversarial_count="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts?per_page=100"             --jq '.artifacts[].name' | grep -Ec '^adversarial-v5-' || true)"
+          echo "source_status=$status conclusion=$conclusion mixed=$mixed_count adversarial=$adversarial_count"
+          if [[ "$status" == "completed" ]]; then
+            if [[ "$mixed_count" -ne 30 ]]; then
+              echo "Expected 30 frozen mixed traffic artifacts after completed source run, found $mixed_count" >&2
+              exit 1
+            fi
+          fi
