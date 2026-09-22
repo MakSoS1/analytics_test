@@ -80,13 +80,16 @@ Capture and register it in one command:
 export PYTHONPATH="$PWD/src"
 export COVERLAB_FRAMEWORK_LIFECYCLE="registration,idle,poll,synthetic_task,synthetic_result,sleep,reconnect"
 
+export COVERLAB_ISOLATED_LAB=1
+
 bash scripts/capture_isolated_framework_v5.sh \
   mythic_httpx \
-  eth1 \
+  cc-mythic \
+  v-mythic \
   10.77.0.21 \
   https \
   fw-mythic-httpx-0001 \
-  /opt/coverlab/evidence/framework \
+  /opt/coverlab/evidence \
   -- /opt/coverlab/drivers/run_mythic_httpx_lab_agent.sh
 ```
 
@@ -102,6 +105,7 @@ PYTHONPATH=src python -m coverlab.external_evidence_status_v3 \
   --ech-root /opt/coverlab/evidence/ech \
   --environment-root /opt/coverlab/evidence/environment \
   --long-timing-root /opt/coverlab/evidence/long-timing \
+  --office-root /opt/coverlab/evidence/office \
   --out-dir /tmp/coverlab-evidence-status
 ```
 
@@ -125,15 +129,18 @@ private/loopback.
 Example wrapper:
 
 ```bash
+export COVERLAB_ISOLATED_LAB=1
+
 bash scripts/capture_isolated_ech_v5.sh \
-  eth1 \
+  cc-ech \
+  v-ech \
   10.77.0.31 \
   h3 \
   ech-pair-001-on \
   ech-pair-001 \
   accepted_h3 \
   true \
-  /opt/coverlab/evidence/ech \
+  /opt/coverlab/evidence \
   -- /opt/coverlab/drivers/run_local_ech_request.sh
 ```
 
@@ -147,10 +154,10 @@ absolute score delta between paired ECH-on/off observations.
 Register real captures produced by different client/server/network domains:
 
 ```bash
-PYTHONPATH=src python -m coverlab.register_environment_capture_v5 \
-  --root /opt/coverlab/evidence/environment \
+PYTHONPATH=src python -m coverlab.evidence_register_v4 \
+  --root /opt/coverlab/evidence environment \
   --pcap /captures/winhttp-nginx-nat-01.pcap \
-  --evidence-id winhttp-nginx-nat-01 \
+  --capture-id winhttp-nginx-nat-01 \
   --session-count 500 \
   --client-stack windows_winhttp_schannel \
   --server-stack nginx \
@@ -180,8 +187,8 @@ without timestamp acceleration.
 Each interval needs at least one benign and one suspicious capture.
 
 ```bash
-PYTHONPATH=src python -m coverlab.register_long_timing_capture_v5 \
-  --root /opt/coverlab/evidence/long-timing \
+PYTHONPATH=src python -m coverlab.evidence_register_v4 \
+  --root /opt/coverlab/evidence long-timing \
   --pcap /captures/timing-1200-benign.pcap \
   --campaign-id timing-1200-benign-01 \
   --interval-seconds 1200 \
