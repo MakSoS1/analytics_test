@@ -11,36 +11,7 @@ MANIFEST="$EVIDENCE/framework_holdout.jsonl"
 [[ -s "$MANIFEST" ]] || { echo "missing framework_holdout.jsonl" >&2; exit 1; }
 mkdir -p "$OUT"
 
-PYTHONPATH="$ROOT/src" python - "$MANIFEST" "$EVIDENCE" "$OUT" <<'PY'
-import json,sys
-from pathlib import Path
-manifest=Path(sys.argv[1]); evidence=Path(sys.argv[2]); out=Path(sys.argv[3])
-rows=[json.loads(x) for x in manifest.read_text().splitlines() if x.strip()]
-for row in rows:
-    cid=str(row["campaign_id"])
-    stage=out/cid/"stage"
-    (stage/"manifests").mkdir(parents=True,exist_ok=True)
-    campaign=dict(row)
-    campaign.setdefault("scenario_id","EXTERNAL_FRAMEWORK")
-    campaign.setdefault("expected_events",0)
-    campaign.setdefault("attack_mapping",[])
-    campaign.setdefault("persona","external_framework")
-    campaign.setdefault("client_impl",str(row.get("framework","external_framework")))
-    campaign.setdefault("visibility_mode","opaque_and_ground_truth")
-    campaign.setdefault("inspection_policy","bypass")
-    campaign.setdefault("sni_visibility","clear")
-    campaign.setdefault("status","success")
-    campaign.setdefault("external_dependency",False)
-    (stage/"manifests"/"campaigns.jsonl").write_text(json.dumps(campaign,separators=(",",":"),sort_keys=True)+"\n")
-    (stage/"manifests"/"events.jsonl").write_text("")
-    (stage/"manifests"/"decrypted_transactions.jsonl").write_text("")
-    (stage/"campaigns.jsonl").write_text(json.dumps(campaign,separators=(",",":"),sort_keys=True)+"\n")
-    (stage/"events.jsonl").write_text("")
-    p=evidence/row["pcap_file"]
-    if not p.is_file():
-        raise SystemExit(f"missing pcap for {cid}: {p}")
-PY
-
+PYTHONPATH="$ROOT/src" python -m coverlab.external_campaign_adapter_v5 --kind framework --manifest "$MANIFEST" --evidence-root "$EVIDENCE" --out-root "$OUT"
 while IFS= read -r cid; do
   [[ -n "$cid" ]] || continue
   STAGE="$OUT/$cid/stage"
