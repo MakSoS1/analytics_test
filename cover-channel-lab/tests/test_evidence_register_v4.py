@@ -10,6 +10,7 @@ from coverlab.evidence_register_v4 import (
     register_office,
 )
 from coverlab.framework_holdout_v3 import validate_source
+from coverlab.framework_metrics_v4 import build as build_framework_metrics
 from coverlab.ech_v3 import validate_ech_import
 from coverlab.environment_evidence_v3 import validate as validate_environment
 from coverlab.long_timing_evidence_v4 import validate as validate_long_timing
@@ -32,12 +33,17 @@ def test_framework_registration_is_challenge_only(tmp_path):
         lifecycle=["registration", "idle", "poll", "synthetic_task", "synthetic_result", "sleep", "reconnect"],
         tool_version="test",
         adapter_version="test",
+        model_score=0.99,
+        decision_threshold=0.5,
     )
     rows, errors = validate_source(root / "framework")
     assert errors == []
     assert rows[0]["training_eligible"] is False
     assert rows[0]["post_exploitation"] is False
     assert rows[0]["wire_real"] is True
+    metrics = build_framework_metrics(root / "framework")
+    assert metrics["sliver"]["status"] == "ok"
+    assert metrics["sliver"]["recall"] == 1.0
 
 
 def test_ech_registration_enforces_benign_ech_semantics(tmp_path):
