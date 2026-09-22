@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import subprocess
+from datetime import datetime
 from collections import defaultdict
 from pathlib import Path
 
@@ -46,6 +48,19 @@ def validate_ech_import(root:Path)->dict:
     rows=[json.loads(x) for x in manifest.read_text().splitlines() if x.strip()];errors=[]
     for i,r in enumerate(rows):
         errors += [f'row {i}: {e}' for e in validate_ech_record(r)]
+        if r.get('isolated_lab') is not True:errors.append(f'row {i}: isolated_lab=true required')
+        if r.get('ech_enabled') not in (True,False):errors.append(f'row {i}: ech_enabled boolean required')
+        try:
+            ip=ipaddress.ip_address(str(r.get('source_ip','')))
+            if not (ip.is_private or ip.is_loopback):errors.append(f'row {i}: source_ip must be private/loopback')
+        except Exception:
+            errors.append(f'row {i}: invalid source_ip')
+        try:
+            start=datetime.fromisoformat(str(r.get('started_at','')).replace('Z','+00:00'))
+            end=datetime.fromisoformat(str(r.get('ended_at','')).replace('Z','+00:00'))
+            if end < start:errors.append(f'row {i}: ended_at precedes started_at')
+        except Exception:
+            errors.append(f'row {i}: valid started_at/ended_at required')
         p=root/str(r.get('pcap_file',''))
         if not p.is_file():errors.append(f'row {i}: pcap missing')
         elif sha256(p)!=r.get('pcap_sha256'):errors.append(f'row {i}: pcap sha mismatch')
