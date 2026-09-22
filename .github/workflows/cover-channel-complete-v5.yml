@@ -498,6 +498,10 @@ jobs:
             python -m coverlab.score_ech_holdout_v5 --evidence-root "$DST/ech" --features-root "$RUNNER_TEMP/ech-features" --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib" --out-manifest "$DST/ech/ech_holdout.jsonl"
           fi
 
+          if [[ -s "$DST/environment/session_features.parquet" ]]; then
+            python -m coverlab.score_environment_holdout_v5 --evidence-root "$DST/environment" --features "$DST/environment/session_features.parquet" --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib" --out "$DST/environment/environment_model_metrics.json"
+          fi
+
           if [[ -s "$DST/office/session_features.parquet" ]]; then
             python -m coverlab.score_office_background_v5 --features "$DST/office/session_features.parquet" --model "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib" --out "$DST/office/office_b3_report.json"
           fi
