@@ -40,6 +40,15 @@ DNS.15=benign-update.test
 DNS.16=benign-devtunnel.test
 DNS.17=synthetic-api.test
 DNS.18=echo.test
+DNS.19=edge-front.test
+DNS.20=edge-ws.test
+DNS.21=cdn-front.test
+DNS.22=workers-front.test
+DNS.23=graph-front.test
+DNS.24=telegram-front.test
+DNS.25=resolver-front.test
+DNS.26=plain-front.test
+DNS.27=stage-m-resolver.test
 CNF
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -keyout "$CERTDIR/server.key" -out "$CERTDIR/server.crt" -config "$CERTDIR/openssl.cnf" >/dev/null 2>&1
 chmod 600 "$CERTDIR/server.key"; chmod 644 "$CERTDIR/server.crt"
@@ -51,6 +60,46 @@ allow_anonymous true
 persistence false
 certfile $CERTDIR/server.crt
 keyfile $CERTDIR/server.key
+EOF
+
+cat > "$CERTDIR/nginx-stage-m.conf" <<EOF
+pid $CERTDIR/nginx-stage-m.pid;
+error_log $LOGDIR/nginx-stage-m-error.log notice;
+events { worker_connections 1024; }
+http {
+  access_log $LOGDIR/nginx-stage-m-access.log;
+  server {
+    listen 10.20.0.22:8443 ssl;
+    server_name edge-front.test edge-ws.test cdn-front.test workers-front.test graph-front.test telegram-front.test resolver-front.test;
+    ssl_certificate $CERTDIR/server.crt;
+    ssl_certificate_key $CERTDIR/server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    location /ws {
+      proxy_pass https://10.20.0.21:8443;
+      proxy_ssl_verify off;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host \$host;
+    }
+    location / {
+      proxy_pass http://10.20.0.20:8080;
+      proxy_http_version 1.1;
+      proxy_set_header Host \$host;
+      proxy_set_header X-Forwarded-For \$remote_addr;
+    }
+  }
+  server {
+    listen 10.20.0.22:80;
+    listen 10.20.0.22:443;
+    server_name plain-front.test;
+    location / {
+      proxy_pass http://10.20.0.20:8080;
+      proxy_http_version 1.1;
+      proxy_set_header Host \$host;
+    }
+  }
+}
 EOF
 
 run_in_c2() {
@@ -65,6 +114,12 @@ run_in_c2 "$PYTHON_BIN" -m coverlab.grpc_server --bind 10.20.0.20:50051 >"$LOGDI
 run_in_c2 "$PYTHON_BIN" -m coverlab.h3_fixture server --host 10.20.0.20 --port 8444 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/h3.log" 2>&1 & echo $! > "$LOGDIR/h3.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.connect_server --host 10.20.0.20 --port 8082 >"$LOGDIR/connect.log" 2>&1 & echo $! > "$LOGDIR/connect.pid"
 run_in_c2 mosquitto -c "$CERTDIR/mosquitto.conf" -v >"$LOGDIR/mqtt.log" 2>&1 & echo $! > "$LOGDIR/mqtt.pid"
+
+# Stage M local-only infrastructure. Root is used only for privileged DNS/HTTP
+# ports inside the namespace; there is still no default route to the Internet.
+sudo ip netns exec cc-c2 env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.stage_m_dns_server --bind 10.20.0.20 --port 53 >"$LOGDIR/stage-m-dns-auth.log" 2>&1 & echo $! > "$LOGDIR/stage-m-dns-auth.pid"
+sudo ip netns exec cc-c2 env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.stage_m_dns_server --bind 10.20.0.23 --port 53 --upstream 10.20.0.20 >"$LOGDIR/stage-m-dns-rec.log" 2>&1 & echo $! > "$LOGDIR/stage-m-dns-rec.pid"
+sudo ip netns exec cc-c2 nginx -c "$CERTDIR/nginx-stage-m.conf" -g 'daemon off;' >"$LOGDIR/nginx-stage-m.log" 2>&1 & echo $! > "$LOGDIR/nginx-stage-m.pid"
 
 CORE_READY=false
 for _ in $(seq 1 80); do
@@ -129,6 +184,13 @@ required_probe grpc "$LOGDIR/grpc.log" sudo ip netns exec cc-dev runuser -u "$US
 required_probe mqtt-wss "$LOGDIR/mqtt.log" sudo ip netns exec cc-dev runuser -u "$USER" -- "${COMMON_ENV[@]}" "$PYTHON_BIN" -c "$mqtt_probe"
 
 echo "coverlab H3/CONNECT-UDP/WebTransport/gRPC/MQTT fixtures ready"
+
+# Stage M front/DNS readiness.
+required_probe stage-m-nginx "$LOGDIR/nginx-stage-m-error.log" sudo ip netns exec cc-dev curl --noproxy '*' -kfsS https://edge-front.test:8443/healthz
+required_probe stage-m-http443 "$LOGDIR/nginx-stage-m-error.log" sudo ip netns exec cc-dev curl --noproxy '*' -fsS http://plain-front.test:443/healthz
+dns_probe='import socket,dns.message; q=dns.message.make_query("probe.stage-m.test.","A").to_wire(); s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3); s.sendto(q,("10.20.0.23",53)); d,_=s.recvfrom(4096); raise SystemExit(0 if len(d)>12 else 1)'
+required_probe stage-m-dns "$LOGDIR/stage-m-dns-rec.log" sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$dns_probe"
+echo "coverlab Stage M nginx/DNS fixtures ready"
 
 # Socket-level diagnostics make a later protocol-shard failure actionable.
 sudo ip netns exec cc-c2 ss -lntup 2>/dev/null | grep -E ':(8080|8443|50051|8082|9443)\b' || true
