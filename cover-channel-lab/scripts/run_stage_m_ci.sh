@@ -15,7 +15,7 @@ trap cleanup EXIT
 "$ROOT/scripts/stop_services.sh" || true
 for dev in v-office v-dev v-c2 v-devops v-soc; do sudo ip link del "$dev" 2>/dev/null || true; done
 "$ROOT/scripts/setup_netns.sh"
-"$ROOT/scripts/start_services.sh"
+COVERLAB_ENABLE_STAGE_M=1 "$ROOT/scripts/start_services.sh"
 bash "$ROOT/scripts/netem_v3.sh" apply "$PROFILE" v-c2
 
 rm -f "$RAW_PCAP" "$PCAP" /tmp/coverlab_stage_m_dns_trace.jsonl /tmp/coverlab_stage_m_tunnel_trace.jsonl
