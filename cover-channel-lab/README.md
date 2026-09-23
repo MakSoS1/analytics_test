@@ -20,7 +20,7 @@ The lab intentionally does **not** run malware. It does not execute received com
 - request URI, standard/custom header, body, response, syntax, timing, WSS tunnel, TLS-visibility and control-plane/data-plane Cover Channel scenarios;
 - trusted-service / LOTS-inspired examples retained **only as benign hard negatives/background**, never as a positive Cover Channel target;
 - paired benign hard negatives and counterfactual-style pairs using the same service/carrier family;
-- independent client stacks: httpx H1/H2, curl, Node fetch, Go net/http, Python stdlib, Chromium, aioquic, grpcio and Paho MQTT;
+- independent client stacks: httpx H1/H2, curl, Node fetch, Go net/http, Java HttpClient, Rust reqwest, Python stdlib, Chromium, aioquic, grpcio and Paho MQTT;
 - Suricata offline parsing plus pinned Zeek 8.2.1 offline parsing with fatal parser quality gates;
 - JA4/JA4S/JA4H/JA4T/JA4L extraction when exported by the parser, plus HTTP/TLS/DNS/QUIC/WebSocket/session aggregates;
 - Bronze, Silver and Gold dataset layers with campaign/event ground truth, checksums, strict splits and leakage audit;
@@ -76,6 +76,7 @@ release/
 | G — trusted-service background | LOTS-inspired / commodity-service traffic as **benign hard negatives only**; never a positive target |
 | H — future transport holdout | 1,400 H3/QUIC, CONNECT, H3 datagram, WebTransport and privacy sessions |
 | I — adversarial holdout | 500 post-baseline suspicious sessions, never train data |
+| M — positive implementation diversity | 4,750 positive-only HTTPS/DNS/DoH/WSS/TCP/fallback campaigns across independent clients, servers and network profiles; 600 explicit implementation holdouts |
 
 Stage E generalization is enforced by campaign-level grouping and explicit holdouts. `node_fetch`/`python_stdlib`, selected carriers/transforms, browser challenge, trusted-background, future transport and adversarial stages are excluded from train according to the split contract.
 
@@ -146,3 +147,11 @@ FPR promotion policy are documented in [EXTERNAL_HOLDOUTS_V5.md](EXTERNAL_HOLDOU
 
 Use **Cover Channel Complete V5** for resume-first corpus/model work and
 **Cover Channel External Holdouts V5** on the isolated self-hosted lab runner.
+
+## Stage M positive-only extension
+
+The post-V5 positive corpus is documented in [docs/STAGE_M_POSITIVE.md](docs/STAGE_M_POSITIVE.md).
+Use **Cover Channel Stage M Positive** for the hosted positive-only corpus. It does
+not generate a benign class or train a model. Real 15/60-minute beacon evidence is
+separated into **Cover Channel Stage M Real Long Timing Positive** for the isolated
+self-hosted lab.
