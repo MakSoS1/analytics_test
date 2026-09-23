@@ -1,0 +1,225 @@
+# dpi_max100.rules — expanded protocol/service DPI rules for Suricata 8.x
+# Historical filename retained for compatibility. Active budget is 100..199 rules.
+# Exact service attribution uses visible SNI/HTTP host. ECH is detected separately and is never guessed as a service.
+
+# BitTorrent DHT
+alert udp any any -> any any (msg:"DPI|bt-dht|protocol"; app-layer-protocol:bittorrent-dht; sid:9500001; rev:2;)
+alert udp any any -> any any (msg:"DPI|bt-dht|protocol"; content:"1:q4:ping"; content:"1:y1:q"; distance:0; within:48; sid:9500002; rev:2;)
+# DNS
+alert udp any any -> any any (msg:"DPI|dns|protocol"; app-layer-protocol:dns; sid:9500003; rev:2;)
+alert tcp any any -> any any (msg:"DPI|dns|protocol"; app-layer-protocol:dns; sid:9500004; rev:2;)
+# FTP
+alert tcp any any -> any any (msg:"DPI|ftp|protocol"; app-layer-protocol:ftp; sid:9500005; rev:2;)
+alert tcp any any -> any any (msg:"DPI|ftp|protocol"; flow:established; content:"220 "; startswith; content:"FTP"; nocase; distance:0; within:128; sid:9500006; rev:2;)
+# HTTP. Use the parsed protocol field so RTSP parsed through LibHTP does not become HTTP DPI.
+alert http any any -> any any (msg:"DPI|http|protocol"; http.protocol; pcre:"/^HTTP\/(?:0\.9|1\.0|1\.1|2)$/i"; sid:9500007; rev:3;)
+# IMAP
+alert tcp any any -> any any (msg:"DPI|imap|protocol"; app-layer-protocol:imap; sid:9500008; rev:2;)
+alert tcp any any -> any any (msg:"DPI|imap|protocol"; flow:established; content:"* OK "; startswith; content:"IMAP"; nocase; distance:0; within:128; sid:9500009; rev:2;)
+# LDAP
+alert tcp any any -> any any (msg:"DPI|ldap|protocol"; app-layer-protocol:ldap; sid:9500010; rev:2;)
+# MQTT
+alert tcp any any -> any any (msg:"DPI|mqtt|protocol"; app-layer-protocol:mqtt; sid:9500011; rev:2;)
+alert tcp any any -> any any (msg:"DPI|mqtt|protocol"; flow:established,to_server; content:"|00 04|MQTT"; depth:20; sid:9500012; rev:2;)
+# NTP
+alert udp any any -> any any (msg:"DPI|ntp|protocol"; app-layer-protocol:ntp; sid:9500013; rev:2;)
+# POP3
+alert tcp any any -> any any (msg:"DPI|pop3|protocol"; app-layer-protocol:pop3; sid:9500014; rev:2;)
+alert tcp any any -> any any (msg:"DPI|pop3|protocol"; flow:established; content:"+OK "; startswith; content:"POP3"; nocase; distance:0; within:128; sid:9500015; rev:2;)
+# RDP
+alert tcp any any -> any any (msg:"DPI|rdp|protocol"; app-layer-protocol:rdp; sid:9500016; rev:2;)
+alert tcp any any -> any any (msg:"DPI|rdp|protocol"; flow:established,to_server; content:"|03 00|"; offset:0; depth:2; content:"|E0|"; offset:5; depth:1; sid:9500017; rev:2;)
+# SIP. Require the parser to expose the actual SIP protocol token; this prevents ACK-like payload collisions.
+alert sip any any -> any any (msg:"DPI|sip|protocol"; flow:to_server; sip.protocol; content:"SIP/2.0"; startswith; endswith; sid:9500018; rev:3;)
+alert sip any any -> any any (msg:"DPI|sip|protocol"; flow:to_client; sip.protocol; content:"SIP/2.0"; startswith; endswith; sid:9500019; rev:3;)
+alert udp any any -> any any (msg:"DPI|sip|protocol"; content:"INVITE "; startswith; content:" SIP/2.0|0D 0A|"; distance:0; within:512; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500020; rev:2;)
+alert tcp any any -> any any (msg:"DPI|sip|protocol"; content:"INVITE "; startswith; content:" SIP/2.0|0D 0A|"; distance:0; within:512; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500021; rev:2;)
+# SNMP
+alert udp any any -> any any (msg:"DPI|snmp|protocol"; app-layer-protocol:snmp; sid:9500022; rev:2;)
+# Telnet
+alert tcp any any -> any any (msg:"DPI|telnet|protocol"; app-layer-protocol:telnet; sid:9500023; rev:2;)
+alert tcp any any -> any any (msg:"DPI|telnet|protocol"; flow:established; content:"|FF FB 01|"; content:"|FF FB 03|"; distance:0; within:32; sid:9500024; rev:2;)
+# TLS
+alert tcp any any -> any any (msg:"DPI|tls|protocol"; app-layer-protocol:tls; sid:9500025; rev:2;)
+# SSH
+alert tcp any any -> any any (msg:"DPI|ssh|protocol"; app-layer-protocol:ssh; sid:9500026; rev:2;)
+alert tcp any any -> any any (msg:"DPI|ssh|protocol"; flow:established; content:"SSH-2.0-"; startswith; sid:9500027; rev:2;)
+# QUIC
+alert udp any any -> any any (msg:"DPI|quic|protocol"; app-layer-protocol:quic; sid:9500028; rev:2;)
+alert udp any any -> any any (msg:"DPI|quic|protocol"; pcre:"/^[\xC0-\xFF]\x00\x00\x00\x01/s"; sid:9500029; rev:2;)
+# IEC 60870-5-104
+alert tcp any any -> any any (msg:"DPI|iec104|protocol"; flow:established,to_server; content:"|68 04 07 00 00 00|"; startswith; sid:9500030; rev:2;)
+alert tcp any any -> any any (msg:"DPI|iec104|protocol"; flow:established,to_server; content:"|68 04 13 00 00 00|"; startswith; sid:9500031; rev:2;)
+# BGP
+alert tcp any any -> any any (msg:"DPI|bgp|protocol"; flow:established; content:"|FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF|"; startswith; content:"|01|"; offset:18; depth:1; sid:9500032; rev:2;)
+alert tcp any any -> any any (msg:"DPI|bgp|protocol"; flow:established; content:"|FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF|"; startswith; content:"|02|"; offset:18; depth:1; sid:9500033; rev:2;)
+# BitTorrent peer
+alert tcp any any -> any any (msg:"DPI|bt-peer|protocol"; flow:established,to_server; content:"|13|BitTorrent protocol"; startswith; sid:9500034; rev:2;)
+# PostgreSQL
+alert tcp any any -> any any (msg:"DPI|postgresql|protocol"; flow:established,to_server; content:"|00 03 00 00|"; offset:4; depth:4; content:"user|00|"; distance:0; within:256; sid:9500035; rev:2;)
+# RADIUS Access-Request. Set flow state so response-only traffic cannot be labeled RADIUS.
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_server; content:"|01|"; offset:0; depth:1; content:"|01|"; offset:20; depth:1; flowbits:set,dpi.radius.access; sid:9500036; rev:3;)
+# RTSP raw stream fallbacks
+alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; content:" RTSP/1.0|0D 0A|"; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500037; rev:2;)
+alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; content:"RTSP/1.0 "; startswith; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500038; rev:2;)
+# SAP
+alert udp any any -> any any (msg:"DPI|sap|protocol"; content:"application/sdp|00|"; content:"v=0|0D 0A|"; distance:0; within:64; sid:9500039; rev:2;)
+# Syslog
+alert udp any any -> any any (msg:"DPI|syslog|protocol"; pcre:"/^<[0-9]{1,3}>1 /"; sid:9500040; rev:2;)
+alert tcp any any -> any any (msg:"DPI|syslog|protocol"; flow:established; pcre:"/^<[0-9]{1,3}>1 /"; sid:9500041; rev:2;)
+alert udp any any -> any any (msg:"DPI|syslog|protocol"; pcre:"/^<[0-9]{1,3}>[A-Z][a-z]{2} [ 0-9][0-9] /"; sid:9500042; rev:2;)
+alert tcp any any -> any any (msg:"DPI|syslog|protocol"; flow:established; pcre:"/^<[0-9]{1,3}>[A-Z][a-z]{2} [ 0-9][0-9] /"; sid:9500043; rev:2;)
+# STUN
+alert udp any any -> any any (msg:"DPI|stun|protocol"; content:"|21 12 A4 42|"; offset:4; depth:4; sid:9500044; rev:2;)
+# DTLS
+alert udp any any -> any any (msg:"DPI|dtls|protocol"; content:"|16 FE FD|"; offset:0; depth:3; content:"|01|"; offset:13; depth:1; sid:9500045; rev:2;)
+alert udp any any -> any any (msg:"DPI|dtls|protocol"; content:"|16 FE FF|"; offset:0; depth:3; content:"|01|"; offset:13; depth:1; sid:9500046; rev:2;)
+# OPC
+alert tcp any any -> any any (msg:"DPI|opc|protocol"; flow:established; content:"HELF"; startswith; sid:9500047; rev:2;)
+alert tcp any any -> any any (msg:"DPI|opc|protocol"; flow:established; content:"|4D 3A C1 39 1E 01 D0 11 96 75 00 20 AF D8 AD B3|"; sid:9500048; rev:2;)
+# OpenVPN stateful reset handshake
+alert udp any any -> any any (msg:"DPIHELPER|openvpn|udp-v2-client-reset"; flow:to_server; content:"|38|"; offset:0; depth:1; flowbits:set,dpi.openvpn.reset; noalert; sid:9500049; rev:2;)
+alert udp any any -> any any (msg:"DPIHELPER|openvpn|udp-v3-client-reset"; flow:to_server; content:"|50|"; offset:0; depth:1; flowbits:set,dpi.openvpn.reset; noalert; sid:9500050; rev:2;)
+alert udp any any -> any any (msg:"DPI|openvpn|protocol"; flow:to_client; flowbits:isset,dpi.openvpn.reset; content:"|40|"; offset:0; depth:1; sid:9500051; rev:2;)
+alert tcp any any -> any any (msg:"DPIHELPER|openvpn|tcp-v2-client-reset"; flow:established,to_server; content:"|38|"; offset:2; depth:1; flowbits:set,dpi.openvpn.tcp.reset; noalert; sid:9500052; rev:2;)
+alert tcp any any -> any any (msg:"DPIHELPER|openvpn|tcp-v3-client-reset"; flow:established,to_server; content:"|50|"; offset:2; depth:1; flowbits:set,dpi.openvpn.tcp.reset; noalert; sid:9500053; rev:2;)
+alert tcp any any -> any any (msg:"DPI|openvpn|protocol"; flow:established,to_client; flowbits:isset,dpi.openvpn.tcp.reset; content:"|40|"; offset:2; depth:1; sid:9500054; rev:2;)
+# Outlook
+alert tls any any -> any any (msg:"DPI|outlook|service"; flow:established,to_server; tls.sni; content:"outlook.office.com"; nocase; endswith; pcre:"/(?:^|\.)outlook\.office\.com$/i"; sid:9500055; rev:2;)
+alert tls any any -> any any (msg:"DPI|outlook|service"; flow:established,to_server; tls.sni; content:"outlook.office365.com"; nocase; endswith; pcre:"/(?:^|\.)outlook\.office365\.com$/i"; sid:9500056; rev:2;)
+# Facebook chat
+alert tls any any -> any any (msg:"DPI|facebook-chat|service"; flow:established,to_server; tls.sni; content:"edge-mqtt.facebook.com"; nocase; endswith; pcre:"/(?:^|\.)edge\-mqtt\.facebook\.com$/i"; sid:9500057; rev:2;)
+alert tls any any -> any any (msg:"DPI|facebook-chat|service"; flow:established,to_server; tls.sni; content:"mqtt-mini.facebook.com"; nocase; endswith; pcre:"/(?:^|\.)mqtt\-mini\.facebook\.com$/i"; sid:9500058; rev:2;)
+# Gmail
+alert tls any any -> any any (msg:"DPI|gmail|service"; flow:established,to_server; tls.sni; content:"gmail.com"; nocase; endswith; pcre:"/(?:^|\.)gmail\.com$/i"; sid:9500059; rev:2;)
+alert tls any any -> any any (msg:"DPI|gmail|service"; flow:established,to_server; tls.sni; content:"mail.google.com"; nocase; endswith; pcre:"/(?:^|\.)mail\.google\.com$/i"; sid:9500060; rev:2;)
+# Azure signup
+alert tls any any -> any any (msg:"DPI|azure-signup|service"; flow:established,to_server; tls.sni; content:"signup.azure.com"; nocase; endswith; pcre:"/(?:^|\.)signup\.azure\.com$/i"; sid:9500061; rev:2;)
+# Microsoft Update
+alert tls any any -> any any (msg:"DPI|microsoft-update|service"; flow:established,to_server; tls.sni; content:"windowsupdate.com"; nocase; endswith; pcre:"/(?:^|\.)windowsupdate\.com$/i"; sid:9500062; rev:2;)
+alert tls any any -> any any (msg:"DPI|microsoft-update|service"; flow:established,to_server; tls.sni; content:"update.microsoft.com"; nocase; endswith; pcre:"/(?:^|\.)update\.microsoft\.com$/i"; sid:9500063; rev:2;)
+alert tls any any -> any any (msg:"DPI|microsoft-update|service"; flow:established,to_server; tls.sni; content:"delivery.mp.microsoft.com"; nocase; endswith; pcre:"/(?:^|\.)delivery\.mp\.microsoft\.com$/i"; sid:9500064; rev:2;)
+# Netflix
+alert tls any any -> any any (msg:"DPI|netflix|service"; flow:established,to_server; tls.sni; content:"netflix.com"; nocase; endswith; pcre:"/(?:^|\.)netflix\.com$/i"; sid:9500065; rev:2;)
+alert tls any any -> any any (msg:"DPI|netflix|service"; flow:established,to_server; tls.sni; content:"nflxvideo.net"; nocase; endswith; pcre:"/(?:^|\.)nflxvideo\.net$/i"; sid:9500066; rev:2;)
+alert tls any any -> any any (msg:"DPI|netflix|service"; flow:established,to_server; tls.sni; content:"nflximg.net"; nocase; endswith; pcre:"/(?:^|\.)nflximg\.net$/i"; sid:9500067; rev:2;)
+# Skype
+alert tls any any -> any any (msg:"DPI|skype|service"; flow:established,to_server; tls.sni; content:"skype.com"; nocase; endswith; pcre:"/(?:^|\.)skype\.com$/i"; sid:9500068; rev:2;)
+alert tls any any -> any any (msg:"DPI|skype|service"; flow:established,to_server; tls.sni; content:"skype.net"; nocase; endswith; pcre:"/(?:^|\.)skype\.net$/i"; sid:9500069; rev:2;)
+# TeamViewer
+alert tls any any -> any any (msg:"DPI|teamviewer|service"; flow:established,to_server; tls.sni; content:"teamviewer.com"; nocase; endswith; pcre:"/(?:^|\.)teamviewer\.com$/i"; sid:9500070; rev:2;)
+alert tls any any -> any any (msg:"DPI|teamviewer|service"; flow:established,to_server; tls.sni; content:"teamviewerapi.com"; nocase; endswith; pcre:"/(?:^|\.)teamviewerapi\.com$/i"; sid:9500071; rev:2;)
+# Webex
+alert tls any any -> any any (msg:"DPI|webex|service"; flow:established,to_server; tls.sni; content:"webex.com"; nocase; endswith; pcre:"/(?:^|\.)webex\.com$/i"; sid:9500072; rev:2;)
+alert tls any any -> any any (msg:"DPI|webex|service"; flow:established,to_server; tls.sni; content:"wbx2.com"; nocase; endswith; pcre:"/(?:^|\.)wbx2\.com$/i"; sid:9500073; rev:2;)
+# YouTube
+alert tls any any -> any any (msg:"DPI|youtube|service"; flow:established,to_server; tls.sni; content:"youtube.com"; nocase; endswith; pcre:"/(?:^|\.)youtube\.com$/i"; sid:9500074; rev:2;)
+alert tls any any -> any any (msg:"DPI|youtube|service"; flow:established,to_server; tls.sni; content:"googlevideo.com"; nocase; endswith; pcre:"/(?:^|\.)googlevideo\.com$/i"; sid:9500075; rev:2;)
+alert tls any any -> any any (msg:"DPI|youtube|service"; flow:established,to_server; tls.sni; content:"ytimg.com"; nocase; endswith; pcre:"/(?:^|\.)ytimg\.com$/i"; sid:9500076; rev:2;)
+
+# ---- Expanded coverage ----------------------------------------------------
+# BitTorrent DHT query variants
+alert udp any any -> any any (msg:"DPI|bt-dht|protocol"; content:"1:q9:get_peers"; content:"1:y1:q"; distance:0; within:96; sid:9500101; rev:1;)
+alert udp any any -> any any (msg:"DPI|bt-dht|protocol"; content:"1:q13:announce_peer"; content:"1:y1:q"; distance:0; within:128; sid:9500102; rev:1;)
+# FTP explicit TLS negotiation remains visible before encryption
+alert tcp any any -> any any (msg:"DPI|ftp|protocol"; flow:established,to_server; content:"AUTH TLS|0D 0A|"; nocase; startswith; sid:9500103; rev:1;)
+alert tcp any any -> any any (msg:"DPI|ftp|protocol"; flow:established,to_server; content:"AUTH SSL|0D 0A|"; nocase; startswith; sid:9500104; rev:1;)
+# HTTP/2 cleartext prior-knowledge preface
+alert tcp any any -> any any (msg:"DPI|http|protocol"; flow:established,to_server; content:"PRI * HTTP/2.0|0D 0A 0D 0A|SM|0D 0A 0D 0A|"; startswith; sid:9500105; rev:1;)
+# IMAP STARTTLS
+alert tcp any any -> any any (msg:"DPI|imap|protocol"; flow:established,to_server; pcre:"/^[A-Za-z0-9._-]+ STARTTLS\r\n/i"; sid:9500106; rev:1;)
+# LDAP StartTLS extended operation OID
+alert tcp any any -> any any (msg:"DPI|ldap|protocol"; flow:established,to_server; content:"1.3.6.1.4.1.1466.20037"; sid:9500107; rev:1;)
+# MQTT 3.1 legacy protocol name
+alert tcp any any -> any any (msg:"DPI|mqtt|protocol"; flow:established,to_server; content:"|00 06|MQIsdp"; depth:24; sid:9500108; rev:1;)
+# NTP v4/v3 client structural fallbacks
+alert udp any any -> any any (msg:"DPI|ntp|protocol"; content:"|23|"; offset:0; depth:1; dsize:48; sid:9500109; rev:1;)
+alert udp any any -> any any (msg:"DPI|ntp|protocol"; content:"|1B|"; offset:0; depth:1; dsize:48; sid:9500110; rev:1;)
+# POP3 TLS upgrade
+alert tcp any any -> any any (msg:"DPI|pop3|protocol"; flow:established,to_server; content:"STLS|0D 0A|"; nocase; startswith; sid:9500111; rev:1;)
+# RDP negotiation response and mstshash cookie variants
+alert tcp any any -> any any (msg:"DPI|rdp|protocol"; flow:established,to_client; content:"|03 00|"; offset:0; depth:2; content:"|D0|"; offset:5; depth:1; sid:9500112; rev:1;)
+alert tcp any any -> any any (msg:"DPI|rdp|protocol"; flow:established,to_server; content:"|03 00|"; offset:0; depth:2; content:"Cookie: mstshash="; nocase; within:512; sid:9500113; rev:1;)
+# SIP methods and responses across UDP/TCP
+alert udp any any -> any any (msg:"DPI|sip|protocol"; pcre:"/^(REGISTER|OPTIONS|ACK|BYE|CANCEL|SUBSCRIBE|NOTIFY|MESSAGE|INFO|PRACK|UPDATE|REFER|PUBLISH) [^\r\n]{1,512} SIP\/2\.0\r\n/i"; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500114; rev:1;)
+alert tcp any any -> any any (msg:"DPI|sip|protocol"; flow:established; pcre:"/^(REGISTER|OPTIONS|ACK|BYE|CANCEL|SUBSCRIBE|NOTIFY|MESSAGE|INFO|PRACK|UPDATE|REFER|PUBLISH) [^\r\n]{1,512} SIP\/2\.0\r\n(?:[^\r\n]*\r\n){0,16}Via:/i"; sid:9500115; rev:2;)
+alert udp any any -> any any (msg:"DPI|sip|protocol"; pcre:"/^SIP\/2\.0 [1-6][0-9][0-9] [^\r\n]{1,128}\r\n/"; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500116; rev:1;)
+alert tcp any any -> any any (msg:"DPI|sip|protocol"; flow:established; pcre:"/^SIP\/2\.0 [1-6][0-9][0-9] [^\r\n]{1,128}\r\n/"; content:"|0D 0A|Via:"; nocase; distance:0; within:1024; sid:9500117; rev:1;)
+# SNMP BER version fallbacks
+alert udp any any -> any any (msg:"DPI|snmp|protocol"; pcre:"/^\x30.{1,3}\x02\x01\x00\x04/s"; sid:9500118; rev:1;)
+alert udp any any -> any any (msg:"DPI|snmp|protocol"; pcre:"/^\x30.{1,3}\x02\x01\x01\x04/s"; sid:9500119; rev:1;)
+alert udp any any -> any any (msg:"DPI|snmp|protocol"; pcre:"/^\x30.{1,3}\x02\x01\x03\x30/s"; sid:9500120; rev:1;)
+# Generic Telnet IAC negotiation
+alert tcp any any -> any any (msg:"DPI|telnet|protocol"; flow:established; pcre:"/^\xFF[\xFB-\xFE][\x00-\xFF]/s"; sid:9500121; rev:1;)
+# TLS Encrypted ClientHello extension. Check extension length and ECHClientHello type after 0xfe0d.
+# Type 0 is ClientHelloOuter; type 1 is retained as a compatibility/fuzz variant in the regression corpus.
+alert tls any any -> any any (msg:"DPI|tls-ech|protocol"; flow:established,to_server; ssl_state:client_hello; content:"|FE 0D|"; depth:2048; byte_test:2,>,7,0,relative; byte_test:2,<,2048,0,relative; byte_test:1,<,2,2,relative; sid:9500122; rev:2;)
+# SSH protocol 1.x legacy identification
+alert tcp any any -> any any (msg:"DPI|ssh|protocol"; flow:established; content:"SSH-1."; startswith; sid:9500123; rev:1;)
+# QUIC v2 and version-negotiation long headers
+alert udp any any -> any any (msg:"DPI|quic|protocol"; pcre:"/^[\xC0-\xFF]\x6B\x33\x43\xCF/s"; sid:9500124; rev:1;)
+alert udp any any -> any any (msg:"DPI|quic|protocol"; pcre:"/^[\x80-\xFF]\x00\x00\x00\x00/s"; sid:9500125; rev:1;)
+# IEC104 U-frame confirmations and TESTFR
+alert tcp any any -> any any (msg:"DPI|iec104|protocol"; flow:established; content:"|68 04 0B 00 00 00|"; startswith; sid:9500126; rev:1;)
+alert tcp any any -> any any (msg:"DPI|iec104|protocol"; flow:established; content:"|68 04 23 00 00 00|"; startswith; sid:9500127; rev:1;)
+alert tcp any any -> any any (msg:"DPI|iec104|protocol"; flow:established; content:"|68 04 43 00 00 00|"; startswith; sid:9500128; rev:1;)
+alert tcp any any -> any any (msg:"DPI|iec104|protocol"; flow:established; content:"|68 04 83 00 00 00|"; startswith; sid:9500129; rev:1;)
+# BGP NOTIFICATION, KEEPALIVE, ROUTE-REFRESH
+alert tcp any any -> any any (msg:"DPI|bgp|protocol"; flow:established; content:"|FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF|"; startswith; content:"|03|"; offset:18; depth:1; sid:9500130; rev:1;)
+alert tcp any any -> any any (msg:"DPI|bgp|protocol"; flow:established; content:"|FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF|"; startswith; content:"|04|"; offset:18; depth:1; sid:9500131; rev:1;)
+alert tcp any any -> any any (msg:"DPI|bgp|protocol"; flow:established; content:"|FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF|"; startswith; content:"|05|"; offset:18; depth:1; sid:9500132; rev:1;)
+# PostgreSQL SSLRequest and CancelRequest remain visible before TLS/authentication
+alert tcp any any -> any any (msg:"DPI|postgresql|protocol"; flow:established,to_server; content:"|00 00 00 08 04 D2 16 2F|"; startswith; sid:9500133; rev:1;)
+alert tcp any any -> any any (msg:"DPI|postgresql|protocol"; flow:established,to_server; content:"|00 00 00 10 04 D2 16 2E|"; startswith; sid:9500134; rev:1;)
+# RADIUS responses are accepted only after the corresponding request direction established flow state.
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_client; flowbits:isset,dpi.radius.access; content:"|02|"; offset:0; depth:1; dsize:>19; sid:9500135; rev:2;)
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_client; flowbits:isset,dpi.radius.access; content:"|03|"; offset:0; depth:1; dsize:>19; sid:9500136; rev:2;)
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_server; content:"|04|"; offset:0; depth:1; dsize:>19; flowbits:set,dpi.radius.accounting; sid:9500137; rev:2;)
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_client; flowbits:isset,dpi.radius.accounting; content:"|05|"; offset:0; depth:1; dsize:>19; sid:9500138; rev:2;)
+alert udp any any -> any any (msg:"DPI|radius|protocol"; flow:to_client; flowbits:isset,dpi.radius.access; content:"|0B|"; offset:0; depth:1; dsize:>19; sid:9500139; rev:2;)
+# RTSP/2.0 raw stream fallbacks
+alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; content:" RTSP/2.0|0D 0A|"; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500140; rev:1;)
+alert tcp any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; content:"RTSP/2.0 "; startswith; content:"|0D 0A|CSeq:"; nocase; distance:0; within:1024; sid:9500141; rev:1;)
+# RFC6587 octet-counted syslog framing
+alert tcp any any -> any any (msg:"DPI|syslog|protocol"; flow:established; pcre:"/^[1-9][0-9]{0,5} <[0-9]{1,3}>/"; sid:9500142; rev:1;)
+alert udp any any -> any any (msg:"DPI|syslog|protocol"; pcre:"/^[1-9][0-9]{0,5} <[0-9]{1,3}>/"; sid:9500143; rev:1;)
+# STUN over TCP
+alert tcp any any -> any any (msg:"DPI|stun|protocol"; flow:established; content:"|21 12 A4 42|"; offset:4; depth:4; sid:9500144; rev:1;)
+# DTLS ServerHello for 1.2/1.0
+alert udp any any -> any any (msg:"DPI|dtls|protocol"; content:"|16 FE FD|"; offset:0; depth:3; content:"|02|"; offset:13; depth:1; sid:9500145; rev:1;)
+alert udp any any -> any any (msg:"DPI|dtls|protocol"; content:"|16 FE FF|"; offset:0; depth:3; content:"|02|"; offset:13; depth:1; sid:9500146; rev:1;)
+# OPC UA ACK/ERR/OpenSecureChannel message types
+alert tcp any any -> any any (msg:"DPI|opc|protocol"; flow:established; content:"ACKF"; startswith; sid:9500147; rev:1;)
+alert tcp any any -> any any (msg:"DPI|opc|protocol"; flow:established; content:"ERRF"; startswith; sid:9500148; rev:1;)
+alert tcp any any -> any any (msg:"DPI|opc|protocol"; flow:established; content:"OPNF"; startswith; sid:9500149; rev:1;)
+# OpenVPN control/ack packets only after reset handshake established flow state
+alert udp any any -> any any (msg:"DPI|openvpn|protocol"; flow:to_server; flowbits:isset,dpi.openvpn.reset; content:"|20|"; offset:0; depth:1; sid:9500150; rev:1;)
+alert udp any any -> any any (msg:"DPI|openvpn|protocol"; flow:to_server; flowbits:isset,dpi.openvpn.reset; content:"|28|"; offset:0; depth:1; sid:9500151; rev:1;)
+# Additional precise TLS service endpoint families
+alert tls any any -> any any (msg:"DPI|outlook|service"; flow:established,to_server; tls.sni; content:"outlook.com"; nocase; endswith; pcre:"/(?:^|\.)outlook\.com$/i"; sid:9500152; rev:1;)
+alert tls any any -> any any (msg:"DPI|facebook-chat|service"; flow:established,to_server; tls.sni; content:"mqtt.c10r.facebook.com"; nocase; endswith; pcre:"/(?:^|\.)mqtt\.c10r\.facebook\.com$/i"; sid:9500153; rev:1;)
+alert tls any any -> any any (msg:"DPI|gmail|service"; flow:established,to_server; tls.sni; content:"imap.gmail.com"; nocase; endswith; pcre:"/(?:^|\.)imap\.gmail\.com$/i"; sid:9500154; rev:1;)
+alert tls any any -> any any (msg:"DPI|gmail|service"; flow:established,to_server; tls.sni; content:"smtp.gmail.com"; nocase; endswith; pcre:"/(?:^|\.)smtp\.gmail\.com$/i"; sid:9500155; rev:1;)
+alert tls any any -> any any (msg:"DPI|microsoft-update|service"; flow:established,to_server; tls.sni; content:"download.windowsupdate.com"; nocase; endswith; pcre:"/(?:^|\.)download\.windowsupdate\.com$/i"; sid:9500156; rev:1;)
+alert tls any any -> any any (msg:"DPI|microsoft-update|service"; flow:established,to_server; tls.sni; content:"dl.delivery.mp.microsoft.com"; nocase; endswith; pcre:"/(?:^|\.)dl\.delivery\.mp\.microsoft\.com$/i"; sid:9500157; rev:1;)
+alert tls any any -> any any (msg:"DPI|netflix|service"; flow:established,to_server; tls.sni; content:"nflxso.net"; nocase; endswith; pcre:"/(?:^|\.)nflxso\.net$/i"; sid:9500158; rev:1;)
+alert tls any any -> any any (msg:"DPI|netflix|service"; flow:established,to_server; tls.sni; content:"nflxext.com"; nocase; endswith; pcre:"/(?:^|\.)nflxext\.com$/i"; sid:9500159; rev:1;)
+alert tls any any -> any any (msg:"DPI|skype|service"; flow:established,to_server; tls.sni; content:"skypeassets.com"; nocase; endswith; pcre:"/(?:^|\.)skypeassets\.com$/i"; sid:9500160; rev:1;)
+alert tls any any -> any any (msg:"DPI|webex|service"; flow:established,to_server; tls.sni; content:"ciscospark.com"; nocase; endswith; pcre:"/(?:^|\.)ciscospark\.com$/i"; sid:9500161; rev:1;)
+alert tls any any -> any any (msg:"DPI|youtube|service"; flow:established,to_server; tls.sni; content:"youtube-nocookie.com"; nocase; endswith; pcre:"/(?:^|\.)youtube\-nocookie\.com$/i"; sid:9500162; rev:1;)
+# Plain HTTP / TLS-terminated visibility service fallbacks
+alert http any any -> any any (msg:"DPI|outlook|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:outlook\.com|outlook\.office\.com|outlook\.office365\.com)$/i"; sid:9500163; rev:1;)
+alert http any any -> any any (msg:"DPI|facebook-chat|service"; flow:established,to_server; http.host; pcre:"/^(?:edge\-mqtt\.facebook\.com|mqtt\-mini\.facebook\.com|mqtt\.c10r\.facebook\.com)$/i"; sid:9500164; rev:1;)
+alert http any any -> any any (msg:"DPI|gmail|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:gmail\.com|mail\.google\.com|imap\.gmail\.com|smtp\.gmail\.com)$/i"; sid:9500165; rev:1;)
+alert http any any -> any any (msg:"DPI|azure-signup|service"; flow:established,to_server; http.host; pcre:"/^(?:signup\.azure\.com)$/i"; sid:9500166; rev:1;)
+alert http any any -> any any (msg:"DPI|microsoft-update|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:windowsupdate\.com|update\.microsoft\.com|delivery\.mp\.microsoft\.com|download\.windowsupdate\.com|dl\.delivery\.mp\.microsoft\.com)$/i"; sid:9500167; rev:1;)
+alert http any any -> any any (msg:"DPI|netflix|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:netflix\.com|nflxvideo\.net|nflximg\.net|nflxso\.net|nflxext\.com)$/i"; sid:9500168; rev:1;)
+alert http any any -> any any (msg:"DPI|skype|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:skype\.com|skype\.net|skypeassets\.com)$/i"; sid:9500169; rev:1;)
+alert http any any -> any any (msg:"DPI|teamviewer|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:teamviewer\.com|teamviewerapi\.com)$/i"; sid:9500170; rev:1;)
+alert http any any -> any any (msg:"DPI|webex|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:webex\.com|wbx2\.com|ciscospark\.com)$/i"; sid:9500171; rev:1;)
+alert http any any -> any any (msg:"DPI|youtube|service"; flow:established,to_server; http.host; pcre:"/(?:^|\.)(?:youtube\.com|googlevideo\.com|ytimg\.com|youtube\-nocookie\.com)$/i"; sid:9500172; rev:1;)
+# RTSP parsed through LibHTP: require both RTSP protocol token and CSeq header.
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; http.protocol; content:"RTSP/1.0"; startswith; endswith; http.header; content:"CSeq|3a|"; nocase; sid:9500173; rev:2;)
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; http.protocol; content:"RTSP/1.0"; startswith; endswith; http.header; content:"CSeq|3a|"; nocase; sid:9500174; rev:2;)
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_server; http.protocol; content:"RTSP/2.0"; startswith; endswith; http.header; content:"CSeq|3a|"; nocase; sid:9500175; rev:2;)
+alert http any any -> any any (msg:"DPI|rtsp|protocol"; flow:established,to_client; http.protocol; content:"RTSP/2.0"; startswith; endswith; http.header; content:"CSeq|3a|"; nocase; sid:9500176; rev:2;)
