@@ -1,3 +1,3 @@
 source_run_id=35737103850
 release_id=gh-35737103850-a1
-trigger=sync-26-mixed-2026-09-23T01-02-msk
+trigger=post-completion-sync-2026-09-23T07-34-msk
