@@ -1,0 +1,124 @@
+name: Cover Channel Research Promotion V5
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_run_id:
+        description: "Completed Cover Channel Complete V5 run id"
+        required: true
+        type: string
+      external_run_id:
+        description: "Completed Cover Channel External Holdouts V5 run id"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download frozen model bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: models-v5-${{ inputs.model_run_id }}
+          path: ${{ runner.temp }}/model-bundle
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.model_run_id }}
+
+      - name: Download frozen mixed evaluation
+        uses: actions/download-artifact@v4
+        with:
+          name: mixed-evaluation-v5-${{ inputs.model_run_id }}
+          path: ${{ runner.temp }}/mixed-reports
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.model_run_id }}
+
+      - name: Download original core acceptance
+        uses: actions/download-artifact@v4
+        with:
+          name: acceptance-v5-${{ inputs.model_run_id }}
+          path: ${{ runner.temp }}/original-acceptance
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.model_run_id }}
+
+      - name: Download adversarial holdout from the model run
+        uses: actions/download-artifact@v4
+        with:
+          name: adversarial-v5-${{ inputs.model_run_id }}
+          path: ${{ runner.temp }}/adversarial
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.model_run_id }}
+
+      - name: Download external evidence scored against the same model run
+        uses: actions/download-artifact@v4
+        with:
+          name: external-evidence-v5-modelrun-${{ inputs.model_run_id }}-${{ inputs.external_run_id }}
+          path: ${{ runner.temp }}/external-holdout-artifact
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.external_run_id }}
+
+      - name: Verify run binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/model-bundle/models/B3-opaque.joblib"
+          test -s "$RUNNER_TEMP/mixed-reports/mixed_report.json"
+          test -s "$RUNNER_TEMP/mixed-reports/advanced_mixed_report.json"
+          test -s "$RUNNER_TEMP/original-acceptance/core_acceptance.json"
+          test -s "$RUNNER_TEMP/adversarial/quality/adversarial-00/adversarial_report.json"
+          test -s "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/framework_status.json"
+          test -s "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/ech_status.json"
+          test -s "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/environment_status.json"
+          test -s "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/long_timing_status.json"
+          test -s "$RUNNER_TEMP/external-holdout-artifact/external-evidence/office/office_b3_report.json"
+
+      - name: Strict research promotion
+        working-directory: cover-channel-lab
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          dataset_valid="$(jq -r '.dataset_valid // false' "$RUNNER_TEMP/original-acceptance/core_acceptance.json")"
+          mkdir -p "$RUNNER_TEMP/research-promotion"
+          python -m coverlab.model_acceptance_v3 \
+            --baseline-report "$RUNNER_TEMP/model-bundle/models/baseline_report.json" \
+            --advanced-report "$RUNNER_TEMP/model-bundle/models/advanced_v3_report.json" \
+            --mixed-report "$RUNNER_TEMP/mixed-reports/mixed_report.json" \
+            --advanced-mixed-report "$RUNNER_TEMP/mixed-reports/advanced_mixed_report.json" \
+            --unseen-report "$RUNNER_TEMP/model-bundle/evaluation/unseen.json" \
+            --research-readiness-report "$RUNNER_TEMP/model-bundle/evaluation/research_readiness.json" \
+            --framework-report "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/framework_status.json" \
+            --ech-report "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/ech_status.json" \
+            --environment-report "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/environment_status.json" \
+            --long-timing-report "$RUNNER_TEMP/external-holdout-artifact/external-evidence/status/long_timing_status.json" \
+            --office-report "$RUNNER_TEMP/external-holdout-artifact/external-evidence/office/office_b3_report.json" \
+            --adversarial-report "$RUNNER_TEMP/adversarial/quality/adversarial-00/adversarial_report.json" \
+            --dataset-valid "$dataset_valid" \
+            --require-nine-point-evidence \
+            --require-office-evidence \
+            --out "$RUNNER_TEMP/research-promotion/research_acceptance.json"
+
+          jq -n             --arg model_run_id "${{ inputs.model_run_id }}"             --arg external_run_id "${{ inputs.external_run_id }}"             --argjson candidate "$(jq '.model_candidate' "$RUNNER_TEMP/research-promotion/research_acceptance.json")"             --argjson nine_point "$(jq '.nine_point_evidence_ready' "$RUNNER_TEMP/research-promotion/research_acceptance.json")"             --argjson office "$(jq '.office_background_ready' "$RUNNER_TEMP/research-promotion/research_acceptance.json")"             '{workflow_revision:5,model_run_id:$model_run_id,external_run_id:$external_run_id,research_model_candidate:$candidate,nine_point_evidence_ready:$nine_point,office_background_ready:$office}'             > "$RUNNER_TEMP/research-promotion/promotion_status.json"
+
+          cat "$RUNNER_TEMP/research-promotion/promotion_status.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: research-promotion-v5-modelrun-${{ inputs.model_run_id }}-externalrun-${{ inputs.external_run_id }}
+          path: ${{ runner.temp }}/research-promotion
+          retention-days: 90

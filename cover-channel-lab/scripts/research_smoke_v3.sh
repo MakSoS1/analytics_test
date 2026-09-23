@@ -59,7 +59,7 @@ for f in B1-content.joblib B2-session.joblib B3-opaque.joblib B2-sequence.pt B2-
   [[ -s "$OUT/$f" ]] || { echo "missing advanced model artifact: $f" >&2; exit 1; }
 done
 jq -e '.opaque_sequence.status == "ok" and .visible_sequence.status == "ok" and .fusion.status == "ok" and .opaque_plaintext_leakage_guard == true' "$OUT/advanced_v3_report.json" >/dev/null
-jq -e '.policy_revision == 4 and .model_artifacts_created == true and .model_candidate == false and .nine_point_evidence_ready == false' "$EVAL/model_acceptance_v3.json" >/dev/null
+jq -e '.policy_revision == 5 and .model_artifacts_created == true and .model_candidate == false and .nine_point_evidence_ready == false and .adversarial_required == false' "$EVAL/model_acceptance_v3.json" >/dev/null
 jq -e '.benign_corpus_ready == true and .benign_multi_event_ready == true and .long_timing_ready == false' "$EVAL/research_readiness.json" >/dev/null
 
 # P0 regression: opaque inference must survive physical deletion of every decrypted transaction/field table.

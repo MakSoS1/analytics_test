@@ -1,0 +1,72 @@
+name: Cover Channel Evidence CI
+
+on:
+  push:
+    branches: [main, coverlab-finish-2026-09]
+    paths:
+      - 'cover-channel-lab/src/coverlab/evidence_register_v4.py'
+      - 'cover-channel-lab/src/coverlab/external_campaign_adapter_v5.py'
+      - 'cover-channel-lab/src/coverlab/framework_holdout_v3.py'
+      - 'cover-channel-lab/src/coverlab/ech_v3.py'
+      - 'cover-channel-lab/src/coverlab/framework_metrics_v4.py'
+      - 'cover-channel-lab/src/coverlab/office_background_v4.py'
+      - 'cover-channel-lab/src/coverlab/environment_evidence_v3.py'
+      - 'cover-channel-lab/src/coverlab/score_environment_holdout_v5.py'
+      - 'cover-channel-lab/src/coverlab/external_evidence_status_v3.py'
+      - 'cover-channel-lab/src/coverlab/model_acceptance_v3.py'
+      - 'cover-channel-lab/src/coverlab/score_framework_holdout_v5.py'
+      - 'cover-channel-lab/src/coverlab/score_ech_holdout_v5.py'
+      - 'cover-channel-lab/src/coverlab/score_office_background_v5.py'
+      - 'cover-channel-lab/src/coverlab/long_timing_evidence_v4.py'
+      - 'cover-channel-lab/src/coverlab/score_long_timing_holdout_v5.py'
+      - 'cover-channel-lab/src/coverlab/import_generated_long_timing_v5.py'
+      - 'cover-channel-lab/scripts/process_external_long_timing_v5.sh'
+      - 'cover-channel-lab/tests/test_evidence_register_v4.py'
+      - 'cover-channel-lab/tests/test_benign_range_v5.py'
+      - 'cover-channel-lab/tests/test_external_campaign_adapter_v5.py'
+      - '.github/workflows/cover-channel-evidence-ci.yml'
+  pull_request:
+    paths:
+      - 'cover-channel-lab/src/coverlab/evidence_register_v4.py'
+      - 'cover-channel-lab/src/coverlab/external_campaign_adapter_v5.py'
+      - 'cover-channel-lab/src/coverlab/framework_holdout_v3.py'
+      - 'cover-channel-lab/src/coverlab/ech_v3.py'
+      - 'cover-channel-lab/src/coverlab/framework_metrics_v4.py'
+      - 'cover-channel-lab/src/coverlab/office_background_v4.py'
+      - 'cover-channel-lab/src/coverlab/environment_evidence_v3.py'
+      - 'cover-channel-lab/src/coverlab/score_environment_holdout_v5.py'
+      - 'cover-channel-lab/src/coverlab/external_evidence_status_v3.py'
+      - 'cover-channel-lab/src/coverlab/model_acceptance_v3.py'
+      - 'cover-channel-lab/src/coverlab/score_framework_holdout_v5.py'
+      - 'cover-channel-lab/src/coverlab/score_ech_holdout_v5.py'
+      - 'cover-channel-lab/src/coverlab/score_office_background_v5.py'
+      - 'cover-channel-lab/src/coverlab/long_timing_evidence_v4.py'
+      - 'cover-channel-lab/src/coverlab/score_long_timing_holdout_v5.py'
+      - 'cover-channel-lab/src/coverlab/import_generated_long_timing_v5.py'
+      - 'cover-channel-lab/scripts/process_external_long_timing_v5.sh'
+      - 'cover-channel-lab/tests/test_evidence_register_v4.py'
+      - 'cover-channel-lab/tests/test_benign_range_v5.py'
+      - 'cover-channel-lab/tests/test_external_campaign_adapter_v5.py'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: cover-channel-lab/requirements.txt
+      - name: Install
+        working-directory: cover-channel-lab
+        run: python -m pip install -r requirements.txt
+      - name: Compile and test evidence contracts
+        working-directory: cover-channel-lab
+        env: {PYTHONPATH: src}
+        run: |
+          python -m compileall -q src tests
+          pytest -q tests/test_evidence_register_v4.py tests/test_benign_range_v5.py tests/test_external_campaign_adapter_v5.py

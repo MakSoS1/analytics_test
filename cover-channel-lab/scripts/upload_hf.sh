@@ -6,6 +6,13 @@ HF_DATASET_REPO="${HF_DATASET_REPO:-Maksim123321/cover-channel-web-protocols}"
 LOCAL="$1" REMOTE="$2" MSG="$3"
 export HF_XET_HIGH_PERFORMANCE=1
 
+# Some terminal/finalize jobs do not install the project requirements before
+# publication. Make publication self-contained instead of failing after hours
+# of successful corpus/model work.
+if ! python -c 'import huggingface_hub' >/dev/null 2>&1 || ! command -v hf >/dev/null 2>&1; then
+  python -m pip install -q 'huggingface_hub[hf_xet]>=1.0.0'
+fi
+
 python - <<'PY'
 import os
 from huggingface_hub import HfApi

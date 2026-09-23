@@ -136,3 +136,13 @@ cd cover-channel-lab
 All `.test` names resolve only inside the isolated `10.20.0.0/24` lab. HTTP/H2/H3/MQTT fixtures use `10.20.0.20`; the dedicated custom WSS aliases use `10.20.0.21`. Simulated client namespaces have no default route. WSS tunnel messages can reference only fixed synthetic targets and the server acknowledges them without arbitrary forwarding. The HTTP CONNECT fixture only echoes bytes locally after validating an allowlist and never opens an onward connection. DoH is never forwarded upstream. H3 DATAGRAM, WebTransport, gRPC and MQTT fixtures likewise terminate inside the lab.
 
 See `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, and `docs/PRODUCTION_FEATURE_CONTRACT.md` for operational details.
+
+
+## V5 completion / external holdouts
+
+The completion workflow, deterministic recovery of the timeout-prone Stage K
+shard, real framework/ECH/environment/long-timing evidence, and office benign
+FPR promotion policy are documented in [EXTERNAL_HOLDOUTS_V5.md](EXTERNAL_HOLDOUTS_V5.md).
+
+Use **Cover Channel Complete V5** for resume-first corpus/model work and
+**Cover Channel External Holdouts V5** on the isolated self-hosted lab runner.

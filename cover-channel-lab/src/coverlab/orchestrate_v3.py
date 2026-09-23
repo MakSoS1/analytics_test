@@ -100,8 +100,13 @@ def _benign_scenario(pattern:str,i:int,shard:int):
 def benign_stage(args, manifest: Path, events_out: Path):
     total=args.sessions or int(os.environ.get('COVERLAB_BENIGN_SESSIONS','60000'))
     actual_netem=os.environ.get('COVERLAB_NETEM_PROFILE','clean')
+    range_start=int(os.environ.get('COVERLAB_BENIGN_RANGE_START','0'))
+    range_end=int(os.environ.get('COVERLAB_BENIGN_RANGE_END',str(total)))
+    if not (0 <= range_start <= range_end <= total):
+        raise ValueError(f'invalid benign range: {range_start}:{range_end} total={total}')
     for i in range(total):
         if i % args.shards != args.shard: continue
+        if not (range_start <= i < range_end): continue
         persona,ip=_base.PERSONAS[i % len(_base.PERSONAS)]
         service=BENIGN_SERVICE_PROFILES[i % len(BENIGN_SERVICE_PROFILES)]
         planned_stack=CLIENT_STACKS[(i//3) % len(CLIENT_STACKS)]
