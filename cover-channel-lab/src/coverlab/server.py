@@ -173,6 +173,34 @@ async def ws_endpoint(ws: WebSocket):
         return
 
 
+@app.get("/stage-m/ws-fixture")
+async def stage_m_ws_fixture(host: str = "edge-ws.test", events: int = 6, seed: int = 1, mode: str = "wss"):
+    # Browser-native local-only WebSocket implementation diversity fixture.
+    # Host is allowlisted; the page cannot turn into an arbitrary browser proxy.
+    allowed = {"edge-ws.test", "cover-ws.test"}
+    if host not in allowed:
+        return Response(status_code=400)
+    events = max(1, min(int(events), 20))
+    tunnel = mode == "tunnel"
+    js = f"""
+    (() => {{
+      const ws = new WebSocket('wss://{host}:8443/ws');
+      let sent = 0, recv = 0;
+      ws.onopen = () => {{
+        for (let i=0; i<{events}; i++) {{
+          const token = (({seed} * 1103515245 + i*12345) >>> 0).toString(16);
+          const msg = {str(tunnel).lower()}
+            ? {{type:'socks_data',conn_id:'b'+(i%4),data:btoa('BROWSER_STAGE_M_'+token)}}
+            : {{action:(i%2?'send':'recv'),container:token,target:'LAB',message:'STATUS'}};
+          ws.send(JSON.stringify(msg)); sent++;
+        }}
+      }};
+      ws.onmessage = () => {{ recv++; if (recv >= {events}) ws.close(); }};
+    }})();
+    """
+    return HTMLResponse("<html><body><script>"+js+"</script>stage-m browser wss fixture</body></html>")
+
+
 @app.api_route("/{path:path}", methods=["GET","POST","PUT","PATCH","DELETE","HEAD"])
 async def catch_all(path: str, request: Request):
     st = read_state(request.client.host if request.client else None)
