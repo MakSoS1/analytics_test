@@ -1,0 +1,72 @@
+name: Cover Channel Stage M Real Timing
+
+on:
+  workflow_dispatch:
+    inputs:
+      events:
+        description: "Real events per campaign (3 means two real gaps)"
+        required: true
+        default: "3"
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  real-timing:
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include:
+          - {family: M-HTTPS-BEACON, interval: 900, offset: 0, profile: clean}
+          - {family: M-HTTPS-BEACON, interval: 900, offset: 1, profile: wan_20ms}
+          - {family: M-HTTPS-FRONT, interval: 900, offset: 0, profile: wan_80ms}
+          - {family: M-HTTPS-FRONT, interval: 900, offset: 1, profile: lossy_wifi}
+          - {family: M-HTTPS-BEACON, interval: 3600, offset: 2, profile: clean}
+          - {family: M-HTTPS-BEACON, interval: 3600, offset: 3, profile: constrained}
+          - {family: M-HTTPS-FRONT, interval: 3600, offset: 2, profile: wan_20ms}
+          - {family: M-HTTPS-FRONT, interval: 3600, offset: 3, profile: wan_80ms}
+    runs-on: [self-hosted, linux, coverlab]
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Prepare runner
+        working-directory: cover-channel-lab
+        run: bash ./scripts/install_runner.sh
+      - name: Capture real-timing positive campaign
+        working-directory: cover-channel-lab
+        env:
+          COVERLAB_STAGE_M_FAMILY_FILTER: ${{ matrix.family }}
+          COVERLAB_STAGE_M_FORCE_INTERVAL_SECONDS: ${{ matrix.interval }}
+          COVERLAB_STAGE_M_EVENT_COUNT_CAP: ${{ inputs.events }}
+          COVERLAB_STAGE_M_CAMPAIGN_LIMIT: "1"
+          COVERLAB_STAGE_M_SPEC_OFFSET: ${{ matrix.offset }}
+          COVERLAB_STAGE_M_TIME_SCALE: "1"
+          COVERLAB_STAGE_M_MAX_SLEEP_SECONDS: ""
+        run: |
+          name="M-real-${{ matrix.family }}-${{ matrix.interval }}-${{ matrix.offset }}"
+          bash ./scripts/run_stage_m_ci.sh full 0 1 "${{ matrix.profile }}" "$RUNNER_TEMP/stage-m-real" "$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-real-${{ matrix.family }}-${{ matrix.interval }}-${{ matrix.offset }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m-real/release
+          retention-days: 90
+          compression-level: 0
+      - name: Publish real timing shard to Hugging Face
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [[ -n "$HF_TOKEN" ]]; then
+            name="M-real-${{ matrix.family }}-${{ matrix.interval }}-${{ matrix.offset }}"
+            ./scripts/upload_hf.sh "$RUNNER_TEMP/stage-m-real/release" "releases/stage-m-real-gh-${{ github.run_id }}/$name" "Stage M real timing $name $GITHUB_SHA"
+          fi
