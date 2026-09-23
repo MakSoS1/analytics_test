@@ -59,7 +59,7 @@ DNS_RECURSOR = "10.20.0.23"
 
 HTTP_CLIENTS = (
     "python_httpx", "python_httpx_h2", "python_stdlib", "curl_linux",
-    "go_nethttp", "node_fetch", "java_httpclient", "rust_reqwest",
+    "go_nethttp", "node_fetch", "java_httpclient", "rust_reqwest", "browser_chromium",
 )
 WSS_CLIENTS = ("python_websockets", "node_websocket", "chromium_websocket")
 NETEM_PROFILES = ("clean", "wan_20ms", "wan_80ms", "lossy_wifi", "constrained")
@@ -159,6 +159,11 @@ def implementation_catalog(family: str) -> tuple[tuple[str, str, str, str], ...]
              "doh-relay.test" if i % 2 == 0 else "resolver-front.test")
             for i, c in enumerate(HTTP_CLIENTS[:6])
         )
+    if family == "M-HTTPS-FRONT":
+        return tuple(
+            (f"m-https-front-{c}-{i}", c, "nginx_reverse_proxy", HTTPS_FRONTS[i % len(HTTPS_FRONTS)])
+            for i, c in enumerate(HTTP_CLIENTS)
+        )
     if family in {"M-DEAD-DROP", "M-FALLBACK"}:
         return tuple(
             (f"{family.lower()}-{c}-{i%3}", c,
@@ -202,7 +207,13 @@ def build_specs(mode: str = "full") -> list[CampaignSpec]:
             out.append(CampaignSpec(
                 index=g, family=family, family_index=j, implementation_id=impl_id,
                 client_impl=client, server_impl=server, front_host=front_host,
-                network_topology=topology if not topology.endswith(".test") else ("nginx_front" if "front" in topology or "ws" in topology else "direct"),
+                network_topology=(
+                    topology if not topology.endswith(".test")
+                    else "direct_wss" if topology == WSS_DIRECT
+                    else "nginx_wss_front" if topology == WSS_FRONT
+                    else "nginx_front" if topology in HTTPS_FRONTS or topology == "plain-front.test"
+                    else "direct"
+                ),
                 interval_seconds=interval, jitter_fraction=jitter, event_count=events,
                 volume_mode=volume, asymmetry=asym, payload_mode=payload,
                 holdout_fold=_stable_mod(impl_id, 5),
@@ -256,8 +267,37 @@ def _requested_sleep(spec: CampaignSpec, r: random.Random, i: int) -> None:
         time.sleep(actual)
 
 
+def _chromium_http(url: str, method: str, body: bytes | None) -> tuple[int, str]:
+    chrome = os.environ.get("COVERLAB_CHROME") or next(
+        (x for x in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
+         if subprocess.run(["bash", "-lc", f"command -v {x}"], stdout=subprocess.DEVNULL).returncode == 0), ""
+    )
+    if not chrome:
+        raise RuntimeError("Chromium unavailable for Stage M HTTPS implementation")
+    u = __import__("urllib.parse", fromlist=["urlparse"]).urlparse(url)
+    if u.hostname not in set(HTTPS_DIRECT) | set(HTTPS_FRONTS):
+        raise RuntimeError("Chromium Stage M HTTP target is not allowlisted")
+    # A local fixture page issues the requested POST/GET from Chromium itself,
+    # giving a genuine browser TLS/HTTP stack while remaining inside .test.
+    payload = base64.urlsafe_b64encode(body or b"").decode()
+    fixture = (
+        f"https://{u.hostname}:8443/stage-m/http-fixture"
+        f"?target={__import__('urllib.parse', fromlist=['quote']).quote(u.path + ('?' + u.query if u.query else ''), safe='')}"
+        f"&method={method}&body={__import__('urllib.parse', fromlist=['quote']).quote(payload, safe='')}"
+    )
+    cp = subprocess.run([
+        chrome, "--headless", "--no-sandbox", "--disable-gpu", "--ignore-certificate-errors",
+        "--disable-background-networking", "--disable-component-update", "--disable-sync",
+        "--no-first-run", "--virtual-time-budget=4000", "--dump-dom", fixture,
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=25)
+    if cp.returncode != 0:
+        raise RuntimeError(f"Chromium Stage M HTTP returned {cp.returncode}")
+    return 200, "browser_chromium"
+
+
 def _http_exchange(client: str, method: str, url: str, headers: dict, body: bytes | None, use_h2: bool = False) -> tuple[int, str]:
-    # Chromium is reserved for WSS in Stage M. HTTP diversity uses concrete CLI/runtime stacks.
+    if client == "browser_chromium":
+        return _chromium_http(url, method, body)
     if client == "chromium_websocket":
         client = "python_httpx"
     return rc.execute_http(client, method, url, headers, body, use_h2)
