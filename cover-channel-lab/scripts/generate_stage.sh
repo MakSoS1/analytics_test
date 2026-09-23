@@ -40,6 +40,16 @@ for idx in 0 1 2 3; do
     COVERLAB_BENIGN_SESSIONS="${COVERLAB_BENIGN_SESSIONS:-60000}" \
     COVERLAB_BENIGN_RANGE_START="${COVERLAB_BENIGN_RANGE_START:-0}" COVERLAB_BENIGN_RANGE_END="${COVERLAB_BENIGN_RANGE_END:-${COVERLAB_BENIGN_SESSIONS:-60000}}" \
     COVERLAB_LONG_REPETITIONS="${COVERLAB_LONG_REPETITIONS:-2}" \
+    COVERLAB_NETEM_PROFILE="${COVERLAB_NETEM_PROFILE:-clean}" \
+    COVERLAB_STAGE_M_GO_TCP=/tmp/coverlab-stage-m-go-tcp \
+    COVERLAB_STAGE_M_SMOKE="${COVERLAB_STAGE_M_SMOKE:-0}" \
+    COVERLAB_STAGE_M_TIER="${COVERLAB_STAGE_M_TIER:-all}" \
+    COVERLAB_STAGE_M_FAMILY="${COVERLAB_STAGE_M_FAMILY:-}" \
+    COVERLAB_STAGE_M_INTERVAL="${COVERLAB_STAGE_M_INTERVAL:-}" \
+    COVERLAB_STAGE_M_LIMIT="${COVERLAB_STAGE_M_LIMIT:-0}" \
+    COVERLAB_STAGE_M_REAL_TIMING="${COVERLAB_STAGE_M_REAL_TIMING:-0}" \
+    COVERLAB_STAGE_M_TIME_SCALE="${COVERLAB_STAGE_M_TIME_SCALE:-0.001}" \
+    COVERLAB_STAGE_M_MAX_GAP_SECONDS="${COVERLAB_STAGE_M_MAX_GAP_SECONDS:-0.15}" \
     NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
     "$PYTHON_BIN" -m coverlab.orchestrate_v3 --stage "$STAGE" --shard "$SHARD" --shards "$SHARDS" \
       --persona-index "$idx" --out "$pdir" --capture-file "$(basename "$PCAP")" &
@@ -69,6 +79,12 @@ cp "$OUT/manifests/events.jsonl" "$OUT/events.jsonl"
 : > "$OUT/manifests/decrypted_transactions.jsonl"
 [[ -f /tmp/coverlab_server_trace.jsonl ]] && cat /tmp/coverlab_server_trace.jsonl >> "$OUT/manifests/decrypted_transactions.jsonl"
 [[ -f /tmp/coverlab_wss_trace.jsonl ]] && cat /tmp/coverlab_wss_trace.jsonl >> "$OUT/manifests/decrypted_transactions.jsonl"
+
+if [[ "$STAGE" == "stage_m" ]]; then
+  PYTHONPATH="$ROOT/src" python -m coverlab.stage_m_report \
+    --manifest "$OUT/manifests/campaigns.jsonl" \
+    --out-dir "$OUT/manifests"
+fi
 
 if [[ "$STAGE" == "lots" ]]; then
   python - "$OUT/manifests/campaigns.jsonl" <<'PY'
