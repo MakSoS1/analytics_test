@@ -27,6 +27,21 @@ def validate(stage_dir: Path) -> dict:
             if int(r.get('timing_acceleration',1)) != 1: errors.append(f'{cid}: Stage L timing must not be accelerated')
             if float(r.get('real_interval_seconds',0)) <= 0: errors.append(f'{cid}: Stage L missing real interval')
             if r.get('training_eligible') is not False: errors.append(f'{cid}: Stage L must be challenge-only')
+        if stage=='M_positive_diversity' or cid.startswith('m-'):
+            if label != 1: errors.append(f'{cid}: Stage M is positive-only and must have label_binary=1')
+            if r.get('positive_only') is not True: errors.append(f'{cid}: Stage M missing positive_only=true')
+            if r.get('external_dependency') is not False: errors.append(f'{cid}: Stage M must not require external dependencies')
+            if role not in {'train_candidate','implementation_holdout'}: errors.append(f'{cid}: invalid Stage M dataset_role={role!r}')
+            if role=='implementation_holdout' and r.get('training_eligible') is not False:
+                errors.append(f'{cid}: implementation holdout must be training-ineligible')
+            if role=='train_candidate' and r.get('training_eligible') is not True:
+                errors.append(f'{cid}: train candidate must be training-eligible')
+            front=str(r.get('front_host') or '')
+            if front and not front.endswith('.stage-m.test'):
+                errors.append(f'{cid}: non-local Stage M front_host={front!r}')
+            safety=r.get('safety_boundary') or {}
+            for key in ('no_command_execution','no_arbitrary_forwarding','no_internet_route','synthetic_test_domains_only'):
+                if safety.get(key) is not True: errors.append(f'{cid}: Stage M safety boundary {key}=false/missing')
         if stage=='J_framework_holdout':
             if r.get('training_eligible') is not False or r.get('dataset_role')!='external_framework_holdout':
                 errors.append(f'{cid}: framework holdout leaked into training contract')
