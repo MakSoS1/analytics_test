@@ -164,7 +164,7 @@ def _browser_http_campaign(plan: dict) -> list[dict]:
     else: path = _response_path(resp)
     delay_ms = int(_gap_seconds(plan, 0, burst=family == "M-RMM-SHAPE") * 1000)
     q = urllib.parse.urlencode({"target": base + path, "events": count, "payload": min(req, 4096), "delay_ms": delay_ms, "method": "GET" if family == "M-HTTPS-FRAG" else "POST"})
-    _browser_get("https://stage-m-asgi.test:9443/stage-m/browser-http?" + q, budget_ms=count*max(1, delay_ms)+2500)
+    _browser_get("https://stage-m-asgi.test:9543/stage-m/browser-http?" + q, budget_ms=count*max(1, delay_ms)+2500)
     return [{"event_type":"stage_m_http","sent_at":now_iso(),"completed_at":now_iso(),"transport":"https","http_method":"GET" if family=="M-HTTPS-FRAG" else "POST","http_path":path,"response_status":200,"encoded_length":0 if family=="M-HTTPS-FRAG" else min(req,4096),"response_bytes_target":resp} for _ in range(count)]
 
 def _server_url(plan: dict, *, force_host: str | None = None, plaintext: bool = False) -> tuple[str, bool]:
@@ -384,13 +384,13 @@ def _browser_wss(server: str, count: int, plan: dict) -> list[int]:
     req, resp = _direction_sizes(plan["direction_profile"],0); delay_ms=int(_gap_seconds(plan,0)*1000)
     target="custom" if server=="python_websockets_server" else "hypercorn"
     q=urllib.parse.urlencode({"target":target,"events":count,"payload":min(req,4096),"response":min(resp,4096),"delay_ms":delay_ms})
-    _browser_get("https://stage-m-asgi.test:9443/stage-m/browser-wss?"+q, budget_ms=count*max(1,delay_ms)+2500)
+    _browser_get("https://stage-m-asgi.test:9543/stage-m/browser-wss?"+q, budget_ms=count*max(1,delay_ms)+2500)
     return [resp]*count
 
 
 def _wss_campaign(plan: dict, r: random.Random) -> list[dict]:
     server=plan["server_stack"]
-    url="wss://stage-m-ws.test:9550/ws" if server=="python_websockets_server" else "wss://stage-m-asgi.test:9443/ws"
+    url="wss://stage-m-ws.test:9550/ws" if server=="python_websockets_server" else "wss://stage-m-asgi.test:9543/ws"
     count=int(plan["event_count_target"]); started=now_iso()
     if plan["client_stack"]=="python_websockets": replies=_python_wss(url,count,plan,r)
     elif plan["client_stack"]=="java_websocket": replies=_java_wss(url,count,plan)
