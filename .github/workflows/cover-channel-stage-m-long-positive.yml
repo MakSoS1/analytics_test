@@ -1,0 +1,65 @@
+name: Cover Channel Stage M Real Long Timing Positive
+
+on:
+  workflow_dispatch:
+    inputs:
+      interval_seconds:
+        description: Real wall-clock interval
+        required: true
+        default: '900'
+        type: choice
+        options: ['900', '3600']
+      family:
+        required: true
+        default: M-HTTPS-BEACON
+        type: choice
+        options: [M-HTTPS-BEACON, M-HTTPS-FRONT]
+      campaigns:
+        description: Maximum positive campaigns for this evidence run
+        required: true
+        default: '1'
+
+permissions:
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+
+jobs:
+  real-long:
+    runs-on: [self-hosted, linux, x64, coverlab]
+    timeout-minutes: 720
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install isolated lab runtime
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Capture real long positive timing
+        working-directory: cover-channel-lab
+        env:
+          COVERLAB_NETEM_PROFILE: clean
+          COVERLAB_STAGE_M_FAMILY: ${{ inputs.family }}
+          COVERLAB_STAGE_M_INTERVAL: ${{ inputs.interval_seconds }}
+          COVERLAB_STAGE_M_LIMIT: ${{ inputs.campaigns }}
+          COVERLAB_STAGE_M_REAL_TIMING: '1'
+        run: ./scripts/run_shard_ci.sh stage_m 0 1 "$RUNNER_TEMP/stage-m-long" "M-real-${{ inputs.interval_seconds }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-real-${{ inputs.interval_seconds }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m-long/release
+          retention-days: 90
+          compression-level: 0
+      - name: Publish real timing evidence to Hugging Face
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${HF_TOKEN:-}" ]]; then
+            echo "HF_TOKEN is not configured; GitHub artifact remains the safety copy"
+            exit 0
+          fi
+          ./scripts/upload_hf.sh "$RUNNER_TEMP/stage-m-long/release" "releases/stage-m-real-${GITHUB_RUN_ID}/${{ inputs.interval_seconds }}s" "Stage M real timing $GITHUB_SHA"
