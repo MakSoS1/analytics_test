@@ -11,6 +11,7 @@ from . import run_campaign as _rc
 from .client_runtime_v3 import install as _install_client_runtime
 from .research_contract_v3 import BENIGN_SERVICE_PROFILES, CLIENT_STACKS, LONG_TIMING_SECONDS, SERVER_STACKS
 from .scenarios import BY_ID, SCENARIOS
+from .stage_m_runtime import generate_positive_stage
 
 _install_client_runtime()
 _ORIGINAL_SLEEP = _rc.time.sleep
@@ -165,7 +166,7 @@ def long_stage(args, manifest: Path, events_out: Path):
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('--stage',choices=['parser','isolated','sequence','challenge','lots','future','mixed','benign','long'],required=True)
+    p.add_argument('--stage',choices=['parser','isolated','sequence','challenge','lots','future','mixed','benign','long','stage_m'],required=True)
     p.add_argument('--out',required=True); p.add_argument('--capture-file',required=True); p.add_argument('--seed',type=int,default=26080823)
     p.add_argument('--shard',type=int,default=0); p.add_argument('--shards',type=int,default=1); p.add_argument('--persona-index',type=int,choices=[0,1,2,3],default=None)
     p.add_argument('--mixed-index',type=int); p.add_argument('--duration-minutes',type=int); p.add_argument('--flow-count',type=int)
@@ -173,10 +174,13 @@ def main():
     a=p.parse_args(); out=Path(a.out); out.mkdir(parents=True,exist_ok=True)
     if a.persona_index is not None: os.environ['COVERLAB_PERSONA_INDEX']=str(a.persona_index)
     manifest=out/'campaigns.jsonl'; events=out/'events.jsonl'; manifest.touch(); events.touch()
-    if a.stage == 'benign': fn=benign_stage
-    elif a.stage == 'long': fn=long_stage
-    else: fn=getattr(_base,a.stage+'_stage')
-    fn(a,manifest,events)
+    if a.stage == 'stage_m':
+        generate_positive_stage(a,manifest,events,_base.PERSONAS)
+    else:
+        if a.stage == 'benign': fn=benign_stage
+        elif a.stage == 'long': fn=long_stage
+        else: fn=getattr(_base,a.stage+'_stage')
+        fn(a,manifest,events)
     print(json.dumps({'stage':a.stage,'shard':a.shard,'campaigns':sum(1 for _ in manifest.open()),'events':sum(1 for _ in events.open())}))
 
 if __name__=='__main__': main()
