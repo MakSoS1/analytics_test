@@ -5,9 +5,13 @@ PYTHON_BIN="$(command -v python)"
 CERTDIR="${RUNNER_TEMP:-/tmp}/coverlab-certs"
 LOGDIR="${RUNNER_TEMP:-/tmp}/coverlab-services"
 mkdir -p "$CERTDIR" "$LOGDIR"
-rm -f /tmp/coverlab_server_state.json /tmp/coverlab_server_state.json.lock /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock /tmp/coverlab_wss_trace.jsonl
+rm -f /tmp/coverlab_server_state.json /tmp/coverlab_server_state.json.lock /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock /tmp/coverlab_wss_trace.jsonl /tmp/coverlab_stage_m_dns_trace.jsonl /tmp/coverlab_stage_m_tunnel_trace.jsonl
 go build -o /tmp/coverlab-go-client "$ROOT/clients/go_client.go"
 chmod 755 /tmp/coverlab-go-client
+if [[ "${COVERLAB_ENABLE_STAGE_M:-0}" == 1 ]]; then
+  go build -o /tmp/coverlab-stage-m-go-tunnel "$ROOT/clients/stage_m_go_tunnel.go"
+  chmod 755 /tmp/coverlab-stage-m-go-tunnel
+fi
 
 cat > "$CERTDIR/openssl.cnf" <<'CNF'
 [req]
@@ -40,6 +44,15 @@ DNS.15=benign-update.test
 DNS.16=benign-devtunnel.test
 DNS.17=synthetic-api.test
 DNS.18=echo.test
+DNS.19=beacon.stage-m.test
+DNS.20=api.stage-m.test
+DNS.21=ws.stage-m.test
+DNS.22=doh.stage-m.test
+DNS.23=cdn.stage-m.test
+DNS.24=workers.stage-m.test
+DNS.25=graph.stage-m.test
+DNS.26=telegram.stage-m.test
+DNS.27=resolver.stage-m.test
 CNF
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -keyout "$CERTDIR/server.key" -out "$CERTDIR/server.crt" -config "$CERTDIR/openssl.cnf" >/dev/null 2>&1
 chmod 600 "$CERTDIR/server.key"; chmod 644 "$CERTDIR/server.crt"
@@ -65,6 +78,16 @@ run_in_c2 "$PYTHON_BIN" -m coverlab.grpc_server --bind 10.20.0.20:50051 >"$LOGDI
 run_in_c2 "$PYTHON_BIN" -m coverlab.h3_fixture server --host 10.20.0.20 --port 8444 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/h3.log" 2>&1 & echo $! > "$LOGDIR/h3.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.connect_server --host 10.20.0.20 --port 8082 >"$LOGDIR/connect.log" 2>&1 & echo $! > "$LOGDIR/connect.pid"
 run_in_c2 mosquitto -c "$CERTDIR/mosquitto.conf" -v >"$LOGDIR/mqtt.log" 2>&1 & echo $! > "$LOGDIR/mqtt.pid"
+
+if [[ "${COVERLAB_ENABLE_STAGE_M:-0}" == 1 ]]; then
+  # Stage M adds only local traffic-shape fixtures. None of these listeners
+  # forwards commands, proxies arbitrary destinations, or has an Internet route.
+  run_in_c2 "$PYTHON_BIN" -m hypercorn coverlab.server:app --bind 10.20.0.20:80 --workers 1 >"$LOGDIR/stage-m-http80.log" 2>&1 & echo $! > "$LOGDIR/stage-m-http80.pid"
+  run_in_c2 "$PYTHON_BIN" -m hypercorn coverlab.server:app --bind 10.20.0.20:443 --workers 1 >"$LOGDIR/stage-m-http443.log" 2>&1 & echo $! > "$LOGDIR/stage-m-http443.pid"
+  run_in_c2 "$PYTHON_BIN" -m coverlab.stage_m_dns_server --host 10.20.0.20 --role authoritative >"$LOGDIR/stage-m-dns-auth.log" 2>&1 & echo $! > "$LOGDIR/stage-m-dns-auth.pid"
+  run_in_c2 "$PYTHON_BIN" -m coverlab.stage_m_dns_server --host 10.20.0.40 --role recursive --upstream 10.20.0.20 >"$LOGDIR/stage-m-dns-recursive.log" 2>&1 & echo $! > "$LOGDIR/stage-m-dns-recursive.pid"
+  run_in_c2 "$PYTHON_BIN" -m coverlab.stage_m_tunnel_server --host 10.20.0.20 --port 9090 >"$LOGDIR/stage-m-tunnel.log" 2>&1 & echo $! > "$LOGDIR/stage-m-tunnel.pid"
+fi
 
 CORE_READY=false
 for _ in $(seq 1 80); do
@@ -99,6 +122,25 @@ fi
 
 echo "coverlab core HTTP/HTTPS/H2/WSS services ready"
 
+if [[ "${COVERLAB_ENABLE_STAGE_M:-0}" == 1 ]]; then
+  STAGE_M_READY=false
+  stage_m_probe='import dns.message,dns.query; q=dns.message.make_query("health.stage-m.test","A"); r=dns.query.udp(q,"10.20.0.40",port=53,timeout=3); assert r.answer'
+  for _ in $(seq 1 40); do
+    if sudo ip netns exec cc-dev curl --noproxy '*' -fsS http://beacon.stage-m.test:443/healthz >/dev/null 2>&1 \
+      && timeout 8s sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$stage_m_probe" >/dev/null 2>&1; then
+      STAGE_M_READY=true
+      break
+    fi
+    sleep .25
+  done
+  if [[ "$STAGE_M_READY" != true ]]; then
+    echo "Stage M HTTP/DNS fixtures did not become ready" >&2
+    tail -n 80 "$LOGDIR"/stage-m-*.log >&2 || true
+    exit 1
+  fi
+  echo "coverlab Stage M HTTP/DNS/tunnel fixtures ready"
+fi
+
 required_probe() {
   local name="$1" logfile="$2"; shift 2
   local ok=false
@@ -131,5 +173,5 @@ required_probe mqtt-wss "$LOGDIR/mqtt.log" sudo ip netns exec cc-dev runuser -u 
 echo "coverlab H3/CONNECT-UDP/WebTransport/gRPC/MQTT fixtures ready"
 
 # Socket-level diagnostics make a later protocol-shard failure actionable.
-sudo ip netns exec cc-c2 ss -lntup 2>/dev/null | grep -E ':(8080|8443|50051|8082|9443)\b' || true
+sudo ip netns exec cc-c2 ss -lntup 2>/dev/null | grep -E ':(53|80|443|8080|8443|50051|8082|9090|9443)\b' || true
 sudo ip netns exec cc-c2 ss -lnup 2>/dev/null | grep -E ':8444\b' || true
