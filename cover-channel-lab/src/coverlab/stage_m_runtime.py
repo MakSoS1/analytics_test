@@ -29,7 +29,7 @@ from .stage_m_contract import FAMILY_BY_ID, campaign_plan
 _install_client_runtime()
 
 HTTP_ENDPOINTS = {
-    "hypercorn": {"host": "stage-m-asgi.test", "https_port": 9443, "http_port": 9082},
+    "hypercorn": {"host": "stage-m-asgi.test", "https_port": 9543, "http_port": 9082},
     "go_nethttp_server": {"host": "stage-m-go.test", "https_port": 9444, "http_port": 9080},
     "node_http_server": {"host": "stage-m-node.test", "https_port": 9445, "http_port": 9081},
 }
