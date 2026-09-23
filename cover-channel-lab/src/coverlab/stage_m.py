@@ -589,6 +589,9 @@ def generate(args: argparse.Namespace) -> dict:
         specs = [replace(s, interval_seconds=int(force_interval)) for s in specs]
     if event_cap > 0:
         specs = [replace(s, event_count=min(s.event_count, event_cap)) for s in specs]
+    spec_offset = int(os.environ.get("COVERLAB_STAGE_M_SPEC_OFFSET", "0") or 0)
+    if spec_offset > 0:
+        specs = specs[spec_offset:]
     campaign_limit = int(os.environ.get("COVERLAB_STAGE_M_CAMPAIGN_LIMIT", "0") or 0)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
