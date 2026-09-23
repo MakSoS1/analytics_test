@@ -27,7 +27,7 @@ create_ns cc-dev 10.20.0.11
 create_ns cc-c2 10.20.0.20
 # Dedicated WSS fixture address. It remains on the same isolated lab segment and
 # has no forwarding role; separating it avoids sharing Hypercorn's TLS listener.
-sudo ip netns exec cc-c2 ip addr add 10.20.0.21/24 dev eth0
+sudo ip netns exec cc-c2 ip addr add 10.20.0.21/24 dev eth0\n# Stage M nginx front and recursive DNS fixture addresses.\nsudo ip netns exec cc-c2 ip addr add 10.20.0.22/24 dev eth0\nsudo ip netns exec cc-c2 ip addr add 10.20.0.23/24 dev eth0
 create_ns cc-devops 10.20.0.30
 create_ns cc-soc 10.20.0.31
 
@@ -39,6 +39,14 @@ for h in "${WSS_HOSTS[@]}"; do
   sudo sed -i -E "/[[:space:]]${h//./\\.}([[:space:]]|$)/d" /etc/hosts
   echo "10.20.0.21 $h" | sudo tee -a /etc/hosts >/dev/null
 done
+
+FRONT_HOSTS=(edge-front.test edge-ws.test cdn-front.test workers-front.test graph-front.test telegram-front.test resolver-front.test plain-front.test)
+for h in "${FRONT_HOSTS[@]}"; do
+  sudo sed -i -E "/[[:space:]]${h//./\\.}([[:space:]]|$)/d" /etc/hosts
+  echo "10.20.0.22 $h" | sudo tee -a /etc/hosts >/dev/null
+done
+sudo sed -i -E '/[[:space:]]stage-m-resolver\\.test([[:space:]]|$)/d' /etc/hosts
+echo "10.20.0.23 stage-m-resolver.test" | sudo tee -a /etc/hosts >/dev/null
 
 HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-bucket.test benign-devtunnel.test doh-relay.test synthetic-api.test echo.test mqtt-broker.test)
 for h in "${HOSTS[@]}"; do
