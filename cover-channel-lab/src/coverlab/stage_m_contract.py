@@ -177,3 +177,135 @@ def _payload_profile(family_id: str, n: int) -> str:
     if family_id.startswith("M-DNS-"):
         return ("base32_high_entropy", "fixed_hex", "short_code")[n % 3]
     return ("high_entropy_fixed", "short_code", "guid", "fragment_2_6")[n % 4]
+
+def _event_count(family_id: str, interval: int, n: int) -> int:
+    if family_id == "M-DNS-BULK":
+        return (20, 50, 100)[n % 3]
+    if family_id == "M-TUNNEL":
+        return (10, 20, 50, 100)[n % 4]
+    if family_id == "M-WSS-LONG":
+        return (5, 10, 20, 50, 100)[n % 5]
+    if interval >= 900:
+        return (3, 5)[n % 2]
+    if interval >= 300:
+        return (3, 5, 10)[n % 3]
+    return EVENT_COUNTS[n % len(EVENT_COUNTS)]
+
+
+def _tier_records(family: StageMFamily) -> Iterable[tuple[str, int]]:
+    yield "core", family.core_count
+    if family.diversity_count:
+        yield "implementation_diversity", family.diversity_count
+    if family.holdout_count:
+        yield "implementation_holdout", family.holdout_count
+
+
+def campaign_plan(seed: int = 26092301) -> list[dict]:
+    out: list[dict] = []
+    global_index = 0
+    for family in FAMILIES:
+        family_index = 0
+        implementations = implementations_for(family.family_id)
+        for tier, count in _tier_records(family):
+            for _ in range(count):
+                h = _stable_int(seed, family.family_id, family_index, tier)
+                impl = dict(implementations[h % len(implementations)])
+                interval = NOMINAL_INTERVAL_SECONDS[(h // 7) % len(NOMINAL_INTERVAL_SECONDS)]
+                jitter = JITTER_FRACTIONS[(h // 17) % len(JITTER_FRACTIONS)]
+                network = NETWORK_PROFILES[(h // 29) % len(NETWORK_PROFILES)]
+                payload = _payload_profile(family.family_id, h)
+                direction = DIRECTION_PROFILES[(h // 43) % len(DIRECTION_PROFILES)]
+                event_count = _event_count(family.family_id, interval, h)
+                front = FRONT_HOSTS[(h // 53) % len(FRONT_HOSTS)]
+                qtype = ("A", "AAAA", "TXT")[(h // 61) % 3]
+                dns_transport = ("udp", "tcp")[(h // 67) % 2]
+                nx_ratio = (0.0, 0.10, 0.50)[(h // 71) % 3]
+                requested_tls = ("native", "tls12", "tls13")[(h // 79) % 3]
+                tls_profile = requested_tls if impl.get("client_stack") in {"python_httpx", "python_httpx_h2"} else "native"
+                cid = f"m-{global_index:05d}"
+                record = {
+                    "campaign_index": global_index,
+                    "family_index": family_index,
+                    "campaign_id": cid,
+                    "family_id": family.family_id,
+                    "transport": family.transport,
+                    "tier": tier,
+                    "dataset_role": "positive_implementation_holdout" if tier == "implementation_holdout" else "positive_cover_channel",
+                    "training_eligible": tier != "implementation_holdout",
+                    "stage_m_split_role": "implementation_holdout" if tier == "implementation_holdout" else ("diversity" if tier == "implementation_diversity" else "train_candidate"),
+                    "attack_mapping": list(family.attack_mapping),
+                    "network_profile": network,
+                    "nominal_interval_seconds": interval,
+                    "jitter_fraction": jitter,
+                    "event_count_target": event_count,
+                    "payload_profile": payload,
+                    "direction_profile": direction,
+                    "front_host": front,
+                    "dns_qtype": qtype,
+                    "dns_transport": dns_transport,
+                    "dns_nxdomain_ratio": nx_ratio,
+                    "tls_profile": tls_profile,
+                    "requested_tls_profile": requested_tls,
+                    **impl,
+                }
+                if family.family_id == "M-FALLBACK":
+                    record["dns_path"] = DNS_PATHS[(h // 83) % len(DNS_PATHS)]
+                    record["dns_qtype"] = ("A", "AAAA", "TXT")[(h // 89) % 3]
+                    record["dns_transport"] = ("udp", "tcp")[(h // 97) % 2]
+                record["holdout_groups"] = {
+                    "implementation": record["implementation_id"],
+                    "client": record["client_stack"],
+                    "server": record["server_stack"],
+                    "network": network,
+                    "timing": f"{interval}s-j{int(jitter*100)}",
+                    "payload": payload,
+                }
+                out.append(record)
+                family_index += 1
+                global_index += 1
+    assert_plan(out)
+    return out
+
+
+def assert_plan(plan: list[dict]) -> None:
+    if len(plan) != EXPECTED_TOTAL_CAMPAIGNS:
+        raise ValueError(f"Stage M plan size {len(plan)} != {EXPECTED_TOTAL_CAMPAIGNS}")
+    ids = [x["campaign_id"] for x in plan]
+    if len(ids) != len(set(ids)):
+        raise ValueError("Stage M campaign IDs are not unique")
+    for family in FAMILIES:
+        rows = [x for x in plan if x["family_id"] == family.family_id]
+        if len(rows) != family.total_count:
+            raise ValueError(f"{family.family_id}: expected {family.total_count}, got {len(rows)}")
+        min_impl = 3 if family.family_id not in {"M-RMM-SHAPE"} else 2
+        if len({x["implementation_id"] for x in rows}) < min_impl:
+            raise ValueError(f"{family.family_id}: insufficient implementation diversity")
+    if {x["network_profile"] for x in plan} != set(NETWORK_PROFILES):
+        raise ValueError("Stage M does not cover every real netem profile")
+    if not set(EVENT_COUNTS[:4]).issubset({x["event_count_target"] for x in plan}):
+        raise ValueError("Stage M event-count diversity collapsed")
+    if any(not str(x["front_host"]).endswith(".test") for x in plan):
+        raise ValueError("Stage M contains a non-local front host")
+
+
+def plan_summary(plan: list[dict] | None = None) -> dict:
+    plan = campaign_plan() if plan is None else plan
+    by_family = {}
+    for family in FAMILIES:
+        rows = [x for x in plan if x["family_id"] == family.family_id]
+        by_family[family.family_id] = {
+            "campaigns": len(rows),
+            "implementations": len({x["implementation_id"] for x in rows}),
+            "clients": sorted({x["client_stack"] for x in rows}),
+            "servers": sorted({x["server_stack"] for x in rows}),
+        }
+    return {
+        "contract_revision": 1,
+        "positive_only": True,
+        "campaigns": len(plan),
+        "families": by_family,
+        "network_profiles": sorted({x["network_profile"] for x in plan}),
+        "event_counts": sorted({x["event_count_target"] for x in plan}),
+        "nominal_intervals_seconds": sorted({x["nominal_interval_seconds"] for x in plan}),
+        "jitter_fractions": sorted({x["jitter_fraction"] for x in plan}),
+    }
