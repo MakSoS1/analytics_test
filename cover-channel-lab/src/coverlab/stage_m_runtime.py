@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from dataclasses import replace
 import base64
 import fcntl
 import hashlib
@@ -318,16 +319,31 @@ def run_one(plan,persona,source_ip,capture_file,manifest,out):
 
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument("--out",required=True);ap.add_argument("--capture-file",required=True);ap.add_argument("--network-profile",required=True);ap.add_argument("--shard",type=int,default=0);ap.add_argument("--shards",type=int,default=1);ap.add_argument("--persona-index",type=int,choices=range(4),required=True);ap.add_argument("--limit",type=int,default=0);ap.add_argument("--limit-per-family",type=int,default=0);ap.add_argument("--family",action="append",default=[]);a=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument("--out",required=True);ap.add_argument("--capture-file",required=True);ap.add_argument("--network-profile",required=True);ap.add_argument("--shard",type=int,default=0);ap.add_argument("--shards",type=int,default=1);ap.add_argument("--persona-index",type=int,choices=range(4),required=True);ap.add_argument("--limit",type=int,default=0);ap.add_argument("--limit-per-family",type=int,default=0);ap.add_argument("--smoke-implementations",action="store_true");ap.add_argument("--family",action="append",default=[]);a=ap.parse_args()
     out=Path(a.out);out.mkdir(parents=True,exist_ok=True);manifest=out/"campaigns.jsonl";events=out/"events.jsonl";manifest.touch();events.touch()
     plans=list(iter_campaigns());check=validate_plan(plans)
     if not check["passed"]:raise SystemExit(json.dumps(check))
     selected=[];local=0;wanted=set(a.family)
-    for gi,p in enumerate(plans):
-        if p.network_profile!=a.network_profile or (wanted and p.family_id not in wanted):continue
-        if gi%4!=a.persona_index:continue
-        if local%a.shards==a.shard:selected.append(p)
-        local+=1
+    if a.smoke_implementations:
+        # Integration smoke: exercise every distinct family × implementation
+        # pair while keeping campaigns short and forcing the requested netem
+        # profile. This is a test-only view and does not alter the frozen catalog.
+        first={}
+        for p in plans:
+            if wanted and p.family_id not in wanted: continue
+            first.setdefault((p.family_id,p.implementation_id),p)
+        smoke=[replace(p,network_profile=a.network_profile,event_count_target=min(3,p.event_count_target),nominal_interval_seconds=min(30.0,p.nominal_interval_seconds)) for p in first.values()]
+        smoke.sort(key=lambda x:(x.family_id,x.implementation_id))
+        for gi,p in enumerate(smoke):
+            if gi%4!=a.persona_index: continue
+            if local%a.shards==a.shard: selected.append(p)
+            local+=1
+    else:
+        for gi,p in enumerate(plans):
+            if p.network_profile!=a.network_profile or (wanted and p.family_id not in wanted):continue
+            if gi%4!=a.persona_index:continue
+            if local%a.shards==a.shard:selected.append(p)
+            local+=1
     if a.limit_per_family>0:
         kept=[];seen={}
         for p in selected:
