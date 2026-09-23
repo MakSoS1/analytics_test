@@ -173,6 +173,31 @@ async def ws_endpoint(ws: WebSocket):
         return
 
 
+@app.get("/stage-m/http-fixture")
+async def stage_m_http_fixture(target: str = "/stage-m/beacon", method: str = "POST", body: str = ""):
+    # Loads in Chromium and issues a same-origin request. Target is strictly
+    # constrained to a local path, so this cannot become a browser proxy.
+    import urllib.parse
+    try:
+        raw = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)).decode("latin1") if body else ""
+    except Exception:
+        raw = ""
+    if not target.startswith("/") or "://" in target or target.startswith("//"):
+        return Response(status_code=400)
+    method = method.upper()
+    if method not in {"GET", "POST"}:
+        return Response(status_code=400)
+    js_target = json.dumps(target)
+    js_method = json.dumps(method)
+    js_body = json.dumps(raw)
+    js = (
+        "fetch(" + js_target + ",{method:" + js_method +
+        (",body:" + js_body + ",headers:{'Content-Type':'application/octet-stream'}" if method == "POST" else "") +
+        "}).then(r=>r.text()).then(()=>document.body.dataset.done='1');"
+    )
+    return HTMLResponse("<html><body><script>"+js+"</script>stage-m browser http fixture</body></html>")
+
+
 @app.get("/stage-m/ws-fixture")
 async def stage_m_ws_fixture(host: str = "edge-ws.test", events: int = 6, seed: int = 1, mode: str = "wss"):
     # Browser-native local-only WebSocket implementation diversity fixture.
