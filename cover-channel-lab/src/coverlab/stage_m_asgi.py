@@ -63,7 +63,7 @@ async def browser_http(request: Request):
 @app.get("/stage-m/browser-wss")
 async def browser_wss(request: Request):
     target = request.query_params.get("target", "custom")
-    url = "wss://stage-m-ws.test:9550/ws" if target == "custom" else "wss://stage-m-asgi.test:9443/ws"
+    url = "wss://stage-m-ws.test:9550/ws" if target == "custom" else "wss://stage-m-asgi.test:9543/ws"
     events = min(100, max(1, int(request.query_params.get("events", "1"))))
     payload = min(8192, max(1, int(request.query_params.get("payload", "64"))))
     response = min(8192, max(1, int(request.query_params.get("response", "64"))))
