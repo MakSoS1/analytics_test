@@ -102,6 +102,7 @@ jobs:
         env:
           COVERLAB_STAGE_M_TIME_SCALE: ${{ needs.plan.outputs.mode == 'smoke' && '0.0002' || '0.001' }}
           COVERLAB_STAGE_M_MAX_SLEEP_SECONDS: "0.05"
+          COVERLAB_STAGE_M_EVENT_COUNT_CAP: ${{ needs.plan.outputs.mode == 'smoke' && '5' || '0' }}
         run: |
           name="M-positive-$(printf '%02d' ${{ matrix.shard }})"
           bash ./scripts/run_stage_m_ci.sh "${{ needs.plan.outputs.mode }}" "${{ matrix.shard }}" "${{ matrix.shards }}" "${{ matrix.profile }}" "$RUNNER_TEMP/stage-m" "$name"
