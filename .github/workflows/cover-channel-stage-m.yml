@@ -24,6 +24,13 @@ permissions:
   actions: read
   contents: read
 
+concurrency:
+  # Push smoke runs supersede older smoke runs. Explicit dispatches (especially
+  # full corpus generation) get their own run-id group and cannot be cancelled
+  # by later branch maintenance commits.
+  group: cover-channel-stage-m-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
 env:
   HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
   PYTHONUNBUFFERED: "1"
