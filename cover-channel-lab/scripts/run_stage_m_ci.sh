@@ -15,7 +15,7 @@ cleanup(){
 trap cleanup EXIT
 
 "$ROOT/scripts/stop_services.sh" || true
-for dev in v-office v-dev v-c2 v-devops v-soc; do sudo ip link del "$dev" 2>/dev/null || true; done
+for dev in v-office v-dev v-c2 v-dns v-devops v-soc; do sudo ip link del "$dev" 2>/dev/null || true; done
 "$ROOT/scripts/setup_netns.sh"
 "$ROOT/scripts/start_services.sh"
 bash "$ROOT/scripts/netem_v3.sh" apply "$PROFILE" v-c2
@@ -23,7 +23,7 @@ bash "$ROOT/scripts/netem_v3.sh" apply "$PROFILE" v-c2
 export COVERLAB_STAGE_M_MODE="$MODE"
 export COVERLAB_NETEM_PROFILE="$PROFILE"
 export COVERLAB_STAGE_M_TIME_SCALE="${COVERLAB_STAGE_M_TIME_SCALE:-0.001}"
-export COVERLAB_STAGE_M_MAX_SLEEP_SECONDS="${COVERLAB_STAGE_M_MAX_SLEEP_SECONDS:-0.05}"
+export COVERLAB_STAGE_M_MAX_SLEEP_SECONDS="${COVERLAB_STAGE_M_MAX_SLEEP_SECONDS-0.05}"
 
 "$ROOT/scripts/generate_stage.sh" stage_m "$SHARD" "$SHARDS" "$STAGE_DIR" "$PCAP"
 "$ROOT/scripts/process_parsers.sh" "$PCAP" "$STAGE_DIR" "$PARSER_DIR"
