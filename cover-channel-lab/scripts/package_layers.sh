@@ -12,6 +12,12 @@ PYTHONPATH="$ROOT/src" python -m coverlab.capture_tail_guard --stage-dir "$STAGE
 cp "$STAGE/manifests/campaigns.jsonl" "$BRONZE/manifests/"
 cp "$STAGE/manifests/events.jsonl" "$BRONZE/manifests/"
 cp "$STAGE/manifests/decrypted_transactions.jsonl" "$BRONZE/manifests/"
+for extra in stage_m_coverage.json stage_m_holdouts.json; do
+  if [[ -s "$STAGE/manifests/$extra" ]]; then
+    cp "$STAGE/manifests/$extra" "$BRONZE/manifests/"
+    cp "$STAGE/manifests/$extra" "$QUALITY/"
+  fi
+done
 cp -a "$PARSER/suricata" "$SILVER/suricata-raw"
 cp -a "$PARSER/zeek" "$SILVER/zeek-raw"
 zstd -T0 -q -9 -f "$PCAP" -o "$BRONZE/captures/${NAME}.pcap.zst"
