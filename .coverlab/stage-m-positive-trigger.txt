@@ -1,0 +1,2 @@
+mode=smoke
+revision=stage-m-positive-v1
