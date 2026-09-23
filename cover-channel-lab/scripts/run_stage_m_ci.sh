@@ -68,6 +68,7 @@ PYTHONPATH="$ROOT/src" python "$ROOT/scripts/retime_stage_m_pcap.py" \
   --events "$STAGE_DIR/manifests/events.jsonl" --report "$STAGE_DIR/manifests/retime_report.json"
 cp "$STAGE_DIR/manifests/campaigns.jsonl" "$STAGE_DIR/campaigns.jsonl"
 cp "$STAGE_DIR/manifests/events.jsonl" "$STAGE_DIR/events.jsonl"
+PYTHONPATH="$ROOT/src" python -m coverlab.stage_m_quality --stage-dir "$STAGE_DIR" --out "$STAGE_DIR/manifests/stage_m_quality.json"
 
 PYTHONPATH="$ROOT/src" python -m coverlab.validate_dataset_contract_v3 --stage-dir "$STAGE_DIR" --out "$STAGE_DIR/manifests/dataset_contract.json"
 "$ROOT/scripts/process_parsers.sh" "$PCAP" "$STAGE_DIR" "$PARSER_DIR"
@@ -78,6 +79,7 @@ zstd -T0 -q -9 -f "$RAW_PCAP" -o "$BRONZE/captures/${NAME}.raw-runtime.pcap.zst"
 cp -a "$STAGE_DIR/raw_runtime" "$BRONZE/manifests/"
 cp -a "$STAGE_DIR/manifests/stage_m_catalog" "$QUALITY/"
 cp "$STAGE_DIR/manifests/retime_report.json" "$QUALITY/"
+cp "$STAGE_DIR/manifests/stage_m_quality.json" "$QUALITY/"
 cat > "$QUALITY/stage_m_positive_only.json" <<JSON
 {"positive_only":true,"network_profile":"$PROFILE","shard":$SHARD,"shards":$SHARDS,"runtime_capture_retained":true,"retimed_capture_used_for_parsers_and_features":true}
 JSON
