@@ -118,7 +118,7 @@ run_in_c2 mosquitto -c "$CERTDIR/mosquitto.conf" -v >"$LOGDIR/mqtt.log" 2>&1 & e
 # Stage M local-only infrastructure. Root is used only for privileged DNS/HTTP
 # ports inside the namespace; there is still no default route to the Internet.
 sudo ip netns exec cc-c2 env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.stage_m_dns_server --bind 10.20.0.20 --port 53 >"$LOGDIR/stage-m-dns-auth.log" 2>&1 & echo $! > "$LOGDIR/stage-m-dns-auth.pid"
-sudo ip netns exec cc-c2 env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.stage_m_dns_server --bind 10.20.0.23 --port 53 --upstream 10.20.0.20 >"$LOGDIR/stage-m-dns-rec.log" 2>&1 & echo $! > "$LOGDIR/stage-m-dns-rec.pid"
+sudo ip netns exec cc-dns env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.stage_m_dns_server --bind 10.20.0.23 --port 53 --upstream 10.20.0.20 >"$LOGDIR/stage-m-dns-rec.log" 2>&1 & echo $! > "$LOGDIR/stage-m-dns-rec.pid"
 sudo ip netns exec cc-c2 nginx -c "$CERTDIR/nginx-stage-m.conf" -g 'daemon off;' >"$LOGDIR/nginx-stage-m.log" 2>&1 & echo $! > "$LOGDIR/nginx-stage-m.pid"
 
 CORE_READY=false
