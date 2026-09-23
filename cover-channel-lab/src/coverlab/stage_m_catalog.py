@@ -252,6 +252,13 @@ def iter_campaigns(seed: int = 26092301) -> Iterable[CampaignPlan]:
                 qtype = _choose(spec.qtypes, n * 43 + global_index) if spec.qtypes else ""
                 behavior = _choose(spec.behaviors, n * 47 + global_index) if spec.behaviors else ""
                 http_impl = str(impl).split("+", 1)[0]
+                if spec.protocol in {"https", "https+https", "https+dns", "http+https", "http"} and spec.family_id != "M-WSS-LONG":
+                    if "chromium" in http_impl:
+                        conn = "keepalive"
+                    elif http_impl in {"python_httpx_h1", "python_httpx_h2"}:
+                        conn = _choose(("reconnect", "keepalive"), n * 31 + global_index)
+                    else:
+                        conn = "reconnect"
                 if spec.family_id == "M-HTTP-443":
                     server_impl = "hypercorn_plain"
                 elif spec.protocol in {"https", "https+https", "https+dns", "http+https"}:
@@ -272,6 +279,9 @@ def iter_campaigns(seed: int = 26092301) -> Iterable[CampaignPlan]:
                     ws_compression = _choose(WS_COMPRESSION_MODES, n * 71 + global_index)
                 else:
                     ws_compression = "none"
+                if spec.family_id == "M-WSS-LONG":
+                    server_impl = "websockets_deflate" if ws_compression == "deflate" else "websockets_plain"
+                    tls_profile = "default"
                 cid = f"m-{spec.family_id[2:].lower()}-{tier[0]}-{n:05d}"
                 yield CampaignPlan(
                     campaign_id=cid,
