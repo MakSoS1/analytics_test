@@ -27,6 +27,14 @@ def validate(stage_dir: Path) -> dict:
             if int(r.get('timing_acceleration',1)) != 1: errors.append(f'{cid}: Stage L timing must not be accelerated')
             if float(r.get('real_interval_seconds',0)) <= 0: errors.append(f'{cid}: Stage L missing real interval')
             if r.get('training_eligible') is not False: errors.append(f'{cid}: Stage L must be challenge-only')
+        if stage=='M_positive_diversity' or cid.startswith('m-'):
+            if label != 1: errors.append(f'{cid}: Stage M must be positive')
+            if role != 'positive_corpus': errors.append(f'{cid}: Stage M role must be positive_corpus')
+            if r.get('positive_only') is not True: errors.append(f'{cid}: Stage M positive_only contract missing')
+            if r.get('negative_class_present') is not False: errors.append(f'{cid}: Stage M must not contain a negative class')
+            if r.get('external_dependency') is not False: errors.append(f'{cid}: Stage M must stay local-only')
+            if r.get('arbitrary_forwarding') is not False: errors.append(f'{cid}: Stage M cannot provide arbitrary forwarding')
+            if r.get('post_exploitation') is not False: errors.append(f'{cid}: Stage M cannot contain post-exploitation behavior')
         if stage=='J_framework_holdout':
             if r.get('training_eligible') is not False or r.get('dataset_role')!='external_framework_holdout':
                 errors.append(f'{cid}: framework holdout leaked into training contract')
