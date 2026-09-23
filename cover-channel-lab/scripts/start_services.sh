@@ -40,6 +40,19 @@ DNS.15=benign-update.test
 DNS.16=benign-devtunnel.test
 DNS.17=synthetic-api.test
 DNS.18=echo.test
+DNS.19=stage-m-asgi.test
+DNS.20=stage-m-ws.test
+DNS.21=stage-m-go.test
+DNS.22=stage-m-node.test
+DNS.23=stage-m-tcp.test
+DNS.24=stage-m-dns.test
+DNS.25=stage-m-resolver.test
+DNS.26=plain-http.test
+DNS.27=front-cdn.test
+DNS.28=front-workers.test
+DNS.29=front-graph.test
+DNS.30=front-telegram.test
+DNS.31=front-resolver.test
 CNF
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -keyout "$CERTDIR/server.key" -out "$CERTDIR/server.crt" -config "$CERTDIR/openssl.cnf" >/dev/null 2>&1
 chmod 600 "$CERTDIR/server.key"; chmod 644 "$CERTDIR/server.crt"
@@ -65,6 +78,10 @@ run_in_c2 "$PYTHON_BIN" -m coverlab.grpc_server --bind 10.20.0.20:50051 >"$LOGDI
 run_in_c2 "$PYTHON_BIN" -m coverlab.h3_fixture server --host 10.20.0.20 --port 8444 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/h3.log" 2>&1 & echo $! > "$LOGDIR/h3.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.connect_server --host 10.20.0.20 --port 8082 >"$LOGDIR/connect.log" 2>&1 & echo $! > "$LOGDIR/connect.pid"
 run_in_c2 mosquitto -c "$CERTDIR/mosquitto.conf" -v >"$LOGDIR/mqtt.log" 2>&1 & echo $! > "$LOGDIR/mqtt.pid"
+
+if [[ "${COVERLAB_ENABLE_STAGE_M:-0}" == "1" ]]; then
+  bash "$ROOT/scripts/start_stage_m_services.sh" "$CERTDIR"
+fi
 
 CORE_READY=false
 for _ in $(seq 1 80); do
