@@ -7,8 +7,13 @@ sudo apt-get install -y software-properties-common tcpdump zstd jq curl ca-certi
 if ! grep -Rqs 'suricata-stable' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
   sudo add-apt-repository -y ppa:oisf/suricata-stable || true
 fi
-sudo apt-get update -y
-sudo apt-get install -y suricata
+sudo apt-get update -y || true
+if ! sudo apt-get install -y suricata; then
+  echo "OISF PPA unavailable; falling back to Ubuntu Suricata package" >&2
+  sudo rm -f /etc/apt/sources.list.d/*suricata* /etc/apt/sources.list.d/*oisf* 2>/dev/null || true
+  sudo apt-get update -y
+  sudo apt-get install -y suricata
+fi
 sudo suricata-update >/dev/null 2>&1 || true
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
