@@ -1,0 +1,150 @@
+name: Cover Channel Stage M Positive
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "smoke or full"
+        required: true
+        default: smoke
+        type: choice
+        options: [smoke, full]
+  push:
+    branches: [coverlab-finish-2026-09]
+    paths:
+      - '.coverlab/stage-m-positive-trigger.txt'
+
+permissions:
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+
+concurrency:
+  group: cover-channel-stage-m-positive-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      release_id: ${{ steps.mode.outputs.release_id }}
+      hf_enabled: ${{ steps.mode.outputs.hf_enabled }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - id: mode
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          HF_TOKEN_VALUE: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          mode="${INPUT_MODE:-}"
+          if [[ -z "$mode" && -f .coverlab/stage-m-positive-trigger.txt ]]; then
+            mode="$(awk -F= '$1=="mode"{print $2}' .coverlab/stage-m-positive-trigger.txt | tail -1)"
+          fi
+          [[ "$mode" == smoke || "$mode" == full ]] || { echo "invalid mode=$mode" >&2; exit 2; }
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "release_id=stage-m-gh-${GITHUB_RUN_ID}-a${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          if [[ -n "$HF_TOKEN_VALUE" ]]; then echo "hf_enabled=true" >> "$GITHUB_OUTPUT"; else echo "hf_enabled=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Install lightweight test dependencies
+        working-directory: cover-channel-lab
+        run: python -m pip install dnspython pytest
+      - name: Export and validate complete positive catalog
+        working-directory: cover-channel-lab
+        env: {PYTHONPATH: src}
+        run: |
+          python -m coverlab.stage_m_export --out "$RUNNER_TEMP/stage-m-catalog"
+          python -m pytest -q tests/test_stage_m_catalog.py tests/test_stage_m_dns_server.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-catalog-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m-catalog
+          retention-days: 90
+      - name: Publish catalog to HF
+        if: steps.mode.outputs.hf_enabled == 'true'
+        working-directory: cover-channel-lab
+        env: {HF_TOKEN: ${{ secrets.HF_TOKEN }}}
+        run: ./scripts/upload_hf.sh "$RUNNER_TEMP/stage-m-catalog" "releases/${{ steps.mode.outputs.release_id }}/stage-m-catalog" "Stage M positive catalog $GITHUB_SHA"
+
+  smoke:
+    needs: plan
+    if: needs.plan.outputs.mode == 'smoke'
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [clean, wan_80ms]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install runner dependencies with retry
+        working-directory: cover-channel-lab
+        run: |
+          set -euo pipefail
+          ok=false
+          for n in 1 2 3; do
+            if ./scripts/install_runner.sh; then ok=true; break; fi
+            sleep $((n*20))
+          done
+          [[ "$ok" == true ]]
+          python -m pip install -r requirements.txt
+      - name: Generate positive-only smoke shard
+        working-directory: cover-channel-lab
+        run: ./scripts/run_stage_m_ci.sh "${{ matrix.profile }}" 0 1 "$RUNNER_TEMP/stage-m" "M-smoke-${{ matrix.profile }}" 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-smoke-${{ matrix.profile }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m/release
+          retention-days: 30
+          compression-level: 0
+
+  full:
+    needs: plan
+    if: needs.plan.outputs.mode == 'full'
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        profile: [clean, wan_20ms, wan_80ms, lossy_wifi, constrained]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install runner dependencies with retry
+        working-directory: cover-channel-lab
+        run: |
+          set -euo pipefail
+          ok=false
+          for n in 1 2 3; do
+            if ./scripts/install_runner.sh; then ok=true; break; fi
+            sleep $((n*20))
+          done
+          [[ "$ok" == true ]]
+          python -m pip install -r requirements.txt
+      - name: Generate Stage M positive shard
+        working-directory: cover-channel-lab
+        run: |
+          name="M-${{ matrix.profile }}-${{ matrix.shard }}"
+          ./scripts/run_stage_m_ci.sh "${{ matrix.profile }}" "${{ matrix.shard }}" 8 "$RUNNER_TEMP/stage-m" "$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-${{ matrix.profile }}-${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m/release
+          retention-days: 90
+          compression-level: 0
+      - name: Publish shard to HF
+        if: needs.plan.outputs.hf_enabled == 'true'
+        working-directory: cover-channel-lab
+        env: {HF_TOKEN: ${{ secrets.HF_TOKEN }}}
+        run: |
+          name="M-${{ matrix.profile }}-${{ matrix.shard }}"
+          ./scripts/upload_hf.sh "$RUNNER_TEMP/stage-m/release" "releases/${{ needs.plan.outputs.release_id }}/stage-m/$name" "Stage M positive $name $GITHUB_SHA"
