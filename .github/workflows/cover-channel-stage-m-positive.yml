@@ -100,7 +100,7 @@ jobs:
           python -m pip install -r requirements.txt
       - name: Generate positive-only smoke shard
         working-directory: cover-channel-lab
-        run: bash ./scripts/run_stage_m_ci.sh "${{ matrix.profile }}" 0 1 "$RUNNER_TEMP/stage-m" "M-smoke-${{ matrix.profile }}" 1
+        run: bash ./scripts/run_stage_m_ci.sh "${{ matrix.profile }}" 0 1 "$RUNNER_TEMP/stage-m" "M-smoke-${{ matrix.profile }}" smoke
       - uses: actions/upload-artifact@v4
         with:
           name: stage-m-smoke-${{ matrix.profile }}-${{ github.run_id }}
