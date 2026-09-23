@@ -120,6 +120,77 @@ async def events(request: Request):
 
 
 
+@app.get("/stage-m/browser")
+async def stage_m_browser(request: Request):
+    """Browser/BoringSSL implementation for the isolated Stage M corpus.
+
+    All generated destinations are local *.stage-m.test fixtures.  The page
+    only emits HTTP/DoH/WebSocket traffic shapes; it cannot execute commands or
+    proxy arbitrary destinations.
+    """
+    q=request.query_params
+    campaign=str(q.get("campaign","m-browser"))
+    family=str(q.get("family","M-HTTPS-BEACON"))
+    mode=str(q.get("mode","fetch"))
+    payload_style=str(q.get("payload","low_entropy_code"))
+    try: events=max(1,min(100,int(q.get("events","5"))))
+    except Exception: events=5
+    safe_campaign="".join(c for c in campaign if c.isalnum() or c in "-_")[:96]
+    js=f"""
+const campaign={json.dumps(safe_campaign)};
+const family={json.dumps(family)};
+const mode={json.dumps(mode)};
+const payloadStyle={json.dumps(payload_style)};
+const events={events};
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+function value(i){{
+  if(payloadStyle==='low_entropy_code') return ['ok','go','id','up','do','cfg','ack','sync'][i%8]+(i%10);
+  if(payloadStyle==='guid') return crypto.randomUUID();
+  if(payloadStyle==='fragment_2_6') return ('abcxyz0123456789'.slice(i%10,i%10+2+(i%5))).slice(0,6);
+  if(payloadStyle==='hex_fixed'){{
+    const a=new Uint8Array(16);crypto.getRandomValues(a);return Array.from(a).map(x=>x.toString(16).padStart(2,'0')).join('');
+  }}
+  const a=new Uint8Array(32);crypto.getRandomValues(a);return btoa(String.fromCharCode(...a)).replaceAll('=','');
+}}
+async function runFetch(){{
+  for(let i=0;i<events;i++){{
+    const v=value(i);
+    if(family==='M-HTTPS-FRAG') await fetch('/stage-m/frag/'+campaign+'/'+i+'?v='+encodeURIComponent(v),{{cache:'no-store'}});
+    else await fetch('/stage-m/fetch/'+campaign+'/'+i,{{method:'POST',cache:'no-store',headers:{{'Content-Type':'application/json','X-Stage-M-Campaign':campaign}},body:JSON.stringify({{id:v,seq:i}})}});
+    await sleep(15);
+  }}
+}}
+async function runDoh(){{
+  for(let i=0;i<events;i++){{
+    const b=new Uint8Array([0,1,1,0,0,1,0,0,0,0,0,0]);
+    await fetch('/dns-query?campaign='+encodeURIComponent(campaign)+'&seq='+i,{{method:'POST',headers:{{'Content-Type':'application/dns-message','Accept':'application/dns-message'}},body:b,cache:'no-store'}});
+    await sleep(15);
+  }}
+}}
+async function runWs(){{
+  const w=new WebSocket('wss://ws.stage-m.test:8443/ws');
+  await new Promise((res,rej)=>{{w.onopen=res;w.onerror=rej;}});
+  for(let i=0;i<events;i++){{w.send(JSON.stringify({{type:'stage_m',campaign_id:campaign,seq:i,value:value(i)}}));await sleep(15);}}
+  await sleep(50);w.close();
+}}
+async function runDeadDrop(){{
+  await fetch('/stage-m/dead-drop/'+campaign+'/0?id='+encodeURIComponent(value(0)),{{cache:'no-store'}});
+  for(let i=1;i<events;i++){{
+    await fetch('https://beacon.stage-m.test:8443/stage-m/beacon/'+campaign+'/'+i+'?id='+encodeURIComponent(value(i)),{{mode:'no-cors',cache:'no-store'}});
+    await sleep(15);
+  }}
+}}
+(async()=>{{
+  if(mode==='doh') await runDoh();
+  else if(mode==='wss') await runWs();
+  else if(mode==='dead_drop') await runDeadDrop();
+  else await runFetch();
+  document.body.dataset.done='1';
+}})().catch(e=>{{document.body.dataset.error=String(e);}});
+"""
+    return HTMLResponse("<html><body><script>"+js+"</script>stage-m browser fixture</body></html>")
+
+
 @app.get("/browser-fixture/{sid}")
 async def browser_fixture(sid: str):
     # Genuine browser network primitives against LOCAL .test endpoints only.
