@@ -1,2 +1,2 @@
 mode=smoke
-trigger=premerge-smoke-1
+trigger=premerge-smoke-2-port-fix
