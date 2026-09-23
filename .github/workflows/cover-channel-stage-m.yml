@@ -1,0 +1,187 @@
+name: Cover Channel Stage M Positive
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "smoke or full positive corpus"
+        required: true
+        default: smoke
+        type: choice
+        options: [smoke, full]
+      shards:
+        description: "Number of Stage M shards"
+        required: true
+        default: "10"
+        type: string
+  push:
+    branches: [stage-m-positive-corpus]
+    paths:
+      - ".coverlab/stage-m-trigger.txt"
+      - ".github/workflows/cover-channel-stage-m.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      release_id: ${{ steps.plan.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          mode="smoke"
+          shards="1"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            mode="${{ inputs.mode }}"
+            shards="${{ inputs.shards }}"
+          elif [[ -f .coverlab/stage-m-trigger.txt ]]; then
+            mode="$(awk -F= '$1=="mode"{print $2}' .coverlab/stage-m-trigger.txt | tail -1)"
+            shards="$(awk -F= '$1=="shards"{print $2}' .coverlab/stage-m-trigger.txt | tail -1)"
+            [[ -n "$mode" ]] || mode=smoke
+            [[ -n "$shards" ]] || shards=1
+          fi
+          [[ "$mode" == smoke || "$mode" == full ]] || { echo "invalid mode=$mode" >&2; exit 2; }
+          [[ "$shards" =~ ^[0-9]+$ ]] || { echo "invalid shards=$shards" >&2; exit 2; }
+          if [[ "$mode" == smoke ]]; then shards=1; fi
+          (( shards >= 1 && shards <= 20 )) || { echo "shards must be 1..20" >&2; exit 2; }
+          export MODE="$mode" SHARDS="$shards"
+          matrix="$(python - <<'PY'
+          import json, os
+          profiles=["clean","wan_20ms","wan_80ms","lossy_wifi","constrained"]
+          n=int(os.environ["SHARDS"])
+          print(json.dumps([{"shard":i,"shards":n,"profile":profiles[i%len(profiles)]} for i in range(n)],separators=(",",":")))
+          PY
+          )"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "release_id=stage-m-gh-${{ github.run_id }}-a${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+          echo "$matrix"
+
+  unit:
+    needs: plan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - working-directory: cover-channel-lab
+        run: |
+          python -m pip install -r requirements.txt
+          PYTHONPATH=src python -m pytest -q tests/test_stage_m.py
+
+  generate:
+    needs: [plan, unit]
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Install runner
+        working-directory: cover-channel-lab
+        run: bash ./scripts/install_runner.sh
+      - name: Generate Stage M positive shard
+        working-directory: cover-channel-lab
+        env:
+          COVERLAB_STAGE_M_TIME_SCALE: ${{ needs.plan.outputs.mode == 'smoke' && '0.0002' || '0.001' }}
+          COVERLAB_STAGE_M_MAX_SLEEP_SECONDS: "0.05"
+        run: |
+          name="M-positive-$(printf '%02d' ${{ matrix.shard }})"
+          bash ./scripts/run_stage_m_ci.sh "${{ needs.plan.outputs.mode }}" "${{ matrix.shard }}" "${{ matrix.shards }}" "${{ matrix.profile }}" "$RUNNER_TEMP/stage-m" "$name"
+      - name: Upload GitHub artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-positive-${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m/release
+          retention-days: 90
+          compression-level: 0
+      - name: Publish shard to Hugging Face
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [[ -n "$HF_TOKEN" ]]; then
+            name="M-positive-$(printf '%02d' ${{ matrix.shard }})"
+            ./scripts/upload_hf.sh "$RUNNER_TEMP/stage-m/release" "releases/${{ needs.plan.outputs.release_id }}/$name" "Stage M positive-only $name $GITHUB_SHA"
+          else
+            echo "HF_TOKEN unavailable; GitHub artifact remains the temporary copy"
+          fi
+
+  verify:
+    needs: [plan, generate]
+    if: always() && needs.generate.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stage-m-positive-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/all-stage-m
+          merge-multiple: true
+      - name: Merge and verify positive-only corpus
+        working-directory: cover-channel-lab
+        env:
+          MODE: ${{ needs.plan.outputs.mode }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/stage-m-final"
+          find "$RUNNER_TEMP/all-stage-m" -path '*/bronze/*/manifests/campaigns.jsonl' -type f -print0 | sort -z | xargs -0 cat > "$RUNNER_TEMP/stage-m-final/campaigns.jsonl"
+          find "$RUNNER_TEMP/all-stage-m" -path '*/bronze/*/manifests/events.jsonl' -type f -print0 | sort -z | xargs -0 cat > "$RUNNER_TEMP/stage-m-final/events.jsonl"
+          if [[ "$MODE" == full ]]; then
+            PYTHONPATH=src python -m coverlab.stage_m validate --manifest "$RUNNER_TEMP/stage-m-final/campaigns.jsonl" --require-full | tee "$RUNNER_TEMP/stage-m-final/positive_contract.json"
+          else
+            PYTHONPATH=src python -m coverlab.stage_m validate --manifest "$RUNNER_TEMP/stage-m-final/campaigns.jsonl" | tee "$RUNNER_TEMP/stage-m-final/positive_contract.json"
+          fi
+          python - <<'PY'
+          import json, os
+          from collections import Counter
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"stage-m-final"/"campaigns.jsonl"
+          rows=[json.loads(x) for x in p.read_text().splitlines() if x.strip()]
+          out={
+            "mode":os.environ["MODE"],
+            "positive_only":all(r.get("label_binary")==1 for r in rows),
+            "campaigns":len(rows),
+            "families":dict(sorted(Counter(r["scenario_id"] for r in rows).items())),
+            "implementations":len({r["implementation_id"] for r in rows}),
+            "clients":sorted({r["client_impl"] for r in rows}),
+            "servers":sorted({r["server_impl"] for r in rows}),
+            "netem":sorted({r["netem_profile"] for r in rows}),
+          }
+          (p.parent/"inventory.json").write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
+          print(json.dumps(out,sort_keys=True))
+          if not out["positive_only"]: raise SystemExit("non-positive row found")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-positive-final-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m-final
+          retention-days: 90
+      - name: Publish final manifest to Hugging Face
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [[ -n "$HF_TOKEN" ]]; then
+            ./scripts/upload_hf.sh "$RUNNER_TEMP/stage-m-final" "releases/${{ needs.plan.outputs.release_id }}/final-manifest" "Stage M positive-only final manifest $GITHUB_SHA"
+          fi
