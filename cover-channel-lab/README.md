@@ -76,10 +76,17 @@ release/
 | G — trusted-service background | LOTS-inspired / commodity-service traffic as **benign hard negatives only**; never a positive target |
 | H — future transport holdout | 1,400 H3/QUIC, CONNECT, H3 datagram, WebTransport and privacy sessions |
 | I — adversarial holdout | 500 post-baseline suspicious sessions, never train data |
+| M — positive implementation diversity | 4,950 positive-only campaigns across 13 channel families, five network profiles and explicit unseen-implementation holdouts |
 
 Stage E generalization is enforced by campaign-level grouping and explicit holdouts. `node_fetch`/`python_stdlib`, selected carriers/transforms, browser challenge, trusted-background, future transport and adversarial stages are excluded from train according to the split contract.
 
 The internal workflow key for Stage G remains `lots` for backward compatibility with the original generation plan, but its dataset contract is explicitly benign: `label_binary=0`, `label_family=benign`, `label_intent=benign`, `attack_mapping=[]`, `experiment_stage=G_trusted_background`, `dataset_role=hard_negative`. In mixed captures, a positive draw can never use a LOTS-family scenario; an actual Cover Channel carrier is substituted instead.
+
+## Stage M positive-only corpus
+
+Stage M is deliberately separate from the historical mixed/benign stages. It expands the positive class across independent client implementations, DNS direct-versus-recursive topology, network-domain randomization, event-count/timing variation, direction/asymmetry and complete per-family implementation holdouts. It does **not** add a synthetic legitimate class or train a binary model without real office negatives.
+
+See [STAGE_M_POSITIVE_CORPUS.md](docs/STAGE_M_POSITIVE_CORPUS.md) for the catalog, safety boundary, timestamp-retiming contract, holdout policy and artifact layout.
 
 ## Model artifacts
 
