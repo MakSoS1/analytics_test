@@ -10,7 +10,7 @@ on:
         type: choice
         options: [smoke, core, full]
   push:
-    branches: [coverlab-finish-2026-09]
+    branches: [coverlab-finish-2026-09, stage-m-positive-build]
     paths:
       - '.coverlab/stage-m-positive.txt'
 
