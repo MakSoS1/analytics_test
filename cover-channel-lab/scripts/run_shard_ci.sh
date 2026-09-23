@@ -12,7 +12,7 @@ trap cleanup EXIT
 # Tear down the prior lab first so orphan namespaces/veths cannot collide with
 # the deterministic topology names used below.
 "$ROOT/scripts/stop_services.sh" || true
-for dev in v-office v-dev v-c2 v-devops v-soc; do sudo ip link del "$dev" 2>/dev/null || true; done
+for dev in v-office v-dev v-c2 v-devops v-soc v-dns; do sudo ip link del "$dev" 2>/dev/null || true; done
 "$ROOT/scripts/setup_netns.sh"
 "$ROOT/scripts/start_services.sh"
 PROFILE="${COVERLAB_NETEM_PROFILE:-clean}"
