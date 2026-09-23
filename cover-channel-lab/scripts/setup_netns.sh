@@ -28,19 +28,24 @@ create_ns cc-c2 10.20.0.20
 # Dedicated WSS fixture address. It remains on the same isolated lab segment and
 # has no forwarding role; separating it avoids sharing Hypercorn's TLS listener.
 sudo ip netns exec cc-c2 ip addr add 10.20.0.21/24 dev eth0
+# Stage M local recursive DNS fixture. It is still inside cc-c2 and has no
+# default route or forwarding path to the Internet.
+sudo ip netns exec cc-c2 ip addr add 10.20.0.40/24 dev eth0
+# Allow the unprivileged fixture process to bind local lab ports 53/80/443.
+sudo ip netns exec cc-c2 sysctl -q -w net.ipv4.ip_unprivileged_port_start=0
 create_ns cc-devops 10.20.0.30
 create_ns cc-soc 10.20.0.31
 
 # Only the custom RFC6455 fixture aliases resolve to 10.20.0.21. MQTT itself
 # also uses WebSockets, but it is served by Mosquitto on 10.20.0.20:9443 and
 # therefore must not be sent to the custom WSS listener.
-WSS_HOSTS=(cover-ws.test lots-tunnel.test dyndns-relay.test)
+WSS_HOSTS=(cover-ws.test lots-tunnel.test dyndns-relay.test ws.stage-m.test)
 for h in "${WSS_HOSTS[@]}"; do
   sudo sed -i -E "/[[:space:]]${h//./\\.}([[:space:]]|$)/d" /etc/hosts
   echo "10.20.0.21 $h" | sudo tee -a /etc/hosts >/dev/null
 done
 
-HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-bucket.test benign-devtunnel.test doh-relay.test synthetic-api.test echo.test mqtt-broker.test)
+HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-bucket.test benign-devtunnel.test doh-relay.test synthetic-api.test echo.test mqtt-broker.test beacon.stage-m.test api.stage-m.test doh.stage-m.test cdn.stage-m.test workers.stage-m.test graph.stage-m.test telegram.stage-m.test resolver.stage-m.test)
 for h in "${HOSTS[@]}"; do
   sudo sed -i -E "/[[:space:]]${h//./\\.}([[:space:]]|$)/d" /etc/hosts
   echo "10.20.0.20 $h" | sudo tee -a /etc/hosts >/dev/null
