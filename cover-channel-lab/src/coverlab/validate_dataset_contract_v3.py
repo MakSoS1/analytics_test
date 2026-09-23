@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .validate_dataset_contract import validate as validate_v2
+from .stage_m_contract import NETWORK_PROFILES
 
 
 def _read(path: Path):
@@ -27,6 +28,21 @@ def validate(stage_dir: Path) -> dict:
             if int(r.get('timing_acceleration',1)) != 1: errors.append(f'{cid}: Stage L timing must not be accelerated')
             if float(r.get('real_interval_seconds',0)) <= 0: errors.append(f'{cid}: Stage L missing real interval')
             if r.get('training_eligible') is not False: errors.append(f'{cid}: Stage L must be challenge-only')
+        if stage=='M_positive_diversity' or cid.startswith('m-'):
+            if label != 1: errors.append(f'{cid}: Stage M must be positive')
+            if r.get('positive_only') is not True: errors.append(f'{cid}: Stage M missing positive_only=true')
+            if r.get('external_dependency') is not False: errors.append(f'{cid}: Stage M must be fully local')
+            for key in ('family_id','implementation_id','client_stack','server_stack','network_profile','event_count_target','nominal_interval_seconds','holdout_groups'):
+                if key not in r or r.get(key) in (None,'',{}): errors.append(f'{cid}: Stage M missing {key}')
+            if str(r.get('network_profile','')) not in NETWORK_PROFILES:
+                errors.append(f'{cid}: Stage M unknown network profile {r.get("network_profile")!r}')
+            tier=str(r.get('tier',''))
+            if tier=='implementation_holdout':
+                if r.get('training_eligible') is not False: errors.append(f'{cid}: Stage M holdout must be training-ineligible')
+                if role!='positive_implementation_holdout': errors.append(f'{cid}: Stage M holdout role={role!r}')
+            else:
+                if r.get('training_eligible') is not True: errors.append(f'{cid}: Stage M train/diversity row must be training eligible')
+                if role!='positive_cover_channel': errors.append(f'{cid}: Stage M positive role={role!r}')
         if stage=='J_framework_holdout':
             if r.get('training_eligible') is not False or r.get('dataset_role')!='external_framework_holdout':
                 errors.append(f'{cid}: framework holdout leaked into training contract')
