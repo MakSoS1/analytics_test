@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ $# -lt 5 ]]; then
-  echo "usage: $0 NETWORK_PROFILE SHARD SHARDS WORK_ROOT SHARD_NAME [LIMIT_PER_FAMILY]" >&2
+  echo "usage: $0 NETWORK_PROFILE SHARD SHARDS WORK_ROOT SHARD_NAME [smoke|LIMIT_PER_FAMILY]" >&2
   exit 2
 fi
-PROFILE="$1" SHARD="$2" SHARDS="$3" WORK="$4" NAME="$5" LIMIT_PER_FAMILY="${6:-0}"
+PROFILE="$1" SHARD="$2" SHARDS="$3" WORK="$4" NAME="$5" MODE="${6:-}"
+EXTRA_ARGS=()
+if [[ "$MODE" == "smoke" ]]; then
+  EXTRA_ARGS+=(--smoke-implementations)
+elif [[ "$MODE" =~ ^[0-9]+$ && "$MODE" -gt 0 ]]; then
+  EXTRA_ARGS+=(--limit-per-family "$MODE")
+fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAGE_DIR="$WORK/stage" PARSER_DIR="$WORK/parsers" RELEASE_DIR="$WORK/release"
 RAW_PCAP="$WORK/capture.raw.pcap" PCAP="$WORK/capture.pcap"
@@ -35,7 +41,7 @@ for idx in 0 1 2 3; do
     COVERLAB_STAGE_M_NODE_CLIENT="$ROOT/clients/stage_m_node_client.mjs" COVERLAB_STAGE_M_GO_TUNNEL=/tmp/coverlab-stage-m-go-tunnel \
     NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
     python -m coverlab.stage_m_runtime --out "$pdir" --capture-file "$(basename "$PCAP")" \
-      --network-profile "$PROFILE" --shard "$SHARD" --shards "$SHARDS" --persona-index "$idx" --limit-per-family "$LIMIT_PER_FAMILY" &
+      --network-profile "$PROFILE" --shard "$SHARD" --shards "$SHARDS" --persona-index "$idx" "${EXTRA_ARGS[@]}" &
   PIDS+=("$!")
 done
 rc=0
