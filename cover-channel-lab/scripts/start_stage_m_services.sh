@@ -51,7 +51,7 @@ probe() {
 }
 
 NS_DEV=(sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" NO_PROXY="$COMMON_NO_PROXY" no_proxy="$COMMON_NO_PROXY")
-probe asgi "${NS_DEV[@]}" curl --noproxy '*' -ksS https://stage-m-asgi.test:9443/healthz
+probe asgi "${NS_DEV[@]}" curl --noproxy '*' -ksS https://stage-m-asgi.test:9543/healthz
 probe go "${NS_DEV[@]}" curl --noproxy '*' -ksS https://stage-m-go.test:9444/healthz
 probe node "${NS_DEV[@]}" curl --noproxy '*' -ksS https://stage-m-node.test:9445/healthz
 probe plain443 "${NS_DEV[@]}" curl --noproxy '*' -sS http://plain-http.test:443/healthz
