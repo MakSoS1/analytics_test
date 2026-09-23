@@ -27,7 +27,10 @@ create_ns cc-dev 10.20.0.11
 create_ns cc-c2 10.20.0.20
 # Dedicated WSS fixture address. It remains on the same isolated lab segment and
 # has no forwarding role; separating it avoids sharing Hypercorn's TLS listener.
-sudo ip netns exec cc-c2 ip addr add 10.20.0.21/24 dev eth0\n# Stage M nginx front and recursive DNS fixture addresses.\nsudo ip netns exec cc-c2 ip addr add 10.20.0.22/24 dev eth0\nsudo ip netns exec cc-c2 ip addr add 10.20.0.23/24 dev eth0
+sudo ip netns exec cc-c2 ip addr add 10.20.0.21/24 dev eth0
+# Stage M nginx front and recursive DNS fixture addresses.
+sudo ip netns exec cc-c2 ip addr add 10.20.0.22/24 dev eth0
+sudo ip netns exec cc-c2 ip addr add 10.20.0.23/24 dev eth0
 create_ns cc-devops 10.20.0.30
 create_ns cc-soc 10.20.0.31
 
