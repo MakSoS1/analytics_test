@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,13 @@ _v2_build_gold = _v2.build_gold
 def assign_split(row: pd.Series) -> str:
     stage=str(row.get('experiment_stage','')).lower(); role=str(row.get('dataset_role','')).lower(); cid=str(row.get('campaign_id',''))
     training=row.get('training_eligible', True)
+    # Stage M uses an explicit implementation holdout.  Do not let historical
+    # client/carrier holdout rules silently reshape this positive-only split.
+    if stage=='m_positive_diversity' or cid.startswith('m-'):
+        if role=='implementation_holdout' or str(row.get('primary_split','')).lower()=='implementation_holdout' or training is False or str(training).lower()=='false':
+            return 'challenge'
+        x=int(hashlib.sha256(cid.encode()).hexdigest()[:8],16)%100
+        return 'train' if x<80 else 'validation' if x<90 else 'test'
     if training is False or str(training).lower()=='false' or stage in {'j_framework_holdout','l_long_timing'} or role in {'external_framework_holdout','long_timing_challenge'} or cid.startswith(('j-','l-')):
         return 'challenge'
     return _v2_assign(row)
@@ -30,7 +38,15 @@ def leakage_audit(df: pd.DataFrame, split_counts: dict[str,int]) -> dict[str,Any
     ineligible=training.astype(str).str.lower().eq('false') | training.eq(False)
     bad=df.loc[ineligible & ~split.eq('challenge'),'campaign_id'].astype(str).tolist()
     report['training_ineligible_outside_challenge']=bad
-    report['passed']=bool(report.get('passed',False)) and not bad
+    stage_m_leaks=[]
+    if {'scenario_id','implementation_id','primary_split'}.issubset(df.columns):
+        m=df[df.get('experiment_stage',pd.Series(['']*len(df),index=df.index)).astype(str).str.lower().eq('m_positive_diversity')]
+        if not m.empty:
+            train_pairs=set(zip(m.loc[m.primary_split.astype(str).eq('train_candidate'),'scenario_id'].astype(str),m.loc[m.primary_split.astype(str).eq('train_candidate'),'implementation_id'].astype(str)))
+            hold_pairs=set(zip(m.loc[m.primary_split.astype(str).eq('implementation_holdout'),'scenario_id'].astype(str),m.loc[m.primary_split.astype(str).eq('implementation_holdout'),'implementation_id'].astype(str)))
+            stage_m_leaks=sorted(f'{a}:{b}' for a,b in train_pairs & hold_pairs)
+    report['stage_m_implementation_holdout_leakage']=stage_m_leaks
+    report['passed']=bool(report.get('passed',False)) and not bad and not stage_m_leaks
     return report
 
 
