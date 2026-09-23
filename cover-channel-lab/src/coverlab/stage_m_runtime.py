@@ -318,7 +318,7 @@ def run_one(plan,persona,source_ip,capture_file,manifest,out):
 
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument("--out",required=True);ap.add_argument("--capture-file",required=True);ap.add_argument("--network-profile",required=True);ap.add_argument("--shard",type=int,default=0);ap.add_argument("--shards",type=int,default=1);ap.add_argument("--persona-index",type=int,choices=range(4),required=True);ap.add_argument("--limit",type=int,default=0);ap.add_argument("--family",action="append",default=[]);a=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument("--out",required=True);ap.add_argument("--capture-file",required=True);ap.add_argument("--network-profile",required=True);ap.add_argument("--shard",type=int,default=0);ap.add_argument("--shards",type=int,default=1);ap.add_argument("--persona-index",type=int,choices=range(4),required=True);ap.add_argument("--limit",type=int,default=0);ap.add_argument("--limit-per-family",type=int,default=0);ap.add_argument("--family",action="append",default=[]);a=ap.parse_args()
     out=Path(a.out);out.mkdir(parents=True,exist_ok=True);manifest=out/"campaigns.jsonl";events=out/"events.jsonl";manifest.touch();events.touch()
     plans=list(iter_campaigns());check=validate_plan(plans)
     if not check["passed"]:raise SystemExit(json.dumps(check))
@@ -328,6 +328,13 @@ def main():
         if gi%4!=a.persona_index:continue
         if local%a.shards==a.shard:selected.append(p)
         local+=1
+    if a.limit_per_family>0:
+        kept=[];seen={}
+        for p in selected:
+            n=seen.get(p.family_id,0)
+            if n<a.limit_per_family:
+                kept.append(p);seen[p.family_id]=n+1
+        selected=kept
     if a.limit>0:selected=selected[:a.limit]
     persona,source_ip=PERSONAS[a.persona_index]
     for p in selected:run_one(p,persona,source_ip,a.capture_file,manifest,events)
