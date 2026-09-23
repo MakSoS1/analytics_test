@@ -21,6 +21,18 @@ DNS_IMPLS = ("dnspython_udp", "raw_udp", "raw_tcp", "node_dns")
 DOH_IMPLS = ("python_httpx_h2", "curl_h2", "node_fetch", "chromium_doh")
 WSS_IMPLS = ("python_websockets", "python_raw_ws", "node_websocket", "chromium_websocket")
 TUNNEL_IMPLS = ("python_socket", "python_asyncio", "node_net", "go_net")
+DEAD_DROP_IMPLS = (
+    "python_httpx_h1+curl_h1",
+    "curl_h1+python_stdlib",
+    "go_nethttp+node_fetch",
+    "node_fetch+go_nethttp",
+    "chromium_fetch+chromium_fetch",
+)
+SERVER_PROFILES = ("hypercorn_default", "asyncio_tls12", "asyncio_tls13")
+HTTP_TRANSFER_STYLES = ("content_length", "chunked")
+DOH_METHODS = ("POST", "GET")
+TLS_SESSION_MODES = ("fresh", "resumption_attempt")
+WS_COMPRESSION_MODES = ("none", "deflate")
 
 FRONT_HOSTS = (
     "cdn.stage-m.test",
@@ -118,6 +130,7 @@ FAMILY_SPECS: tuple[FamilySpec, ...] = (
         connection_policies=("datagram", "tcp"),
         dns_topologies=("direct_authoritative", "recursive_local"),
         qtypes=("A", "AAAA", "TXT"),
+        behaviors=("udp_only", "udp_retry", "udp_then_tcp"),
     ),
     FamilySpec(
         "M-DOH", "https", "dns_over_https", "c2", ("T1071.004", "T1071.001"),
@@ -128,7 +141,7 @@ FAMILY_SPECS: tuple[FamilySpec, ...] = (
     ),
     FamilySpec(
         "M-DEAD-DROP", "https+https", "two_phase_dead_drop", "c2", ("T1102.001", "T1071.001"),
-        200, 80, 50, HTTP_IMPLS, "chromium_fetch",
+        200, 80, 50, DEAD_DROP_IMPLS, "chromium_fetch+chromium_fetch",
         ("low_entropy_code", "guid"),
         (1, 5, 30, 300),
         ("small_small", "small_large"),
@@ -159,7 +172,7 @@ FAMILY_SPECS: tuple[FamilySpec, ...] = (
         ("small_small",),
         dns_topologies=("direct_authoritative", "recursive_local"),
         qtypes=("A", "AAAA", "TXT"),
-        behaviors=("https_to_dns", "dns_to_https"),
+        behaviors=("https_to_dns_early", "https_to_dns_mid", "https_to_dns_late", "dns_to_https_early", "dns_to_https_mid", "dns_to_https_late"),
     ),
     FamilySpec(
         "M-RMM-SHAPE", "http+https", "poll_then_interactive_burst", "c2", ("T1219", "T1071.001"),
@@ -192,6 +205,12 @@ class CampaignPlan:
     dns_topology: str
     qtype: str
     behavior_profile: str
+    server_impl: str
+    tls_profile: str
+    tls_session_mode: str
+    http_transfer_style: str
+    doh_method: str
+    ws_compression: str
     seed: int
     index_in_family: int
 
@@ -232,6 +251,27 @@ def iter_campaigns(seed: int = 26092301) -> Iterable[CampaignPlan]:
                 dns_topology = _choose(spec.dns_topologies, n * 41 + global_index)
                 qtype = _choose(spec.qtypes, n * 43 + global_index) if spec.qtypes else ""
                 behavior = _choose(spec.behaviors, n * 47 + global_index) if spec.behaviors else ""
+                http_impl = str(impl).split("+", 1)[0]
+                if spec.family_id == "M-HTTP-443":
+                    server_impl = "hypercorn_plain"
+                elif spec.protocol in {"https", "https+https", "https+dns", "http+https"}:
+                    if "h2" in http_impl or "chromium" in http_impl:
+                        server_impl = "hypercorn_default"
+                    else:
+                        server_impl = _choose(SERVER_PROFILES, n * 53 + global_index)
+                else:
+                    server_impl = "local_protocol_fixture"
+                tls_profile = {"asyncio_tls12": "tls12", "asyncio_tls13": "tls13"}.get(str(server_impl), "default")
+                if http_impl == "python_stdlib" and tls_profile in {"tls12", "tls13"}:
+                    tls_session_mode = _choose(TLS_SESSION_MODES, n * 59 + global_index)
+                else:
+                    tls_session_mode = "fresh"
+                transfer_style = _choose(HTTP_TRANSFER_STYLES, n * 61 + global_index)
+                doh_method = _choose(DOH_METHODS, n * 67 + global_index) if spec.family_id == "M-DOH" else ""
+                if spec.family_id == "M-WSS-LONG" and str(impl) in {"python_websockets", "chromium_websocket"}:
+                    ws_compression = _choose(WS_COMPRESSION_MODES, n * 71 + global_index)
+                else:
+                    ws_compression = "none"
                 cid = f"m-{spec.family_id[2:].lower()}-{tier[0]}-{n:05d}"
                 yield CampaignPlan(
                     campaign_id=cid,
@@ -250,6 +290,12 @@ def iter_campaigns(seed: int = 26092301) -> Iterable[CampaignPlan]:
                     dns_topology=str(dns_topology),
                     qtype=str(qtype),
                     behavior_profile=str(behavior),
+                    server_impl=str(server_impl),
+                    tls_profile=str(tls_profile),
+                    tls_session_mode=str(tls_session_mode),
+                    http_transfer_style=str(transfer_style),
+                    doh_method=str(doh_method),
+                    ws_compression=str(ws_compression),
                     seed=seed + global_index * 1009 + n,
                     index_in_family=n,
                 )
@@ -264,6 +310,8 @@ def build_split_summary(plans: Iterable[CampaignPlan]) -> dict:
         "network_profile": sorted({x.network_profile for x in rows}),
         "payload_style": sorted({x.payload_style for x in rows}),
         "nominal_interval_seconds": sorted({x.nominal_interval_seconds for x in rows}),
+        "server_impl": sorted({x.server_impl for x in rows}),
+        "tls_profile": sorted({x.tls_profile for x in rows}),
     }
     folds = []
     for spec in FAMILY_SPECS:
@@ -273,7 +321,7 @@ def build_split_summary(plans: Iterable[CampaignPlan]) -> dict:
             train = len(family_rows) - test
             if test:
                 folds.append({"dimension": "implementation_id", "family_id": spec.family_id, "held_out": impl, "train_count": train, "test_count": test})
-    for dim in ("network_profile", "payload_style", "nominal_interval_seconds"):
+    for dim in ("network_profile", "payload_style", "nominal_interval_seconds", "server_impl", "tls_profile"):
         for value in dimensions[dim]:
             test = sum(getattr(x, dim) == value for x in rows)
             folds.append({"dimension": dim, "held_out": value, "train_count": len(rows)-test, "test_count": test})
