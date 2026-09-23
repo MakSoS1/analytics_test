@@ -24,7 +24,7 @@ import ssl
 import subprocess
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -580,6 +580,16 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
 
 def generate(args: argparse.Namespace) -> dict:
     specs = build_specs(args.mode)
+    family_filter = {x.strip() for x in os.environ.get("COVERLAB_STAGE_M_FAMILY_FILTER", "").split(",") if x.strip()}
+    if family_filter:
+        specs = [s for s in specs if s.family in family_filter]
+    force_interval = os.environ.get("COVERLAB_STAGE_M_FORCE_INTERVAL_SECONDS")
+    event_cap = int(os.environ.get("COVERLAB_STAGE_M_EVENT_COUNT_CAP", "0") or 0)
+    if force_interval:
+        specs = [replace(s, interval_seconds=int(force_interval)) for s in specs]
+    if event_cap > 0:
+        specs = [replace(s, event_count=min(s.event_count, event_cap)) for s in specs]
+    campaign_limit = int(os.environ.get("COVERLAB_STAGE_M_CAMPAIGN_LIMIT", "0") or 0)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     manifest_path = out / "campaigns.jsonl"
@@ -601,6 +611,8 @@ def generate(args: argparse.Namespace) -> dict:
             for evt in events:
                 ef.write(json.dumps(evt, separators=(",", ":"), default=str) + "\n")
             selected += 1
+            if campaign_limit and selected >= campaign_limit:
+                break
     result = {
         "mode": args.mode,
         "shard": args.shard,
