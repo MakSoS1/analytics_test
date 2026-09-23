@@ -3,7 +3,7 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 sudo apt-get update -y
-sudo apt-get install -y software-properties-common tcpdump zstd jq curl ca-certificates openssl mosquitto mosquitto-clients iproute2 openjdk-21-jdk-headless
+sudo apt-get install -y software-properties-common tcpdump zstd jq curl ca-certificates openssl mosquitto mosquitto-clients iproute2 openjdk-21-jdk-headless nginx
 if ! grep -Rqs 'suricata-stable' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
   sudo add-apt-repository -y ppa:oisf/suricata-stable || true
 fi
