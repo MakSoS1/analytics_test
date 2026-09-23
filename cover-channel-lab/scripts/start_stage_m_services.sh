@@ -23,7 +23,7 @@ run_ns_root() {
   echo $! > "$LOGDIR/$name.pid"
 }
 
-run_c2_user stage-m-asgi-tls "$PYTHON_BIN" -m hypercorn coverlab.stage_m_asgi:app --bind 10.20.0.20:9443 --certfile "$CERTDIR/server.crt" --keyfile "$CERTDIR/server.key" --workers 1
+run_c2_user stage-m-asgi-tls "$PYTHON_BIN" -m hypercorn coverlab.stage_m_asgi:app --bind 10.20.0.20:9543 --certfile "$CERTDIR/server.crt" --keyfile "$CERTDIR/server.key" --workers 1
 run_c2_user stage-m-asgi-http "$PYTHON_BIN" -m hypercorn coverlab.stage_m_asgi:app --bind 10.20.0.20:9082 --workers 1
 run_c2_user stage-m-go /tmp/coverlab-stage-m-go-server --host 10.20.0.20 --http-port 9080 --https-port 9444 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key"
 run_c2_user stage-m-node node "$ROOT/clients/stage_m_node_server.mjs" --host 10.20.0.20 --http-port 9081 --https-port 9445 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key"
