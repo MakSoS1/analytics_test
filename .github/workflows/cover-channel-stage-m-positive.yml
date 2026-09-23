@@ -1,0 +1,117 @@
+name: Cover Channel Stage M Positive
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Corpus slice
+        required: true
+        default: full
+        type: choice
+        options: [smoke, core, full]
+  push:
+    branches: [coverlab-finish-2026-09]
+    paths:
+      - '.coverlab/stage-m-positive.txt'
+
+permissions:
+  contents: read
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+
+concurrency:
+  group: cover-channel-stage-m-positive-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      mode: ${{ steps.p.outputs.mode }}
+      profiles: ${{ steps.p.outputs.profiles }}
+      shards: ${{ steps.p.outputs.shards }}
+      total_shards: ${{ steps.p.outputs.total_shards }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        shell: bash
+        run: |
+          set -euo pipefail
+          mode='${{ github.event.inputs.mode }}'
+          if [[ -z "$mode" && -f .coverlab/stage-m-positive.txt ]]; then
+            mode="$(sed -n 's/^mode=//p' .coverlab/stage-m-positive.txt | tail -1)"
+          fi
+          mode="${mode:-smoke}"
+          case "$mode" in
+            smoke)
+              echo 'profiles=["clean"]' >> "$GITHUB_OUTPUT"
+              echo 'shards=[0]' >> "$GITHUB_OUTPUT"
+              echo 'total_shards=1' >> "$GITHUB_OUTPUT"
+              ;;
+            core|full)
+              echo 'profiles=["clean","wan_20ms","wan_80ms","lossy_wifi","constrained"]' >> "$GITHUB_OUTPUT"
+              echo 'shards=[0,1,2,3]' >> "$GITHUB_OUTPUT"
+              echo 'total_shards=4' >> "$GITHUB_OUTPUT"
+              ;;
+            *) echo "invalid mode: $mode" >&2; exit 2 ;;
+          esac
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+  generate:
+    needs: plan
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        profile: ${{ fromJSON(needs.plan.outputs.profiles) }}
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install isolated lab runtime
+        working-directory: cover-channel-lab
+        run: ./scripts/install_runner.sh
+      - name: Generate positive-only Stage M shard
+        working-directory: cover-channel-lab
+        env:
+          COVERLAB_NETEM_PROFILE: ${{ matrix.profile }}
+          COVERLAB_STAGE_M_SMOKE: ${{ needs.plan.outputs.mode == 'smoke' && '1' || '0' }}
+          COVERLAB_STAGE_M_TIER: ${{ needs.plan.outputs.mode == 'core' && 'core' || 'all' }}
+        run: |
+          set -euo pipefail
+          name="M-positive-${{ matrix.profile }}-s${{ matrix.shard }}"
+          ./scripts/run_shard_ci.sh stage_m '${{ matrix.shard }}' '${{ needs.plan.outputs.total_shards }}' "$RUNNER_TEMP/stage-m" "$name"
+      - name: Upload GitHub safety copy
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-positive-${{ matrix.profile }}-s${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m/release
+          retention-days: 90
+          compression-level: 0
+      - name: Publish positive shard to Hugging Face
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${HF_TOKEN:-}" ]]; then
+            echo "HF_TOKEN is not configured; GitHub artifact remains the safety copy"
+            exit 0
+          fi
+          ./scripts/upload_hf.sh             "$RUNNER_TEMP/stage-m/release"             "releases/stage-m-${GITHUB_RUN_ID}/positive/${{ matrix.profile }}-s${{ matrix.shard }}"             "Stage M positive-only ${{ matrix.profile }} shard ${{ matrix.shard }} $GITHUB_SHA"
+
+  complete:
+    needs: [plan, generate]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify matrix
+        run: |
+          echo "mode=${{ needs.plan.outputs.mode }}"
+          echo "generate=${{ needs.generate.result }}"
+          [[ '${{ needs.generate.result }}' == success ]]
