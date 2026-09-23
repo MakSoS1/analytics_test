@@ -120,7 +120,7 @@ async def handler(ws) -> None:
         return
 
 
-async def main_async(host: str, port: int, cert: str, key: str) -> None:
+async def main_async(host: str, port: int, cert: str, key: str, compression: str = "none") -> None:
     global _TRACE_QUEUE
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(certfile=cert, keyfile=key)
@@ -132,7 +132,7 @@ async def main_async(host: str, port: int, cert: str, key: str) -> None:
             host,
             port,
             ssl=ctx,
-            compression=None,
+            compression=None if compression == "none" else "deflate",
             max_size=1 << 20,
             max_queue=128,
             ping_interval=None,
@@ -154,8 +154,9 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8445)
     ap.add_argument("--cert", required=True)
     ap.add_argument("--key", required=True)
+    ap.add_argument("--compression", choices=["none", "deflate"], default="none")
     args = ap.parse_args()
-    asyncio.run(main_async(args.host, args.port, args.cert, args.key))
+    asyncio.run(main_async(args.host, args.port, args.cert, args.key, args.compression))
 
 
 if __name__ == "__main__":
