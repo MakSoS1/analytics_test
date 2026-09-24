@@ -102,7 +102,7 @@ jobs:
         env:
           COVERLAB_STAGE_M_EVENT_COUNT_CAP: ${{ inputs.mode == 'smoke' && '5' || '0' }}
           COVERLAB_STAGE_M_TIME_SCALE: ${{ inputs.time_scale }}
-          COVERLAB_STAGE_M_MAX_SLEEP_SECONDS: ${{ inputs.max_sleep_seconds == '-1' && '' || inputs.max_sleep_seconds }}
+          COVERLAB_STAGE_M_MAX_SLEEP_SECONDS: ${{ inputs.max_sleep_seconds }}
         run: |
           name="M-vm-positive-$(printf '%02d' ${{ matrix.shard }})"
           args=( "${{ inputs.mode }}" "${{ matrix.shard }}" "${{ matrix.shards }}" "${{ matrix.profile }}" "${{ inputs.inventory_path }}" "$RUNNER_TEMP/stage-m-vm" "$name" )
