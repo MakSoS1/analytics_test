@@ -50,6 +50,8 @@ foreach ($r in $rows) {
   $m | Add-Member -NotePropertyName source_ip -NotePropertyValue $r.source_ip -Force
   $m | Add-Member -NotePropertyName persona -NotePropertyValue $r.client_id -Force
   $m | Add-Member -NotePropertyName network_topology -NotePropertyValue $r.network_topology -Force
+  $m | Add-Member -NotePropertyName environment_id -NotePropertyValue $r.environment_id -Force
+  $m | Add-Member -NotePropertyName hypervisor -NotePropertyValue $r.hypervisor -Force
   $m | Add-Member -NotePropertyName network_profile_id -NotePropertyValue "vm_router" -Force
   $m | Add-Member -NotePropertyName requested_interval_seconds -NotePropertyValue ([double]$r.interval_seconds) -Force
   $m | Add-Member -NotePropertyName timing_scale -NotePropertyValue $TimeScale -Force
