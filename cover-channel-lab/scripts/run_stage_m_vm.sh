@@ -130,4 +130,14 @@ obj.update({
 repro.write_text(json.dumps(obj,indent=2,sort_keys=True)+"\n")
 PY
 
+SURICATA_VERSION="$(suricata -V 2>&1 | head -1 | tr -d '\r')"
+ZEEK_VERSION="$(docker run --rm zeek/zeek:8.2.1 zeek --version 2>&1 | head -1 | tr -d '\r')"
+python - "$BRONZE/reproducibility.json" "$SURICATA_VERSION" "$ZEEK_VERSION" <<'PY'
+import json,sys
+from pathlib import Path
+p=Path(sys.argv[1]); obj=json.loads(p.read_text())
+obj["parser_versions"]={"suricata":sys.argv[2],"zeek":sys.argv[3]}
+p.write_text(json.dumps(obj,indent=2,sort_keys=True)+"\n")
+PY
+
 echo "$RELEASE"
