@@ -53,7 +53,9 @@
         "grpcio_stream_unary",
         "paho_mqtt_websockets",
         "paho_mqtt_websockets_qos1",
-        "scapy_raw"
+        "scapy_raw",
+        "python_httpx_reuse",
+        "python_httpx_h2_reuse"
       ],
       "repo_path": "/opt/coverlab/analytics_test/cover-channel-lab",
       "work_dir": "/tmp/coverlab-vm"
