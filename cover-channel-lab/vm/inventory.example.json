@@ -31,16 +31,29 @@
       "ssh": "coverlab@10.20.0.10",
       "ipv4": "10.20.0.10",
       "stacks": [
-        "chromium",
-        "firefox",
-        "curl_openssl",
+        "browser_chromium",
+        "chromium_websocket",
+        "curl_linux",
         "python_httpx",
+        "python_httpx_h2",
+        "python_stdlib",
         "go_nethttp",
+        "node_fetch",
+        "node_websocket",
         "java_httpclient",
         "rust_reqwest",
-        "aioquic",
+        "python_dnspython_udp",
+        "python_dnspython_tcp",
+        "python_aioquic_doq",
+        "python_aioquic_doq_reuse",
+        "python_aioquic_h3",
+        "python_aioquic_h3_reuse",
+        "python_aioquic_h3_parallel",
         "grpcio",
-        "paho_mqtt"
+        "grpcio_stream_unary",
+        "paho_mqtt_websockets",
+        "paho_mqtt_websockets_qos1",
+        "scapy_raw"
       ],
       "repo_path": "/opt/coverlab/analytics_test/cover-channel-lab",
       "work_dir": "/tmp/coverlab-vm"
@@ -99,5 +112,6 @@
     "ipv4": "10.20.0.23",
     "repo_path": "/opt/coverlab/analytics_test/cover-channel-lab",
     "work_dir": "/tmp/coverlab-vm"
-  }
+  },
+  "hypervisor": "kvm-primary-host"
 }
