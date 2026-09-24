@@ -35,6 +35,7 @@ from typing import Iterable
 import dns.message
 import dns.name
 import dns.rdatatype
+import httpx
 import grpc
 import paho.mqtt.client as mqtt
 from websockets.sync.client import connect as ws_connect
