@@ -4,7 +4,7 @@ param(
     "M-CLOUD-API","M-RMM-SHAPE","M-WSS-LONG","M-TUNNEL","M-DNS-BEACON","M-DNS-BULK"
   )][string]$Family,
   [Parameter(Mandatory=$true)][ValidateSet(
-    "dotnet_httpclient_schannel","winhttp","curl_schannel",
+    "dotnet_httpclient_schannel","winhttp","curl_schannel","edge_chromium",
     "dotnet_clientwebsocket","windows_dns"
   )][string]$Stack,
   [Parameter(Mandatory=$true)][string]$CampaignId,
@@ -98,6 +98,51 @@ function Invoke-Curl([string]$Url, [string]$Method, [byte[]]$Body) {
   } finally { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
 }
 
+function Get-EdgePath {
+  $candidates = @(
+    "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe",
+    "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
+  )
+  foreach($p in $candidates) { if(Test-Path $p) { return $p } }
+  $cmd = Get-Command msedge.exe -ErrorAction SilentlyContinue
+  if($cmd) { return $cmd.Source }
+  throw "Microsoft Edge is required for edge_chromium VM holdout"
+}
+
+function Invoke-EdgeHttp([string]$HostName, [string]$TargetPath, [string]$Method, [byte[]]$Body) {
+  $edge = Get-EdgePath
+  $b64 = if($null -eq $Body) { "" } else { [Convert]::ToBase64String($Body) }
+  $fixture = "https://" + $HostName + ":8443/stage-m/http-fixture?target=" +
+    [Uri]::EscapeDataString($TargetPath) + "&method=" + [Uri]::EscapeDataString($Method) +
+    "&body=" + [Uri]::EscapeDataString($b64)
+  $args = @(
+    "--headless=new","--disable-gpu","--ignore-certificate-errors",
+    "--disable-background-networking","--disable-component-update","--disable-sync",
+    "--no-first-run","--virtual-time-budget=5000","--dump-dom",$fixture
+  )
+  & $edge @args | Out-Null
+  if($LASTEXITCODE -ne 0) { throw "Edge HTTP fixture failed rc=$LASTEXITCODE" }
+  return 200
+}
+
+function Invoke-EdgeWebSocketScenario {
+  $edge = Get-EdgePath
+  $mode = if($Family -eq "M-TUNNEL"){"tunnel"}else{"wss"}
+  $fixture = "https://edge-front.test:8443/stage-m/ws-fixture?host=" +
+    [Uri]::EscapeDataString($ServerHost) + "&events=" + $Events +
+    "&seed=" + $Seed + "&mode=" + $mode
+  $args = @(
+    "--headless=new","--disable-gpu","--ignore-certificate-errors",
+    "--disable-background-networking","--disable-component-update","--disable-sync",
+    "--no-first-run","--virtual-time-budget=8000","--dump-dom",$fixture
+  )
+  & $edge @args | Out-Null
+  if($LASTEXITCODE -ne 0) { throw "Edge WSS fixture failed rc=$LASTEXITCODE" }
+  for($i=0; $i -lt $Events; $i++) {
+    Add-Row $i "stage_m_windows_edge_wss" 0 "browser_native=1"
+  }
+}
+
 function Invoke-HttpScenario([int]$I) {
   $payload = New-Payload $I
   $path = "/stage-m/beacon"
@@ -124,6 +169,7 @@ function Invoke-HttpScenario([int]$I) {
     "dotnet_httpclient_schannel" { Invoke-DotNetHttp $url $method $payload }
     "winhttp" { Invoke-WinHttp $url $method $payload }
     "curl_schannel" { Invoke-Curl $url $method $payload }
+    "edge_chromium" { Invoke-EdgeHttp $ServerHost $path $method $payload }
     default { Invoke-DotNetHttp $url $method $payload }
   }
   Add-Row $I "stage_m_windows_http" $(if($null -eq $payload){0}else{$payload.Length}) "status=$status"
@@ -175,6 +221,8 @@ if ($Stack -eq "windows_dns") {
   Invoke-DnsScenario
 } elseif ($Stack -eq "dotnet_clientwebsocket") {
   Invoke-WebSocketScenario
+} elseif ($Stack -eq "edge_chromium" -and $Family -in @("M-WSS-LONG","M-TUNNEL")) {
+  Invoke-EdgeWebSocketScenario
 } else {
   for ($i=0; $i -lt $Events; $i++) {
     Invoke-HttpScenario $i
