@@ -476,6 +476,197 @@ def _doh_events(spec: CampaignSpec, r: random.Random) -> list[dict]:
     return events
 
 
+async def _doq_batch(spec: CampaignSpec, r: random.Random) -> list[dict]:
+    cfg = QuicConfiguration(is_client=True, alpn_protocols=DOQ_ALPN)
+    cfg.verify_mode = ssl.CERT_NONE
+    host = "doq-resolver.test"
+    reuse = spec.client_impl.endswith("_reuse")
+    out: list[dict] = []
+
+    async def emit(proto: DoQClientProtocol, i: int) -> dict:
+        raw = _payload(r, spec.payload_mode, i, 18 + (i % 4) * 8)
+        label = base64.b32encode(raw).decode().rstrip("=").lower()[:50]
+        qname = f"{label}.stage-m.test."
+        qtype = ("A", "AAAA", "TXT")[i % 3]
+        wire = _dns_wire_query(qname, qtype)
+        started = now_iso()
+        reply = await proto.query(wire, timeout=12)
+        return {
+            "event_id": f"e{i:03d}", "event_type": "stage_m_doq",
+            "sent_at": started, "completed_at": now_iso(),
+            "dns_qname": qname, "dns_qtype": qtype,
+            "encoded_length": len(wire), "reply_len": len(reply),
+            "quic_connection_reused": reuse,
+            "alpn": "doq",
+        }
+
+    if reuse:
+        async with quic_connect(
+            host, 8853, configuration=cfg,
+            create_protocol=DoQClientProtocol, server_name=host,
+        ) as proto:
+            for i in range(spec.event_count):
+                out.append(await emit(proto, i))
+                _requested_sleep(spec, r, i)
+    else:
+        for i in range(spec.event_count):
+            async with quic_connect(
+                host, 8853, configuration=cfg,
+                create_protocol=DoQClientProtocol, server_name=host,
+            ) as proto:
+                out.append(await emit(proto, i))
+            _requested_sleep(spec, r, i)
+    return out
+
+
+def _doq_events(spec: CampaignSpec, r: random.Random) -> list[dict]:
+    attempts = int(os.environ.get("COVERLAB_STAGE_M_QUIC_RETRIES", "4"))
+    last = None
+    for attempt in range(1, attempts + 1):
+        try:
+            rows = asyncio.run(_doq_batch(spec, r))
+            for row in rows:
+                row["transport_attempt"] = attempt
+            return rows
+        except (TimeoutError, OSError, ConnectionError) as exc:
+            last = exc
+            time.sleep(min(2.0, 0.25 * (2 ** (attempt - 1))))
+    raise RuntimeError(f"Stage M DoQ failed after {attempts} attempts: {last}")
+
+
+def _cloud_events(spec: CampaignSpec, r: random.Random) -> list[dict]:
+    hosts = ("graph-front.test", "workers-front.test", "cdn-front.test", "telegram-front.test")
+    templates = (
+        ("/v1.0/me/drive/items/{id}/content", "GET"),
+        ("/v4/spreadsheets/{id}/values/A1", "GET"),
+        ("/storage/v1/b/lab/o/{id}", "PUT"),
+        ("/yandex/disk/resources?path=/lab/{id}", "GET"),
+        ("/api/blob/{id}", "POST"),
+    )
+    out = []
+    for i in range(spec.event_count):
+        ident = hashlib.sha256(f"{spec.index}:{i}".encode()).hexdigest()[:16]
+        tpl, method = templates[i % len(templates)]
+        path = tpl.format(id=ident)
+        host = hosts[(spec.family_index + i) % len(hosts)]
+        body = None if method == "GET" else _payload(r, spec.payload_mode, i, 32 + (i % 6) * 64)
+        started = now_iso()
+        status, effective = _http_exchange(
+            spec.client_impl, method, f"https://{host}:8443{path}",
+            {"Accept": "application/json", "Content-Type": "application/octet-stream", "X-Client-Request-Id": ident},
+            body,
+        )
+        out.append({
+            "event_id": f"e{i:03d}", "event_type": "stage_m_cloud_api",
+            "sent_at": started, "completed_at": now_iso(),
+            "http_method": method, "http_path": path, "response_status": status,
+            "encoded_length": len(body or b""), "effective_client_impl": effective,
+            "service_mimic": ("graph", "sheets", "blob", "disk", "object_api")[i % 5],
+        })
+        _requested_sleep(spec, r, i)
+    return out
+
+
+def _mqtt_events(spec: CampaignSpec, r: random.Random, *, timing: bool = False) -> list[dict]:
+    qos = 1 if "qos1" in spec.implementation_id else 0
+    client = mqtt.Client(
+        mqtt.CallbackAPIVersion.VERSION2,
+        client_id=f"stage-m-{spec.index:06d}",
+        protocol=mqtt.MQTTv5,
+        transport="websockets",
+    )
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    client.tls_set_context(ctx)
+    client.ws_set_options(path="/mqtt")
+    last = None
+    for attempt in range(1, 5):
+        try:
+            client.connect("mqtt-broker.test", 9443, keepalive=30)
+            last = None
+            break
+        except OSError as exc:
+            last = exc
+            time.sleep(min(2.0, 0.25 * (2 ** (attempt - 1))))
+    if last is not None:
+        raise RuntimeError(f"MQTT connect failed: {last}")
+    client.loop_start()
+    out = []
+    try:
+        for i in range(spec.event_count):
+            topic = f"control/stage-m/{spec.index % 32}/{i % 5}"
+            payload = _payload(r, spec.payload_mode, i, 24 + (i % 5) * 48)
+            started = now_iso()
+            info = client.publish(topic, payload=payload, qos=qos, retain=(i % 17 == 0))
+            if qos:
+                info.wait_for_publish(timeout=10)
+            out.append({
+                "event_id": f"e{i:03d}", "event_type": "stage_m_mqtt",
+                "sent_at": started, "completed_at": now_iso(),
+                "mqtt_topic": topic, "mqtt_qos": qos, "encoded_length": len(payload),
+                "response_status": 200,
+            })
+            if timing:
+                _requested_sleep(spec, r, i)
+    finally:
+        client.disconnect()
+        client.loop_stop()
+    return out
+
+
+def _grpc_events(spec: CampaignSpec, r: random.Random) -> list[dict]:
+    channel = grpc.insecure_channel("cover-h2.test:50051")
+    out = []
+    payloads = [_payload(r, spec.payload_mode, i, 32 + (i % 4) * 64) for i in range(spec.event_count)]
+    try:
+        if spec.client_impl == "grpcio_stream_unary":
+            call = channel.stream_unary(
+                "/coverlab.Control/ClientStream",
+                request_serializer=lambda x: x,
+                response_deserializer=lambda x: x,
+            )
+            started = now_iso()
+            reply = call(iter(payloads), timeout=20)
+            out.append({
+                "event_id": "e000", "event_type": "stage_m_grpc_stream_unary",
+                "sent_at": started, "completed_at": now_iso(),
+                "encoded_length": sum(map(len, payloads)), "reply_len": len(reply),
+                "response_status": 200,
+            })
+        else:
+            call = channel.stream_stream(
+                "/coverlab.Control/Bidi",
+                request_serializer=lambda x: x,
+                response_deserializer=lambda x: x,
+            )
+            started = now_iso()
+            replies = list(call(iter(payloads), timeout=30))
+            for i, (req, reply) in enumerate(zip(payloads, replies)):
+                out.append({
+                    "event_id": f"e{i:03d}", "event_type": "stage_m_grpc_bidi",
+                    "sent_at": started, "completed_at": now_iso(),
+                    "encoded_length": len(req), "reply_len": len(reply),
+                    "response_status": 200,
+                })
+    finally:
+        channel.close()
+    return out
+
+
+def _timing_xcarrier_events(spec: CampaignSpec, r: random.Random, seed: int) -> tuple[list[dict], str]:
+    impl = spec.implementation_id
+    if impl.startswith("timing-https"):
+        return _http_events(spec, r, "M-TIMING-XCARRIER"), "https"
+    if impl.startswith("timing-dns"):
+        return _dns_events(spec, r, bulk=False), "dns"
+    if impl.startswith("timing-wss"):
+        return _wss_events(spec, r, seed, tunnel=False), "wss"
+    if impl.startswith("timing-mqtt"):
+        return _mqtt_events(spec, r, timing=True), "mqtt+wss"
+    raise RuntimeError(f"unknown cross-carrier timing implementation: {impl}")
+
+
 def _python_wss(spec: CampaignSpec, r: random.Random, tunnel: bool) -> list[dict]:
     host = spec.front_host or WSS_DIRECT
     ctx = ssl.create_default_context()
@@ -641,6 +832,20 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
     elif spec.family == "M-DOH":
         events = _doh_events(spec, r)
         protocol = "https+doh"
+    elif spec.family == "M-DOQ":
+        events = _doq_events(spec, r)
+        protocol = "doq+quic"
+    elif spec.family == "M-CLOUD-API":
+        events = _cloud_events(spec, r)
+        protocol = "https"
+    elif spec.family == "M-TIMING-XCARRIER":
+        events, protocol = _timing_xcarrier_events(spec, r, seed)
+    elif spec.family == "M-PUBSUB-MQTT":
+        events = _mqtt_events(spec, r, timing=False)
+        protocol = "mqtt+wss"
+    elif spec.family == "M-GRPC-BIDI":
+        events = _grpc_events(spec, r)
+        protocol = "grpc+h2"
     elif spec.family == "M-WSS-LONG":
         events = _wss_events(spec, r, seed, tunnel=False)
         protocol = "wss"
@@ -667,7 +872,7 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
     )
     embedding_locus = (
         "session_sequence" if mechanism in {"timing", "multi_carrier"}
-        else "dns_message" if spec.family.startswith("M-DNS") or spec.family == "M-DOH"
+        else "dns_message" if spec.family.startswith("M-DNS") or spec.family in {"M-DOH", "M-DOQ"}
         else "application_message"
     )
     manifest = {
@@ -680,10 +885,10 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "attack_mapping": ATTACK_MAPPING[spec.family],
         "protocol": protocol,
         "carrier": spec.family.lower().replace("m-", "").replace("-", "_"),
-        "visibility_mode": "opaque_and_ground_truth" if any(x in protocol for x in ("https", "wss")) else "content",
-        "inspection_policy": "bypass" if any(x in protocol for x in ("https", "wss")) else "not_applicable",
-        "inspection_outcome": "encrypted" if any(x in protocol for x in ("https", "wss")) else "plaintext",
-        "sni_visibility": "clear" if any(x in protocol for x in ("https", "wss")) else "not_applicable",
+        "visibility_mode": "opaque_and_ground_truth" if any(x in protocol for x in ("https", "wss", "doq", "quic")) else "content",
+        "inspection_policy": "bypass" if any(x in protocol for x in ("https", "wss", "doq", "quic")) else "not_applicable",
+        "inspection_outcome": "encrypted" if any(x in protocol for x in ("https", "wss", "doq", "quic")) else "plaintext",
+        "sni_visibility": "clear" if any(x in protocol for x in ("https", "wss", "doq", "quic")) else "not_applicable",
         "feature_availability_bitmap": "runtime",
         "experiment_stage": "M_positive_diversity",
         "dataset_role": "positive_corpus",
@@ -702,8 +907,8 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "network_profile_id": os.environ.get("COVERLAB_NETEM_PROFILE", "clean"),
         "clock_profile_id": os.environ.get("COVERLAB_CLOCK_PROFILE", "host_default"),
         "tls_profile_id": spec.client_impl if any(x in protocol for x in ("https", "wss")) else "none",
-        "quic_profile_id": "none",
-        "dns_transport": "tcp" if spec.client_impl.endswith("_tcp") else ("udp" if "dns" in protocol else "none"),
+        "quic_profile_id": spec.client_impl if any(x in protocol for x in ("doq", "quic")) else "none",
+        "dns_transport": "doq" if "doq" in protocol else ("tcp" if spec.client_impl.endswith("_tcp") else ("udp" if "dns" in protocol else "none")),
         "service_mimic_category": spec.front_host or "direct_lab_service",
         "seed_origin": "deterministic_coverlab",
         "seed_license": "synthetic",
