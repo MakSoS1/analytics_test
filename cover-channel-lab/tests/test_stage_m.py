@@ -9,7 +9,7 @@ from coverlab.diversity_audit import audit
 
 def test_stage_m_full_budget_and_family_counts():
     specs = build_specs("full")
-    assert len(specs) == 4500
+    assert len(specs) == sum(FAMILY_COUNTS.values()) == 13350
     got = {}
     for s in specs:
         got[s.family] = got.get(s.family, 0) + 1
