@@ -501,7 +501,7 @@ def _dns_events(spec: CampaignSpec, r: random.Random, bulk: bool = False) -> lis
     tcp = spec.client_impl.endswith("_tcp")
     server = DNS_RECURSOR if spec.network_topology == "recursive_resolver" else DNS_AUTH
     events = []
-    qtypes = ("A", "AAAA", "TXT")
+    qtypes = ("A", "AAAA", "TXT", "CNAME")
     parent = "stage-m.test."
     for i in range(spec.event_count):
         raw = _payload(r, "high_entropy" if bulk else spec.payload_mode, i, 16 if not bulk else 32)
@@ -530,18 +530,26 @@ def _doh_events(spec: CampaignSpec, r: random.Random) -> list[dict]:
         raw = _payload(r, spec.payload_mode, i, 16)
         label = base64.b32encode(raw).decode().rstrip("=").lower()[:50]
         qname = f"{label}.stage-m.test."
-        qtype = ("A", "AAAA", "TXT")[i % 3]
+        qtype = ("A", "AAAA", "TXT", "CNAME")[i % 4]
         wire = _dns_wire_query(qname, qtype)
         started = now_iso()
+        doh_get = (i % 2 == 0)
+        if doh_get:
+            encoded = base64.urlsafe_b64encode(wire).decode().rstrip("=")
+            method, url, body = "GET", f"https://{host}:8443/dns-query?dns={encoded}", None
+            headers = {"Accept": "application/dns-message"}
+        else:
+            method, url, body = "POST", f"https://{host}:8443/dns-query", wire
+            headers = {"Content-Type": "application/dns-message", "Accept": "application/dns-message"}
         status, effective = _http_exchange(
-            spec.client_impl, "POST", f"https://{host}:8443/dns-query",
-            {"Content-Type": "application/dns-message", "Accept": "application/dns-message"},
-            wire, use_h2=(spec.client_impl == "python_httpx_h2"),
+            spec.client_impl, method, url, headers, body,
+            use_h2=(spec.client_impl == "python_httpx_h2"),
         )
         events.append({
             "event_id": f"e{i:03d}", "event_type": "stage_m_doh", "sent_at": started,
             "completed_at": now_iso(), "dns_qname": qname, "dns_qtype": qtype,
-            "response_status": status, "encoded_length": len(wire), "effective_client_impl": effective,
+            "doh_method": method, "response_status": status,
+            "encoded_length": len(wire), "effective_client_impl": effective,
         })
         _requested_sleep(spec, r, i)
     return events
