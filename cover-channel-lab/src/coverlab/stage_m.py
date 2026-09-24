@@ -23,6 +23,7 @@ import random
 import socket
 import ssl
 import subprocess
+import sys
 import time
 import uuid
 from dataclasses import dataclass, replace
@@ -102,6 +103,7 @@ FAMILY_COUNTS = {
     "M-PUBSUB-MQTT": 500,
     "M-GRPC-BIDI": 400,
     "M-RMM-SHAPE": 400,
+    "M-L34-STORAGE": 1000,
 }
 
 ATTACK_MAPPING = {
@@ -124,6 +126,7 @@ ATTACK_MAPPING = {
     "M-TUNNEL": ["T1572", "T1090"],
     "M-FALLBACK": ["T1071.001", "T1071.004"],
     "M-RMM-SHAPE": ["T1219", "T1071.001"],
+    "M-L34-STORAGE": ["T1001"],
 }
 
 
@@ -208,6 +211,14 @@ def implementation_catalog(family: str) -> tuple[tuple[str, str, str, str], ...]
         return (
             ("grpc-python-bidi", "grpcio", "grpcio_generic_h2", "cover-h2.test"),
             ("grpc-python-stream-unary", "grpcio_stream_unary", "grpcio_generic_h2", "cover-h2.test"),
+        )
+    if family == "M-L34-STORAGE":
+        return (
+            ("raw-ipv4-id-udp", "scapy_raw", "kernel_udp_sink", "ipv4_id_udp"),
+            ("raw-udp-source-port", "scapy_raw", "kernel_udp_sink", "udp_source_port"),
+            ("raw-icmp-id-seq", "scapy_raw", "kernel_icmp", "icmp_id_seq"),
+            ("raw-tcp-initial-seq", "scapy_raw", "kernel_tcp", "tcp_initial_seq"),
+            ("raw-tcp-timestamp", "scapy_raw", "kernel_tcp", "tcp_timestamp"),
         )
     if family == "M-HTTP-443":
         return tuple(
@@ -906,6 +917,33 @@ def _wss_events(spec: CampaignSpec, r: random.Random, seed: int, tunnel: bool = 
     return _python_wss(spec, r, tunnel)
 
 
+def _raw_header_events(spec: CampaignSpec, seed: int, source_ip: str) -> list[dict]:
+    root = Path(__file__).resolve().parents[2]
+    mode = spec.front_host or spec.network_topology
+    if mode not in {"ipv4_id_udp", "udp_source_port", "icmp_id_seq", "tcp_initial_seq", "tcp_timestamp"}:
+        raise RuntimeError(f"invalid raw Stage M mode: {mode}")
+    max_sleep = os.environ.get("COVERLAB_STAGE_M_MAX_SLEEP_SECONDS", "0.05")
+    cmd = [
+        "sudo", "-n", "env", f"PYTHONPATH={root / 'src'}",
+        sys.executable, "-m", "coverlab.stage_m_raw",
+        "--mode", mode,
+        "--source-ip", source_ip,
+        "--events", str(spec.event_count),
+        "--seed", str(seed),
+        "--interval", str(spec.interval_seconds),
+        "--jitter", str(spec.jitter_fraction),
+        "--time-scale", str(float(os.environ.get("COVERLAB_STAGE_M_TIME_SCALE", "0.001"))),
+        "--max-sleep", max_sleep,
+    ]
+    cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=300)
+    if cp.returncode != 0:
+        raise RuntimeError("raw Stage M generator failed: " + cp.stderr[-1200:])
+    rows = [json.loads(x) for x in cp.stdout.splitlines() if x.strip().startswith("{")]
+    if len(rows) != spec.event_count:
+        raise RuntimeError(f"raw Stage M event mismatch: {len(rows)} != {spec.event_count}")
+    return rows
+
+
 def _dead_drop_events(spec: CampaignSpec, r: random.Random) -> list[dict]:
     first = spec.front_host or "graph-front.test"
     status1, c1 = _http_exchange(spec.client_impl, "GET", f"https://{first}:8443/stage-m/dead-drop", {"User-Agent": "Mozilla/5.0"}, None)
@@ -975,6 +1013,10 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
     elif spec.family == "M-FALLBACK":
         events = _fallback_events(spec, r)
         protocol = "https+dns"
+    elif spec.family == "M-L34-STORAGE":
+        events = _raw_header_events(spec, seed, source_ip)
+        mode = spec.front_host or spec.network_topology
+        protocol = "icmp" if mode == "icmp_id_seq" else ("tcp_raw" if mode.startswith("tcp_") else "ipv4+udp")
     else:
         events = _http_events(spec, r, spec.family)
         protocol = "http" if spec.family == "M-HTTP-443" else "https"
@@ -988,7 +1030,8 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         else "storage"
     )
     embedding_locus = (
-        "session_sequence" if mechanism in {"timing", "multi_carrier"}
+        "network_header" if spec.family == "M-L34-STORAGE"
+        else "session_sequence" if mechanism in {"timing", "multi_carrier"}
         else "dns_message" if spec.family.startswith("M-DNS") or spec.family in {"M-DOH", "M-DOQ"}
         else "application_message"
     )
@@ -1069,6 +1112,8 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "status": "success",
         "generator_name": "coverlab_stage_m_positive",
         "generator_version": "1.0.0",
+        "implementation_fidelity": "raw_packet_precise" if spec.family == "M-L34-STORAGE" else "wire_application_stack",
+        "packet_generator": "scapy" if spec.family == "M-L34-STORAGE" else "kernel_protocol_stack",
         "generator_commit": os.environ.get("GITHUB_SHA", "local"),
         "external_dependency": False,
         "post_exploitation": False,
