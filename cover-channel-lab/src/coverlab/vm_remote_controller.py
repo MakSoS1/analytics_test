@@ -139,6 +139,71 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
     path.write_text("\n".join(json.dumps(x, separators=(",", ":")) for x in rows) + ("\n" if rows else ""))
 
 
+def preflight_nodes(inv: dict, key: str | None) -> None:
+    server = inv.get("server") or {}
+    resolver = inv.get("resolver") or {}
+    router = inv.get("router") or {}
+    cap = inv.get("capture") or {}
+
+    if server:
+        target = str(server.get("ssh") or "")
+        repo = str(server.get("repo_path") or "")
+        validate_target(target); validate_path(repo, "linux")
+        cmd = (
+            "set -e; sudo -n true; "
+            "for x in python3 nginx mosquitto openssl; do command -v $x >/dev/null; done; "
+            f"cd {shlex.quote(repo)}; "
+            "PYTHONPATH=src python3 -c "
+            + shlex.quote(
+                "import fastapi,hypercorn,aioquic,grpc,dns,paho.mqtt.client,websockets;"
+                "import coverlab.server,coverlab.wss_server,coverlab.h3_fixture,"
+                "coverlab.doq_fixture,coverlab.grpc_server,coverlab.stage_m_dns_server"
+            )
+        )
+        remote_posix(target, cmd, key)
+
+    if resolver:
+        target = str(resolver.get("ssh") or "")
+        repo = str(resolver.get("repo_path") or "")
+        validate_target(target); validate_path(repo, "linux")
+        remote_posix(
+            target,
+            "set -e; sudo -n true; command -v python3 >/dev/null; "
+            f"cd {shlex.quote(repo)}; PYTHONPATH=src python3 -c "
+            + shlex.quote("import dns; import coverlab.stage_m_dns_server"),
+            key,
+        )
+
+    if router:
+        target = str(router.get("ssh") or "")
+        validate_target(target)
+        cif = str(router.get("client_interface") or "")
+        sif = str(router.get("server_interface") or "")
+        for value in (cif, sif):
+            if not re.fullmatch(r"[A-Za-z0-9_.:-]+", value):
+                raise ValueError(f"unsafe router interface name: {value}")
+        remote_posix(
+            target,
+            "set -e; sudo -n true; command -v tc >/dev/null; "
+            f"ip link show {shlex.quote(cif)} >/dev/null; ip link show {shlex.quote(sif)} >/dev/null",
+            key,
+        )
+
+    sensor = str(cap.get("sensor_host") or "")
+    iface = str(cap.get("interface") or "")
+    if sensor:
+        validate_target(sensor)
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]+", iface):
+            raise ValueError(f"unsafe capture interface: {iface}")
+        remote_posix(
+            sensor,
+            "set -e; command -v dumpcap >/dev/null; "
+            f"ip link show {shlex.quote(iface)} >/dev/null; "
+            f"dumpcap -D 2>/dev/null | grep -F {shlex.quote(iface)} >/dev/null",
+            key,
+        )
+
+
 def bootstrap_services(inv: dict, key: str | None) -> None:
     server = inv["server"]
     resolver = inv.get("resolver")
@@ -424,6 +489,7 @@ def main() -> None:
             validate_target(str(node["ssh"]))
 
     verify_remote_revision(inv, a.ssh_key)
+    preflight_nodes(inv, a.ssh_key)
     if a.bootstrap_services:
         bootstrap_services(inv, a.ssh_key)
     apply_netem(inv, a.netem_profile, a.ssh_key)
