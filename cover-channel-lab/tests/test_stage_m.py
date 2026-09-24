@@ -114,6 +114,8 @@ def test_diversity_audit_full_catalog_contract(tmp_path: Path):
 
 def test_vm_wire_plan_contract():
     inv = {
+        "environment_id": "stage-m-vm-test",
+        "hypervisor": "kvm-test",
         "server": {"ipv4": "10.20.0.20"},
         "clients": [
             {"id": "linux-01", "os": "linux", "ssh": "lab@10.20.0.10", "ipv4": "10.20.0.10"},
@@ -126,7 +128,10 @@ def test_vm_wire_plan_contract():
     assert all(r["capture_environment"] == "vm_wire" for r in rows)
     assert {r["client_os"] for r in rows} == {"linux", "windows"}
     assert any(r["split_role"] == "H_client" for r in rows)
+    assert any(r["client_impl"] == "edge_chromium" and r["split_role"] == "H_client" for r in rows)
     assert all(r["source_ip"].startswith("10.20.0.") for r in rows)
+    assert all(r["environment_id"] == "stage-m-vm-test" for r in rows)
+    assert all(r["hypervisor"] == "kvm-test" for r in rows)
 
 
 def test_raw_header_packets_are_bounded():
@@ -142,6 +147,8 @@ def test_raw_header_packets_are_bounded():
 
 def test_full_vm_plan_has_at_least_2000_windows_sessions():
     inv = {
+        "environment_id": "stage-m-vm-full-test",
+        "hypervisor": "kvm-test",
         "server": {"ipv4": "10.20.0.20"},
         "clients": [
             {"id": "linux-01", "os": "linux", "ssh": "lab@10.20.0.10", "ipv4": "10.20.0.10"},
@@ -153,3 +160,5 @@ def test_full_vm_plan_has_at_least_2000_windows_sessions():
     assert len(rows) == 15150
     assert len(windows) >= 2000
     assert any(r["split_role"] == "H_client" for r in windows)
+    assert any(r["client_impl"] == "edge_chromium" and r["split_role"] == "H_client" for r in windows)
+    assert not any(r["client_impl"] == "edge_chromium" and r["training_eligible"] for r in windows)
