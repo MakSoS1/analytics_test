@@ -23,7 +23,13 @@ command -v editcap >/dev/null || { echo "editcap is required on the controller" 
 command -v ssh >/dev/null || { echo "ssh is required on the controller" >&2; exit 1; }
 command -v scp >/dev/null || { echo "scp is required on the controller" >&2; exit 1; }
 
-PYTHONPATH="$ROOT/src" python -m coverlab.vm_plan   --inventory "$INVENTORY" --out "$PLAN" --mode "$MODE" --shard "$SHARD" --shards "$SHARDS"
+PLAN_ARGS=(--inventory "$INVENTORY" --out "$PLAN" --mode "$MODE" --shard "$SHARD" --shards "$SHARDS")
+[[ -n "${COVERLAB_VM_FAMILIES:-}" ]] && PLAN_ARGS+=(--families "$COVERLAB_VM_FAMILIES")
+[[ -n "${COVERLAB_VM_FORCE_INTERVAL_SECONDS:-}" ]] && PLAN_ARGS+=(--force-interval "$COVERLAB_VM_FORCE_INTERVAL_SECONDS")
+[[ -n "${COVERLAB_VM_EVENT_COUNT:-}" ]] && PLAN_ARGS+=(--event-count "$COVERLAB_VM_EVENT_COUNT")
+[[ -n "${COVERLAB_VM_PLAN_OFFSET:-}" ]] && PLAN_ARGS+=(--offset "$COVERLAB_VM_PLAN_OFFSET")
+[[ -n "${COVERLAB_VM_PLAN_LIMIT:-}" ]] && PLAN_ARGS+=(--limit "$COVERLAB_VM_PLAN_LIMIT")
+PYTHONPATH="$ROOT/src" python -m coverlab.vm_plan "${PLAN_ARGS[@]}"
 
 CTRL=(python -m coverlab.vm_remote_controller
   --inventory "$INVENTORY"
