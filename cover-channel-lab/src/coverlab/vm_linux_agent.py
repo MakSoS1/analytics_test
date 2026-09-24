@@ -16,7 +16,7 @@ from .stage_m import CampaignSpec, run_one
 
 ALLOWED_FAMILIES = {
     "M-HTTPS-BEACON", "M-HTTPS-FRONT", "M-HTTPS-LOWENT", "M-HTTPS-FRAG",
-    "M-HTTP-443", "M-DNS-BEACON", "M-DNS-BULK", "M-DOH", "M-DOQ",
+    "M-HTTP-443", "M-DNS-BEACON", "M-DNS-BULK", "M-DOH", "M-DOQ", "M-H3-QUIC",
     "M-DEAD-DROP", "M-WSS-LONG", "M-TUNNEL", "M-FALLBACK",
     "M-CLOUD-API", "M-TIMING-XCARRIER", "M-PUBSUB-MQTT",
     "M-GRPC-BIDI", "M-RMM-SHAPE",
