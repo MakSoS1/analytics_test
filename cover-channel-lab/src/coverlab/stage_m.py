@@ -77,7 +77,7 @@ VOLUME_MODES = ("rare_beacon", "interactive", "trickle", "bulk")
 ASYMMETRY = ("small_small", "small_large", "large_small", "upload_heavy", "download_heavy", "symmetric")
 PAYLOAD_MODES = ("high_entropy", "low_entropy", "fragment_2_6")
 
-# Exact requested positive-corpus budget: 4,500 campaigns.
+# Expanded P0/P1 positive-corpus budget: 13,350 campaigns.
 FAMILY_COUNTS = {
     # P0/P1 positive-only target. Existing V5 H3 / extended protocol shards stay
     # separate and are not re-generated here merely to inflate volume.
@@ -609,8 +609,7 @@ def _mqtt_events(spec: CampaignSpec, r: random.Random, *, timing: bool = False) 
             payload = _payload(r, spec.payload_mode, i, 24 + (i % 5) * 48)
             started = now_iso()
             info = client.publish(topic, payload=payload, qos=qos, retain=(i % 17 == 0))
-            if qos:
-                info.wait_for_publish(timeout=10)
+            info.wait_for_publish(timeout=10)
             out.append({
                 "event_id": f"e{i:03d}", "event_type": "stage_m_mqtt",
                 "sent_at": started, "completed_at": now_iso(),
