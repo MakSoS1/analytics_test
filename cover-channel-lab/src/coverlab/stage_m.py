@@ -884,6 +884,7 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         else "dns_message" if spec.family.startswith("M-DNS") or spec.family in {"M-DOH", "M-DOQ"}
         else "application_message"
     )
+    timing_real = bool(math.isclose(scale, 1.0) and not os.environ.get("COVERLAB_STAGE_M_MAX_SLEEP_SECONDS"))
     manifest = {
         "campaign_id": campaign_id,
         "run_id": "stage-m",
@@ -901,7 +902,7 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "feature_availability_bitmap": "runtime",
         "experiment_stage": "M_positive_diversity",
         "dataset_role": "positive_corpus",
-        "training_eligible": wire_vm,
+        "training_eligible": bool(wire_vm and (mechanism != "timing" or timing_real)),
         "channel_mechanism": mechanism,
         "embedding_locus": embedding_locus,
         "modulation_scheme": "periodic_jittered" if mechanism == "timing" else spec.payload_mode,
@@ -943,7 +944,7 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "payload_mode": spec.payload_mode,
         "timing_scale": scale,
         "timing_fidelity": "wire_real" if math.isclose(scale, 1.0) and not os.environ.get("COVERLAB_STAGE_M_MAX_SLEEP_SECONDS") else "accelerated_shape_only",
-        "timing_training_eligible": bool(math.isclose(scale, 1.0) and not os.environ.get("COVERLAB_STAGE_M_MAX_SLEEP_SECONDS")),
+        "timing_training_eligible": timing_real,
         "holdout_fold": spec.holdout_fold,
         "leave_one_implementation_group": spec.implementation_id,
         "leave_one_client_group": spec.client_impl,
