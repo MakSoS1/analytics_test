@@ -87,8 +87,11 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           PYTHONPATH=src python -m pytest -q tests/test_stage_m.py
+          python -m py_compile src/coverlab/vm_plan.py src/coverlab/vm_linux_agent.py src/coverlab/vm_remote_controller.py
+          bash -n scripts/run_stage_m_vm.sh vm/bootstrap_linux_client.sh vm/start_server.sh vm/start_resolver.sh vm/apply_router_netem.sh vm/configure_linux_hosts.sh
           pwsh -NoProfile -Command '[scriptblock]::Create((Get-Content -Raw vm/windows_stage_m_agent.ps1)) | Out-Null'
           pwsh -NoProfile -Command '[scriptblock]::Create((Get-Content -Raw vm/windows_stage_m_batch.ps1)) | Out-Null'
+          pwsh -NoProfile -Command '[scriptblock]::Create((Get-Content -Raw vm/configure_windows_hosts.ps1)) | Out-Null'
 
   generate:
     needs: [plan, unit]
