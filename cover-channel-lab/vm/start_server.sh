@@ -117,4 +117,10 @@ sudo nginx -c "$STATE_DIR/nginx.conf" -g 'daemon off;'   >"$STATE_DIR/logs/nginx
 sleep 2
 curl --noproxy '*' -fsS http://10.20.0.20:8080/healthz >/dev/null
 curl --noproxy '*' -kfsS --resolve edge-front.test:8443:10.20.0.22 https://edge-front.test:8443/healthz >/dev/null
+"$PYTHON_BIN" - <<'PY'
+import socket
+s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3)
+s.sendto(b"probe",("10.20.0.20",9091)); d,_=s.recvfrom(64)
+if d != b"probe": raise SystemExit("raw UDP sink echo mismatch")
+PY
 echo "coverlab VM server services ready"
