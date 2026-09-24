@@ -151,6 +151,28 @@ def bootstrap_services(inv: dict, key: str | None) -> None:
         command = f"cd {shlex.quote(repo)} && bash {shlex.quote('vm/' + script)}"
         remote_posix(target, command, key)
 
+    # Make the local .test topology explicit on every client. This avoids
+    # depending on public DNS or per-host manual state.
+    for client in inv["clients"]:
+        target = str(client["ssh"])
+        repo = str(client["repo_path"]).rstrip("/")
+        validate_target(target)
+        if client["os"] == "linux":
+            validate_path(repo, "linux")
+            remote_posix(
+                target,
+                f"cd {shlex.quote(repo)} && bash vm/configure_linux_hosts.sh",
+                key,
+            )
+        else:
+            validate_path(repo, "windows")
+            script = repo + "/vm/configure_windows_hosts.ps1"
+            remote_windows(
+                target,
+                'powershell.exe -NoProfile -ExecutionPolicy Bypass -File ' + f'"{script}"',
+                key,
+            )
+
 
 def apply_netem(inv: dict, profile: str, key: str | None) -> None:
     router = inv["router"]
