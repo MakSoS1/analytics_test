@@ -174,3 +174,18 @@ def test_stage_m_dns_cname_is_protocol_valid():
     assert r.answer
     assert r.answer[0].rdtype == dns.rdatatype.CNAME
     assert "target.stage-m.test." in r.answer[0].to_text()
+
+
+def test_vm_plan_rejects_undeclared_runtime_stack():
+    import pytest
+    inv = {
+        "environment_id": "stage-m-vm-stack-test",
+        "hypervisor": "kvm-test",
+        "server": {"ipv4": "10.20.0.20"},
+        "clients": [
+            {"id": "linux-01", "os": "linux", "ssh": "lab@10.20.0.10", "ipv4": "10.20.0.10", "stacks": ["python_httpx"]},
+            {"id": "windows-01", "os": "windows", "ssh": "lab@10.20.0.11", "ipv4": "10.20.0.11", "stacks": ["dotnet_httpclient_schannel"]},
+        ],
+    }
+    with pytest.raises(ValueError, match="does not declare required stack"):
+        make_plan(inv, "smoke", 0, 1)
