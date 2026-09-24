@@ -174,6 +174,42 @@ def bootstrap_services(inv: dict, key: str | None) -> None:
             )
 
 
+def verify_remote_revision(inv: dict, key: str | None) -> None:
+    expected = os.environ.get("GITHUB_SHA", "").strip()
+    if not expected or expected == "local":
+        return
+    nodes = [
+        ("server", inv.get("server")),
+        ("resolver", inv.get("resolver")),
+        ("router", inv.get("router")),
+        *[(f"client:{c.get('id')}", c) for c in inv.get("clients", [])],
+    ]
+    mismatches = []
+    for label, node in nodes:
+        if not node or not node.get("ssh") or not node.get("repo_path"):
+            continue
+        target = str(node["ssh"])
+        repo = str(node["repo_path"]).rstrip("/")
+        os_name = str(node.get("os") or "linux")
+        validate_target(target)
+        validate_path(repo, "windows" if os_name == "windows" else "linux")
+        if os_name == "windows":
+            cmd = f'powershell.exe -NoProfile -Command "git -C \'{repo}\' rev-parse HEAD"'
+        else:
+            cmd = f"git -C {shlex.quote(repo)} rev-parse HEAD"
+        try:
+            actual = remote_posix_capture(target, cmd, key).strip().splitlines()[-1]
+        except Exception as exc:
+            mismatches.append(f"{label}: cannot read revision ({exc})")
+            continue
+        if actual != expected:
+            mismatches.append(f"{label}: {actual} != {expected}")
+    if mismatches:
+        raise RuntimeError(
+            "VM nodes must run the same CoverLab revision as the controller: " + "; ".join(mismatches)
+        )
+
+
 def apply_netem(inv: dict, profile: str, key: str | None) -> None:
     router = inv["router"]
     target = str(router["ssh"])
@@ -301,6 +337,7 @@ def main() -> None:
         if node and node.get("ssh"):
             validate_target(str(node["ssh"]))
 
+    verify_remote_revision(inv, a.ssh_key)
     if a.bootstrap_services:
         bootstrap_services(inv, a.ssh_key)
     apply_netem(inv, a.netem_profile, a.ssh_key)
