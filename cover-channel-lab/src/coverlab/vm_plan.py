@@ -72,6 +72,11 @@ def make_plan(inv: dict, mode: str, shard: int, shards: int) -> list[dict]:
         if spec.index % shards != shard:
             continue
         client, stack, split_role = choose_client(spec, inv)
+        declared = {str(x) for x in (client.get("stacks") or [])}
+        if declared and stack not in declared:
+            raise ValueError(
+                f"client {client.get('id')} does not declare required stack {stack} for {spec.family}"
+            )
         rows.append({
             "campaign_id": f"vm-m-{spec.index:05d}-{spec.family_index:04d}",
             "spec_index": spec.index,
