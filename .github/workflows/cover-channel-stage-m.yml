@@ -12,7 +12,7 @@ on:
       shards:
         description: "Number of Stage M shards"
         required: true
-        default: "10"
+        default: "20"
         type: string
   push:
     branches: [stage-m-positive-corpus]
@@ -92,7 +92,7 @@ jobs:
     needs: [plan, unit]
     strategy:
       fail-fast: false
-      max-parallel: 5
+      max-parallel: 10
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ubuntu-24.04
@@ -110,6 +110,7 @@ jobs:
           COVERLAB_STAGE_M_TIME_SCALE: ${{ needs.plan.outputs.mode == 'smoke' && '0.0002' || '0.001' }}
           COVERLAB_STAGE_M_MAX_SLEEP_SECONDS: "0.05"
           COVERLAB_STAGE_M_EVENT_COUNT_CAP: ${{ needs.plan.outputs.mode == 'smoke' && '5' || '0' }}
+          COVERLAB_ENVIRONMENT_TIER: "ci_netns"
         run: |
           name="M-positive-$(printf '%02d' ${{ matrix.shard }})"
           bash ./scripts/run_stage_m_ci.sh "${{ needs.plan.outputs.mode }}" "${{ matrix.shard }}" "${{ matrix.shards }}" "${{ matrix.profile }}" "$RUNNER_TEMP/stage-m" "$name"
