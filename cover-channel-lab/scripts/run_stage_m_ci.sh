@@ -20,6 +20,7 @@ for dev in v-office v-dev v-c2 v-dns v-devops v-soc; do sudo ip link del "$dev" 
 "$ROOT/scripts/start_services.sh"
 bash "$ROOT/scripts/netem_v3.sh" apply "$PROFILE" v-c2
 
+export COVERLAB_CAPTURE_IF="${COVERLAB_CAPTURE_IF:-ccbr0}"
 export COVERLAB_STAGE_M_MODE="$MODE"
 export COVERLAB_NETEM_PROFILE="$PROFILE"
 export COVERLAB_STAGE_M_TIME_SCALE="${COVERLAB_STAGE_M_TIME_SCALE:-0.001}"
