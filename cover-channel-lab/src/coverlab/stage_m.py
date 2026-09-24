@@ -866,7 +866,7 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
     environment_tier = os.environ.get("COVERLAB_ENVIRONMENT_TIER", "ci_netns")
     wire_vm = environment_tier in {"vm_wire", "self_hosted_vm", "cross_host_wire"}
     mechanism = (
-        "timing" if spec.family in {"M-HTTPS-BEACON", "M-WSS-LONG", "M-RMM-SHAPE"}
+        "timing" if spec.family in {"M-HTTPS-BEACON", "M-WSS-LONG", "M-RMM-SHAPE", "M-TIMING-XCARRIER"}
         else "multi_carrier" if spec.family in {"M-FALLBACK", "M-DEAD-DROP"}
         else "storage"
     )
