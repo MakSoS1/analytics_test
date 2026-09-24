@@ -35,6 +35,7 @@ Office traffic is intentionally not synthesized here.
 | M-DNS-BULK | 750 |
 | M-DOH | 800 |
 | M-DOQ | 800 |
+| M-H3-QUIC | 800 |
 | M-DEAD-DROP | 300 |
 | M-WSS-LONG | 800 |
 | M-TUNNEL | 600 |
@@ -44,7 +45,7 @@ Office traffic is intentionally not synthesized here.
 | M-PUBSUB-MQTT | 500 |
 | M-GRPC-BIDI | 400 |
 | M-RMM-SHAPE | 400 |
-| **Total** | **13,350** |
+| **Total** | **14,150** |
 
 The existing HTTP header/URI/body and H3/QUIC/WebTransport V5 captures remain
 separate and are not regenerated merely to inflate counts. Stage M now adds
@@ -213,7 +214,7 @@ run-specific Stage M release.
 `.github/workflows/cover-channel-stage-m.yml`
 
 - `smoke`: one shard, all Stage M families, reduced campaign count;
-- `full`: defaults to 20 shards and produces exactly 13,350 positive campaigns;
+- `full`: defaults to 20 shards and produces exactly 14,150 positive campaigns;
 - full verification fails if any negative row appears or if a family/campaign
   is missing.
 
