@@ -910,24 +910,38 @@ def _chromium_wss(spec: CampaignSpec, seed: int, tunnel: bool) -> list[dict]:
         f"https://edge-front.test:8443/stage-m/ws-fixture"
         f"?host={host}&events={min(spec.event_count,20)}&seed={seed}&mode={'tunnel' if tunnel else 'wss'}"
     )
-    last_rc = None
-    for attempt in range(1, int(os.environ.get("COVERLAB_STAGE_M_WSS_RETRIES", "5")) + 1):
-        cp = subprocess.run([
-            chrome, "--headless", "--no-sandbox", "--disable-gpu", "--ignore-certificate-errors",
-            "--disable-background-networking", "--disable-component-update", "--disable-sync",
-            "--no-first-run", "--virtual-time-budget=8000", "--dump-dom", url,
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-        if cp.returncode == 0:
-            # Browser network activity is the evidence; event rows retain requested shape.
-            return [{
-                "event_id": f"e{i:03d}", "event_type": "stage_m_wss_browser",
-                "sent_at": now_iso(), "completed_at": now_iso(), "encoded_length": 0,
-                "reply_len": 0, "wss_client_impl": "chromium_websocket",
-                "transport_attempt": attempt,
-            } for i in range(min(spec.event_count, 20))]
-        last_rc = cp.returncode
+    retries = max(1, min(7, int(os.environ.get("COVERLAB_STAGE_M_WSS_RETRIES", "5"))))
+    timeout = max(15.0, min(120.0, float(os.environ.get("COVERLAB_STAGE_M_WSS_TIMEOUT_SECONDS", "40"))))
+    errors = []
+    for attempt in range(1, retries + 1):
+        with tempfile.TemporaryDirectory(prefix="coverlab-chrome-wss-") as profile:
+            cmd = [
+                chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--ignore-certificate-errors",
+                "--disable-background-networking", "--disable-component-update", "--disable-sync",
+                "--disable-default-apps", "--disable-extensions", "--disable-features=Translate",
+                "--no-first-run", "--no-default-browser-check",
+                f"--user-data-dir={profile}",
+                "--virtual-time-budget=8000", "--dump-dom", url,
+            ]
+            try:
+                cp = subprocess.run(
+                    cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                    text=True, timeout=timeout,
+                )
+            except subprocess.TimeoutExpired:
+                errors.append(f"attempt={attempt}:timeout={timeout}s")
+            else:
+                if cp.returncode == 0:
+                    # Browser network activity is the evidence; event rows retain requested shape.
+                    return [{
+                        "event_id": f"e{i:03d}", "event_type": "stage_m_wss_browser",
+                        "sent_at": now_iso(), "completed_at": now_iso(), "encoded_length": 0,
+                        "reply_len": 0, "wss_client_impl": "chromium_websocket",
+                        "transport_attempt": attempt,
+                    } for i in range(min(spec.event_count, 20))]
+                errors.append(f"attempt={attempt}:rc={cp.returncode}:{(cp.stderr or '')[-240:]}")
         time.sleep(min(2.0, 0.20 * (2 ** (attempt - 1))))
-    raise RuntimeError(f"Chromium Stage M WSS failed after bounded retries rc={last_rc}")
+    raise RuntimeError("Chromium Stage M WSS failed after bounded retries: " + " | ".join(errors))
 
 
 def _wss_events(spec: CampaignSpec, r: random.Random, seed: int, tunnel: bool = False) -> list[dict]:
