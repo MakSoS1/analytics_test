@@ -187,7 +187,7 @@ def bootstrap_services(inv: dict, key: str | None) -> None:
                 checks.append("if(-not (Get-Command curl.exe -ErrorAction SilentlyContinue)){throw 'curl.exe missing'}")
             if "edge_chromium" in declared:
                 checks += [
-                    "$edge=@($env:ProgramFiles+'\\Microsoft\\Edge\\Application\\msedge.exe',$env:'ProgramFiles(x86)'+'\\Microsoft\\Edge\\Application\\msedge.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1",
+                    "$edge=@($env:ProgramFiles+'\\Microsoft\\Edge\\Application\\msedge.exe',${env:ProgramFiles(x86)}+'\\Microsoft\\Edge\\Application\\msedge.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1",
                     "if(-not $edge -and -not (Get-Command msedge.exe -ErrorAction SilentlyContinue)){throw 'Microsoft Edge missing'}",
                 ]
             remote_windows(
