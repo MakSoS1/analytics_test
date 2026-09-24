@@ -156,8 +156,10 @@ jobs:
           find "$RUNNER_TEMP/all-stage-m" -path '*/bronze/*/manifests/events.jsonl' -type f -print0 | sort -z | xargs -0 cat > "$RUNNER_TEMP/stage-m-final/events.jsonl"
           if [[ "$MODE" == full ]]; then
             PYTHONPATH=src python -m coverlab.stage_m validate --manifest "$RUNNER_TEMP/stage-m-final/campaigns.jsonl" --require-full | tee "$RUNNER_TEMP/stage-m-final/positive_contract.json"
+            PYTHONPATH=src python -m coverlab.diversity_audit --manifest "$RUNNER_TEMP/stage-m-final/campaigns.jsonl" --require-full --out "$RUNNER_TEMP/stage-m-final/diversity_audit.json"
           else
             PYTHONPATH=src python -m coverlab.stage_m validate --manifest "$RUNNER_TEMP/stage-m-final/campaigns.jsonl" | tee "$RUNNER_TEMP/stage-m-final/positive_contract.json"
+            PYTHONPATH=src python -m coverlab.diversity_audit --manifest "$RUNNER_TEMP/stage-m-final/campaigns.jsonl" --out "$RUNNER_TEMP/stage-m-final/diversity_audit.json"
           fi
           python - <<'PY'
           import json, os
