@@ -43,6 +43,8 @@ from aioquic.quic.configuration import QuicConfiguration
 from . import run_campaign as rc
 from .client_runtime_v3 import install as install_client_runtime
 from .doq_fixture import DOQ_ALPN, DoQClientProtocol
+from .h3_fixture import LabH3Client
+from aioquic.h3.connection import H3_ALPN
 
 install_client_runtime()
 
@@ -90,6 +92,7 @@ FAMILY_COUNTS = {
     "M-DNS-BULK": 750,
     "M-DOH": 800,
     "M-DOQ": 800,
+    "M-H3-QUIC": 800,
     "M-DEAD-DROP": 300,
     "M-WSS-LONG": 800,
     "M-TUNNEL": 600,
@@ -111,6 +114,7 @@ ATTACK_MAPPING = {
     "M-DNS-BULK": ["T1071.004", "T1041"],
     "M-DOH": ["T1071.001", "T1071.004"],
     "M-DOQ": ["T1071.004", "T1573"],
+    "M-H3-QUIC": ["T1071.001", "T1573"],
     "M-CLOUD-API": ["T1102", "T1071.001"],
     "M-TIMING-XCARRIER": ["T1071", "T1001"],
     "M-PUBSUB-MQTT": ["T1071.005"],
@@ -172,6 +176,12 @@ def implementation_catalog(family: str) -> tuple[tuple[str, str, str, str], ...]
         return (
             ("doq-aioquic-newconn", "python_aioquic_doq", "aioquic_doq", "direct_doq"),
             ("doq-aioquic-reuse", "python_aioquic_doq_reuse", "aioquic_doq", "direct_doq"),
+        )
+    if family == "M-H3-QUIC":
+        return (
+            ("h3-aioquic-newconn", "python_aioquic_h3", "aioquic_h3", "cover-h3.test"),
+            ("h3-aioquic-reuse", "python_aioquic_h3_reuse", "aioquic_h3", "cover-h3.test"),
+            ("h3-aioquic-parallel", "python_aioquic_h3_parallel", "aioquic_h3", "cover-h3.test"),
         )
     if family == "M-CLOUD-API":
         return tuple(
@@ -563,6 +573,82 @@ def _doq_events(spec: CampaignSpec, r: random.Random) -> list[dict]:
     raise RuntimeError(f"Stage M DoQ failed after {attempts} attempts: {last}")
 
 
+async def _h3_batch(spec: CampaignSpec, r: random.Random) -> list[dict]:
+    cfg = QuicConfiguration(
+        is_client=True,
+        alpn_protocols=H3_ALPN,
+        max_datagram_frame_size=65536,
+    )
+    cfg.verify_mode = ssl.CERT_NONE
+    host = "cover-h3.test"
+    authority = f"{host}:8444"
+    reuse = spec.client_impl.endswith("_reuse")
+    parallel = spec.client_impl.endswith("_parallel")
+    out: list[dict] = []
+
+    async def emit(proto: LabH3Client, i: int) -> dict:
+        body = _payload(r, spec.payload_mode, i, 24 + (i % 6) * 64)
+        path = f"/stage-m/h3/{spec.index}/{i}"
+        started = now_iso()
+        reply = await proto.request(authority, path, "POST", body)
+        return {
+            "event_id": f"e{i:03d}",
+            "event_type": "stage_m_h3",
+            "sent_at": started,
+            "completed_at": now_iso(),
+            "http_method": "POST",
+            "http_path": path,
+            "response_status": int(reply.get("status") or 0),
+            "encoded_length": len(body),
+            "reply_len": int(reply.get("response_bytes") or 0),
+            "h3_stream_id": int(reply.get("stream_id") or 0),
+            "quic_connection_reused": bool(reuse or parallel),
+            "h3_parallel_streams": bool(parallel),
+            "alpn": "h3",
+        }
+
+    if reuse or parallel:
+        async with quic_connect(
+            host, 8444, configuration=cfg,
+            create_protocol=LabH3Client, server_name=host,
+        ) as proto:
+            if parallel:
+                width = min(8, max(1, spec.event_count))
+                for start in range(0, spec.event_count, width):
+                    batch = [emit(proto, i) for i in range(start, min(start + width, spec.event_count))]
+                    out.extend(await asyncio.gather(*batch))
+                    if start + width < spec.event_count:
+                        _requested_sleep(spec, r, min(start + width - 1, spec.event_count - 1))
+            else:
+                for i in range(spec.event_count):
+                    out.append(await emit(proto, i))
+                    _requested_sleep(spec, r, i)
+    else:
+        for i in range(spec.event_count):
+            async with quic_connect(
+                host, 8444, configuration=cfg,
+                create_protocol=LabH3Client, server_name=host,
+            ) as proto:
+                out.append(await emit(proto, i))
+            _requested_sleep(spec, r, i)
+    return out
+
+
+def _h3_events(spec: CampaignSpec, r: random.Random) -> list[dict]:
+    attempts = int(os.environ.get("COVERLAB_STAGE_M_QUIC_RETRIES", "4"))
+    last = None
+    for attempt in range(1, attempts + 1):
+        try:
+            rows = asyncio.run(_h3_batch(spec, r))
+            for row in rows:
+                row["transport_attempt"] = attempt
+            return rows
+        except (TimeoutError, OSError, ConnectionError, RuntimeError) as exc:
+            last = exc
+            time.sleep(min(2.0, 0.25 * (2 ** (attempt - 1))))
+    raise RuntimeError(f"Stage M H3 failed after {attempts} attempts: {last}")
+
+
 def _cloud_events(spec: CampaignSpec, r: random.Random) -> list[dict]:
     hosts = ("graph-front.test", "workers-front.test", "cdn-front.test", "telegram-front.test")
     templates = (
@@ -863,6 +949,9 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
     elif spec.family == "M-DOQ":
         events = _doq_events(spec, r)
         protocol = "doq+quic"
+    elif spec.family == "M-H3-QUIC":
+        events = _h3_events(spec, r)
+        protocol = "h3+quic"
     elif spec.family == "M-CLOUD-API":
         events = _cloud_events(spec, r)
         protocol = "https"
@@ -914,10 +1003,10 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "attack_mapping": ATTACK_MAPPING[spec.family],
         "protocol": protocol,
         "carrier": spec.family.lower().replace("m-", "").replace("-", "_"),
-        "visibility_mode": "opaque_and_ground_truth" if any(x in protocol for x in ("https", "wss", "doq", "quic")) else "content",
-        "inspection_policy": "bypass" if any(x in protocol for x in ("https", "wss", "doq", "quic")) else "not_applicable",
-        "inspection_outcome": "encrypted" if any(x in protocol for x in ("https", "wss", "doq", "quic")) else "plaintext",
-        "sni_visibility": "clear" if any(x in protocol for x in ("https", "wss", "doq", "quic")) else "not_applicable",
+        "visibility_mode": "opaque_and_ground_truth" if any(x in protocol for x in ("https", "wss", "doq", "quic", "h3")) else "content",
+        "inspection_policy": "bypass" if any(x in protocol for x in ("https", "wss", "doq", "quic", "h3")) else "not_applicable",
+        "inspection_outcome": "encrypted" if any(x in protocol for x in ("https", "wss", "doq", "quic", "h3")) else "plaintext",
+        "sni_visibility": "clear" if any(x in protocol for x in ("https", "wss", "doq", "quic", "h3")) else "not_applicable",
         "feature_availability_bitmap": "runtime",
         "experiment_stage": "M_positive_diversity",
         "dataset_role": "positive_corpus",
