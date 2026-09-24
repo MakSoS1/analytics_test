@@ -9,6 +9,8 @@ fi
 MODE="$1"; SHARD="$2"; SHARDS="$3"; PROFILE="$4"; INVENTORY="$5"; WORK="$6"; NAME="$7"; SSH_KEY="${8:-}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PLAN="$WORK/plan.jsonl"
+MAX_SLEEP="${COVERLAB_STAGE_M_MAX_SLEEP_SECONDS-0.05}"
+if [[ "$MAX_SLEEP" == "-1" ]]; then MAX_SLEEP=""; fi
 REMOTE="$WORK/vm-run"
 STAGE="$WORK/stage"
 PARSERS="$WORK/parsers"
@@ -32,7 +34,7 @@ CTRL=(python -m coverlab.vm_remote_controller
   --capture-wire
   --event-cap "${COVERLAB_STAGE_M_EVENT_COUNT_CAP:-0}"
   --time-scale "${COVERLAB_STAGE_M_TIME_SCALE:-0.001}"
-  --max-sleep "${COVERLAB_STAGE_M_MAX_SLEEP_SECONDS-0.05}"
+  --max-sleep "$MAX_SLEEP"
 )
 if [[ -n "$SSH_KEY" ]]; then CTRL+=(--ssh-key "$SSH_KEY"); fi
 PYTHONPATH="$ROOT/src" "${CTRL[@]}"
