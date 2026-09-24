@@ -81,7 +81,7 @@ VOLUME_MODES = ("rare_beacon", "interactive", "trickle", "bulk")
 ASYMMETRY = ("small_small", "small_large", "large_small", "upload_heavy", "download_heavy", "symmetric")
 PAYLOAD_MODES = ("high_entropy", "low_entropy", "fragment_2_6")
 
-# Expanded P0/P1 positive-corpus budget: 13,350 campaigns.
+# Expanded P0/P1 positive-corpus budget: 15,150 campaigns.
 FAMILY_COUNTS = {
     # P0/P1 positive-only target. Existing V5 H3 / extended protocol shards stay
     # separate and are not re-generated here merely to inflate volume.
@@ -234,9 +234,10 @@ def implementation_catalog(family: str) -> tuple[tuple[str, str, str, str], ...]
             for i, c in enumerate(HTTP_CLIENTS[:6])
         )
     if family == "M-HTTPS-FRONT":
+        clients = HTTP_CLIENTS + ("python_httpx_reuse", "python_httpx_h2_reuse")
         return tuple(
             (f"m-https-front-{c}-{i}", c, "nginx_reverse_proxy", HTTPS_FRONTS[i % len(HTTPS_FRONTS)])
-            for i, c in enumerate(HTTP_CLIENTS)
+            for i, c in enumerate(clients)
         )
     if family in {"M-DEAD-DROP", "M-FALLBACK"}:
         return tuple(
@@ -245,9 +246,11 @@ def implementation_catalog(family: str) -> tuple[tuple[str, str, str, str], ...]
              HTTPS_FRONTS[i % len(HTTPS_FRONTS)])
             for i, c in enumerate(HTTP_CLIENTS[:6])
         )
-    # HTTPS beacon/front/low-entropy/fragment/RMM families.
+    # HTTPS beacon/low-entropy/fragment/RMM families include explicit
+    # reconnect and persistent H1/H2 implementations.
     items = []
-    for i, c in enumerate(HTTP_CLIENTS):
+    http_clients = HTTP_CLIENTS + ("python_httpx_reuse", "python_httpx_h2_reuse")
+    for i, c in enumerate(http_clients):
         server = "hypercorn" if i % 2 == 0 else "nginx_reverse_proxy"
         host = HTTPS_DIRECT[i % len(HTTPS_DIRECT)] if server == "hypercorn" else HTTPS_FRONTS[i % len(HTTPS_FRONTS)]
         items.append((f"{family.lower()}-{c}-{server}", c, server, host))
@@ -408,6 +411,15 @@ def _http_exchange(client: str, method: str, url: str, headers: dict, body: byte
 def _http_events(spec: CampaignSpec, r: random.Random, family: str) -> list[dict]:
     events: list[dict] = []
     host = spec.front_host or "cover-api.test"
+    reusable: httpx.Client | None = None
+    if spec.client_impl in {"python_httpx_reuse", "python_httpx_h2_reuse"}:
+        reusable = httpx.Client(
+            verify=False,
+            http2=(spec.client_impl == "python_httpx_h2_reuse"),
+            timeout=10,
+            follow_redirects=False,
+            trust_env=False,
+        )
     scheme = "https"
     port = 8443
     if family == "M-HTTP-443":
@@ -441,7 +453,12 @@ def _http_events(spec: CampaignSpec, r: random.Random, family: str) -> list[dict
         if spec.asymmetry in {"small_large", "download_heavy"}:
             headers["X-Coverlab-Response-Size"] = "large"
         started = now_iso()
-        status, effective = _http_exchange(spec.client_impl, method, f"{scheme}://{host}:{port}{path}", headers, body, use_h2=(host == "cover-h2.test"))
+        if reusable is not None:
+            resp = reusable.request(method, f"{scheme}://{host}:{port}{path}", headers=headers, content=body)
+            _ = resp.content
+            status, effective = int(resp.status_code), spec.client_impl
+        else:
+            status, effective = _http_exchange(spec.client_impl, method, f"{scheme}://{host}:{port}{path}", headers, body, use_h2=(host == "cover-h2.test"))
         events.append({
             "event_id": f"e{i:03d}", "event_type": "stage_m_http", "sent_at": started,
             "completed_at": now_iso(), "http_method": method, "http_path": path,
@@ -449,6 +466,8 @@ def _http_events(spec: CampaignSpec, r: random.Random, family: str) -> list[dict
             "effective_client_impl": effective,
         })
         _requested_sleep(spec, r, i)
+    if reusable is not None:
+        reusable.close()
     return events
 
 
@@ -1128,6 +1147,7 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "positive_only": True,
         "implementation_id": spec.implementation_id,
         "client_impl": spec.client_impl,
+        "connection_lifecycle": "persistent_reuse" if spec.client_impl.endswith("_reuse") else "stack_default_or_reconnect",
         "server_impl": spec.server_impl,
         "network_topology": spec.network_topology,
         "front_host_category": spec.front_host,
