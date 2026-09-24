@@ -138,3 +138,18 @@ def test_raw_header_packets_are_bounded():
         assert pkt[IP].src == "10.20.0.10"
         assert pkt[IP].dst == "10.20.0.20"
         assert isinstance(value, int)
+
+
+def test_full_vm_plan_has_at_least_2000_windows_sessions():
+    inv = {
+        "server": {"ipv4": "10.20.0.20"},
+        "clients": [
+            {"id": "linux-01", "os": "linux", "ssh": "lab@10.20.0.10", "ipv4": "10.20.0.10"},
+            {"id": "windows-01", "os": "windows", "ssh": "lab@10.20.0.11", "ipv4": "10.20.0.11"},
+        ],
+    }
+    rows = make_plan(inv, "full", 0, 1)
+    windows = [r for r in rows if r["client_os"] == "windows"]
+    assert len(rows) == 15150
+    assert len(windows) >= 2000
+    assert any(r["split_role"] == "H_client" for r in windows)
