@@ -130,7 +130,7 @@ function Invoke-HttpScenario([int]$I) {
 }
 
 function Invoke-WebSocketScenario {
-  $uri = [Uri]"wss://cover-ws.test:8443/ws"
+  $uri = [Uri]("wss://" + $ServerHost + ":8443/ws")
   $ws = [System.Net.WebSockets.ClientWebSocket]::new()
   $ws.Options.RemoteCertificateValidationCallback = { param($s,$c,$ch,$e) $true }
   try {
