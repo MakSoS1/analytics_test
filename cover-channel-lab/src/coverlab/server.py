@@ -96,11 +96,18 @@ async def healthz():
 
 @app.api_route("/dns-query", methods=["GET", "POST"])
 async def dns_query(request: Request):
-    # Returns a tiny synthetic DNS response body; semantics are never forwarded to a resolver.
+    # Local RFC8484-shaped fixture. GET reads the base64url `dns` query
+    # parameter; POST reads application/dns-message. Nothing is forwarded.
     body = await request.body()
+    if request.method == "GET":
+        encoded = request.query_params.get("dns", "")
+        if encoded:
+            try:
+                body = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+            except Exception:
+                return Response(status_code=400)
     if not body:
         body = b"\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
-    # Echoing the query is sufficient for wire-format traffic generation and stays local.
     append_trace({"ts":time.time(),"kind":"http","client_ip":request.client.host if request.client else None,"scenario_id":"CC_DOH_01","method":request.method,"path":"/dns-query","request_headers":dict(request.headers),"request":body_record(body),"response_status":200,"response_content_type":"application/dns-message"})
     return Response(body, media_type="application/dns-message")
 
