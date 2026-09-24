@@ -100,7 +100,7 @@ stop_pid() {
     rm -f "$STATE_DIR/pids/$name.pid"
   fi
 }
-for n in http https wss h3 doq grpc mqtt dns nginx; do stop_pid "$n"; done
+for n in http https wss h3 doq grpc mqtt dns raw_sink nginx; do stop_pid "$n"; done
 
 export PYTHONPATH="$ROOT/src"
 "$PYTHON_BIN" -m hypercorn coverlab.server:app --bind 10.20.0.20:8080 --workers 2   >"$STATE_DIR/logs/http.log" 2>&1 & echo $! > "$STATE_DIR/pids/http.pid"
@@ -111,6 +111,7 @@ export PYTHONPATH="$ROOT/src"
 "$PYTHON_BIN" -m coverlab.grpc_server --bind 10.20.0.20:50051   >"$STATE_DIR/logs/grpc.log" 2>&1 & echo $! > "$STATE_DIR/pids/grpc.pid"
 mosquitto -c "$STATE_DIR/mosquitto.conf" -v   >"$STATE_DIR/logs/mqtt.log" 2>&1 & echo $! > "$STATE_DIR/pids/mqtt.pid"
 sudo env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -m coverlab.stage_m_dns_server --bind 10.20.0.20 --port 53   >"$STATE_DIR/logs/dns.log" 2>&1 & echo $! > "$STATE_DIR/pids/dns.pid"
+"$PYTHON_BIN" -m coverlab.stage_m_raw_sink --bind 10.20.0.20 --port 9091 >"$STATE_DIR/logs/raw-sink.log" 2>&1 & echo $! > "$STATE_DIR/pids/raw_sink.pid"
 sudo nginx -c "$STATE_DIR/nginx.conf" -g 'daemon off;'   >"$STATE_DIR/logs/nginx.log" 2>&1 & echo $! > "$STATE_DIR/pids/nginx.pid"
 
 sleep 2
