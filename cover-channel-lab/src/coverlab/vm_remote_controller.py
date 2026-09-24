@@ -163,7 +163,7 @@ def bootstrap_services(inv: dict, key: str | None) -> None:
             remote_posix(target, "sudo -n true", key)
             remote_posix(
                 target,
-                f"cd {shlex.quote(repo)} && bash vm/configure_linux_hosts.sh",
+                f"cd {shlex.quote(repo)} && bash vm/configure_linux_hosts.sh && bash vm/bootstrap_linux_client.sh",
                 key,
             )
         else:
@@ -245,11 +245,33 @@ def run_linux_client(client: dict, rows: list[dict], work: Path, key: str | None
     remote_out = remote_work + "/out"
     remote_posix(target, f"mkdir -p {shlex.quote(remote_work)} {shlex.quote(remote_out)}", key)
     run(scp_base(key) + [str(local_plan), f"{target}:{remote_plan}"])
+    runtime_env = remote_posix_capture(
+        target,
+        "cat /tmp/coverlab-vm-client/runtime.env",
+        key,
+    )
+    runtime = {}
+    for line in runtime_env.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            runtime[k.strip()] = v.strip()
+    required_runtime = {
+        "COVERLAB_VM_PYTHON","COVERLAB_GO_CLIENT","COVERLAB_JAVA_CLIENT_DIR",
+        "COVERLAB_RUST_CLIENT","COVERLAB_NODE_CLIENT","COVERLAB_CHROME",
+    }
+    missing = sorted(required_runtime - set(runtime))
+    if missing:
+        raise RuntimeError("Linux VM runtime bootstrap missing: " + ",".join(missing))
     env = [
         "PYTHONPATH=src",
         "COVERLAB_ENVIRONMENT_TIER=vm_wire",
         f"COVERLAB_STAGE_M_TIME_SCALE={time_scale}",
         f"COVERLAB_STAGE_M_EVENT_COUNT_CAP={event_cap}",
+        f"COVERLAB_GO_CLIENT={runtime['COVERLAB_GO_CLIENT']}",
+        f"COVERLAB_JAVA_CLIENT_DIR={runtime['COVERLAB_JAVA_CLIENT_DIR']}",
+        f"COVERLAB_RUST_CLIENT={runtime['COVERLAB_RUST_CLIENT']}",
+        f"COVERLAB_NODE_CLIENT={runtime['COVERLAB_NODE_CLIENT']}",
+        f"COVERLAB_CHROME={runtime['COVERLAB_CHROME']}",
     ]
     if max_sleep == "":
         env.append("COVERLAB_STAGE_M_MAX_SLEEP_SECONDS=")
@@ -258,7 +280,7 @@ def run_linux_client(client: dict, rows: list[dict], work: Path, key: str | None
     command = (
         f"cd {shlex.quote(repo)} && "
         + " ".join(shlex.quote(x) for x in env)
-        + f" python3 -m coverlab.vm_linux_agent --plan {shlex.quote(remote_plan)} "
+        + f" {shlex.quote(runtime['COVERLAB_VM_PYTHON'])} -m coverlab.vm_linux_agent --plan {shlex.quote(remote_plan)} "
         + f"--out {shlex.quote(remote_out)} --capture-file capture.pcapng"
     )
     remote_posix(target, command, key)
@@ -318,6 +340,47 @@ def merge(results: list[Path], out: Path) -> dict:
     return counts
 
 
+def prove_sensor_wire_path(inv: dict, capture_state: tuple[str, str, str], key: str | None) -> None:
+    """Fail closed unless the sensor's configured interface observes a real
+    client->server transaction. This prevents a green run whose pcap came from
+    the wrong NIC or a management-only capture path."""
+    sensor_target, remote_file, _ = capture_state
+    before_raw = remote_posix_capture(
+        sensor_target,
+        f"stat -c %s {shlex.quote(remote_file)} 2>/dev/null || echo 0",
+        key,
+    ).strip().splitlines()[-1]
+    before = int(before_raw or "0")
+    clients = inv.get("clients") or []
+    linux = next((x for x in clients if x.get("os") == "linux"), None)
+    windows = next((x for x in clients if x.get("os") == "windows"), None)
+    if linux:
+        remote_posix(
+            str(linux["ssh"]),
+            "for i in 1 2 3 4 5; do curl --noproxy '*' -kfsS https://cover-api.test:8443/healthz >/dev/null; done",
+            key,
+        )
+    elif windows:
+        remote_windows(
+            str(windows["ssh"]),
+            'powershell.exe -NoProfile -Command "1..5 | ForEach-Object { curl.exe -k -sS https://cover-api.test:8443/healthz | Out-Null }"',
+            key,
+        )
+    else:
+        raise RuntimeError("no client available for sensor wire-path probe")
+    remote_posix(sensor_target, "sleep 2; sync", key)
+    after_raw = remote_posix_capture(
+        sensor_target,
+        f"stat -c %s {shlex.quote(remote_file)} 2>/dev/null || echo 0",
+        key,
+    ).strip().splitlines()[-1]
+    after = int(after_raw or "0")
+    if after <= before:
+        raise RuntimeError(
+            f"sensor capture did not grow during client->server probe: before={before} after={after}"
+        )
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--inventory", required=True)
@@ -353,6 +416,7 @@ def main() -> None:
     try:
         if a.capture_wire:
             capture_state = start_sensor_capture(inv, work, a.ssh_key)
+            prove_sensor_wire_path(inv, capture_state, a.ssh_key)
         jobs = []
         max_workers = max(1, min(
             len(grouped),
