@@ -31,7 +31,31 @@
       "os": "linux",
       "ssh": "coverlab@10.20.0.10",
       "ipv4": "10.20.0.10",
-      "stacks": ["chromium","curl_openssl","python_httpx","go_nethttp","aioquic","grpcio","paho_mqtt"],
+      "stacks": [
+        "browser_chromium",
+        "chromium_websocket",
+        "curl_linux",
+        "python_httpx",
+        "python_httpx_h2",
+        "python_stdlib",
+        "go_nethttp",
+        "node_fetch",
+        "node_websocket",
+        "java_httpclient",
+        "rust_reqwest",
+        "python_dnspython_udp",
+        "python_dnspython_tcp",
+        "python_aioquic_doq",
+        "python_aioquic_doq_reuse",
+        "python_aioquic_h3",
+        "python_aioquic_h3_reuse",
+        "python_aioquic_h3_parallel",
+        "grpcio",
+        "grpcio_stream_unary",
+        "paho_mqtt_websockets",
+        "paho_mqtt_websockets_qos1",
+        "scapy_raw"
+      ],
       "repo_path": "/opt/coverlab/analytics_test/cover-channel-lab",
       "work_dir": "/tmp/coverlab-vm"
     },
@@ -40,17 +64,47 @@
       "os": "windows",
       "ssh": "coverlab@10.20.0.11",
       "ipv4": "10.20.0.11",
-      "stacks": ["edge_chromium","dotnet_httpclient_schannel","dotnet_clientwebsocket","windows_dns"],
+      "stacks": [
+        "edge_chromium",
+        "dotnet_httpclient_schannel",
+        "dotnet_clientwebsocket",
+        "windows_dns"
+      ],
       "repo_path": "C:/coverlab/analytics_test/cover-channel-lab",
       "work_dir": "C:/coverlab-vm"
     }
   ],
   "network_profiles": {
-    "lan": {"delay_ms": 2, "jitter_ms": 0.5, "loss_pct": 0, "rate_mbit": 1000},
-    "wan_low": {"delay_ms": 25, "jitter_ms": 7, "loss_pct": 0.03, "rate_mbit": 150},
-    "wan": {"delay_ms": 85, "jitter_ms": 20, "loss_pct": 0.15, "rate_mbit": 60},
-    "bad_wifi": {"delay_ms": 140, "jitter_ms": 50, "loss_pct": 1.0, "rate_mbit": 15},
-    "asymmetric": {"delay_ms": 55, "jitter_ms": 15, "loss_pct": 0.2, "rate_mbit": 30}
+    "lan": {
+      "delay_ms": 2,
+      "jitter_ms": 0.5,
+      "loss_pct": 0,
+      "rate_mbit": 1000
+    },
+    "wan_low": {
+      "delay_ms": 25,
+      "jitter_ms": 7,
+      "loss_pct": 0.03,
+      "rate_mbit": 150
+    },
+    "wan": {
+      "delay_ms": 85,
+      "jitter_ms": 20,
+      "loss_pct": 0.15,
+      "rate_mbit": 60
+    },
+    "bad_wifi": {
+      "delay_ms": 140,
+      "jitter_ms": 50,
+      "loss_pct": 1,
+      "rate_mbit": 15
+    },
+    "asymmetric": {
+      "delay_ms": 55,
+      "jitter_ms": 15,
+      "loss_pct": 0.2,
+      "rate_mbit": 30
+    }
   },
   "resolver": {
     "ssh": "coverlab@10.20.0.23",
