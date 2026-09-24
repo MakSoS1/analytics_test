@@ -5,6 +5,7 @@ from pathlib import Path
 
 from coverlab.stage_m import FAMILY_COUNTS, build_specs, total_implementation_profiles, validate_manifest
 from coverlab.diversity_audit import audit
+from coverlab.vm_plan import make_plan
 
 
 def test_stage_m_full_budget_and_family_counts():
@@ -108,3 +109,20 @@ def test_diversity_audit_full_catalog_contract(tmp_path: Path):
     assert report["passed"], report
     assert report["metrics"]["campaigns"] == 13350
     assert report["metrics"]["exact_duplicate_fraction"] < 0.01
+
+
+def test_vm_wire_plan_contract():
+    inv = {
+        "server": {"ipv4": "10.20.0.20"},
+        "clients": [
+            {"id": "linux-01", "os": "linux", "ssh": "lab@10.20.0.10", "ipv4": "10.20.0.10"},
+            {"id": "windows-01", "os": "windows", "ssh": "lab@10.20.0.11", "ipv4": "10.20.0.11"},
+        ],
+    }
+    rows = make_plan(inv, "smoke", 0, 1)
+    assert rows
+    assert all(r["positive_only"] and r["label_binary"] == 1 for r in rows)
+    assert all(r["capture_environment"] == "vm_wire" for r in rows)
+    assert {r["client_os"] for r in rows} == {"linux", "windows"}
+    assert any(r["split_role"] == "H_client" for r in rows)
+    assert all(r["source_ip"].startswith("10.20.0.") for r in rows)
