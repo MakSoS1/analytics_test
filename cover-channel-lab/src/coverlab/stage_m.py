@@ -133,9 +133,11 @@ class CampaignSpec:
     server_impl: str
     front_host: str
     network_topology: str
-    interval_seconds: int
+    interval_seconds: float
+    interval_bucket_seconds: int
     jitter_fraction: float
     event_count: int
+    event_count_bucket: int
     volume_mode: str
     asymmetry: str
     payload_mode: str
@@ -243,9 +245,16 @@ def build_specs(mode: str = "full") -> list[CampaignSpec]:
         for j in range(actual_count):
             impl_id, client, server, topology = impls[j % len(impls)]
             front_host = topology if topology.endswith(".test") else ""
-            interval = INTERVALS[(j // max(1, len(impls))) % len(INTERVALS)]
-            jitter = JITTERS[(j // 3) % len(JITTERS)]
-            events = EVENT_COUNTS[(j * 5 + g) % len(EVENT_COUNTS)]
+            interval_bucket = INTERVALS[(j // max(1, len(impls))) % len(INTERVALS)]
+            # Do not manufacture thousands of "different" PCAPs by seed alone.
+            # Keep the research cadence buckets, but vary the requested clock,
+            # jitter and count deterministically inside each bucket.
+            interval_delta = (((j * 37 + g * 13) % 97) - 48) / 1200.0
+            interval = round(interval_bucket * (1.0 + interval_delta), 3)
+            jitter_bucket = JITTERS[(j // 3) % len(JITTERS)]
+            jitter = round(max(0.0, min(0.50, jitter_bucket + ((((j * 17 + g * 7) % 19) - 9) * 0.005))), 3)
+            event_bucket = EVENT_COUNTS[(j * 5 + g) % len(EVENT_COUNTS)]
+            events = max(3, min(120, event_bucket + ((j * 11 + g * 5) % 7) - 3))
             volume = VOLUME_MODES[(j // 2) % len(VOLUME_MODES)]
             asym = ASYMMETRY[(j // 5) % len(ASYMMETRY)]
             if family == "M-HTTPS-LOWENT":
@@ -264,7 +273,8 @@ def build_specs(mode: str = "full") -> list[CampaignSpec]:
                     else "nginx_front" if topology in HTTPS_FRONTS or topology == "plain-front.test"
                     else "direct"
                 ),
-                interval_seconds=interval, jitter_fraction=jitter, event_count=events,
+                interval_seconds=interval, interval_bucket_seconds=interval_bucket,
+                jitter_fraction=jitter, event_count=events, event_count_bucket=event_bucket,
                 volume_mode=volume, asymmetry=asym, payload_mode=payload,
                 holdout_fold=_stable_mod(impl_id, 5),
             ))
@@ -925,8 +935,10 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "front_host_category": spec.front_host,
         "netem_profile": os.environ.get("COVERLAB_NETEM_PROFILE", "clean"),
         "requested_interval_seconds": spec.interval_seconds,
+        "interval_bucket_seconds": spec.interval_bucket_seconds,
         "jitter_fraction": spec.jitter_fraction,
         "event_count_target": spec.event_count,
+        "event_count_bucket": spec.event_count_bucket,
         "volume_mode": spec.volume_mode,
         "direction_asymmetry": spec.asymmetry,
         "payload_mode": spec.payload_mode,
@@ -971,9 +983,9 @@ def generate(args: argparse.Namespace) -> dict:
     force_interval = os.environ.get("COVERLAB_STAGE_M_FORCE_INTERVAL_SECONDS")
     event_cap = int(os.environ.get("COVERLAB_STAGE_M_EVENT_COUNT_CAP", "0") or 0)
     if force_interval:
-        specs = [replace(s, interval_seconds=int(force_interval)) for s in specs]
+        specs = [replace(s, interval_seconds=float(force_interval), interval_bucket_seconds=int(float(force_interval))) for s in specs]
     if event_cap > 0:
-        specs = [replace(s, event_count=min(s.event_count, event_cap)) for s in specs]
+        specs = [replace(s, event_count=min(s.event_count, event_cap), event_count_bucket=min(s.event_count_bucket, event_cap)) for s in specs]
     spec_offset = int(os.environ.get("COVERLAB_STAGE_M_SPEC_OFFSET", "0") or 0)
     if spec_offset > 0:
         specs = specs[spec_offset:]
