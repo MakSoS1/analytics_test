@@ -29,6 +29,7 @@ PLAN_ARGS=(--inventory "$INVENTORY" --out "$PLAN" --mode "$MODE" --shard "$SHARD
 [[ -n "${COVERLAB_VM_EVENT_COUNT:-}" ]] && PLAN_ARGS+=(--event-count "$COVERLAB_VM_EVENT_COUNT")
 [[ -n "${COVERLAB_VM_PLAN_OFFSET:-}" ]] && PLAN_ARGS+=(--offset "$COVERLAB_VM_PLAN_OFFSET")
 [[ -n "${COVERLAB_VM_PLAN_LIMIT:-}" ]] && PLAN_ARGS+=(--limit "$COVERLAB_VM_PLAN_LIMIT")
+[[ -n "${COVERLAB_VM_FORCE_SPLIT_ROLE:-}" ]] && PLAN_ARGS+=(--force-split-role "$COVERLAB_VM_FORCE_SPLIT_ROLE")
 PYTHONPATH="$ROOT/src" python -m coverlab.vm_plan "${PLAN_ARGS[@]}"
 
 CTRL=(python -m coverlab.vm_remote_controller
