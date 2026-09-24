@@ -33,6 +33,7 @@ import dns.message
 import dns.name
 import dns.rdatatype
 from websockets.sync.client import connect as ws_connect
+from websockets.exceptions import ConnectionClosed, WebSocketException
 
 from . import run_campaign as rc
 from .client_runtime_v3 import install as install_client_runtime
@@ -432,23 +433,61 @@ def _python_wss(spec: CampaignSpec, r: random.Random, tunnel: bool) -> list[dict
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     events = []
-    with ws_connect(f"wss://{host}:8443/ws", ssl=ctx, open_timeout=10, proxy=None, compression=None) as ws:
+    ws = None
+    connect_attempt = 0
+    max_attempts = int(os.environ.get("COVERLAB_STAGE_M_WSS_RETRIES", "5"))
+    try:
         for i in range(spec.event_count):
             data = _payload(r, spec.payload_mode, i, 24 + (i % 5) * 32)
-            started = now_iso()
             if tunnel:
                 conn = f"m{i % 4}"
                 msg = {"type": "socks_data", "conn_id": conn, "data": base64.b64encode(data).decode()}
             else:
                 msg = {"action": "send" if i % 2 else "recv", "container": data.decode(errors="ignore"), "target": "LAB", "message": "STATUS"}
-            ws.send(json.dumps(msg, separators=(",", ":")))
-            reply = ws.recv()
-            events.append({
-                "event_id": f"e{i:03d}", "event_type": "stage_m_wss", "sent_at": started,
-                "completed_at": now_iso(), "encoded_length": len(json.dumps(msg)),
-                "reply_len": len(reply), "wss_client_impl": "python_websockets",
-            })
+
+            attempt = 0
+            while True:
+                attempt += 1
+                connect_attempt += 1
+                started = now_iso()
+                try:
+                    if ws is None:
+                        ws = ws_connect(
+                            f"wss://{host}:8443/ws",
+                            ssl=ctx,
+                            open_timeout=20,
+                            close_timeout=2,
+                            proxy=None,
+                            compression=None,
+                        )
+                    ws.send(json.dumps(msg, separators=(",", ":")))
+                    reply = ws.recv(timeout=20)
+                    events.append({
+                        "event_id": f"e{i:03d}", "event_type": "stage_m_wss", "sent_at": started,
+                        "completed_at": now_iso(), "encoded_length": len(json.dumps(msg)),
+                        "reply_len": len(reply), "wss_client_impl": "python_websockets",
+                        "transport_attempt": attempt, "session_connect_ordinal": connect_attempt,
+                    })
+                    break
+                except (TimeoutError, OSError, ssl.SSLError, ConnectionClosed, WebSocketException) as exc:
+                    if ws is not None:
+                        try:
+                            ws.close()
+                        except Exception:
+                            pass
+                        ws = None
+                    if attempt >= max_attempts:
+                        raise RuntimeError(
+                            f"python Stage M WSS failed after {attempt} attempts host={host} event={i}: {exc}"
+                        ) from exc
+                    time.sleep(min(2.0, 0.20 * (2 ** (attempt - 1))))
             _requested_sleep(spec, r, i)
+    finally:
+        if ws is not None:
+            try:
+                ws.close()
+            except Exception:
+                pass
     return events
 
 
@@ -460,10 +499,17 @@ def _node_wss(spec: CampaignSpec, seed: int, tunnel: bool) -> list[dict]:
         "--events", str(spec.event_count), "--seed", str(seed),
         "--mode", "tunnel" if tunnel else "wss",
     ]
-    cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120)
-    if cp.returncode != 0:
-        raise RuntimeError("node stage-m WSS failed: " + cp.stderr[-800:])
-    return [json.loads(x) for x in cp.stdout.splitlines() if x.strip().startswith("{")]
+    last = None
+    for attempt in range(1, int(os.environ.get("COVERLAB_STAGE_M_WSS_RETRIES", "5")) + 1):
+        cp = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120)
+        if cp.returncode == 0:
+            rows = [json.loads(x) for x in cp.stdout.splitlines() if x.strip().startswith("{")]
+            for row in rows:
+                row["transport_attempt"] = attempt
+            return rows
+        last = cp.stderr[-800:]
+        time.sleep(min(2.0, 0.20 * (2 ** (attempt - 1))))
+    raise RuntimeError("node stage-m WSS failed after bounded retries: " + str(last))
 
 
 def _chromium_wss(spec: CampaignSpec, seed: int, tunnel: bool) -> list[dict]:
@@ -478,19 +524,24 @@ def _chromium_wss(spec: CampaignSpec, seed: int, tunnel: bool) -> list[dict]:
         f"https://edge-front.test:8443/stage-m/ws-fixture"
         f"?host={host}&events={min(spec.event_count,20)}&seed={seed}&mode={'tunnel' if tunnel else 'wss'}"
     )
-    cp = subprocess.run([
-        chrome, "--headless", "--no-sandbox", "--disable-gpu", "--ignore-certificate-errors",
-        "--disable-background-networking", "--disable-component-update", "--disable-sync",
-        "--no-first-run", "--virtual-time-budget=8000", "--dump-dom", url,
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-    if cp.returncode != 0:
-        raise RuntimeError(f"Chromium Stage M WSS returned {cp.returncode}")
-    # Browser network activity is the evidence; event rows retain requested shape.
-    return [{
-        "event_id": f"e{i:03d}", "event_type": "stage_m_wss_browser",
-        "sent_at": now_iso(), "completed_at": now_iso(), "encoded_length": 0,
-        "reply_len": 0, "wss_client_impl": "chromium_websocket",
-    } for i in range(min(spec.event_count, 20))]
+    last_rc = None
+    for attempt in range(1, int(os.environ.get("COVERLAB_STAGE_M_WSS_RETRIES", "5")) + 1):
+        cp = subprocess.run([
+            chrome, "--headless", "--no-sandbox", "--disable-gpu", "--ignore-certificate-errors",
+            "--disable-background-networking", "--disable-component-update", "--disable-sync",
+            "--no-first-run", "--virtual-time-budget=8000", "--dump-dom", url,
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+        if cp.returncode == 0:
+            # Browser network activity is the evidence; event rows retain requested shape.
+            return [{
+                "event_id": f"e{i:03d}", "event_type": "stage_m_wss_browser",
+                "sent_at": now_iso(), "completed_at": now_iso(), "encoded_length": 0,
+                "reply_len": 0, "wss_client_impl": "chromium_websocket",
+                "transport_attempt": attempt,
+            } for i in range(min(spec.event_count, 20))]
+        last_rc = cp.returncode
+        time.sleep(min(2.0, 0.20 * (2 ** (attempt - 1))))
+    raise RuntimeError(f"Chromium Stage M WSS failed after bounded retries rc={last_rc}")
 
 
 def _wss_events(spec: CampaignSpec, r: random.Random, seed: int, tunnel: bool = False) -> list[dict]:
@@ -558,6 +609,18 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         protocol = "http" if spec.family == "M-HTTP-443" else "https"
 
     scale = float(os.environ.get("COVERLAB_STAGE_M_TIME_SCALE", "0.001"))
+    environment_tier = os.environ.get("COVERLAB_ENVIRONMENT_TIER", "ci_netns")
+    wire_vm = environment_tier in {"vm_wire", "self_hosted_vm", "cross_host_wire"}
+    mechanism = (
+        "timing" if spec.family in {"M-HTTPS-BEACON", "M-WSS-LONG", "M-RMM-SHAPE"}
+        else "multi_carrier" if spec.family in {"M-FALLBACK", "M-DEAD-DROP"}
+        else "storage"
+    )
+    embedding_locus = (
+        "session_sequence" if mechanism in {"timing", "multi_carrier"}
+        else "dns_message" if spec.family.startswith("M-DNS") or spec.family == "M-DOH"
+        else "application_message"
+    )
     manifest = {
         "campaign_id": campaign_id,
         "run_id": "stage-m",
@@ -575,7 +638,30 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "feature_availability_bitmap": "runtime",
         "experiment_stage": "M_positive_diversity",
         "dataset_role": "positive_corpus",
-        "training_eligible": True,
+        "training_eligible": wire_vm,
+        "channel_mechanism": mechanism,
+        "embedding_locus": embedding_locus,
+        "modulation_scheme": "periodic_jittered" if mechanism == "timing" else spec.payload_mode,
+        "cover_behavior": spec.volume_mode,
+        "temporal_profile": f"{spec.interval_seconds}s_jitter_{int(spec.jitter_fraction*100)}pct",
+        "payload_entropy_class": spec.payload_mode,
+        "payload_size_profile": spec.asymmetry,
+        "transport_chain": protocol,
+        "parent_campaign_id": None,
+        "mutation_epoch": 0,
+        "mutation_policy": "fixed_catalog",
+        "network_profile_id": os.environ.get("COVERLAB_NETEM_PROFILE", "clean"),
+        "clock_profile_id": os.environ.get("COVERLAB_CLOCK_PROFILE", "host_default"),
+        "tls_profile_id": spec.client_impl if any(x in protocol for x in ("https", "wss")) else "none",
+        "quic_profile_id": "none",
+        "dns_transport": "tcp" if spec.client_impl.endswith("_tcp") else ("udp" if "dns" in protocol else "none"),
+        "service_mimic_category": spec.front_host or "direct_lab_service",
+        "seed_origin": "deterministic_coverlab",
+        "seed_license": "synthetic",
+        "concept_epoch": os.environ.get("COVERLAB_CONCEPT_EPOCH", "2026-09"),
+        "external_implementation": False,
+        "ground_truth_source": "lab_orchestrator",
+        "capture_environment": environment_tier,
         "negative_class_present": False,
         "positive_only": True,
         "implementation_id": spec.implementation_id,
