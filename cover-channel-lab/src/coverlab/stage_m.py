@@ -23,6 +23,7 @@ import random
 import socket
 import ssl
 import subprocess
+import tempfile
 import sys
 import time
 import uuid
@@ -366,14 +367,34 @@ def _chromium_http(url: str, method: str, body: bytes | None) -> tuple[int, str]
         f"?target={__import__('urllib.parse', fromlist=['quote']).quote(u.path + ('?' + u.query if u.query else ''), safe='')}"
         f"&method={method}&body={__import__('urllib.parse', fromlist=['quote']).quote(payload, safe='')}"
     )
-    cp = subprocess.run([
-        chrome, "--headless", "--no-sandbox", "--disable-gpu", "--ignore-certificate-errors",
-        "--disable-background-networking", "--disable-component-update", "--disable-sync",
-        "--no-first-run", "--virtual-time-budget=4000", "--dump-dom", fixture,
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=25)
-    if cp.returncode != 0:
-        raise RuntimeError(f"Chromium Stage M HTTP returned {cp.returncode}")
-    return 200, "browser_chromium"
+    retries = max(1, min(5, int(os.environ.get("COVERLAB_STAGE_M_CHROME_RETRIES", "3"))))
+    timeout = max(10.0, min(90.0, float(os.environ.get("COVERLAB_STAGE_M_CHROME_TIMEOUT_SECONDS", "35"))))
+    errors = []
+    for attempt in range(1, retries + 1):
+        # Never reuse a browser profile between synthetic campaigns. A hung
+        # Chrome process/profile must not poison the rest of a long shard.
+        with tempfile.TemporaryDirectory(prefix="coverlab-chrome-") as profile:
+            cmd = [
+                chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--ignore-certificate-errors",
+                "--disable-background-networking", "--disable-component-update", "--disable-sync",
+                "--disable-default-apps", "--disable-extensions", "--disable-features=Translate",
+                "--no-first-run", "--no-default-browser-check",
+                f"--user-data-dir={profile}",
+                "--virtual-time-budget=5000", "--dump-dom", fixture,
+            ]
+            try:
+                cp = subprocess.run(
+                    cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                    text=True, timeout=timeout,
+                )
+            except subprocess.TimeoutExpired:
+                errors.append(f"attempt={attempt}:timeout={timeout}s")
+            else:
+                if cp.returncode == 0:
+                    return 200, "browser_chromium"
+                errors.append(f"attempt={attempt}:rc={cp.returncode}:{(cp.stderr or '')[-240:]}")
+        time.sleep(min(2.0, 0.25 * (2 ** (attempt - 1))))
+    raise RuntimeError("Chromium Stage M HTTP failed after bounded retries: " + " | ".join(errors))
 
 
 def _http_exchange(client: str, method: str, url: str, headers: dict, body: bytes | None, use_h2: bool = False) -> tuple[int, str]:
