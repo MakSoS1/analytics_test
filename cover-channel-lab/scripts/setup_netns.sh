@@ -52,7 +52,7 @@ done
 sudo sed -i -E '/[[:space:]]stage-m-resolver\\.test([[:space:]]|$)/d' /etc/hosts
 echo "10.20.0.23 stage-m-resolver.test" | sudo tee -a /etc/hosts >/dev/null
 
-HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-bucket.test benign-devtunnel.test doh-relay.test synthetic-api.test echo.test mqtt-broker.test)
+HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-bucket.test benign-devtunnel.test doh-relay.test doq-resolver.test synthetic-api.test echo.test mqtt-broker.test)
 for h in "${HOSTS[@]}"; do
   sudo sed -i -E "/[[:space:]]${h//./\\.}([[:space:]]|$)/d" /etc/hosts
   echo "10.20.0.20 $h" | sudo tee -a /etc/hosts >/dev/null
