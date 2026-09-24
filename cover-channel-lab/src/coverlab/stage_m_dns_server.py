@@ -43,6 +43,8 @@ def answer_query(wire: bytes, *, upstream: str | None = None) -> bytes:
         r.answer.append(dns.rrset.from_text(name, ttl, "IN", "AAAA", "fd20::20"))
     elif question.rdtype == dns.rdatatype.TXT:
         r.answer.append(dns.rrset.from_text(name, ttl, "IN", "TXT", '"stage-m-lab"'))
+    elif question.rdtype == dns.rdatatype.CNAME:
+        r.answer.append(dns.rrset.from_text(name, ttl, "IN", "CNAME", "target.stage-m.test."))
     else:
         r.set_rcode(dns.rcode.NOERROR)
     return r.to_wire()
