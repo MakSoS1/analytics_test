@@ -12,6 +12,7 @@ rather than repeated seeds of one generator implementation.
 """
 
 import argparse
+import asyncio
 import base64
 import fcntl
 import hashlib
@@ -32,11 +33,16 @@ from typing import Iterable
 import dns.message
 import dns.name
 import dns.rdatatype
+import grpc
+import paho.mqtt.client as mqtt
 from websockets.sync.client import connect as ws_connect
 from websockets.exceptions import ConnectionClosed, WebSocketException
+from aioquic.asyncio.client import connect as quic_connect
+from aioquic.quic.configuration import QuicConfiguration
 
 from . import run_campaign as rc
 from .client_runtime_v3 import install as install_client_runtime
+from .doq_fixture import DOQ_ALPN, DoQClientProtocol
 
 install_client_runtime()
 
@@ -73,19 +79,26 @@ PAYLOAD_MODES = ("high_entropy", "low_entropy", "fragment_2_6")
 
 # Exact requested positive-corpus budget: 4,500 campaigns.
 FAMILY_COUNTS = {
-    "M-HTTPS-BEACON": 600,
-    "M-HTTPS-FRONT": 500,
-    "M-HTTPS-LOWENT": 300,
-    "M-HTTPS-FRAG": 300,
+    # P0/P1 positive-only target. Existing V5 H3 / extended protocol shards stay
+    # separate and are not re-generated here merely to inflate volume.
+    "M-HTTPS-BEACON": 1500,
+    "M-HTTPS-FRONT": 600,
+    "M-HTTPS-LOWENT": 400,
+    "M-HTTPS-FRAG": 400,
     "M-HTTP-443": 250,
-    "M-DNS-BEACON": 500,
-    "M-DNS-BULK": 350,
-    "M-DOH": 250,
+    "M-DNS-BEACON": 750,
+    "M-DNS-BULK": 750,
+    "M-DOH": 800,
+    "M-DOQ": 800,
     "M-DEAD-DROP": 300,
-    "M-WSS-LONG": 400,
-    "M-TUNNEL": 300,
-    "M-FALLBACK": 250,
-    "M-RMM-SHAPE": 200,
+    "M-WSS-LONG": 800,
+    "M-TUNNEL": 600,
+    "M-FALLBACK": 600,
+    "M-CLOUD-API": 1500,
+    "M-TIMING-XCARRIER": 2000,
+    "M-PUBSUB-MQTT": 500,
+    "M-GRPC-BIDI": 400,
+    "M-RMM-SHAPE": 400,
 }
 
 ATTACK_MAPPING = {
@@ -97,6 +110,11 @@ ATTACK_MAPPING = {
     "M-DNS-BEACON": ["T1071.004"],
     "M-DNS-BULK": ["T1071.004", "T1041"],
     "M-DOH": ["T1071.001", "T1071.004"],
+    "M-DOQ": ["T1071.004", "T1573"],
+    "M-CLOUD-API": ["T1102", "T1071.001"],
+    "M-TIMING-XCARRIER": ["T1071", "T1001"],
+    "M-PUBSUB-MQTT": ["T1071.005"],
+    "M-GRPC-BIDI": ["T1071.001", "T1572"],
     "M-DEAD-DROP": ["T1102.001", "T1071.001"],
     "M-WSS-LONG": ["T1071.001", "T1573"],
     "M-TUNNEL": ["T1572", "T1090"],
@@ -147,6 +165,37 @@ def implementation_catalog(family: str) -> tuple[tuple[str, str, str, str], ...]
             ("wss-python-nginx", "python_websockets", "nginx_to_wss", WSS_FRONT),
             ("wss-node-nginx", "node_websocket", "nginx_to_wss", WSS_FRONT),
             ("wss-chromium-nginx", "chromium_websocket", "nginx_to_wss", WSS_FRONT),
+        )
+    if family == "M-DOQ":
+        return (
+            ("doq-aioquic-newconn", "python_aioquic_doq", "aioquic_doq", "direct_doq"),
+            ("doq-aioquic-reuse", "python_aioquic_doq_reuse", "aioquic_doq", "direct_doq"),
+        )
+    if family == "M-CLOUD-API":
+        return tuple(
+            (f"cloud-api-{c}-{i}", c, "nginx_reverse_proxy", HTTPS_FRONTS[i % len(HTTPS_FRONTS)])
+            for i, c in enumerate(HTTP_CLIENTS)
+        )
+    if family == "M-TIMING-XCARRIER":
+        return (
+            ("timing-https-curl", "curl_linux", "nginx_reverse_proxy", "edge-front.test"),
+            ("timing-https-go", "go_nethttp", "nginx_reverse_proxy", "cdn-front.test"),
+            ("timing-https-browser", "browser_chromium", "nginx_reverse_proxy", "workers-front.test"),
+            ("timing-dns-udp", "python_dnspython_udp", "local_recursive_forwarder", "recursive_resolver"),
+            ("timing-dns-tcp", "python_dnspython_tcp", "local_recursive_forwarder", "recursive_resolver"),
+            ("timing-wss-python", "python_websockets", "python_websockets_server", WSS_DIRECT),
+            ("timing-wss-node", "node_websocket", "nginx_to_wss", WSS_FRONT),
+            ("timing-mqtt-paho", "paho_mqtt_websockets", "mosquitto_websockets", "mqtt-broker.test"),
+        )
+    if family == "M-PUBSUB-MQTT":
+        return (
+            ("mqtt-paho-qos0", "paho_mqtt_websockets", "mosquitto_websockets", "mqtt-broker.test"),
+            ("mqtt-paho-qos1", "paho_mqtt_websockets_qos1", "mosquitto_websockets", "mqtt-broker.test"),
+        )
+    if family == "M-GRPC-BIDI":
+        return (
+            ("grpc-python-bidi", "grpcio", "grpcio_generic_h2", "cover-h2.test"),
+            ("grpc-python-stream-unary", "grpcio_stream_unary", "grpcio_generic_h2", "cover-h2.test"),
         )
     if family == "M-HTTP-443":
         return tuple(
