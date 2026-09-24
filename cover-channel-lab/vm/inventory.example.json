@@ -4,12 +4,14 @@
   "capture": {
     "sensor_host": "sensor@10.20.0.2",
     "interface": "ens19",
-    "format": "pcapng"
+    "format": "pcapng",
+    "work_dir": "/tmp/coverlab-vm-sensor"
   },
   "router": {
     "ssh": "router@10.20.0.1",
     "client_interface": "ens19",
-    "server_interface": "ens20"
+    "server_interface": "ens20",
+    "repo_path": "/opt/coverlab/analytics_test/cover-channel-lab"
   },
   "server": {
     "ssh": "coverlab@10.20.0.20",
