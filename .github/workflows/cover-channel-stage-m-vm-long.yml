@@ -1,0 +1,98 @@
+name: Cover Channel Stage M VM Long Timing
+
+on:
+  workflow_dispatch:
+    inputs:
+      interval_seconds:
+        description: "Real wall-clock cadence"
+        required: true
+        default: "1200"
+        type: choice
+        options: ["1200", "3600"]
+      network_profile:
+        description: "Router impairment profile"
+        required: true
+        default: lan
+        type: choice
+        options: [lan, wan_low, wan, bad_wifi, asymmetric]
+      offset:
+        description: "Resume offset inside long-timing candidate plan"
+        required: true
+        default: "0"
+        type: string
+      batch_size:
+        description: "Campaigns in this resumable batch"
+        required: true
+        default: "4"
+        type: string
+      inventory_path:
+        description: "Absolute inventory path on controller"
+        required: true
+        default: "/opt/coverlab/inventory.json"
+        type: string
+      ssh_key_path:
+        description: "Optional absolute SSH key path"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: cover-channel-stage-m-vm-long-${{ inputs.network_profile }}-${{ inputs.interval_seconds }}
+  cancel-in-progress: false
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  capture:
+    runs-on: [self-hosted, linux, coverlab-controller]
+    timeout-minutes: 1440
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Validate batch request
+        run: |
+          set -euo pipefail
+          [[ "${{ inputs.offset }}" =~ ^[0-9]+$ ]]
+          [[ "${{ inputs.batch_size }}" =~ ^[1-9][0-9]*$ ]]
+          (( ${{ inputs.batch_size }} <= 16 ))
+          test -f "${{ inputs.inventory_path }}"
+      - name: Capture real long-timing VM batch
+        working-directory: cover-channel-lab
+        env:
+          COVERLAB_STAGE_M_TIME_SCALE: "1"
+          COVERLAB_STAGE_M_MAX_SLEEP_SECONDS: "-1"
+          COVERLAB_STAGE_M_EVENT_COUNT_CAP: "0"
+          COVERLAB_VM_FAMILIES: "M-HTTPS-BEACON,M-HTTPS-FRONT,M-WSS-LONG,M-RMM-SHAPE"
+          COVERLAB_VM_FORCE_INTERVAL_SECONDS: ${{ inputs.interval_seconds }}
+          COVERLAB_VM_EVENT_COUNT: "3"
+          COVERLAB_VM_PLAN_OFFSET: ${{ inputs.offset }}
+          COVERLAB_VM_PLAN_LIMIT: ${{ inputs.batch_size }}
+        run: |
+          python -m pip install -r requirements.txt
+          name="M-vm-long-${{ inputs.network_profile }}-${{ inputs.interval_seconds }}-o${{ inputs.offset }}"
+          args=(full 0 1 "${{ inputs.network_profile }}" "${{ inputs.inventory_path }}" "$RUNNER_TEMP/stage-m-vm-long" "$name")
+          if [[ -n "${{ inputs.ssh_key_path }}" ]]; then args+=("${{ inputs.ssh_key_path }}"); fi
+          bash ./scripts/run_stage_m_vm.sh "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-vm-long-${{ inputs.network_profile }}-${{ inputs.interval_seconds }}-${{ inputs.offset }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m-vm-long/release
+          retention-days: 90
+          compression-level: 0
+      - name: Publish real long timing to Hugging Face
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [[ -n "$HF_TOKEN" ]]; then
+            leaf="M-vm-long-${{ inputs.network_profile }}-${{ inputs.interval_seconds }}-o${{ inputs.offset }}"
+            ./scripts/upload_hf.sh "$RUNNER_TEMP/stage-m-vm-long/release"               "releases/stage-m-vm-long/${{ inputs.network_profile }}/${{ inputs.interval_seconds }}/$leaf"               "Stage M VM wire-real timing $leaf $GITHUB_SHA"
+          fi
