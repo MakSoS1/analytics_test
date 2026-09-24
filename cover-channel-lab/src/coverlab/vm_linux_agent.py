@@ -73,6 +73,8 @@ def run(plan: Path, out: Path, capture_file: str) -> dict:
             manifest["split_role"] = row["split_role"]
             manifest["training_eligible"] = bool(row["training_eligible"] and manifest.get("training_eligible"))
             manifest["capture_environment"] = "vm_wire"
+            manifest["environment_id"] = row.get("environment_id", "unknown-vm-environment")
+            manifest["hypervisor"] = row.get("hypervisor", "unknown")
             manifest["source_os"] = "linux"
             cm.write(json.dumps(manifest, separators=(",", ":"), default=str) + "\n")
             for event in events:
