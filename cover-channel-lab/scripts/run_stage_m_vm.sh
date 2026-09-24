@@ -58,6 +58,48 @@ cp "$STAGE/manifests/events.jsonl" "$STAGE/events.jsonl"
 editcap -F pcap "$MASTER" "$PCAP"
 test -s "$PCAP"
 
+# Bind every campaign to the exact captured bytes and capture time range before
+# parser/Gold packaging. These provenance fields are metadata, not model inputs.
+PYTHONPATH="$ROOT/src" python - "$MASTER" "$PCAP" "$STAGE/manifests/campaigns.jsonl" <<'PY'
+import hashlib, json, sys
+from datetime import datetime, timezone
+from pathlib import Path
+from scapy.all import PcapReader
+
+master, pcap, manifest = map(Path, sys.argv[1:])
+def digest(p):
+    h=hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda:f.read(1024*1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+first=last=None
+with PcapReader(str(pcap)) as rd:
+    for pkt in rd:
+        ts=float(pkt.time)
+        if first is None: first=ts
+        last=ts
+if first is None or last is None:
+    raise SystemExit("empty VM wire capture")
+def iso(ts):
+    return datetime.fromtimestamp(ts, timezone.utc).isoformat(timespec="milliseconds").replace("+00:00","Z")
+meta={
+    "pcap_sha256":digest(pcap),
+    "pcapng_sha256":digest(master),
+    "capture_start_utc":iso(first),
+    "capture_end_utc":iso(last),
+    "capture_duration_s":round(max(0.0,last-first),6),
+}
+rows=[]
+for line in manifest.read_text().splitlines():
+    if not line.strip(): continue
+    r=json.loads(line); r.update(meta); rows.append(r)
+manifest.write_text("\n".join(json.dumps(r,separators=(",",":"),default=str) for r in rows)+"\n")
+print(json.dumps(meta,sort_keys=True))
+PY
+cp "$STAGE/manifests/campaigns.jsonl" "$STAGE/campaigns.jsonl"
+
 "$ROOT/scripts/process_parsers.sh" "$PCAP" "$STAGE" "$PARSERS"
 "$ROOT/scripts/package_layers.sh" "$STAGE" "$PCAP" "$PARSERS" "$RELEASE" "$NAME"
 
