@@ -6,6 +6,7 @@ from pathlib import Path
 from coverlab.stage_m import FAMILY_COUNTS, build_specs, total_implementation_profiles, validate_manifest
 from coverlab.diversity_audit import audit
 from coverlab.vm_plan import make_plan
+from coverlab.stage_m_raw import MODES, packet
 
 
 def test_stage_m_full_budget_and_family_counts():
@@ -126,3 +127,14 @@ def test_vm_wire_plan_contract():
     assert {r["client_os"] for r in rows} == {"linux", "windows"}
     assert any(r["split_role"] == "H_client" for r in rows)
     assert all(r["source_ip"].startswith("10.20.0.") for r in rows)
+
+
+def test_raw_header_packets_are_bounded():
+    import random
+    from scapy.layers.inet import IP
+    for i, mode in enumerate(MODES):
+        pkt, value = packet(mode, "10.20.0.10", i, random.Random(1000 + i))
+        assert IP in pkt
+        assert pkt[IP].src == "10.20.0.10"
+        assert pkt[IP].dst == "10.20.0.20"
+        assert isinstance(value, int)
