@@ -45,7 +45,8 @@ Office traffic is intentionally not synthesized here.
 | M-PUBSUB-MQTT | 500 |
 | M-GRPC-BIDI | 400 |
 | M-RMM-SHAPE | 400 |
-| **Total** | **14,150** |
+| M-L34-STORAGE | 1,000 |
+| **Total** | **15,150** |
 
 The existing HTTP header/URI/body and H3/QUIC/WebTransport V5 captures remain
 separate and are not regenerated merely to inflate counts. Stage M now adds
@@ -53,6 +54,14 @@ wire-real local DoQ, MQTT-over-WSS and gRPC positive families. ECH/OHTTP/MASQUE
 remain visibility/privacy challenges rather than automatic malicious labels.
 
 ## Diversity axes
+
+The corpus follows the intended hybrid split: about 93% of the expanded Stage M
+budget is generated through kernel/application protocol stacks, while 1,000
+campaigns (~6.6%) use Scapy only for header fields the kernel normally owns.
+
+The bounded raw family covers IPv4 ID, UDP source port, ICMP id/sequence, TCP
+initial sequence and TCP Timestamp option. It is restricted in code to the
+isolated `10.20.0.20` lab endpoint and never provides arbitrary forwarding.
 
 Each family is generated across independent implementation profiles rather than
 only different random seeds.
@@ -214,7 +223,7 @@ run-specific Stage M release.
 `.github/workflows/cover-channel-stage-m.yml`
 
 - `smoke`: one shard, all Stage M families, reduced campaign count;
-- `full`: defaults to 20 shards and produces exactly 14,150 positive campaigns;
+- `full`: defaults to 20 shards and produces exactly 15,150 positive campaigns;
 - full verification fails if any negative row appears or if a family/campaign
   is missing.
 
