@@ -20,14 +20,20 @@ foreach ($r in $rows) {
   $n = [int]$r.event_count
   if ($EventCap -gt 0) { $n = [Math]::Min($n,$EventCap) }
   $eventFile = Join-Path $OutDir ("events-" + $r.campaign_id + ".jsonl")
+  $serverHost = if ([string]::IsNullOrWhiteSpace([string]$r.front_host)) { "cover-api.test" } else { [string]$r.front_host }
+  $serverIp = if ([string]$r.network_topology -eq "recursive_resolver") { "10.20.0.23" } else { "10.20.0.20" }
+  $scaledInterval = [double]$r.interval_seconds * $TimeScale
+  if ($MaxSleepSeconds -ge 0) { $scaledInterval = [Math]::Min($scaledInterval, $MaxSleepSeconds) }
   $params = @{
     Family = [string]$r.family
     Stack = [string]$r.client_impl
     CampaignId = [string]$r.campaign_id
     Seed = 27000000 + ([int]$r.spec_index * 1009)
     Events = $n
-    IntervalSeconds = [Math]::Min(([double]$r.interval_seconds * $TimeScale), $MaxSleepSeconds)
+    IntervalSeconds = $scaledInterval
     JitterFraction = [double]$r.jitter_fraction
+    ServerHost = $serverHost
+    ServerIp = $serverIp
     Output = $eventFile
   }
   $manifest = & $Agent @params
