@@ -115,6 +115,7 @@ run_in_c2 "$PYTHON_BIN" -m coverlab.grpc_server --bind 10.20.0.20:50051 >"$LOGDI
 run_in_c2 "$PYTHON_BIN" -m coverlab.h3_fixture server --host 10.20.0.20 --port 8444 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/h3.log" 2>&1 & echo $! > "$LOGDIR/h3.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.doq_fixture server --host 10.20.0.20 --port 8853 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/doq.log" 2>&1 & echo $! > "$LOGDIR/doq.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.connect_server --host 10.20.0.20 --port 8082 >"$LOGDIR/connect.log" 2>&1 & echo $! > "$LOGDIR/connect.pid"
+run_in_c2 "$PYTHON_BIN" -m coverlab.stage_m_raw_sink --bind 10.20.0.20 --port 9091 >"$LOGDIR/stage-m-raw-sink.log" 2>&1 & echo $! > "$LOGDIR/stage-m-raw-sink.pid"
 run_in_c2 mosquitto -c "$CERTDIR/mosquitto.conf" -v >"$LOGDIR/mqtt.log" 2>&1 & echo $! > "$LOGDIR/mqtt.pid"
 
 # Stage M local-only infrastructure. Root is used only for privileged DNS/HTTP
@@ -192,6 +193,8 @@ required_probe stage-m-nginx "$LOGDIR/nginx-stage-m-error.log" sudo ip netns exe
 required_probe stage-m-http443 "$LOGDIR/nginx-stage-m-error.log" sudo ip netns exec cc-dev curl --noproxy '*' -fsS http://plain-front.test:443/healthz
 dns_probe='import socket,dns.message; q=dns.message.make_query("probe.stage-m.test.","A").to_wire(); s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3); s.sendto(q,("10.20.0.23",53)); d,_=s.recvfrom(4096); raise SystemExit(0 if len(d)>12 else 1)'
 required_probe stage-m-dns "$LOGDIR/stage-m-dns-rec.log" sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$dns_probe"
+raw_udp_probe='import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3); s.sendto(b"probe",("10.20.0.20",9091)); d,_=s.recvfrom(64); raise SystemExit(0 if d==b"probe" else 1)'
+required_probe stage-m-raw-sink "$LOGDIR/stage-m-raw-sink.log" sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$raw_udp_probe"
 doq_probe='from coverlab.doq_fixture import one_query; import asyncio; r=asyncio.run(one_query("doq-resolver.test",8853,"probe.stage-m.test.","A")); raise SystemExit(0 if r.get("response_bytes",0)>0 else 1)'
 required_probe stage-m-doq "$LOGDIR/doq.log" sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$doq_probe"
 echo "coverlab Stage M nginx/DNS/DoQ fixtures ready"
