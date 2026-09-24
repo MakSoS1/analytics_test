@@ -209,7 +209,7 @@ function Invoke-DnsScenario {
   for ($i=0; $i -lt $Events; $i++) {
     $raw = New-Payload $i
     $label = ([Convert]::ToHexString($raw).ToLower()).Substring(0,[Math]::Min(50,$raw.Length*2))
-    $qtype = @("A","AAAA","TXT")[$i % 3]
+    $qtype = @("A","AAAA","TXT","CNAME")[$i % 4]
     $name = "$label.stage-m.test"
     $null = Resolve-DnsName -Name $name -Type $qtype -Server $ServerIp -DnsOnly -ErrorAction Stop
     Add-Row $i "stage_m_windows_dns" $label.Length "qtype=$qtype"
