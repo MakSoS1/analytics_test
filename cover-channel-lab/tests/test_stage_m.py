@@ -189,3 +189,12 @@ def test_vm_plan_rejects_undeclared_runtime_stack():
     }
     with pytest.raises(ValueError, match="does not declare required stack"):
         make_plan(inv, "smoke", 0, 1)
+
+
+def test_stage_m_https_catalog_has_reconnect_and_persistent_h1_h2():
+    specs=[s for s in build_specs("full") if s.family in {"M-HTTPS-BEACON","M-HTTPS-FRONT","M-HTTPS-LOWENT","M-HTTPS-FRAG","M-RMM-SHAPE"}]
+    clients={s.client_impl for s in specs}
+    assert "python_httpx" in clients
+    assert "python_httpx_h2" in clients
+    assert "python_httpx_reuse" in clients
+    assert "python_httpx_h2_reuse" in clients
