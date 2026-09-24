@@ -12,7 +12,7 @@ WINDOWS_FAMILIES = {
     "M-CLOUD-API", "M-RMM-SHAPE", "M-WSS-LONG", "M-TUNNEL",
     "M-DNS-BEACON", "M-DNS-BULK",
 }
-WINDOWS_HTTP_STACKS = ("dotnet_httpclient_schannel", "winhttp", "curl_schannel")
+WINDOWS_HTTP_STACKS = ("dotnet_httpclient_schannel", "winhttp", "curl_schannel", "edge_chromium")
 
 
 def _private_ip(value: str) -> bool:
@@ -50,12 +50,14 @@ def choose_client(spec, inv: dict) -> tuple[dict, str, str]:
     if windows and spec.family in WINDOWS_FAMILIES and spec.index % 3 == 0:
         c = windows[(spec.index // 3) % len(windows)]
         if spec.family in {"M-WSS-LONG", "M-TUNNEL"}:
-            stack = "dotnet_clientwebsocket"
+            stack = "edge_chromium" if ((spec.index // 3) % 3 == 2) else "dotnet_clientwebsocket"
         elif spec.family.startswith("M-DNS"):
             stack = "windows_dns"
         else:
             stack = WINDOWS_HTTP_STACKS[(spec.index // 3) % len(WINDOWS_HTTP_STACKS)]
-        split_role = "H_client" if stack == "curl_schannel" else "train"
+        # Entire Edge implementation stays outside train: this is a true
+        # client-stack holdout rather than a random campaign split.
+        split_role = "H_client" if stack == "edge_chromium" else "train"
         return c, stack, split_role
 
     if not linux:
@@ -97,6 +99,8 @@ def make_plan(inv: dict, mode: str, shard: int, shards: int) -> list[dict]:
             "split_role": split_role,
             "training_eligible": split_role == "train",
             "capture_environment": "vm_wire",
+            "environment_id": str(inv.get("environment_id") or "unknown-vm-environment"),
+            "hypervisor": str(inv.get("hypervisor") or "unknown"),
             "positive_only": True,
             "label_binary": 1,
         })
@@ -115,6 +119,7 @@ def main() -> None:
     ap.add_argument("--event-count", type=int)
     ap.add_argument("--offset", type=int, default=0)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--force-split-role", choices=["train","H_client","H_environment"], default="")
     a = ap.parse_args()
     if a.shards < 1 or not 0 <= a.shard < a.shards:
         raise SystemExit("invalid shard/shards")
@@ -140,6 +145,10 @@ def main() -> None:
     rows = rows[a.offset:]
     if a.limit > 0:
         rows = rows[:a.limit]
+    if a.force_split_role:
+        for r in rows:
+            r["split_role"] = a.force_split_role
+            r["training_eligible"] = a.force_split_role == "train"
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(json.dumps(r, separators=(",", ":")) for r in rows) + ("\n" if rows else ""))
