@@ -64,6 +64,66 @@ def remote_windows(target: str, command: str, key: str | None) -> None:
     run(ssh_base(key) + [target, command])
 
 
+def remote_posix_capture(target: str, command: str, key: str | None) -> str:
+    validate_target(target)
+    cp = run(ssh_base(key) + [target, command], capture=True)
+    return cp.stdout or ""
+
+
+def start_sensor_capture(inv: dict, work: Path, key: str | None) -> tuple[str, str, str]:
+    cap = inv.get("capture") or {}
+    target = str(cap.get("sensor_host") or "")
+    iface = str(cap.get("interface") or "")
+    fmt = str(cap.get("format") or "pcapng").lower()
+    remote_work = str(cap.get("work_dir") or "/tmp/coverlab-vm-sensor")
+    validate_target(target)
+    validate_path(remote_work, "linux")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]+", iface):
+        raise ValueError(f"unsafe capture interface: {iface}")
+    if fmt != "pcapng":
+        raise ValueError("VM wire master capture must use pcapng")
+    remote_file = remote_work + "/capture.pcapng"
+    remote_pid = remote_work + "/dumpcap.pid"
+    remote_log = remote_work + "/dumpcap.log"
+    command = (
+        f"mkdir -p {shlex.quote(remote_work)} && "
+        f"command -v dumpcap >/dev/null && "
+        f"rm -f {shlex.quote(remote_file)} {shlex.quote(remote_pid)} {shlex.quote(remote_log)} && "
+        f"nohup dumpcap -q -i {shlex.quote(iface)} -f {shlex.quote('net 10.20.0.0/24')} "
+        f"-w {shlex.quote(remote_file)} >{shlex.quote(remote_log)} 2>&1 & echo $! > {shlex.quote(remote_pid)}"
+    )
+    remote_posix(target, command, key)
+    # Confirm the capture process actually stayed alive before generating traffic.
+    remote_posix(target, f"sleep 1; test -s {shlex.quote(remote_pid)}; kill -0 $(cat {shlex.quote(remote_pid)})", key)
+    return target, remote_file, remote_pid
+
+
+def stop_sensor_capture(target: str, remote_file: str, remote_pid: str, local_file: Path, key: str | None) -> None:
+    command = (
+        f"if test -s {shlex.quote(remote_pid)}; then "
+        f"kill -INT $(cat {shlex.quote(remote_pid)}) 2>/dev/null || true; "
+        f"for i in $(seq 1 50); do kill -0 $(cat {shlex.quote(remote_pid)}) 2>/dev/null || break; sleep 0.1; done; fi; "
+        f"test -s {shlex.quote(remote_file)}"
+    )
+    remote_posix(target, command, key)
+    local_file.parent.mkdir(parents=True, exist_ok=True)
+    run(scp_base(key) + [f"{target}:{remote_file}", str(local_file)])
+
+
+def collect_server_ground_truth(inv: dict, out: Path, key: str | None) -> None:
+    server = inv.get("server") or {}
+    target = str(server.get("ssh") or "")
+    validate_target(target)
+    text = remote_posix_capture(
+        target,
+        "for f in /tmp/coverlab_server_trace.jsonl /tmp/coverlab_wss_trace.jsonl; do "
+        "test -f \"$f\" && cat \"$f\" || true; done",
+        key,
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text)
+
+
 def split_plan(plan: Path) -> dict[str, list[dict]]:
     grouped: dict[str, list[dict]] = {}
     for line in plan.read_text().splitlines():
@@ -149,7 +209,10 @@ def run_linux_client(client: dict, rows: list[dict], work: Path, key: str | None
     return local_out
 
 
-def run_windows_client(client: dict, rows: list[dict], work: Path, key: str | None, *, event_cap: int) -> Path:
+def run_windows_client(
+    client: dict, rows: list[dict], work: Path, key: str | None, *,
+    event_cap: int, time_scale: float, max_sleep: str,
+) -> Path:
     target = str(client["ssh"])
     repo = str(client["repo_path"]).rstrip("/")
     remote_work = str(client["work_dir"]).rstrip("/")
@@ -164,9 +227,11 @@ def run_windows_client(client: dict, rows: list[dict], work: Path, key: str | No
     run(scp_base(key) + [str(local_plan), f"{target}:{remote_plan}"])
     batch = repo + "/vm/windows_stage_m_batch.ps1"
     agent = repo + "/vm/windows_stage_m_agent.ps1"
+    max_sleep_num = -1.0 if max_sleep == "" else float(max_sleep)
     command = (
         'powershell.exe -NoProfile -ExecutionPolicy Bypass -File '
-        + f'"{batch}" -Plan "{remote_plan}" -Agent "{agent}" -OutDir "{remote_out}" -EventCap {event_cap}'
+        + f'"{batch}" -Plan "{remote_plan}" -Agent "{agent}" -OutDir "{remote_out}" '
+        + f'-EventCap {event_cap} -TimeScale {time_scale} -MaxSleepSeconds {max_sleep_num}'
     )
     remote_windows(target, command, key)
     local_out = work / f"result-{client['id']}"
@@ -204,11 +269,13 @@ def main() -> None:
     ap.add_argument("--event-cap", type=int, default=0)
     ap.add_argument("--time-scale", type=float, default=0.001)
     ap.add_argument("--max-sleep", default="0.05")
+    ap.add_argument("--capture-wire", action="store_true")
     a = ap.parse_args()
 
     inv = json.loads(Path(a.inventory).read_text())
     clients = {str(x["id"]): x for x in inv["clients"]}
-    for node in [inv.get("server"), inv.get("resolver"), inv.get("router"), *inv["clients"]]:
+    sensor_node = {"ssh": (inv.get("capture") or {}).get("sensor_host")}
+    for node in [inv.get("server"), inv.get("resolver"), inv.get("router"), sensor_node, *inv["clients"]]:
         if node and node.get("ssh"):
             validate_target(str(node["ssh"]))
 
@@ -217,17 +284,40 @@ def main() -> None:
     apply_netem(inv, a.netem_profile, a.ssh_key)
 
     grouped = split_plan(Path(a.plan))
-    work = Path(a.out) / "remote"
+    out_root = Path(a.out)
+    work = out_root / "remote"
     work.mkdir(parents=True, exist_ok=True)
+    capture_state: tuple[str, str, str] | None = None
     results = []
-    for client_id, rows in sorted(grouped.items()):
-        client = clients[client_id]
-        if client["os"] == "linux":
-            results.append(run_linux_client(client, rows, work, a.ssh_key, event_cap=a.event_cap, time_scale=a.time_scale, max_sleep=a.max_sleep))
-        else:
-            results.append(run_windows_client(client, rows, work, a.ssh_key, event_cap=a.event_cap))
-    counts = merge(results, Path(a.out) / "merged")
-    print(json.dumps({**counts, "clients": len(results), "positive_only": True, "capture_environment": "vm_wire"}, sort_keys=True))
+    try:
+        if a.capture_wire:
+            capture_state = start_sensor_capture(inv, work, a.ssh_key)
+        for client_id, rows in sorted(grouped.items()):
+            client = clients[client_id]
+            if client["os"] == "linux":
+                results.append(run_linux_client(
+                    client, rows, work, a.ssh_key,
+                    event_cap=a.event_cap, time_scale=a.time_scale, max_sleep=a.max_sleep,
+                ))
+            else:
+                results.append(run_windows_client(
+                    client, rows, work, a.ssh_key,
+                    event_cap=a.event_cap, time_scale=a.time_scale, max_sleep=a.max_sleep,
+                ))
+    finally:
+        if capture_state is not None:
+            target, remote_file, remote_pid = capture_state
+            stop_sensor_capture(target, remote_file, remote_pid, out_root / "capture.pcapng", a.ssh_key)
+    counts = merge(results, out_root / "merged")
+    collect_server_ground_truth(inv, out_root / "merged" / "decrypted_transactions.jsonl", a.ssh_key)
+    print(json.dumps({
+        **counts,
+        "clients": len(results),
+        "positive_only": True,
+        "capture_environment": "vm_wire",
+        "wire_capture": bool(a.capture_wire),
+        "pcapng": str(out_root / "capture.pcapng") if a.capture_wire else None,
+    }, sort_keys=True))
 
 
 if __name__ == "__main__":
