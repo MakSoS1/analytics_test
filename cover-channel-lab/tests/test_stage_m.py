@@ -80,3 +80,31 @@ def test_diversity_audit_smoke_contract(tmp_path: Path):
     report = audit(p, require_full=False)
     assert report["passed"]
     assert report["metrics"]["positive_only"]
+
+
+def test_diversity_audit_full_catalog_contract(tmp_path: Path):
+    """Fail fast before an expensive full capture if the designed catalog itself
+    violates the release diversity gates."""
+    p = tmp_path / "campaigns-full.jsonl"
+    rows = []
+    for i, s in enumerate(build_specs("full")):
+        rows.append({
+            "campaign_id": f"m-{i:05d}",
+            "scenario_id": s.family,
+            "label_binary": 1,
+            "client_impl": s.client_impl,
+            "server_impl": s.server_impl,
+            "implementation_id": s.implementation_id,
+            "requested_interval_seconds": s.interval_seconds,
+            "jitter_fraction": s.jitter_fraction,
+            "event_count_target": s.event_count,
+            "volume_mode": s.volume_mode,
+            "direction_asymmetry": s.asymmetry,
+            "payload_mode": s.payload_mode,
+            "network_profile_id": "catalog",
+        })
+    p.write_text("\n".join(json.dumps(x) for x in rows) + "\n")
+    report = audit(p, require_full=True)
+    assert report["passed"], report
+    assert report["metrics"]["campaigns"] == 13350
+    assert report["metrics"]["exact_duplicate_fraction"] < 0.01
