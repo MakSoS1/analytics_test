@@ -1056,7 +1056,11 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "training_eligible": bool(wire_vm and (mechanism != "timing" or timing_real)),
         "channel_mechanism": mechanism,
         "embedding_locus": embedding_locus,
-        "modulation_scheme": "periodic_jittered" if mechanism == "timing" else spec.payload_mode,
+        "modulation_scheme": (
+            f"header_field:{spec.network_topology}" if spec.family == "M-L34-STORAGE"
+            else "periodic_jittered" if mechanism == "timing"
+            else spec.payload_mode
+        ),
         "cover_behavior": spec.volume_mode,
         "temporal_profile": f"{spec.interval_seconds}s_jitter_{int(spec.jitter_fraction*100)}pct",
         "payload_entropy_class": spec.payload_mode,
@@ -1103,7 +1107,7 @@ def run_one(spec: CampaignSpec, seed: int, campaign_id: str, persona: str, sourc
         "leave_one_network_group": os.environ.get("COVERLAB_NETEM_PROFILE", "clean"),
         "persona": persona,
         "source_ip": source_ip,
-        "destination_host": spec.front_host,
+        "destination_host": "10.20.0.20" if spec.family == "M-L34-STORAGE" else spec.front_host,
         "capture_file": capture_file,
         "seed": seed,
         "expected_events": len(events),
