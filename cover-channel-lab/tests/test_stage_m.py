@@ -10,7 +10,7 @@ from coverlab.vm_plan import make_plan
 
 def test_stage_m_full_budget_and_family_counts():
     specs = build_specs("full")
-    assert len(specs) == sum(FAMILY_COUNTS.values()) == 13350
+    assert len(specs) == sum(FAMILY_COUNTS.values()) == 14150
     got = {}
     for s in specs:
         got[s.family] = got.get(s.family, 0) + 1
@@ -107,7 +107,7 @@ def test_diversity_audit_full_catalog_contract(tmp_path: Path):
     p.write_text("\n".join(json.dumps(x) for x in rows) + "\n")
     report = audit(p, require_full=True)
     assert report["passed"], report
-    assert report["metrics"]["campaigns"] == 13350
+    assert report["metrics"]["campaigns"] == 14150
     assert report["metrics"]["exact_duplicate_fraction"] < 0.01
 
 
