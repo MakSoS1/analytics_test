@@ -414,26 +414,45 @@ def _dns_wire_query(qname: str, qtype: str) -> bytes:
     return dns.message.make_query(dns.name.from_text(qname), dns.rdatatype.from_text(qtype)).to_wire()
 
 
+def _recv_exact(sock: socket.socket, n: int) -> bytes:
+    data = bytearray()
+    while len(data) < n:
+        chunk = sock.recv(n - len(data))
+        if not chunk:
+            break
+        data.extend(chunk)
+    return bytes(data)
+
+
 def _dns_exchange(server: str, wire: bytes, tcp: bool) -> int:
-    if tcp:
-        with socket.create_connection((server, 53), timeout=5) as s:
-            s.sendall(len(wire).to_bytes(2, "big") + wire)
-            head = s.recv(2)
-            if len(head) != 2:
-                raise RuntimeError("short DNS/TCP response")
-            need = int.from_bytes(head, "big")
-            data = b""
-            while len(data) < need:
-                chunk = s.recv(need - len(data))
-                if not chunk:
-                    break
-                data += chunk
-            return len(data)
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.settimeout(5)
-        s.sendto(wire, (server, 53))
-        data, _ = s.recvfrom(65535)
-        return len(data)
+    attempts = int(os.environ.get("COVERLAB_STAGE_M_DNS_RETRIES", "5"))
+    last: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            if tcp:
+                with socket.create_connection((server, 53), timeout=8) as s:
+                    s.settimeout(8)
+                    s.sendall(len(wire).to_bytes(2, "big") + wire)
+                    head = _recv_exact(s, 2)
+                    if len(head) != 2:
+                        raise RuntimeError("short DNS/TCP length prefix")
+                    need = int.from_bytes(head, "big")
+                    data = _recv_exact(s, need)
+                    if len(data) != need:
+                        raise RuntimeError(f"short DNS/TCP response {len(data)}/{need}")
+                    return len(data)
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.settimeout(8)
+                s.sendto(wire, (server, 53))
+                data, _ = s.recvfrom(65535)
+                if len(data) < 12:
+                    raise RuntimeError("short DNS/UDP response")
+                return len(data)
+        except (OSError, TimeoutError, RuntimeError) as exc:
+            last = exc
+            if attempt < attempts:
+                time.sleep(min(2.0, 0.20 * (2 ** (attempt - 1))))
+    raise RuntimeError(f"Stage M DNS exchange failed after {attempts} attempts server={server} tcp={tcp}: {last}")
 
 
 def _dns_events(spec: CampaignSpec, r: random.Random, bulk: bool = False) -> list[dict]:
