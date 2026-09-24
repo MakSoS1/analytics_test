@@ -1,0 +1,192 @@
+name: Cover Channel Stage M VM Wire
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "smoke or full VM-wire positive corpus"
+        required: true
+        default: smoke
+        type: choice
+        options: [smoke, full]
+      shards:
+        description: "Number of sequential VM shards"
+        required: true
+        default: "20"
+        type: string
+      inventory_path:
+        description: "Absolute inventory path on the coverlab controller"
+        required: true
+        default: "/opt/coverlab/inventory.json"
+        type: string
+      ssh_key_path:
+        description: "Optional absolute SSH key path on controller"
+        required: false
+        default: ""
+        type: string
+      time_scale:
+        description: "1 for real timing; <1 only for non-timing/shape collection"
+        required: true
+        default: "0.001"
+        type: string
+      max_sleep_seconds:
+        description: "Use -1 for no cap; otherwise cap scaled sleeps"
+        required: true
+        default: "0.05"
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: cover-channel-stage-m-vm-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      release_id: ${{ steps.plan.outputs.release_id }}
+    steps:
+      - id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          n="${{ inputs.mode == 'smoke' && '1' || inputs.shards }}"
+          [[ "$n" =~ ^[0-9]+$ ]] || { echo "invalid shards" >&2; exit 2; }
+          (( n >= 1 && n <= 40 )) || { echo "shards must be 1..40" >&2; exit 2; }
+          export N="$n"
+          matrix="$(python - <<'PY'
+          import json,os
+          p=["lan","wan_low","wan","bad_wifi","asymmetric"]
+          n=int(os.environ["N"])
+          print(json.dumps([{"shard":i,"shards":n,"profile":p[i%len(p)]} for i in range(n)],separators=(",",":")))
+          PY
+          )"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "release_id=stage-m-vm-gh-${{ github.run_id }}-a${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
+  generate:
+    needs: plan
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: [self-hosted, linux, coverlab-controller]
+    timeout-minutes: 720
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Controller preflight
+        working-directory: cover-channel-lab
+        run: |
+          set -euo pipefail
+          test -f "${{ inputs.inventory_path }}"
+          command -v ssh
+          command -v scp
+          command -v editcap
+          command -v suricata
+          command -v docker
+          python -m pip install -r requirements.txt
+          docker run --rm zeek/zeek:8.2.1 zeek --version
+      - name: Generate real VM-wire positive shard
+        working-directory: cover-channel-lab
+        env:
+          COVERLAB_STAGE_M_EVENT_COUNT_CAP: ${{ inputs.mode == 'smoke' && '5' || '0' }}
+          COVERLAB_STAGE_M_TIME_SCALE: ${{ inputs.time_scale }}
+          COVERLAB_STAGE_M_MAX_SLEEP_SECONDS: ${{ inputs.max_sleep_seconds == '-1' && '' || inputs.max_sleep_seconds }}
+        run: |
+          name="M-vm-positive-$(printf '%02d' ${{ matrix.shard }})"
+          args=( "${{ inputs.mode }}" "${{ matrix.shard }}" "${{ matrix.shards }}" "${{ matrix.profile }}" "${{ inputs.inventory_path }}" "$RUNNER_TEMP/stage-m-vm" "$name" )
+          if [[ -n "${{ inputs.ssh_key_path }}" ]]; then args+=( "${{ inputs.ssh_key_path }}" ); fi
+          bash ./scripts/run_stage_m_vm.sh "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-vm-positive-${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m-vm/release
+          retention-days: 90
+          compression-level: 0
+      - name: Publish VM shard to Hugging Face
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [[ -n "$HF_TOKEN" ]]; then
+            name="M-vm-positive-$(printf '%02d' ${{ matrix.shard }})"
+            ./scripts/upload_hf.sh "$RUNNER_TEMP/stage-m-vm/release" "releases/${{ needs.plan.outputs.release_id }}/$name" "Stage M VM-wire $name $GITHUB_SHA"
+          fi
+
+  verify:
+    needs: [plan, generate]
+    if: always() && needs.generate.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python -m pip install -r cover-channel-lab/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stage-m-vm-positive-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/all-stage-m-vm
+          merge-multiple: true
+      - name: Verify merged VM-wire corpus
+        working-directory: cover-channel-lab
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/stage-m-vm-final"
+          find "$RUNNER_TEMP/all-stage-m-vm" -path '*/bronze/*/manifests/campaigns.jsonl' -type f -print0 | sort -z | xargs -0 cat > "$RUNNER_TEMP/stage-m-vm-final/campaigns.jsonl"
+          find "$RUNNER_TEMP/all-stage-m-vm" -path '*/bronze/*/manifests/events.jsonl' -type f -print0 | sort -z | xargs -0 cat > "$RUNNER_TEMP/stage-m-vm-final/events.jsonl"
+          if [[ "$MODE" == full ]]; then
+            PYTHONPATH=src python -m coverlab.stage_m validate --manifest "$RUNNER_TEMP/stage-m-vm-final/campaigns.jsonl" --require-full | tee "$RUNNER_TEMP/stage-m-vm-final/positive_contract.json"
+            PYTHONPATH=src python -m coverlab.diversity_audit --manifest "$RUNNER_TEMP/stage-m-vm-final/campaigns.jsonl" --require-full --out "$RUNNER_TEMP/stage-m-vm-final/diversity_audit.json"
+          else
+            PYTHONPATH=src python -m coverlab.stage_m validate --manifest "$RUNNER_TEMP/stage-m-vm-final/campaigns.jsonl" | tee "$RUNNER_TEMP/stage-m-vm-final/positive_contract.json"
+            PYTHONPATH=src python -m coverlab.diversity_audit --manifest "$RUNNER_TEMP/stage-m-vm-final/campaigns.jsonl" --out "$RUNNER_TEMP/stage-m-vm-final/diversity_audit.json"
+          fi
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"stage-m-vm-final"/"campaigns.jsonl"
+          rows=[json.loads(x) for x in p.read_text().splitlines() if x.strip()]
+          if not rows or any(r.get("capture_environment")!="vm_wire" for r in rows):
+              raise SystemExit("non-VM row found in VM corpus")
+          if any(int(r.get("label_binary",0)) != 1 for r in rows):
+              raise SystemExit("negative row found in positive-only VM corpus")
+          summary={
+              "campaigns":len(rows),
+              "vm_wire":True,
+              "positive_only":True,
+              "windows":sum(r.get("source_os")=="windows" for r in rows),
+              "linux":sum(r.get("source_os")=="linux" for r in rows),
+              "training_eligible":sum(bool(r.get("training_eligible")) for r in rows),
+              "timing_wire_real":sum(r.get("timing_fidelity")=="wire_real" for r in rows),
+          }
+          (p.parent/"inventory.json").write_text(json.dumps(summary,indent=2,sort_keys=True)+"\n")
+          print(json.dumps(summary,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-vm-final-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m-vm-final
+          retention-days: 90
+      - name: Publish VM final manifest to Hugging Face
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [[ -n "$HF_TOKEN" ]]; then
+            ./scripts/upload_hf.sh "$RUNNER_TEMP/stage-m-vm-final" "releases/${{ needs.plan.outputs.release_id }}/final-manifest" "Stage M VM-wire final manifest $GITHUB_SHA"
+          fi
