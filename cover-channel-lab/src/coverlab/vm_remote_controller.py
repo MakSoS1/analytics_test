@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import ipaddress
 import json
 import os
@@ -352,18 +353,27 @@ def main() -> None:
     try:
         if a.capture_wire:
             capture_state = start_sensor_capture(inv, work, a.ssh_key)
-        for client_id, rows in sorted(grouped.items()):
-            client = clients[client_id]
-            if client["os"] == "linux":
-                results.append(run_linux_client(
-                    client, rows, work, a.ssh_key,
-                    event_cap=a.event_cap, time_scale=a.time_scale, max_sleep=a.max_sleep,
-                ))
-            else:
-                results.append(run_windows_client(
-                    client, rows, work, a.ssh_key,
-                    event_cap=a.event_cap, time_scale=a.time_scale, max_sleep=a.max_sleep,
-                ))
+        jobs = []
+        max_workers = max(1, min(
+            len(grouped),
+            int(os.environ.get("COVERLAB_VM_CLIENT_PARALLELISM", "4")),
+        ))
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            for client_id, rows in sorted(grouped.items()):
+                client = clients[client_id]
+                if client["os"] == "linux":
+                    fut = pool.submit(
+                        run_linux_client, client, rows, work, a.ssh_key,
+                        event_cap=a.event_cap, time_scale=a.time_scale, max_sleep=a.max_sleep,
+                    )
+                else:
+                    fut = pool.submit(
+                        run_windows_client, client, rows, work, a.ssh_key,
+                        event_cap=a.event_cap, time_scale=a.time_scale, max_sleep=a.max_sleep,
+                    )
+                jobs.append((client_id, fut))
+            for client_id, fut in jobs:
+                results.append(fut.result())
     finally:
         if capture_state is not None:
             target, remote_file, remote_pid = capture_state
