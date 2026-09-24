@@ -2,7 +2,9 @@ param(
   [Parameter(Mandatory=$true)][string]$Plan,
   [Parameter(Mandatory=$true)][string]$Agent,
   [Parameter(Mandatory=$true)][string]$OutDir,
-  [int]$EventCap = 0
+  [int]$EventCap = 0,
+  [double]$TimeScale = 0.001,
+  [double]$MaxSleepSeconds = 0.05
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,7 +26,7 @@ foreach ($r in $rows) {
     CampaignId = [string]$r.campaign_id
     Seed = 27000000 + ([int]$r.spec_index * 1009)
     Events = $n
-    IntervalSeconds = [double]$r.interval_seconds
+    IntervalSeconds = [Math]::Min(([double]$r.interval_seconds * $TimeScale), $MaxSleepSeconds)
     JitterFraction = [double]$r.jitter_fraction
     Output = $eventFile
   }
@@ -38,6 +40,28 @@ foreach ($r in $rows) {
   $m | Add-Member -NotePropertyName volume_mode -NotePropertyValue $r.volume_mode -Force
   $m | Add-Member -NotePropertyName direction_asymmetry -NotePropertyValue $r.asymmetry -Force
   $m | Add-Member -NotePropertyName payload_mode -NotePropertyValue $r.payload_mode -Force
+  $m | Add-Member -NotePropertyName server_impl -NotePropertyValue $r.server_impl -Force
+  $m | Add-Member -NotePropertyName source_ip -NotePropertyValue $r.source_ip -Force
+  $m | Add-Member -NotePropertyName persona -NotePropertyValue $r.client_id -Force
+  $m | Add-Member -NotePropertyName network_topology -NotePropertyValue $r.network_topology -Force
+  $m | Add-Member -NotePropertyName network_profile_id -NotePropertyValue "vm_router" -Force
+  $m | Add-Member -NotePropertyName requested_interval_seconds -NotePropertyValue ([double]$r.interval_seconds) -Force
+  $m | Add-Member -NotePropertyName timing_scale -NotePropertyValue $TimeScale -Force
+  $isTiming = $r.family -in @("M-HTTPS-BEACON","M-WSS-LONG","M-RMM-SHAPE","M-TIMING-XCARRIER")
+  $timingReal = [Math]::Abs($TimeScale - 1.0) -lt 0.000001
+  $eligible = [bool]$r.training_eligible -and ((-not $isTiming) -or $timingReal)
+  $m | Add-Member -NotePropertyName training_eligible -NotePropertyValue $eligible -Force
+  $m | Add-Member -NotePropertyName timing_training_eligible -NotePropertyValue $timingReal -Force
+  $m | Add-Member -NotePropertyName timing_fidelity -NotePropertyValue $(if($timingReal){"wire_real"}else{"accelerated_shape_only"}) -Force
+  $protocol = if($r.family -match "^M-DNS"){"dns"}elseif($r.family -in @("M-WSS-LONG","M-TUNNEL")){"wss"}else{"https"}
+  $m | Add-Member -NotePropertyName protocol -NotePropertyValue $protocol -Force
+  $m | Add-Member -NotePropertyName carrier -NotePropertyValue ($r.family.ToLower().Replace("m-","").Replace("-","_")) -Force
+  $encrypted = $protocol -in @("https","wss")
+  $m | Add-Member -NotePropertyName visibility_mode -NotePropertyValue $(if($encrypted){"opaque_and_ground_truth"}else{"content"}) -Force
+  $m | Add-Member -NotePropertyName inspection_policy -NotePropertyValue $(if($encrypted){"bypass"}else{"not_applicable"}) -Force
+  $m | Add-Member -NotePropertyName inspection_outcome -NotePropertyValue $(if($encrypted){"encrypted"}else{"plaintext"}) -Force
+  $m | Add-Member -NotePropertyName sni_visibility -NotePropertyValue $(if($encrypted){"clear"}else{"not_applicable"}) -Force
+  $m | Add-Member -NotePropertyName feature_availability_bitmap -NotePropertyValue "runtime" -Force
   ($m | ConvertTo-Json -Compress) | Add-Content -Encoding utf8 $campaigns
   Get-Content $eventFile | Add-Content -Encoding utf8 $events
   Remove-Item $eventFile -Force -ErrorAction SilentlyContinue
