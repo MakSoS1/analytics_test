@@ -185,14 +185,14 @@ async def stage_m_http_fixture(target: str = "/stage-m/beacon", method: str = "P
     if not target.startswith("/") or "://" in target or target.startswith("//"):
         return Response(status_code=400)
     method = method.upper()
-    if method not in {"GET", "POST"}:
+    if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
         return Response(status_code=400)
     js_target = json.dumps(target)
     js_method = json.dumps(method)
     js_body = json.dumps(raw)
     js = (
         "fetch(" + js_target + ",{method:" + js_method +
-        (",body:" + js_body + ",headers:{'Content-Type':'application/octet-stream'}" if method == "POST" else "") +
+        (",body:" + js_body + ",headers:{'Content-Type':'application/octet-stream'}" if method in {"POST", "PUT", "PATCH"} else "") +
         "}).then(r=>r.text()).then(()=>document.body.dataset.done='1');"
     )
     return HTMLResponse("<html><body><script>"+js+"</script>stage-m browser http fixture</body></html>")
