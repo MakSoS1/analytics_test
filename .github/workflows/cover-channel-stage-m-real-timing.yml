@@ -24,10 +24,10 @@ jobs:
       max-parallel: 8
       matrix:
         include:
-          - {family: M-HTTPS-BEACON, interval: 900, offset: 0, profile: clean}
-          - {family: M-HTTPS-BEACON, interval: 900, offset: 1, profile: wan_20ms}
-          - {family: M-HTTPS-FRONT, interval: 900, offset: 0, profile: wan_80ms}
-          - {family: M-HTTPS-FRONT, interval: 900, offset: 1, profile: lossy_wifi}
+          - {family: M-HTTPS-BEACON, interval: 1200, offset: 0, profile: clean}
+          - {family: M-HTTPS-BEACON, interval: 1200, offset: 1, profile: wan_20ms}
+          - {family: M-HTTPS-FRONT, interval: 1200, offset: 0, profile: wan_80ms}
+          - {family: M-HTTPS-FRONT, interval: 1200, offset: 1, profile: lossy_wifi}
           - {family: M-HTTPS-BEACON, interval: 3600, offset: 2, profile: clean}
           - {family: M-HTTPS-BEACON, interval: 3600, offset: 3, profile: constrained}
           - {family: M-HTTPS-FRONT, interval: 3600, offset: 2, profile: wan_20ms}
