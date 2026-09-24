@@ -25,7 +25,7 @@ if ($ServerIp -notmatch '^10\.') { throw "VM corpus server must use a private la
 
 $rng = [System.Random]::new($Seed)
 $utf8 = [System.Text.Encoding]::UTF8
-$script:Rows = [System.Collections.Generic.List[object]]::new()
+$script:Rows = [System.Collections.Generic.List[object]]::new()\n$campaignStarted = [DateTimeOffset]::UtcNow.ToString("o")
 
 function Add-Row([int]$I, [string]$Kind, [int]$Bytes, [string]$Extra="") {
   $script:Rows.Add([ordered]@{
@@ -184,11 +184,14 @@ if ($Stack -eq "windows_dns") {
 $Rows | ForEach-Object { ($_ | ConvertTo-Json -Compress) } | Set-Content -Encoding utf8 $Output
 $manifest = [ordered]@{
   campaign_id=$CampaignId; scenario_id=$Family; label_binary=1; label_family="cover_channel";
+  label_intent="c2_or_tunnel_shape"; experiment_stage="M_positive_diversity";
   dataset_role="positive_corpus"; positive_only=$true; negative_class_present=$false;
   training_eligible=$true; capture_environment="vm_wire"; environment_tier="vm_wire";
   client_impl=$Stack; source_os="windows"; implementation_id=("windows-"+$Stack);
   requested_interval_seconds=$IntervalSeconds; jitter_fraction=$JitterFraction; expected_events=$Rows.Count;
+  started_at=$campaignStarted; ended_at=[DateTimeOffset]::UtcNow.ToString("o");
   external_dependency=$false; post_exploitation=$false; arbitrary_forwarding=$false;
-  status="success"; ground_truth_source="vm_native_agent"
+  status="success"; ground_truth_source="vm_native_agent"; generator_name="coverlab_windows_native_agent";
+  generator_version="1.0.0"; capture_file="capture.pcapng"
 }
 $manifest | ConvertTo-Json -Compress
