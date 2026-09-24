@@ -49,6 +49,7 @@ DNS.24=telegram-front.test
 DNS.25=resolver-front.test
 DNS.26=plain-front.test
 DNS.27=stage-m-resolver.test
+DNS.28=doq-resolver.test
 CNF
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -keyout "$CERTDIR/server.key" -out "$CERTDIR/server.crt" -config "$CERTDIR/openssl.cnf" >/dev/null 2>&1
 chmod 600 "$CERTDIR/server.key"; chmod 644 "$CERTDIR/server.crt"
@@ -112,6 +113,7 @@ run_in_c2 "$PYTHON_BIN" -m hypercorn coverlab.server:app --bind 10.20.0.20:8443 
 run_in_c2 "$PYTHON_BIN" -m coverlab.wss_server --host 10.20.0.21 --port 8443 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/wss.log" 2>&1 & echo $! > "$LOGDIR/wss.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.grpc_server --bind 10.20.0.20:50051 >"$LOGDIR/grpc.log" 2>&1 & echo $! > "$LOGDIR/grpc.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.h3_fixture server --host 10.20.0.20 --port 8444 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/h3.log" 2>&1 & echo $! > "$LOGDIR/h3.pid"
+run_in_c2 "$PYTHON_BIN" -m coverlab.doq_fixture server --host 10.20.0.20 --port 8853 --cert "$CERTDIR/server.crt" --key "$CERTDIR/server.key" >"$LOGDIR/doq.log" 2>&1 & echo $! > "$LOGDIR/doq.pid"
 run_in_c2 "$PYTHON_BIN" -m coverlab.connect_server --host 10.20.0.20 --port 8082 >"$LOGDIR/connect.log" 2>&1 & echo $! > "$LOGDIR/connect.pid"
 run_in_c2 mosquitto -c "$CERTDIR/mosquitto.conf" -v >"$LOGDIR/mqtt.log" 2>&1 & echo $! > "$LOGDIR/mqtt.pid"
 
@@ -190,7 +192,9 @@ required_probe stage-m-nginx "$LOGDIR/nginx-stage-m-error.log" sudo ip netns exe
 required_probe stage-m-http443 "$LOGDIR/nginx-stage-m-error.log" sudo ip netns exec cc-dev curl --noproxy '*' -fsS http://plain-front.test:443/healthz
 dns_probe='import socket,dns.message; q=dns.message.make_query("probe.stage-m.test.","A").to_wire(); s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3); s.sendto(q,("10.20.0.23",53)); d,_=s.recvfrom(4096); raise SystemExit(0 if len(d)>12 else 1)'
 required_probe stage-m-dns "$LOGDIR/stage-m-dns-rec.log" sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$dns_probe"
-echo "coverlab Stage M nginx/DNS fixtures ready"
+doq_probe='from coverlab.doq_fixture import one_query; import asyncio; r=asyncio.run(one_query("doq-resolver.test",8853,"probe.stage-m.test.","A")); raise SystemExit(0 if r.get("response_bytes",0)>0 else 1)'
+required_probe stage-m-doq "$LOGDIR/doq.log" sudo ip netns exec cc-dev runuser -u "$USER" -- env PYTHONPATH="$ROOT/src" "$PYTHON_BIN" -c "$doq_probe"
+echo "coverlab Stage M nginx/DNS/DoQ fixtures ready"
 
 # Socket-level diagnostics make a later protocol-shard failure actionable.
 sudo ip netns exec cc-c2 ss -lntup 2>/dev/null | grep -E ':(8080|8443|50051|8082|9443)\b' || true
