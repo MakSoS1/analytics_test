@@ -159,6 +159,7 @@ def bootstrap_services(inv: dict, key: str | None) -> None:
         validate_target(target)
         if client["os"] == "linux":
             validate_path(repo, "linux")
+            remote_posix(target, "sudo -n true", key)
             remote_posix(
                 target,
                 f"cd {shlex.quote(repo)} && bash vm/configure_linux_hosts.sh",
