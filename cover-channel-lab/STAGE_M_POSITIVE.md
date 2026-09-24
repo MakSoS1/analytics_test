@@ -26,24 +26,30 @@ Office traffic is intentionally not synthesized here.
 
 | Family | Campaigns |
 |---|---:|
-| M-HTTPS-BEACON | 600 |
-| M-HTTPS-FRONT | 500 |
-| M-HTTPS-LOWENT | 300 |
-| M-HTTPS-FRAG | 300 |
+| M-HTTPS-BEACON | 1,500 |
+| M-HTTPS-FRONT | 600 |
+| M-HTTPS-LOWENT | 400 |
+| M-HTTPS-FRAG | 400 |
 | M-HTTP-443 | 250 |
-| M-DNS-BEACON | 500 |
-| M-DNS-BULK | 350 |
-| M-DOH | 250 |
+| M-DNS-BEACON | 750 |
+| M-DNS-BULK | 750 |
+| M-DOH | 800 |
+| M-DOQ | 800 |
 | M-DEAD-DROP | 300 |
-| M-WSS-LONG | 400 |
-| M-TUNNEL | 300 |
-| M-FALLBACK | 250 |
-| M-RMM-SHAPE | 200 |
-| **Total** | **4,500** |
+| M-WSS-LONG | 800 |
+| M-TUNNEL | 600 |
+| M-FALLBACK | 600 |
+| M-CLOUD-API | 1,500 |
+| M-TIMING-XCARRIER | 2,000 |
+| M-PUBSUB-MQTT | 500 |
+| M-GRPC-BIDI | 400 |
+| M-RMM-SHAPE | 400 |
+| **Total** | **13,350** |
 
-The existing HTTP header/URI/body, H3, gRPC, MQTT, MASQUE, OHTTP and ECH-oriented
-V5 captures remain separate. Stage M deliberately does not spend new volume on
-those already-covered forms.
+The existing HTTP header/URI/body and H3/QUIC/WebTransport V5 captures remain
+separate and are not regenerated merely to inflate counts. Stage M now adds
+wire-real local DoQ, MQTT-over-WSS and gRPC positive families. ECH/OHTTP/MASQUE
+remain visibility/privacy challenges rather than automatic malicious labels.
 
 ## Diversity axes
 
@@ -84,7 +90,8 @@ Network profiles are the existing real `tc/netem` profiles:
 - lossy_wifi;
 - constrained.
 
-The full catalog contains more than 70 distinct implementation profiles.
+The expanded catalog contains more than 100 declared implementation profiles
+before VM/OS-specific implementation IDs are added.
 
 ## DNS topology
 
@@ -100,24 +107,27 @@ and:
 client -> recursive resolver -> authoritative DNS
 ```
 
-The resolver is placed in a separate `cc-dns` namespace. Therefore the
-resolver-to-authoritative leg crosses the bridge and is visible on the same
-`v-c2` capture point.
+The resolver is placed in a separate `cc-dns` namespace. Stage M CI captures
+on the `ccbr0` bridge rather than only `v-c2`, so both
+`client -> resolver` and `resolver -> authoritative` legs are observable and
+campaign-to-packet mapping remains valid.
 
 No external recursion is possible. The forwarder accepts only the local
 authoritative address `10.20.0.20`.
 
 ## Timing
 
-Requested beacon intervals are:
+Requested cadence buckets are:
 
+- 5 seconds;
 - 30 seconds;
-- 60 seconds;
-- 5 minutes;
-- 15 minutes;
-- 60 minutes.
+- 120 seconds;
+- 300 seconds;
+- 1,200 seconds;
+- 3,600 seconds.
 
-Jitter profiles are 10% and 30%. Event counts vary across:
+Jitter buckets are 0%, 5%, 15%, 30% and 50%. Deterministic within-bucket
+perturbations prevent seed-only duplicate configurations. Event counts vary across:
 
 `3, 5, 10, 20, 50, 100+`-style profiles.
 
@@ -130,7 +140,7 @@ exercise shape generation in CI. Such campaigns are marked:
 ```
 
 The manual **Cover Channel Stage M Real Timing** workflow runs on a
-`[self-hosted, linux, coverlab]` runner and records real 15-minute and
+`[self-hosted, linux, coverlab]` runner and records real 20-minute and
 60-minute intervals with:
 
 ```json
@@ -179,7 +189,8 @@ part of Stage M training data.
 Every shard is captured at wire level and packaged through the existing
 CoverLab pipeline:
 
-- raw PCAP compressed as `.pcap.zst`;
+- CI/netns: raw PCAP compressed as `.pcap.zst`;
+- VM-wire: archival master `.pcapng.zst` plus normalized `.pcap.zst`;
 - campaigns/events manifests;
 - decrypted local transaction trace for ground truth;
 - Suricata EVE;
@@ -202,9 +213,31 @@ run-specific Stage M release.
 `.github/workflows/cover-channel-stage-m.yml`
 
 - `smoke`: one shard, all Stage M families, reduced campaign count;
-- `full`: defaults to 10 shards and produces exactly 4,500 positive campaigns;
+- `full`: defaults to 20 shards and produces exactly 13,350 positive campaigns;
 - full verification fails if any negative row appears or if a family/campaign
   is missing.
+
+### Main VM-wire corpus
+
+`.github/workflows/cover-channel-stage-m-vm.yml`
+
+This is the primary environment for training-eligible transport evidence. It
+expects a pre-provisioned isolated lab with Linux/Windows client VMs, router,
+server, resolver and sensor. The controller:
+
+- bootstraps local services and client `.test` mappings;
+- applies router `tc/netem` profiles;
+- launches native Linux and Windows/SChannel clients;
+- starts/stops `dumpcap` on the sensor VM;
+- retrieves an archival pcapng master;
+- creates a classic-PCAP parser derivative;
+- runs Suricata and Zeek;
+- builds Bronze/Silver/Gold;
+- records SHA-256 for inventory, plan, pcapng and PCAP;
+- uploads the shard and final manifest to Hugging Face.
+
+Accelerated CI/netns campaigns are marked non-training for timing. VM-wire
+campaigns are eligible only under the explicit contract in their manifest.
 
 ### Real long timing
 
@@ -221,9 +254,13 @@ timing is not valid training evidence for real periodicity.
 COVERLAB_STAGE_M_MODE=smoke \
   bash ./scripts/run_stage_m_ci.sh smoke 0 1 clean /tmp/stage-m M-positive-00
 
-# Full shard 3 of 10
+# Full CI shard 3 of 20
 COVERLAB_STAGE_M_MODE=full \
-  bash ./scripts/run_stage_m_ci.sh full 3 10 lossy_wifi /tmp/stage-m M-positive-03
+  bash ./scripts/run_stage_m_ci.sh full 3 20 lossy_wifi /tmp/stage-m M-positive-03
+
+# VM-wire shard
+bash ./scripts/run_stage_m_vm.sh full 3 20 wan \
+  /opt/coverlab/inventory.json /tmp/stage-m-vm M-vm-positive-03 ~/.ssh/id_ed25519
 ```
 
 Pure contract/catalog tests:
