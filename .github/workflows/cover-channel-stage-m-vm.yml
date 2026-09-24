@@ -93,7 +93,10 @@ jobs:
           command -v ssh
           command -v scp
           command -v editcap
+          command -v dumpcap
           command -v suricata
+          command -v zstd
+          command -v sha256sum
           command -v docker
           python -m pip install -r requirements.txt
           docker run --rm zeek/zeek:8.2.1 zeek --version
