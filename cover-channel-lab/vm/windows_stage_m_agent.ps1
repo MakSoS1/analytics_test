@@ -25,7 +25,8 @@ if ($ServerIp -notmatch '^10\.') { throw "VM corpus server must use a private la
 
 $rng = [System.Random]::new($Seed)
 $utf8 = [System.Text.Encoding]::UTF8
-$script:Rows = [System.Collections.Generic.List[object]]::new()\n$campaignStarted = [DateTimeOffset]::UtcNow.ToString("o")
+$script:Rows = [System.Collections.Generic.List[object]]::new()
+$campaignStarted = [DateTimeOffset]::UtcNow.ToString("o")
 
 function Add-Row([int]$I, [string]$Kind, [int]$Bytes, [string]$Extra="") {
   $script:Rows.Add([ordered]@{
