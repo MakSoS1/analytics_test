@@ -110,11 +110,36 @@ def main() -> None:
     ap.add_argument("--mode", choices=["smoke", "full"], default="smoke")
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--shards", type=int, default=1)
+    ap.add_argument("--families", default="")
+    ap.add_argument("--force-interval", type=float)
+    ap.add_argument("--event-count", type=int)
+    ap.add_argument("--offset", type=int, default=0)
+    ap.add_argument("--limit", type=int, default=0)
     a = ap.parse_args()
     if a.shards < 1 or not 0 <= a.shard < a.shards:
         raise SystemExit("invalid shard/shards")
     inv = load_inventory(Path(a.inventory))
     rows = make_plan(inv, a.mode, a.shard, a.shards)
+    families = {x.strip() for x in a.families.split(",") if x.strip()}
+    if families:
+        rows = [r for r in rows if r["family"] in families]
+    if a.force_interval is not None:
+        if a.force_interval <= 0 or a.force_interval > 7200:
+            raise SystemExit("force interval out of range")
+        for r in rows:
+            r["interval_seconds"] = float(a.force_interval)
+            r["interval_bucket_seconds"] = int(a.force_interval)
+    if a.event_count is not None:
+        if not 1 <= a.event_count <= 120:
+            raise SystemExit("event count out of range")
+        for r in rows:
+            r["event_count"] = int(a.event_count)
+            r["event_count_bucket"] = int(a.event_count)
+    if a.offset < 0:
+        raise SystemExit("offset must be non-negative")
+    rows = rows[a.offset:]
+    if a.limit > 0:
+        rows = rows[:a.limit]
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(json.dumps(r, separators=(",", ":")) for r in rows) + ("\n" if rows else ""))
