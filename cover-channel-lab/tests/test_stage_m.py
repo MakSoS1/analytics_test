@@ -7,6 +7,7 @@ from coverlab.stage_m import FAMILY_COUNTS, build_specs, total_implementation_pr
 from coverlab.diversity_audit import audit
 from coverlab.vm_plan import make_plan
 from coverlab.stage_m_raw import MODES, packet
+from coverlab.stage_m_dns_server import answer_query
 
 
 def test_stage_m_full_budget_and_family_counts():
@@ -162,3 +163,14 @@ def test_full_vm_plan_has_at_least_2000_windows_sessions():
     assert any(r["split_role"] == "H_client" for r in windows)
     assert any(r["client_impl"] == "edge_chromium" and r["split_role"] == "H_client" for r in windows)
     assert not any(r["client_impl"] == "edge_chromium" and r["training_eligible"] for r in windows)
+
+
+def test_stage_m_dns_cname_is_protocol_valid():
+    import dns.message
+    import dns.rdatatype
+    q=dns.message.make_query("token.stage-m.test.", dns.rdatatype.CNAME)
+    r=dns.message.from_wire(answer_query(q.to_wire()))
+    assert r.rcode() == 0
+    assert r.answer
+    assert r.answer[0].rdtype == dns.rdatatype.CNAME
+    assert "target.stage-m.test." in r.answer[0].to_text()
