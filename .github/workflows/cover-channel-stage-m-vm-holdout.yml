@@ -1,0 +1,139 @@
+name: Cover Channel Stage M VM Environment Holdout
+
+on:
+  workflow_dispatch:
+    inputs:
+      inventory_path:
+        description: "Absolute inventory path on the independent holdout controller"
+        required: true
+        default: "/opt/coverlab/inventory-holdout.json"
+        type: string
+      ssh_key_path:
+        description: "Optional absolute SSH key path"
+        required: false
+        default: ""
+        type: string
+      shards:
+        description: "Number of holdout shards"
+        required: true
+        default: "10"
+        type: string
+      families:
+        description: "Comma-separated positive families; empty means all"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: cover-channel-stage-m-vm-environment-holdout-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      release_id: ${{ steps.plan.outputs.release_id }}
+    steps:
+      - id: plan
+        env:
+          SHARDS: ${{ inputs.shards }}
+        run: |
+          set -euo pipefail
+          [[ "$SHARDS" =~ ^[0-9]+$ ]]
+          (( SHARDS >= 1 && SHARDS <= 20 ))
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          n=int(os.environ["SHARDS"])
+          profiles=["lan","wan_low","wan","bad_wifi","asymmetric"]
+          print("matrix="+json.dumps([{"shard":i,"shards":n,"profile":profiles[i%len(profiles)]} for i in range(n)],separators=(",",":")))
+          PY
+          echo "release_id=stage-m-vm-henv-gh-${{ github.run_id }}-a${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
+  generate:
+    needs: plan
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: [self-hosted, linux, coverlab-controller-holdout]
+    timeout-minutes: 720
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Independent environment preflight
+        working-directory: cover-channel-lab
+        run: |
+          set -euo pipefail
+          test -f "${{ inputs.inventory_path }}"
+          python -m pip install -r requirements.txt
+          command -v ssh
+          command -v scp
+          command -v editcap
+          command -v dumpcap
+          command -v suricata
+          command -v zstd
+          command -v docker
+          docker run --rm zeek/zeek:8.2.1 zeek --version
+          python - <<'PY'
+          import json
+          p="${{ inputs.inventory_path }}"
+          inv=json.load(open(p))
+          eid=str(inv.get("environment_id") or "")
+          if not eid or "holdout" not in eid.lower():
+              raise SystemExit("environment_id must explicitly identify an independent holdout environment")
+          print("holdout environment:",eid,inv.get("hypervisor","unknown"))
+          PY
+      - name: Capture positive H_environment shard
+        working-directory: cover-channel-lab
+        env:
+          COVERLAB_VM_FORCE_SPLIT_ROLE: "H_environment"
+          COVERLAB_VM_FAMILIES: ${{ inputs.families }}
+          COVERLAB_STAGE_M_TIME_SCALE: "0.001"
+          COVERLAB_STAGE_M_MAX_SLEEP_SECONDS: "0.05"
+          COVERLAB_STAGE_M_EVENT_COUNT_CAP: "0"
+        run: |
+          name="M-vm-henv-$(printf '%02d' ${{ matrix.shard }})"
+          args=(full "${{ matrix.shard }}" "${{ matrix.shards }}" "${{ matrix.profile }}" "${{ inputs.inventory_path }}" "$RUNNER_TEMP/stage-m-vm-henv" "$name")
+          if [[ -n "${{ inputs.ssh_key_path }}" ]]; then args+=("${{ inputs.ssh_key_path }}"); fi
+          bash ./scripts/run_stage_m_vm.sh "${args[@]}"
+      - name: Assert frozen environment holdout
+        working-directory: cover-channel-lab
+        run: |
+          python - <<'PY'
+          import json,glob,os
+          paths=glob.glob(os.path.join(os.environ["RUNNER_TEMP"],"stage-m-vm-henv","release","bronze","*","manifests","campaigns.jsonl"))
+          if not paths: raise SystemExit("campaign manifest missing")
+          rows=[json.loads(x) for p in paths for x in open(p) if x.strip()]
+          if not rows: raise SystemExit("empty environment holdout")
+          if any(r.get("split_role")!="H_environment" for r in rows): raise SystemExit("non-H_environment row found")
+          if any(bool(r.get("training_eligible")) for r in rows): raise SystemExit("environment holdout leaked into training")
+          if any(int(r.get("label_binary",0))!=1 for r in rows): raise SystemExit("negative row found")
+          print(json.dumps({"campaigns":len(rows),"positive_only":True,"training_eligible":0,"split_role":"H_environment"},sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-vm-henv-${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage-m-vm-henv/release
+          retention-days: 90
+          compression-level: 0
+      - name: Publish environment holdout to Hugging Face
+        continue-on-error: true
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [[ -n "$HF_TOKEN" ]]; then
+            leaf="M-vm-henv-$(printf '%02d' ${{ matrix.shard }})"
+            ./scripts/upload_hf.sh "$RUNNER_TEMP/stage-m-vm-henv/release" "releases/${{ needs.plan.outputs.release_id }}/$leaf" "Stage M positive H_environment $leaf $GITHUB_SHA"
+          fi
