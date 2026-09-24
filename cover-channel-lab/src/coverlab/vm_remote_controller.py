@@ -174,6 +174,27 @@ def bootstrap_services(inv: dict, key: str | None) -> None:
                 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File ' + f'"{script}"',
                 key,
             )
+            declared = {str(x) for x in (client.get("stacks") or [])}
+            checks = [
+                "$ErrorActionPreference='Stop'",
+                "if(-not (Get-Command powershell.exe -ErrorAction SilentlyContinue)){throw 'PowerShell missing'}",
+                "if(-not ([type]::GetType('System.Net.Http.HttpClient'))){Add-Type -AssemblyName System.Net.Http}",
+                "[void][System.Net.Http.HttpClient]",
+                "[void][System.Net.WebSockets.ClientWebSocket]",
+                "$w=New-Object -ComObject WinHttp.WinHttpRequest.5.1; [void]$w",
+            ]
+            if "curl_schannel" in declared:
+                checks.append("if(-not (Get-Command curl.exe -ErrorAction SilentlyContinue)){throw 'curl.exe missing'}")
+            if "edge_chromium" in declared:
+                checks += [
+                    "$edge=@($env:ProgramFiles+'\\Microsoft\\Edge\\Application\\msedge.exe',$env:'ProgramFiles(x86)'+'\\Microsoft\\Edge\\Application\\msedge.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1",
+                    "if(-not $edge -and -not (Get-Command msedge.exe -ErrorAction SilentlyContinue)){throw 'Microsoft Edge missing'}",
+                ]
+            remote_windows(
+                target,
+                'powershell.exe -NoProfile -Command "' + "; ".join(checks).replace('"', '\\"') + '"',
+                key,
+            )
 
 
 def verify_remote_revision(inv: dict, key: str | None) -> None:
