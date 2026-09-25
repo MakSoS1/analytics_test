@@ -29,6 +29,7 @@ TARGETS = {
     "max_implementation_share": 0.20,
     "exact_duplicate_fraction": 0.01,
     "pairwise_catalog_coverage": 0.90,
+    "min_network_profiles_full": 5,
 }
 
 
@@ -148,6 +149,7 @@ def audit(path: Path, *, require_full: bool = False) -> dict:
         "max_implementation_share": metrics["max_implementation_share"] <= TARGETS["max_implementation_share"],
         "exact_duplicate_fraction": metrics["exact_duplicate_fraction"] < TARGETS["exact_duplicate_fraction"],
         "pairwise_catalog_coverage": metrics["pairwise_catalog_coverage"] >= TARGETS["pairwise_catalog_coverage"],
+        "network_profile_diversity": metrics["unique"]["networks"] >= TARGETS["min_network_profiles_full"],
     }
     if not require_full:
         # Smoke is an implementation/protocol health check, not a statistical
@@ -155,6 +157,7 @@ def audit(path: Path, *, require_full: bool = False) -> dict:
         checks["exact_duplicate_fraction"] = True
         checks["pairwise_catalog_coverage"] = True
         checks["max_family_share"] = True
+        checks["network_profile_diversity"] = True
 
     return {
         "passed": all(checks.values()),
