@@ -198,3 +198,30 @@ def test_stage_m_https_catalog_has_reconnect_and_persistent_h1_h2():
     assert "python_httpx_h2" in clients
     assert "python_httpx_reuse" in clients
     assert "python_httpx_h2_reuse" in clients
+
+
+def test_full_diversity_audit_rejects_collapsed_network_profile_metadata(tmp_path: Path):
+    specs = build_specs("full")
+    p = tmp_path / "campaigns.jsonl"
+    rows = []
+    for i, s in enumerate(specs):
+        rows.append({
+            "campaign_id": f"m-{i:05d}-{s.family_index:04d}",
+            "scenario_id": s.family,
+            "label_binary": 1,
+            "client_impl": s.client_impl,
+            "server_impl": s.server_impl,
+            "implementation_id": s.implementation_id,
+            "requested_interval_seconds": s.interval_seconds,
+            "jitter_fraction": s.jitter_fraction,
+            "event_count_target": s.event_count,
+            "volume_mode": s.volume_mode,
+            "direction_asymmetry": s.asymmetry,
+            "payload_mode": s.payload_mode,
+            "network_profile_id": "clean",
+            "netem_profile": "clean",
+        })
+    p.write_text("\n".join(json.dumps(x) for x in rows) + "\n")
+    report = audit(p, require_full=True)
+    assert not report["passed"]
+    assert report["checks"]["network_profile_diversity"] is False
