@@ -1,3 +1,3 @@
-mode=full
-shards=20
-trigger=stage-m-final-full-15150-2026-09-25
+mode=smoke
+shards=1
+trigger=stage-m-network-provenance-regression-2026-09-25
