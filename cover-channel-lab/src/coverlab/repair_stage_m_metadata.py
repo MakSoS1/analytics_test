@@ -133,13 +133,15 @@ def repair_release(source: Path, output: Path, shard: int, source_run_id: int) -
     json_changes = 0
     jsonl_rows = 0
     parquet_changes = 0
-    for path in output.rglob("*.jsonl"):
+    # Only campaign tables carry these provenance fields. Avoid rewriting the
+    # much larger event/transaction feature files.
+    for path in output.rglob("campaigns.jsonl"):
         rows, changed = _patch_jsonl(path, profile, source_run_id, shard)
         jsonl_rows += rows
         json_changes += changed
     for path in output.rglob("*.json"):
         json_changes += _patch_json(path, profile)
-    for path in output.rglob("*.parquet"):
+    for path in output.rglob("campaigns.parquet"):
         parquet_changes += _patch_parquet(path, profile)
 
     campaign_path = output / "bronze" / name / "manifests" / "campaigns.jsonl"
