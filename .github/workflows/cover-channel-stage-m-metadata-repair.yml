@@ -31,7 +31,7 @@ jobs:
         with: {python-version: "3.12"}
       - working-directory: cover-channel-lab
         run: |
-          python -m pip install pandas pyarrow pytest
+          python -m pip install -r requirements.txt
           PYTHONPATH=src pytest -q tests/test_stage_m_metadata_repair.py
 
   repair:
@@ -48,7 +48,7 @@ jobs:
         with: {python-version: "3.12"}
       - name: Install metadata repair dependencies
         working-directory: cover-channel-lab
-        run: python -m pip install pandas pyarrow "huggingface_hub[hf_xet]>=1.0.0"
+        run: python -m pip install -r requirements.txt
       - name: Download immutable source shard
         uses: actions/download-artifact@v4
         with:
