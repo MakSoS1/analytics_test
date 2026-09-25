@@ -1,0 +1,180 @@
+name: Cover Channel Stage M Metadata Repair
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [stage-m-positive-corpus]
+    paths:
+      - ".coverlab/stage-m-metadata-repair-trigger.txt"
+      - ".github/workflows/cover-channel-stage-m-metadata-repair.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: cover-channel-stage-m-metadata-repair-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_RUN_ID: "36129636166"
+  SOURCE_RELEASE_ID: "stage-m-gh-36129636166-a1"
+  HF_DATASET_REPO: Maksim123321/cover-channel-web-protocols
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - working-directory: cover-channel-lab
+        run: |
+          python -m pip install -r requirements.txt
+          PYTHONPATH=src pytest -q tests/test_stage_m_metadata_repair.py
+
+  repair:
+    needs: unit
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Install metadata repair dependencies
+        working-directory: cover-channel-lab
+        run: python -m pip install -r requirements.txt
+      - name: Download immutable source shard
+        uses: actions/download-artifact@v4
+        with:
+          name: stage-m-positive-${{ matrix.shard }}-${{ env.SOURCE_RUN_ID }}
+          path: ${{ runner.temp }}/source
+          github-token: ${{ github.token }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+      - name: Repair network-profile provenance
+        working-directory: cover-channel-lab
+        run: |
+          PYTHONPATH=src python -m coverlab.repair_stage_m_metadata repair \
+            --source "$RUNNER_TEMP/source" \
+            --output "$RUNNER_TEMP/corrected" \
+            --shard "${{ matrix.shard }}" \
+            --source-run-id "$SOURCE_RUN_ID" \
+            | tee "$RUNNER_TEMP/repair-report.json"
+          PYTHONPATH=src python -m coverlab.repair_stage_m_metadata verify \
+            --release "$RUNNER_TEMP/corrected" \
+            --shard "${{ matrix.shard }}" \
+            --source-run-id "$SOURCE_RUN_ID"
+      - name: Upload corrected GitHub artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-positive-corrected-${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/corrected
+          retention-days: 90
+          compression-level: 0
+      - name: Replace canonical Hugging Face shard metadata
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          test -n "$HF_TOKEN"
+          name="M-positive-$(printf '%02d' ${{ matrix.shard }})"
+          ./scripts/upload_hf.sh \
+            "$RUNNER_TEMP/corrected" \
+            "releases/$SOURCE_RELEASE_ID/$name" \
+            "Correct Stage M network-profile provenance for $name; wire PCAP unchanged"
+
+  verify:
+    needs: repair
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Install verification dependencies
+        working-directory: cover-channel-lab
+        run: python -m pip install -r requirements.txt
+      - name: Download corrected shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: stage-m-positive-corrected-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/corrected-all
+          merge-multiple: true
+      - name: Verify corrected full corpus
+        working-directory: cover-channel-lab
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/corrected-final"
+          mkdir -p "$OUT"
+          find "$RUNNER_TEMP/corrected-all" -path '*/bronze/*/manifests/campaigns.jsonl' -type f -print0 \
+            | sort -z | xargs -0 cat > "$OUT/campaigns.jsonl"
+          PYTHONPATH=src python -m coverlab.stage_m validate \
+            --manifest "$OUT/campaigns.jsonl" --require-full \
+            | tee "$OUT/positive_contract.json"
+          PYTHONPATH=src python -m coverlab.diversity_audit \
+            --manifest "$OUT/campaigns.jsonl" --require-full \
+            --out "$OUT/diversity_audit.json"
+          python - "$OUT/campaigns.jsonl" "$RUNNER_TEMP/corrected-all" "$OUT/network_profile_correction_summary.json" <<'PY'
+          import json, sys
+          from collections import Counter
+          from pathlib import Path
+          manifest=Path(sys.argv[1])
+          root=Path(sys.argv[2])
+          dst=Path(sys.argv[3])
+          rows=[json.loads(x) for x in manifest.read_text().splitlines() if x.strip()]
+          expected={"clean":3030,"wan_20ms":3030,"wan_80ms":3030,"lossy_wifi":3030,"constrained":3030}
+          fields=("netem_profile","network_profile_id","leave_one_network_group")
+          counts=Counter(str(r.get("network_profile_id")) for r in rows)
+          correction_ids=Counter(str(r.get("network_profile_correction_id")) for r in rows)
+          source_runs=Counter(str(r.get("network_profile_source_run_id")) for r in rows)
+          evidence=list(root.glob("quality/M-positive-*/network_profile_correction.json"))
+          ev=[json.loads(p.read_text()) for p in evidence]
+          out={
+            "passed": (
+              len(rows)==15150 and dict(counts)==expected and
+              all(all(r.get(f)==r.get("network_profile_id") for f in fields) for r in rows) and
+              correction_ids=={"stage_m_network_profile_provenance_v1":15150} and
+              source_runs=={"36129636166":15150} and
+              len(ev)==20 and all(x.get("pcap_bytes_unchanged") is True for x in ev)
+            ),
+            "campaigns":len(rows),
+            "network_profile_counts":dict(counts),
+            "expected_network_profile_counts":expected,
+            "correction_ids":dict(correction_ids),
+            "source_runs":dict(source_runs),
+            "shard_evidence_count":len(ev),
+            "all_pcap_bytes_unchanged":len(ev)==20 and all(x.get("pcap_bytes_unchanged") is True for x in ev),
+            "wire_bytes_regenerated":False,
+            "source_generation_run_id":36129636166,
+            "repair_run_id":"${{ github.run_id }}",
+          }
+          dst.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
+          print(json.dumps(out,sort_keys=True))
+          if not out["passed"]:
+            raise SystemExit("corrected Stage M provenance verification failed")
+          PY
+      - name: Upload corrected final manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage-m-positive-corrected-final-${{ github.run_id }}
+          path: ${{ runner.temp }}/corrected-final
+          retention-days: 90
+      - name: Replace canonical HF final manifest and publish correction evidence
+        working-directory: cover-channel-lab
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$HF_TOKEN"
+          ./scripts/upload_hf.sh \
+            "$RUNNER_TEMP/corrected-final" \
+            "releases/$SOURCE_RELEASE_ID/final-manifest" \
+            "Correct Stage M network-profile provenance; 15150 campaigns; PCAP unchanged"
+          ./scripts/upload_hf.sh \
+            "$RUNNER_TEMP/corrected-final" \
+            "releases/$SOURCE_RELEASE_ID/metadata-correction-v1" \
+            "Stage M network-profile correction evidence"

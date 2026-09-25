@@ -96,11 +96,18 @@ async def healthz():
 
 @app.api_route("/dns-query", methods=["GET", "POST"])
 async def dns_query(request: Request):
-    # Returns a tiny synthetic DNS response body; semantics are never forwarded to a resolver.
+    # Local RFC8484-shaped fixture. GET reads the base64url `dns` query
+    # parameter; POST reads application/dns-message. Nothing is forwarded.
     body = await request.body()
+    if request.method == "GET":
+        encoded = request.query_params.get("dns", "")
+        if encoded:
+            try:
+                body = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+            except Exception:
+                return Response(status_code=400)
     if not body:
         body = b"\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
-    # Echoing the query is sufficient for wire-format traffic generation and stays local.
     append_trace({"ts":time.time(),"kind":"http","client_ip":request.client.host if request.client else None,"scenario_id":"CC_DOH_01","method":request.method,"path":"/dns-query","request_headers":dict(request.headers),"request":body_record(body),"response_status":200,"response_content_type":"application/dns-message"})
     return Response(body, media_type="application/dns-message")
 
@@ -171,6 +178,60 @@ async def ws_endpoint(ws: WebSocket):
                 await ws.send_bytes(data[:64])
     except (WebSocketDisconnect, RuntimeError):
         return
+
+
+@app.get("/stage-m/http-fixture")
+async def stage_m_http_fixture(target: str = "/stage-m/beacon", method: str = "POST", body: str = ""):
+    # Loads in Chromium and issues a same-origin request. Target is strictly
+    # constrained to a local path, so this cannot become a browser proxy.
+    import urllib.parse
+    try:
+        raw = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)).decode("latin1") if body else ""
+    except Exception:
+        raw = ""
+    if not target.startswith("/") or "://" in target or target.startswith("//"):
+        return Response(status_code=400)
+    method = method.upper()
+    if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+        return Response(status_code=400)
+    js_target = json.dumps(target)
+    js_method = json.dumps(method)
+    js_body = json.dumps(raw)
+    js = (
+        "fetch(" + js_target + ",{method:" + js_method +
+        (",body:" + js_body + ",headers:{'Content-Type':'application/octet-stream'}" if method in {"POST", "PUT", "PATCH"} else "") +
+        "}).then(r=>r.text()).then(()=>document.body.dataset.done='1');"
+    )
+    return HTMLResponse("<html><body><script>"+js+"</script>stage-m browser http fixture</body></html>")
+
+
+@app.get("/stage-m/ws-fixture")
+async def stage_m_ws_fixture(host: str = "edge-ws.test", events: int = 6, seed: int = 1, mode: str = "wss"):
+    # Browser-native local-only WebSocket implementation diversity fixture.
+    # Host is allowlisted; the page cannot turn into an arbitrary browser proxy.
+    allowed = {"edge-ws.test", "cover-ws.test"}
+    if host not in allowed:
+        return Response(status_code=400)
+    events = max(1, min(int(events), 20))
+    tunnel_js = "true" if mode == "tunnel" else "false"
+    js = """
+    (() => {
+      const ws = new WebSocket('wss://%s:8443/ws');
+      let sent = 0, recv = 0;
+      const isTunnel = %s;
+      ws.onopen = () => {
+        for (let i=0; i<%d; i++) {
+          const token = ((%d * 1103515245 + i*12345) >>> 0).toString(16);
+          const msg = isTunnel
+            ? {type:'socks_data',conn_id:'b'+(i%%4),data:btoa('BROWSER_STAGE_M_'+token)}
+            : {action:(i%%2?'send':'recv'),container:token,target:'LAB',message:'STATUS'};
+          ws.send(JSON.stringify(msg)); sent++;
+        }
+      };
+      ws.onmessage = () => { recv++; if (recv >= %d) ws.close(); };
+    })();
+    """ % (host, tunnel_js, events, seed, events)
+    return HTMLResponse("<html><body><script>"+js+"</script>stage-m browser wss fixture</body></html>")
 
 
 @app.api_route("/{path:path}", methods=["GET","POST","PUT","PATCH","DELETE","HEAD"])

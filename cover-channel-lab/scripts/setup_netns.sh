@@ -5,7 +5,7 @@ BR=ccbr0
 SUBNET=10.20.0.0/24
 
 delete_ns() { sudo ip netns del "$1" 2>/dev/null || true; }
-for ns in cc-office cc-dev cc-c2 cc-devops cc-soc; do delete_ns "$ns"; done
+for ns in cc-office cc-dev cc-c2 cc-dns cc-devops cc-soc; do delete_ns "$ns"; done
 sudo ip link del "$BR" 2>/dev/null || true
 sudo ip link add "$BR" type bridge
 sudo ip addr add 10.20.0.2/24 dev "$BR"
@@ -28,6 +28,10 @@ create_ns cc-c2 10.20.0.20
 # Dedicated WSS fixture address. It remains on the same isolated lab segment and
 # has no forwarding role; separating it avoids sharing Hypercorn's TLS listener.
 sudo ip netns exec cc-c2 ip addr add 10.20.0.21/24 dev eth0
+# Stage M nginx front address. Recursive DNS is a separate namespace so
+# resolver->authoritative packets cross the bridge and are visible on v-c2.
+sudo ip netns exec cc-c2 ip addr add 10.20.0.22/24 dev eth0
+create_ns cc-dns 10.20.0.23
 create_ns cc-devops 10.20.0.30
 create_ns cc-soc 10.20.0.31
 
@@ -40,13 +44,21 @@ for h in "${WSS_HOSTS[@]}"; do
   echo "10.20.0.21 $h" | sudo tee -a /etc/hosts >/dev/null
 done
 
-HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-bucket.test benign-devtunnel.test doh-relay.test synthetic-api.test echo.test mqtt-broker.test)
+FRONT_HOSTS=(edge-front.test edge-ws.test cdn-front.test workers-front.test graph-front.test telegram-front.test resolver-front.test plain-front.test)
+for h in "${FRONT_HOSTS[@]}"; do
+  sudo sed -i -E "/[[:space:]]${h//./\\.}([[:space:]]|$)/d" /etc/hosts
+  echo "10.20.0.22 $h" | sudo tee -a /etc/hosts >/dev/null
+done
+sudo sed -i -E '/[[:space:]]stage-m-resolver\\.test([[:space:]]|$)/d' /etc/hosts
+echo "10.20.0.23 stage-m-resolver.test" | sudo tee -a /etc/hosts >/dev/null
+
+HOSTS=(cover-api.test cover-h2.test cover-h3.test cover-static.test benign-api.test benign-chat.test benign-market.test benign-update.test lots-chatops.test lots-bucket.test benign-devtunnel.test doh-relay.test doq-resolver.test synthetic-api.test echo.test mqtt-broker.test)
 for h in "${HOSTS[@]}"; do
   sudo sed -i -E "/[[:space:]]${h//./\\.}([[:space:]]|$)/d" /etc/hosts
   echo "10.20.0.20 $h" | sudo tee -a /etc/hosts >/dev/null
 done
 
-for ns in cc-office cc-dev cc-devops cc-soc; do
+for ns in cc-office cc-dev cc-dns cc-devops cc-soc; do
   if sudo ip netns exec "$ns" ip route | grep -q '^default'; then
     echo "unexpected default route in $ns" >&2; exit 1
   fi

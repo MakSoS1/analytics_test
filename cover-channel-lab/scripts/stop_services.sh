@@ -7,7 +7,7 @@ for p in "$LOGDIR"/*.pid; do
 done
 sudo ip netns del cc-office 2>/dev/null || true
 sudo ip netns del cc-dev 2>/dev/null || true
-sudo ip netns del cc-c2 2>/dev/null || true
+sudo ip netns del cc-c2 2>/dev/null || true\nsudo ip netns del cc-dns 2>/dev/null || true
 sudo ip netns del cc-devops 2>/dev/null || true
 sudo ip netns del cc-soc 2>/dev/null || true
 sudo ip link del ccbr0 2>/dev/null || true

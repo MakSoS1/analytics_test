@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "environment_id": "stage-m-vm-wire-example",
+  "capture": {
+    "sensor_host": "sensor@10.20.0.2",
+    "interface": "ens19",
+    "format": "pcapng",
+    "work_dir": "/tmp/coverlab-vm-sensor"
+  },
+  "router": {
+    "ssh": "router@10.20.0.1",
+    "client_interface": "ens19",
+    "server_interface": "ens20",
+    "repo_path": "/opt/coverlab/analytics_test/cover-channel-lab"
+  },
+  "server": {
+    "ssh": "coverlab@10.20.0.20",
+    "ipv4": "10.20.0.20",
+    "https_port": 8443,
+    "wss_port": 8443,
+    "doq_port": 8853,
+    "grpc_port": 50051,
+    "mqtt_wss_port": 9443,
+    "repo_path": "/opt/coverlab/analytics_test/cover-channel-lab",
+    "work_dir": "/tmp/coverlab-vm"
+  },
+  "clients": [
+    {
+      "id": "linux-chromium-01",
+      "os": "linux",
+      "ssh": "coverlab@10.20.0.10",
+      "ipv4": "10.20.0.10",
+      "stacks": [
+        "browser_chromium",
+        "chromium_websocket",
+        "curl_linux",
+        "python_httpx",
+        "python_httpx_h2",
+        "python_stdlib",
+        "go_nethttp",
+        "node_fetch",
+        "node_websocket",
+        "java_httpclient",
+        "rust_reqwest",
+        "python_dnspython_udp",
+        "python_dnspython_tcp",
+        "python_aioquic_doq",
+        "python_aioquic_doq_reuse",
+        "python_aioquic_h3",
+        "python_aioquic_h3_reuse",
+        "python_aioquic_h3_parallel",
+        "grpcio",
+        "grpcio_stream_unary",
+        "paho_mqtt_websockets",
+        "paho_mqtt_websockets_qos1",
+        "scapy_raw",
+        "python_httpx_reuse",
+        "python_httpx_h2_reuse"
+      ],
+      "repo_path": "/opt/coverlab/analytics_test/cover-channel-lab",
+      "work_dir": "/tmp/coverlab-vm"
+    },
+    {
+      "id": "windows-schannel-01",
+      "os": "windows",
+      "ssh": "coverlab@10.20.0.11",
+      "ipv4": "10.20.0.11",
+      "stacks": [
+        "dotnet_httpclient_schannel",
+        "winhttp",
+        "curl_schannel",
+        "edge_chromium",
+        "dotnet_clientwebsocket",
+        "windows_dns"
+      ],
+      "repo_path": "C:/coverlab/analytics_test/cover-channel-lab",
+      "work_dir": "C:/coverlab-vm"
+    }
+  ],
+  "network_profiles": {
+    "lan": {
+      "delay_ms": 1,
+      "jitter_ms": 0.2,
+      "loss_pct": 0,
+      "rate_mbit": 1000
+    },
+    "wan_low": {
+      "delay_ms": 20,
+      "jitter_ms": 5,
+      "loss_pct": 0.02,
+      "rate_mbit": 200
+    },
+    "wan": {
+      "delay_ms": 70,
+      "jitter_ms": 15,
+      "loss_pct": 0.1,
+      "rate_mbit": 80
+    },
+    "bad_wifi": {
+      "delay_ms": 120,
+      "jitter_ms": 40,
+      "loss_pct": 0.8,
+      "rate_mbit": 20
+    },
+    "asymmetric": {
+      "delay_ms": 45,
+      "jitter_ms": 12,
+      "loss_pct": 0.15,
+      "rate_mbit": 40
+    }
+  },
+  "resolver": {
+    "ssh": "coverlab@10.20.0.23",
+    "ipv4": "10.20.0.23",
+    "repo_path": "/opt/coverlab/analytics_test/cover-channel-lab",
+    "work_dir": "/tmp/coverlab-vm"
+  },
+  "hypervisor": "kvm-primary-host"
+}
