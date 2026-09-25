@@ -104,7 +104,7 @@ def test_diversity_audit_full_catalog_contract(tmp_path: Path):
             "volume_mode": s.volume_mode,
             "direction_asymmetry": s.asymmetry,
             "payload_mode": s.payload_mode,
-            "network_profile_id": "catalog",
+            "network_profile_id": ("clean", "wan_20ms", "wan_80ms", "lossy_wifi", "constrained")[i % 5],
         })
     p.write_text("\n".join(json.dumps(x) for x in rows) + "\n")
     report = audit(p, require_full=True)
