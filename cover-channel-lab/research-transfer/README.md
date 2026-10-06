@@ -27,8 +27,12 @@ export PYTHONPATH="$PWD/code"
 .venv/bin/python code/prepare_arkime_inputs.py --help
 ```
 
-[Общий импорт](docs/UNIVERSAL_IMPORT.md), [запуск и зависимости](docs/RUNNING.md), [следующие шаги](docs/NEXT_STEPS.md), [агрегированные результаты](RESULTS.md).
+[Natural Traffic Generator v2](docs/NATURAL_TRAFFIC_GENERATOR_V2.md), [общий импорт](docs/UNIVERSAL_IMPORT.md), [запуск и зависимости](docs/RUNNING.md), [следующие шаги](docs/NEXT_STEPS.md), [агрегированные результаты](RESULTS.md).
 
 Исходные офисные Parquet, PCAP, payload sidecars, salt, приватные индексы, outputs ноутбука, site-specific live collectors, deployment scripts и архивы исходников внешних инструментов не публикуются. По отдельному поручению владельца добавлены [12 псевдонимизированных полных Parquet и зашифрованный словарь](datasets/office-cover-20261006/README.md). Приватный ключ остаётся только на Mac; закрытый исходный комплект передан отдельно. Типовой общий импорт поддерживает целые клиентские TCP/UDP обмены; replay adapter ограничен 35 секундами. Другим carrier/длительным захватам нужен отдельный проверяемый adapter. Linux нужен для capture/replay/native Arkime, Mac подходит для таблиц и Python tests.
 
 `PUBLICATION_SCOPE.json` фиксирует исключения и placeholder replacement. `PUBLICATION_MANIFEST.json` содержит hashes опубликованных файлов. Исторические source pins ноутбука относятся к закрытым оригинальным отчётам; их данные не входят в GitHub. Чтобы выполнить ячейку чтения исходного 89-X экспорта, задайте TRAFFIC_RESEARCH_DATA на разрешённый локальный каталог. Он отличается от полного сопоставимого среза.
+
+## Natural Traffic Generator v2
+
+Новый пакет `code/natural_traffic/` отделяет real-stack generation, benign-only calibration, freeze/confirmation и technique-signal evaluation от исторического PCAP replay. Сценарии не используются для подбора naturalness-профиля; `passed_candidate` остаётся исследовательским статусом, `production_ready=false` до независимого production transfer.

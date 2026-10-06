@@ -67,3 +67,13 @@ python -m office_injection --catalog /path/to/NEW_PREPARED/catalog.json \
 Нужны чистая ветка на том же фоне и `office_injection.compare`, проверка original bytes/order/counts, отсутствие tuple collisions, подтверждённые роли и групповой split. Исходные приложения и их полезная нагрузка не изменяются ради похожего графика. Модель сенсора и среда — отдельные явно отмеченные исследовательские аппроксимации, не доказательство естественности.
 
 Подробный исторический контракт: `universal_activity_generator.md`. В нём пути из исходного репозитория; команды этого документа соответствуют standalone layout ZIP.
+
+## 5. Natural Traffic Generator v2: managed и external режимы
+
+Исторический `activity.json` остаётся внешним контрактом и в новом слое представлен `ExternalActivityAdapter`. Он принимает уже созданные scenario/control PCAP и evidence, проверяет hashes и сохраняет внешнее происхождение capture.
+
+Для встроенных Cover Channels используется `CoverChannelAdapter`: он сопоставляет entry с объявленными runtime capabilities и не помечает неподдерживаемую аппроксимацию как wire-real.
+
+Naturalness calibration выполняется **только на benign controls**. Результат calibration фиксируется в `frozen_profile_manifest.json`; после freeze scenario generation не может менять profile weights/thresholds. Только status `passed_candidate` открывает managed scenario generation, однако этот статус не означает production transfer или `production_ready=true`.
+
+Команды и порядок freeze/confirm/evaluate описаны в [NATURAL_TRAFFIC_GENERATOR_V2.md](NATURAL_TRAFFIC_GENERATOR_V2.md).
