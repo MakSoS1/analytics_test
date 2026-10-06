@@ -1,6 +1,6 @@
 FROM python:3.12-bookworm
 ENV DEBIAN_FRONTEND=noninteractive USER=root PYTHONPATH=/lab/src COVERLAB_CHROME=/usr/bin/chromium
-RUN apt-get update && apt-get install -y --no-install-recommends iproute2 tcpdump ethtool sudo nginx mosquitto mosquitto-clients curl openssl ca-certificates golang nodejs openjdk-17-jdk-headless chromium pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends iproute2 iputils-ping tcpdump ethtool sudo nginx mosquitto mosquitto-clients curl openssl ca-certificates golang nodejs openjdk-17-jdk-headless chromium pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY upstream/stage_m /lab
 WORKDIR /lab
 RUN python -m pip install --no-cache-dir -r requirements.txt
