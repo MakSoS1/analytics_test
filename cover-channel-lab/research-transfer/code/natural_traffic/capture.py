@@ -156,7 +156,7 @@ class TcpdumpBackend:
             if sudo is None:
                 raise RuntimeError("tcpdump requires root or sudo")
             cmd.extend([sudo, "-n"])
-        cmd.extend([tcpdump, "-i", spec.interface, "-U", "-n", "-s", "0", "-w", str(pcap)])
+        cmd.extend([tcpdump, "-i", spec.interface, "--immediate-mode", "-U", "-n", "-s", "0", "-w", str(pcap)])
         bpf = spec.bpf()
         if bpf:
             cmd.extend(bpf.split())
