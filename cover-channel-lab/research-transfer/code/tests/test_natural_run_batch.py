@@ -1,3 +1,5 @@
+import json
+import tempfile
 import importlib.util
 import subprocess
 import sys
@@ -130,6 +132,38 @@ class NaturalRunBatchArmTests(unittest.TestCase):
         mqtt = entrypoint.filter_required_service_probes(sample, {"core", "mqtt"})
         self.assertIn("required_probe mqtt-wss", mqtt)
         self.assertNotIn("required_probe grpc", mqtt)
+
+    def test_runtime_results_fail_closed_when_any_job_failed(self):
+        jobs = [{"job_id": "a"}, {"job_id": "b"}]
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "results.json").write_text(json.dumps([
+                {"job_id": "a", "status": "captured"},
+                {"job_id": "b", "status": "failed", "reason": "client_exit:1"},
+            ]))
+            with self.assertRaisesRegex(RuntimeError, "b.*client_exit:1"):
+                run_batch.validate_runtime_results(root, jobs)
+
+    def test_runtime_results_require_one_result_per_expected_job(self):
+        jobs = [{"job_id": "a"}, {"job_id": "b"}]
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "results.json").write_text(json.dumps([
+                {"job_id": "a", "status": "captured"},
+            ]))
+            with self.assertRaisesRegex(RuntimeError, "missing runtime result"):
+                run_batch.validate_runtime_results(root, jobs)
+
+    def test_runtime_results_accept_all_captured_jobs(self):
+        jobs = [{"job_id": "a"}, {"job_id": "b"}]
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "results.json").write_text(json.dumps([
+                {"job_id": "a", "status": "captured"},
+                {"job_id": "b", "status": "captured"},
+            ]))
+            summary = run_batch.validate_runtime_results(root, jobs)
+            self.assertEqual(summary, {"expected": 2, "captured": 2, "failed": 0})
 
     def test_runtime_image_installs_entrypoint_network_tools(self):
         dockerfile = (ROOT / "cover_runtime" / "Dockerfile").read_text()
