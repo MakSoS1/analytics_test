@@ -89,6 +89,26 @@ class NaturalRunBatchArmTests(unittest.TestCase):
                 loadavg_fn=lambda: (0.0, 0.0, 0.0),
             )
 
+    def test_selected_web_batch_does_not_require_unrelated_protocol_services(self):
+        jobs = [
+            {"entry": {"namespace": "catalog", "transport": "https"}},
+            {"entry": {"namespace": "catalog", "transport": "h2"}},
+            {"entry": {"namespace": "catalog", "transport": "wss"}},
+        ]
+        self.assertEqual(run_batch.required_runtime_services(jobs), ("core",))
+
+    def test_protocol_specific_batches_require_their_service(self):
+        cases = {
+            "h3": "h3",
+            "grpc": "grpc",
+            "mqtt-wss": "mqtt",
+        }
+        for transport, service in cases.items():
+            jobs = [{"entry": {"namespace": "catalog", "transport": transport}}]
+            self.assertIn(service, run_batch.required_runtime_services(jobs))
+        stage = [{"entry": {"namespace": "stage_m", "transport": "https"}}]
+        self.assertIn("stage_m", run_batch.required_runtime_services(stage))
+
     def test_runtime_image_installs_entrypoint_network_tools(self):
         dockerfile = (ROOT / "cover_runtime" / "Dockerfile").read_text()
         for package in ("iproute2", "tcpdump", "ethtool"):
