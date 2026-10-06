@@ -319,7 +319,5 @@ jobs:
           name: natural-generated-benign-e2e-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/natural-e2e
-            ${{ runner.temp }}/natural-control-run/runtime_manifest.json
-            ${{ runner.temp }}/natural-control-run/jobs.json
-            ${{ runner.temp }}/natural-control-run/runtime.log
+            ${{ runner.temp }}/natural-control-run
           retention-days: 30

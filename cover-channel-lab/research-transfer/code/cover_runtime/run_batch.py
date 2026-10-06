@@ -26,6 +26,42 @@ def ensure_runner_resources(
     return {"free_gib": free_gib, "loadavg": loadavg}
 
 
+def validate_runtime_results(run_root, jobs):
+    root = Path(run_root)
+    path = root / "results.json"
+    if not path.is_file():
+        raise RuntimeError("missing runtime results.json")
+    results = json.loads(path.read_text())
+    if not isinstance(results, list):
+        raise RuntimeError("runtime results.json must contain a list")
+    by_id = {}
+    for row in results:
+        job_id = str(row.get("job_id", ""))
+        if not job_id:
+            raise RuntimeError("runtime result missing job_id")
+        if job_id in by_id:
+            raise RuntimeError(f"duplicate runtime result: {job_id}")
+        by_id[job_id] = row
+    expected = [str(job["job_id"]) for job in jobs]
+    missing = [job_id for job_id in expected if job_id not in by_id]
+    if missing:
+        raise RuntimeError(f"missing runtime result for job {missing[0]}")
+    unexpected = sorted(set(by_id) - set(expected))
+    if unexpected:
+        raise RuntimeError(f"unexpected runtime result: {unexpected[0]}")
+    failures = [
+        by_id[job_id]
+        for job_id in expected
+        if str(by_id[job_id].get("status")) != "captured"
+    ]
+    if failures:
+        first = failures[0]
+        raise RuntimeError(
+            f"runtime job {first.get('job_id')} failed: {first.get('reason') or 'unknown reason'}"
+        )
+    return {"expected": len(expected), "captured": len(expected), "failed": 0}
+
+
 def required_runtime_services(jobs):
     services = {"core"}
     for job in jobs:
@@ -252,8 +288,18 @@ def main():
     if cp is None:
         raise RuntimeError("container execution did not start")
     manifest.update(exit_code=cp.returncode, ended_at=time.time())
+    try:
+        result_summary = validate_runtime_results(a.out, jobs)
+        manifest["job_results"] = result_summary
+        if cp.returncode != 0:
+            raise RuntimeError(f"runtime container exited with code {cp.returncode}")
+    except Exception as exc:
+        manifest["job_validation_error"] = str(exc)
+        (a.out / "runtime_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        print(json.dumps({"jobs": len(jobs), "exit_code": cp.returncode, "out": str(a.out), "error": str(exc)}))
+        raise
     (a.out / "runtime_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    print(json.dumps({"jobs": len(jobs), "exit_code": cp.returncode, "out": str(a.out)}))
+    print(json.dumps({"jobs": len(jobs), "exit_code": cp.returncode, "out": str(a.out), "job_results": result_summary}))
 
 
 if __name__ == "__main__":
