@@ -99,3 +99,224 @@ jobs:
           PYTHONPATH: code
           NATURAL_TRAFFIC_FULL_PIPELINE: '1'
         run: python -m unittest discover -s code/tests -p 'test_natural_composition.py' -v
+
+  generated-benign-e2e:
+    needs: [natural-unit, real-capture-smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install evaluation dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scipy scikit-learn pyyaml
+      - name: Guard runner disk before image build
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: python -c "from pathlib import Path; from natural_traffic.capture import ensure_resource_budget; ensure_resource_budget(Path('.'), min_free_gib=15)"
+      - name: Prepare frozen office-path control registry
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_REGISTRY: ${{ runner.temp }}/natural-controls-registry.json
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from demo.prepare_research_registry import prepare
+          from office_injection.cover_registry import digest
+
+          base_path = Path('code/cover_runtime/registry.json')
+          base = json.loads(base_path.read_text())
+          prepared = prepare(base, seed=20261004, path_profile='office_path_v1')
+          allowed = {'https', 'h2', 'wss'}
+          selected = []
+          for entry in prepared['entries']:
+              if str(entry.get('transport','')).lower() not in allowed:
+                  continue
+              profiles = [p for p in entry.get('profiles',[]) if p.get('profile_id') == 'original_dispatch']
+              if not profiles:
+                  continue
+              item = dict(entry)
+              item['profiles'] = []
+              for profile in profiles:
+                  p = dict(profile)
+                  p['runtime_events'] = 1
+                  item['profiles'].append(p)
+              selected.append(item)
+              if len(selected) == 64:
+                  break
+          if len(selected) < 64:
+              raise SystemExit(f'need 64 comparable web entries, found {len(selected)}')
+          body = {k:v for k,v in prepared.items() if k != 'sha256'}
+          body['entries'] = selected
+          body['research_policy'] += '; e2e benign-only 64 independent control captures; one event each'
+          body['sha256'] = digest(body)
+          out = Path(os.environ['NATURAL_REGISTRY'])
+          out.write_text(json.dumps(body, indent=2) + '\n')
+          print('SELECTED_CONTROL_ENTRIES', len(selected))
+          print('REGISTRY_SHA256', body['sha256'])
+          print('PATH_PROFILE', body['path_profile'])
+          PY
+      - name: Build pinned Cover runtime image
+        working-directory: cover-channel-lab/research-transfer
+        run: docker build -t cover-natural-e2e:ci code/cover_runtime
+      - name: Generate 64 benign control captures only
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_REGISTRY: ${{ runner.temp }}/natural-controls-registry.json
+          NATURAL_RUN: ${{ runner.temp }}/natural-control-run
+        run: |
+          python code/cover_runtime/run_batch.py             --image cover-natural-e2e:ci             --registry "$NATURAL_REGISTRY"             --all             --profile original_dispatch             --arm control             --timing accelerated_smoke             --seed 20261004             --out "$NATURAL_RUN"
+      - name: Extract controls, freeze benign profile, confirm against held-out office web sessions
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_RUN: ${{ runner.temp }}/natural-control-run
+          NATURAL_OUT: ${{ runner.temp }}/natural-e2e
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+
+          from natural_traffic.calibration import calibrate_profiles, validate_group_disjointness
+          from natural_traffic.composition import extract_pipeline_capture
+          from natural_traffic.corpus import discover_cover_captures, aggregate_extracted_tables
+          from natural_traffic.evaluation import confirm_naturalness
+          from natural_traffic.profiles import ProfileRegistry
+          from natural_traffic.reference import load_reference
+          from natural_traffic.reporting import write_report
+
+          run = Path(os.environ['NATURAL_RUN'])
+          out = Path(os.environ['NATURAL_OUT'])
+          out.mkdir(parents=True, exist_ok=True)
+          captures = discover_cover_captures(
+              run, high_level_profile_id='linux-protocol-native', role='control'
+          )
+          if len(captures) < 64:
+              raise SystemExit(f'expected 64 captured controls, got {len(captures)}')
+
+          extracted = []
+          for i, capture in enumerate(captures):
+              result = extract_pipeline_capture(
+                  capture.bundle,
+                  out / 'extract' / f'{i:03d}',
+                  run_id=f'natural-control-{i:03d}',
+                  min_free_gib=15,
+              )
+              extracted.append((capture, result.parquet_path))
+          controls_path = out / 'controls.parquet'
+          corpus_report = aggregate_extracted_tables(
+              extracted, controls_path, benign_only=True
+          )
+          controls = pd.read_parquet(controls_path)
+
+          control_groups = sorted(controls['capture_group'].astype(str).unique())
+          if len(control_groups) < 64:
+              raise SystemExit(f'expected 64 independent control groups, got {len(control_groups)}')
+          train_control_groups = set(control_groups[:32])
+          confirm_control_groups = set(control_groups[32:64])
+          validate_group_disjointness(train_control_groups, confirm_control_groups)
+          control_train = controls[controls['capture_group'].astype(str).isin(train_control_groups)].copy()
+          control_confirm = controls[controls['capture_group'].astype(str).isin(confirm_control_groups)].copy()
+
+          ref = load_reference(Path('datasets/office-cover-20261006'), verify_hashes=True)
+          office = ref.pipeline_office.copy()
+          tcp = pd.to_numeric(office['ip_protocol'], errors='coerce').eq(6)
+          dport = pd.to_numeric(office['destination_port'], errors='coerce')
+          office = office[tcp & dport.isin([443, 8443, 9443])].copy()
+          if office['host_key'].nunique() < 60:
+              office = ref.pipeline_office[pd.to_numeric(ref.pipeline_office['ip_protocol'], errors='coerce').eq(6)].copy()
+          hosts = sorted(office['host_key'].astype(str).unique())
+          if len(hosts) < 60:
+              raise SystemExit(f'office comparison requires >=60 host groups, got {len(hosts)}')
+          train_hosts = set(hosts[::2])
+          confirm_hosts = set(hosts[1::2])
+          validate_group_disjointness(train_hosts, confirm_hosts)
+          office_train = office[office['host_key'].astype(str).isin(train_hosts)].copy()
+          office_confirm = office[office['host_key'].astype(str).isin(confirm_hosts)].copy()
+
+          groups_train = {
+              'office': office_train['host_key'].astype(str).tolist(),
+              'controls': control_train['capture_group'].astype(str).tolist(),
+          }
+          registry = ProfileRegistry.default()
+          manifest = calibrate_profiles(
+              office_train,
+              control_train,
+              groups_train,
+              registry,
+              20261004,
+              feature_columns=ref.feature_columns,
+          )
+          manifest_path = out / 'frozen_profile_manifest.json'
+          manifest_path.write_text(manifest.to_json() + '\n')
+          (out / 'frozen_profile_manifest.sha256').write_text(manifest.sha256 + '\n')
+
+          dictionary = json.loads(Path('datasets/office-cover-20261006/pipeline_column_dictionary.json').read_text())
+          families = {}
+          for row in dictionary:
+              if row.get('kind') != 'feature':
+                  continue
+              families.setdefault(row.get('group_key') or 'other', []).append(row['column'])
+
+          confirm_groups = {
+              'office': office_confirm['host_key'].astype(str).tolist(),
+              'controls': control_confirm['capture_group'].astype(str).tolist(),
+          }
+          report = confirm_naturalness(
+              manifest,
+              office_confirm,
+              control_confirm,
+              confirm_groups,
+              expected_manifest_sha=manifest.sha256,
+              feature_columns=ref.feature_columns,
+              feature_families=families,
+              bootstrap_reps=200,
+              random_state=20261004,
+          )
+          write_report(
+              out / 'naturalness.json',
+              kind='naturalness',
+              status=report.status,
+              support=report.support,
+              payload={
+                  **report.as_dict(),
+                  'corpus': corpus_report,
+                  'calibration_control_groups': len(train_control_groups),
+                  'confirmation_control_groups': len(confirm_control_groups),
+                  'calibration_office_groups': len(train_hosts),
+                  'confirmation_office_groups': len(confirm_hosts),
+                  'office_scope': 'tcp web comparison slice; destination 443/8443/9443 when >=60 host groups, otherwise all TCP',
+                  'profile': 'linux-protocol-native',
+                  'production_ready': False,
+              },
+          )
+          print('NATURALNESS_STATUS', report.status)
+          print('MAX_AUC', report.max_auc)
+          print('SUPPORT', json.dumps(report.support, sort_keys=True))
+          print('FAILED_FAMILIES', json.dumps(report.distribution.get('failed_families', [])))
+          PY
+      - name: Summarize generated naturalness report
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/natural-e2e/naturalness.json" ]]; then
+            cat "$RUNNER_TEMP/natural-e2e/naturalness.json"
+          fi
+      - name: Upload generated benign E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: natural-generated-benign-e2e-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/natural-e2e
+            ${{ runner.temp }}/natural-control-run/runtime_manifest.json
+            ${{ runner.temp }}/natural-control-run/jobs.json
+            ${{ runner.temp }}/natural-control-run/runtime.log
+          retention-days: 30
+          compression-level: 6
