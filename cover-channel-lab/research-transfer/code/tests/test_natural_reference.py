@@ -38,13 +38,21 @@ class NaturalTrafficReferenceTests(unittest.TestCase):
         cols = model_feature_columns(df, dictionary)
         declared = {r["column"] for r in dictionary if r.get("kind") == "feature"}
         self.assertEqual(set(cols), declared.intersection(df.columns))
-        forbidden_fragments = ("label", "source_", "origin", "global_session_uid", "global_segment_uid", "pair_id", "profile_id")
-        for col in cols:
-            low = col.lower()
-            self.assertFalse(any(x in low for x in forbidden_fragments), col)
+        forbidden_exact = {"label", "label_binary", "origin", "source_role", "global_session_uid", "global_segment_uid", "pair_id", "profile_id"}
+        self.assertTrue(forbidden_exact.isdisjoint(cols))
+        self.assertIn("dns_label_entropy", cols)
         self.assertIn("proto", cols)
         self.assertIn("conn_state", cols)
         self.assertIn("seq_signed_len", cols)
+
+
+    def test_label_word_inside_feature_name_is_not_target_leakage(self):
+        frame = pd.DataFrame({"dns_label_entropy": [1.2], "label_binary": [1]})
+        dictionary = [
+            {"column": "dns_label_entropy", "kind": "feature"},
+            {"column": "label_binary", "kind": "feature"},
+        ]
+        self.assertEqual(model_feature_columns(frame, dictionary), ["dns_label_entropy"])
 
     def test_numeric_evaluation_does_not_require_decryption(self):
         ref = load_reference(ROOT)
