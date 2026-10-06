@@ -30,6 +30,25 @@ jobs:
           cache: pip
       - name: Install test dependencies
         run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Inspect reference grouping candidates
+        working-directory: cover-channel-lab/research-transfer
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          root=Path('datasets/office-cover-20261006')
+          df=pd.read_parquet(root/'pipeline_office_full.parquet')
+          dictionary=json.loads((root/'pipeline_column_dictionary.json').read_text())
+          features={r['column'] for r in dictionary if r.get('kind')=='feature'}
+          meta=[c for c in df.columns if c not in features]
+          print('OFFICE_META_COLUMNS', meta)
+          for col in meta:
+              try:
+                  print('GROUP_CANDIDATE', col, 'nunique=', int(df[col].nunique(dropna=True)), 'nulls=', int(df[col].isna().sum()))
+              except Exception as exc:
+                  print('GROUP_CANDIDATE', col, 'ERROR', type(exc).__name__)
+          PY
       - name: Run natural traffic tests
         working-directory: cover-channel-lab/research-transfer
         env:
