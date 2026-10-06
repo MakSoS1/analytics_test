@@ -54,6 +54,19 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y tcpdump
           python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Probe runner packet capture independently
+        run: |
+          set -euxo pipefail
+          id
+          tcpdump --version
+          sudo timeout 10 tcpdump -i lo -n -c 2 -w /tmp/runner-probe.pcap icmp &
+          cap_pid=$!
+          sleep 1
+          ping -c 2 127.0.0.1
+          wait $cap_pid
+          test -s /tmp/runner-probe.pcap
+          stat -c '%s bytes' /tmp/runner-probe.pcap
+          sudo tcpdump -nn -r /tmp/runner-probe.pcap -c 2
       - name: Run real Linux TLS capture smoke
         working-directory: cover-channel-lab/research-transfer
         env:
