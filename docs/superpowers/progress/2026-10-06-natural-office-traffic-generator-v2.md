@@ -13,4 +13,8 @@ Task 1: Ruling: feature contract is full declared feature schema, not numeric-on
 Task 1: regression RED run 37492011376 proved dns_label_entropy was incorrectly filtered by substring target-label logic.
 Task 1: complete (commits 78962b0..b2b0465, tests: natural-traffic-tdd run 37492169863 → 10/10 pass).
 
-Task 2: RED tests committed for leakage, support, frozen manifests, C2ST, family distance and technique signal.
+Task 2: RED run 37492668648 failed only because natural_traffic.calibration/evaluation did not exist.
+Task 2: GREEN run 37493371264 passed 21/21 natural tests.
+Task 2: complete (commits b6091cf..53a397e, tests: natural-traffic-tdd run 37493772325 → natural 21/21 pass; full research-transfer 99/99 pass).
+
+Task 3: RED capture/resource/integrity/capability tests committed.
