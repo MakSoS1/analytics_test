@@ -109,6 +109,16 @@ class NaturalWorkflowContractTests(unittest.TestCase):
         self.assertIn("natural-control-run/results.json", paths)
         self.assertIn("natural-control-run/*/client.log", paths)
         self.assertIn("natural-control-run/*/result.json", paths)
+
+    def test_generated_benign_e2e_keeps_common_web_protocol_stratum_homogeneous(self):
+        raw = TDD_WORKFLOW.read_text()
+        self.assertIn("protocol_hints", raw)
+        self.assertIn("grpc", raw)
+        self.assertIn("mqtt", raw)
+        self.assertIn("continue", raw)
+        marker = "common-web calibration excludes protocol-specialized grpc/mqtt strata"
+        self.assertIn(marker, raw)
+
     def test_pr_path_only_runs_reference_validation_and_unit_tests(self):
         raw = WORKFLOW.read_text()
         body = yaml.safe_load(raw)
