@@ -66,6 +66,29 @@ class NaturalRunBatchArmTests(unittest.TestCase):
     def test_builder_is_deterministic(self):
         self.assertEqual(self.build("control"), self.build("control"))
 
+    def test_resource_guard_uses_declared_disk_budget_not_transient_host_load(self):
+        class Usage:
+            free = 16 * 2**30
+
+        run_batch.ensure_runner_resources(
+            Path("."),
+            min_free_gib=15,
+            disk_usage_fn=lambda _: Usage(),
+            loadavg_fn=lambda: (99.0, 99.0, 99.0),
+        )
+
+    def test_resource_guard_rejects_less_than_declared_disk_budget(self):
+        class Usage:
+            free = 14 * 2**30
+
+        with self.assertRaises(SystemExit):
+            run_batch.ensure_runner_resources(
+                Path("."),
+                min_free_gib=15,
+                disk_usage_fn=lambda _: Usage(),
+                loadavg_fn=lambda: (0.0, 0.0, 0.0),
+            )
+
     def test_cli_help_exposes_arm_selection(self):
         proc = subprocess.run(
             [sys.executable, str(RUN_BATCH), "--help"],
