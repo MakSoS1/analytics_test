@@ -164,16 +164,6 @@ jobs:
       - name: Build pinned Cover runtime image
         working-directory: cover-channel-lab/research-transfer
         run: docker build -t cover-natural-e2e:ci code/cover_runtime
-      - name: Diagnose post-build resource guard
-        working-directory: cover-channel-lab/research-transfer
-        run: |
-          df -h .
-          python - <<'PY'
-          import os, shutil
-          d=shutil.disk_usage('.')
-          print('POST_BUILD_FREE_GIB', d.free/(1<<30))
-          print('POST_BUILD_LOADAVG', os.getloadavg())
-          PY
       - name: Generate 64 benign control captures only
         working-directory: cover-channel-lab/research-transfer
         env:
