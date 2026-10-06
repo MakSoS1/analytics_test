@@ -9,6 +9,7 @@ on:
       - 'cover-channel-lab/research-transfer/code/tests/test_natural_*.py'
       - 'cover-channel-lab/research-transfer/datasets/office-cover-20261006/**'
       - '.github/workflows/natural-traffic-tdd.yml'
+      - '.github/workflows/natural-office-traffic-v2.yml'
   pull_request:
     paths:
       - 'cover-channel-lab/research-transfer/code/natural_traffic/**'
@@ -29,23 +30,6 @@ jobs:
           cache: pip
       - name: Install test dependencies
         run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
-      - name: Diagnose committed composition schemas
-        working-directory: cover-channel-lab/research-transfer
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import pyarrow.parquet as pq
-          root=Path('datasets/office-cover-20261006')
-          a=pq.read_schema(root/'pipeline_office_full.parquet')
-          b=pq.read_schema(root/'pipeline_added_full.parquet')
-          print('office_vs_added_name_equal', a.names == b.names)
-          for i,(x,y) in enumerate(zip(a,b)):
-              if x != y:
-                  print('SCHEMA_DIFF', i, x, '!=', y)
-          m=pq.read_schema(root/'matched_mixed_pipeline_arkime.parquet').names
-          print('DIRECTIONISH', [n for n in m if any(k in n.lower() for k in ('direction','same_','up_','down_'))][:100])
-          print('MATCH_PREFIXES', m[:40])
-          PY
       - name: Run natural traffic tests
         working-directory: cover-channel-lab/research-transfer
         env:
