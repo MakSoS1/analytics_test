@@ -57,6 +57,7 @@ jobs:
         working-directory: cover-channel-lab/research-transfer
         env:
           PYTHONPATH: code
+          NATURAL_TRAFFIC_REAL_CAPTURE: '1'
         run: python -m unittest discover -s code/tests -p 'test_natural_*.py' -v
       - name: Run research-transfer regression suite
         working-directory: cover-channel-lab/research-transfer
@@ -298,29 +299,3 @@ jobs:
                   'confirmation_office_groups': len(confirm_hosts),
                   'office_scope': 'tcp web comparison slice; destination 443/8443/9443 when >=60 host groups, otherwise all TCP',
                   'profile': 'linux-protocol-native',
-                  'production_ready': False,
-              },
-          )
-          print('NATURALNESS_STATUS', report.status)
-          print('MAX_AUC', report.max_auc)
-          print('SUPPORT', json.dumps(report.support, sort_keys=True))
-          print('FAILED_FAMILIES', json.dumps(report.distribution.get('failed_families', [])))
-          PY
-      - name: Summarize generated naturalness report
-        if: always()
-        run: |
-          if [[ -f "$RUNNER_TEMP/natural-e2e/naturalness.json" ]]; then
-            cat "$RUNNER_TEMP/natural-e2e/naturalness.json"
-          fi
-      - name: Upload generated benign E2E evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: natural-generated-benign-e2e-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/natural-e2e
-            ${{ runner.temp }}/natural-control-run/runtime_manifest.json
-            ${{ runner.temp }}/natural-control-run/jobs.json
-            ${{ runner.temp }}/natural-control-run/runtime.log
-          retention-days: 30
-          compression-level: 6
