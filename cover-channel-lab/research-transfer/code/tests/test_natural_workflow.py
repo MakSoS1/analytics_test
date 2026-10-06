@@ -1,3 +1,4 @@
+import ast
 import unittest
 from pathlib import Path
 
@@ -75,6 +76,24 @@ class NaturalWorkflowContractTests(unittest.TestCase):
         }
         self.assertNotIn("NATURAL_TRAFFIC_REAL_CAPTURE", natural_env)
         self.assertEqual(str(real_env.get("NATURAL_TRAFFIC_REAL_CAPTURE")), "1")
+
+    def test_embedded_python_heredocs_are_complete_and_parseable(self):
+        body = yaml.safe_load(TDD_WORKFLOW.read_text())
+        checked = 0
+        for job in body["jobs"].values():
+            for step in job.get("steps", []):
+                script = step.get("run")
+                if not isinstance(script, str) or "python - <<'PY'" not in script:
+                    continue
+                lines = script.splitlines()
+                start = next(i for i, line in enumerate(lines) if "python - <<'PY'" in line)
+                try:
+                    end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == "PY")
+                except StopIteration:
+                    self.fail(f"unterminated Python heredoc in step {step.get('name')}")
+                ast.parse("\n".join(lines[start + 1:end]))
+                checked += 1
+        self.assertGreaterEqual(checked, 1)
 
     def test_pr_path_only_runs_reference_validation_and_unit_tests(self):
         raw = WORKFLOW.read_text()
