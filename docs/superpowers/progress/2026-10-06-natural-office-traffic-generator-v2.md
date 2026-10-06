@@ -10,3 +10,4 @@ Pre-flight: Tasks 1-5 -> Task 6 CLI/reporting consumes all public interfaces: al
 
 Task 1: RED tests committed; awaiting GitHub Actions evidence.
 Task 1: RED trigger commit after workflow registration.
+Task 1: Ruling: feature contract is full declared feature schema, not numeric-only — committed dictionary includes categorical/sequence features and spec requires full features; Task 2 owns model encoding — cost if wrong: heterogeneous feature handling becomes Task 2 responsibility.
