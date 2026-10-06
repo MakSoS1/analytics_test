@@ -9,3 +9,4 @@ Pre-flight: Task 2 FrozenProfileManifest -> Task 5 composition consumes frozen m
 Pre-flight: Tasks 1-5 -> Task 6 CLI/reporting consumes all public interfaces: aligned in plan.
 
 Task 1: RED tests committed; awaiting GitHub Actions evidence.
+Task 1: RED trigger commit after workflow registration.
