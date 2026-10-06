@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import signal
 import subprocess
 import time
 from typing import Any, Callable
@@ -164,6 +165,7 @@ class TcpdumpBackend:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
+            start_new_session=True,
         )
         try:
             time.sleep(0.35)
@@ -174,11 +176,17 @@ class TcpdumpBackend:
             time.sleep(0.35)
         finally:
             if proc.poll() is None:
-                proc.terminate()
+                try:
+                    os.killpg(proc.pid, signal.SIGINT)
+                except ProcessLookupError:
+                    pass
                 try:
                     proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    proc.kill()
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                     proc.wait(timeout=5)
         if not pcap.exists() or pcap.stat().st_size <= 24:
             stderr = proc.stderr.read() if proc.stderr else ""
