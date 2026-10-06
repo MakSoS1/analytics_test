@@ -21,16 +21,17 @@ _REQUIRED_TABLES = {
     "session_comparison": ("session_comparison.parquet", (8843, 50)),
 }
 
-_FORBIDDEN_FRAGMENTS = (
+_FORBIDDEN_COLUMNS = {
     "label",
+    "label_binary",
     "origin",
-    "source_",
+    "source_role",
     "global_session_uid",
     "global_segment_uid",
     "pair_id",
     "profile_id",
     "capture_id",
-)
+}
 
 
 @dataclass(frozen=True)
@@ -56,8 +57,7 @@ def model_feature_columns(df: pd.DataFrame, dictionary: Iterable[dict]) -> list[
     ]
     result: list[str] = []
     for col in declared:
-        low = col.lower()
-        if any(fragment in low for fragment in _FORBIDDEN_FRAGMENTS):
+        if col.lower() in _FORBIDDEN_COLUMNS:
             continue
         result.append(col)
     return result
