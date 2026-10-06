@@ -90,3 +90,9 @@ jobs:
           PYTHONPATH: code
           NATURAL_TRAFFIC_REAL_CAPTURE: '1'
         run: python -m unittest discover -s code/tests -p 'test_natural_capture.py' -v
+      - name: Run full production extractor smoke
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_TRAFFIC_FULL_PIPELINE: '1'
+        run: python -m unittest discover -s code/tests -p 'test_natural_composition.py' -v
