@@ -26,6 +26,23 @@ def ensure_runner_resources(
     return {"free_gib": free_gib, "loadavg": loadavg}
 
 
+def required_runtime_services(jobs):
+    services = {"core"}
+    for job in jobs:
+        entry = dict(job.get("entry") or {})
+        namespace = str(entry.get("namespace", "")).lower()
+        transport = str(entry.get("transport", "")).lower()
+        if namespace and namespace != "catalog":
+            services.add("stage_m")
+        if transport in {"h3", "http3", "quic"} or "quic" in transport:
+            services.add("h3")
+        if "grpc" in transport:
+            services.add("grpc")
+        if "mqtt" in transport:
+            services.add("mqtt")
+    return tuple(sorted(services))
+
+
 def build_jobs(
     registry,
     *,
@@ -148,7 +165,10 @@ def main():
         "environment.py",
     ):
         shutil.copyfile(root / file, snapshot / file)
-    (a.out / "jobs.json").write_text(json.dumps({"jobs": jobs}, indent=2) + "\n")
+    required_services = required_runtime_services(jobs)
+    (a.out / "jobs.json").write_text(
+        json.dumps({"jobs": jobs, "required_services": list(required_services)}, indent=2) + "\n"
+    )
 
     image_id = subprocess.check_output(
         ["docker", "image", "inspect", "--format", "{{.Id}}", a.image], text=True
@@ -165,6 +185,7 @@ def main():
         "environment_sha256": hashlib.sha256((snapshot / "environment.py").read_bytes()).hexdigest(),
         "registry_sha256": registry["sha256"],
         "jobs": len(jobs),
+        "required_services": list(required_services),
         "arm": a.arm,
         "network": "none",
         "cpus": 2,

@@ -73,7 +73,35 @@ def client(job):
     (out/'dispatch.json').write_text(json.dumps({'dispatch_verified':True,'catalog_count':len(ids),'package_version':coverlab.__version__})+'\n')
 
 
-def setup():
+def filter_required_service_probes(script, required_services):
+    required = set(required_services or {"all"})
+    if "all" in required:
+        return script
+    def service_for_probe(name):
+        if name.startswith("h3-"):
+            return "h3"
+        if name == "grpc":
+            return "grpc"
+        if name == "mqtt-wss":
+            return "mqtt"
+        if name.startswith("stage-m-"):
+            return "stage_m"
+        return "core"
+    output = []
+    for line in script.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("required_probe "):
+            parts = stripped.split()
+            probe_name = parts[1] if len(parts) > 1 else ""
+            service = service_for_probe(probe_name)
+            if service not in required:
+                output.append(f'echo "optional service probe skipped: {probe_name}"')
+                continue
+        output.append(line)
+    return "\n".join(output) + ("\n" if script.endswith("\n") else "")
+
+
+def setup(required_services=None):
     # Docker mounts /etc/hosts as an individual file: upstream sed -i cannot
     # rename it. Derive a logged patch that changes only write mechanics.
     import re
@@ -108,6 +136,7 @@ def setup():
     # starts as root: its implicit drop to mosquitto cannot read a 0600 root
     # TLS key. The isolated broker stays root inside its network namespace.
     service_patch=services.replace('listen 10.20.0.22:8443 ssl;','listen 10.20.0.22:8443 ssl http2;').replace('allow_anonymous true\npersistence false','allow_anonymous true\nuser root\npersistence false')
+    service_patch=filter_required_service_probes(service_patch, required_services or {"all"})
     script=Path('/lab/scripts/start_services.container.sh');script.write_text(service_patch)
     Path('/out/services_patch.json').write_text(json.dumps({'original_sha256':hashlib.sha256(services.encode()).hexdigest(),
         'patched_sha256':hashlib.sha256(service_patch.encode()).hexdigest(),'reason':'container-root TLS key ownership and actual HTTP/2 on isolated nginx front'})+'\n')
@@ -209,7 +238,7 @@ def run(job):
 
 def main():
     if len(sys.argv)>2 and sys.argv[1]=='--client':client(json.loads(Path(sys.argv[2]).read_text()));return
-    request=json.loads(Path(sys.argv[1]).read_text());setup()
+    request=json.loads(Path(sys.argv[1]).read_text());setup(request.get('required_services'))
     results=[]
     for job in request.get('jobs',[request]):
         try:results.append(run(job))
