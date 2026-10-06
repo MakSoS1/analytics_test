@@ -31,3 +31,4 @@ Task 4: GREEN implementation added after RED run 37500995186 confirmed missing n
 Task 4: complete (commits db5bc1b..e02bd36, tests: natural-traffic-tdd run 37501336754 → natural/full regression + real Linux capture all pass).
 Task 5: Ruling: public GitHub contains feature/Arkime Parquet but no raw office PCAP, so CI composition has a pseudonymized feature-table mode and a separate strict raw-office delegate; only the latter may claim endpoint collision checking against office packets — cost if wrong: public CI can validate feature/membership integrity but cannot prove packet-level office overlay without private raw inputs.
 Task 5: RED composition/full-extraction tests committed.
+Task 5: GREEN implementation added after RED run 37502469166 confirmed missing natural_traffic.composition only.
