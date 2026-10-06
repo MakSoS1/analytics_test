@@ -17,7 +17,7 @@ def sha(path):
 class NaturalCorpusTests(unittest.TestCase):
     def make_job(self, root, job_id, arm, source_profile, seed=1, status="captured"):
         d = Path(root) / job_id
-        d.mkdir()
+        d.mkdir(parents=True)
         pcap = d / "capture.pcap"
         write_pcap(pcap, [(1.0, b"\x00" * 60), (1.1, b"\x01" * 60)])
         job = {
