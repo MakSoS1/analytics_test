@@ -9,6 +9,23 @@ import subprocess
 import time
 
 
+def ensure_runner_resources(
+    path,
+    *,
+    min_free_gib=15,
+    disk_usage_fn=shutil.disk_usage,
+    loadavg_fn=os.getloadavg,
+):
+    usage = disk_usage_fn(Path(path))
+    free_gib = float(usage.free) / (1 << 30)
+    loadavg = tuple(float(v) for v in loadavg_fn())
+    if free_gib < float(min_free_gib):
+        raise SystemExit(
+            f"resource guard: free disk {free_gib:.2f} GiB below {float(min_free_gib):.2f} GiB"
+        )
+    return {"free_gib": free_gib, "loadavg": loadavg}
+
+
 def build_jobs(
     registry,
     *,
@@ -90,8 +107,7 @@ def main():
     a = parser.parse_args()
     if not a.all and not a.entry:
         parser.error("explicit --all or --entry required")
-    if shutil.disk_usage(a.out.parent).free / (1 << 30) < 20 or os.getloadavg()[0] >= 2:
-        raise SystemExit("resource guard: defer")
+    resources = ensure_runner_resources(a.out.parent, min_free_gib=15)
 
     root = Path(__file__).resolve().parent
     registry = json.loads((a.registry or root / "registry.json").read_text())
@@ -155,6 +171,7 @@ def main():
         "memory_gib": 4,
         "timing": a.timing,
         "started_at": time.time(),
+        "runner_resources": resources,
         "production_ready": False,
     }
     (a.out / "runtime_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
