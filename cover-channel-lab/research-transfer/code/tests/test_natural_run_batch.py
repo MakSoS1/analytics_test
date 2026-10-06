@@ -89,6 +89,11 @@ class NaturalRunBatchArmTests(unittest.TestCase):
                 loadavg_fn=lambda: (0.0, 0.0, 0.0),
             )
 
+    def test_runtime_image_installs_entrypoint_network_tools(self):
+        dockerfile = (ROOT / "cover_runtime" / "Dockerfile").read_text()
+        for package in ("iproute2", "tcpdump", "ethtool"):
+            self.assertIn(package, dockerfile)
+
     def test_cli_help_exposes_arm_selection(self):
         proc = subprocess.run(
             [sys.executable, str(RUN_BATCH), "--help"],
