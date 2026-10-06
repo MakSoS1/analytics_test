@@ -1,0 +1,82 @@
+import importlib.util
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+RUN_BATCH = ROOT / "cover_runtime" / "run_batch.py"
+spec = importlib.util.spec_from_file_location("natural_run_batch", RUN_BATCH)
+run_batch = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(run_batch)
+
+
+class NaturalRunBatchArmTests(unittest.TestCase):
+    def registry(self):
+        return {
+            "sha256": "registry-sha",
+            "entries": [
+                {
+                    "entry_id": "E1",
+                    "dataset_role": "scenario_and_matched_control",
+                    "source_fidelity": "wire_real_network",
+                    "profiles": [
+                        {
+                            "profile_id": "p1",
+                            "runtime_events": 2,
+                            "path_profile": "office_path_v1",
+                            "client_mtu": 1290,
+                            "client_tcp_timestamps": True,
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def build(self, arm):
+        return run_batch.build_jobs(
+            self.registry(),
+            requested_entries={"E1"},
+            requested_profiles={"p1"},
+            arm=arm,
+            seed=17,
+            timing="accelerated_smoke",
+            default_events=3,
+            native_interval=None,
+            mechanics=False,
+            adapter_identity="adapter-sha",
+        )
+
+    def test_control_only_never_materializes_scenario_job(self):
+        jobs = self.build("control")
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual({j["arm"] for j in jobs}, {"control"})
+
+    def test_scenario_only_never_materializes_control_job(self):
+        jobs = self.build("scenario")
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual({j["arm"] for j in jobs}, {"scenario"})
+
+    def test_both_keeps_matched_pair_and_job_ids_are_arm_specific(self):
+        jobs = self.build("both")
+        self.assertEqual([j["arm"] for j in jobs], ["scenario", "control"])
+        self.assertEqual(len({j["job_id"] for j in jobs}), 2)
+
+    def test_builder_is_deterministic(self):
+        self.assertEqual(self.build("control"), self.build("control"))
+
+    def test_cli_help_exposes_arm_selection(self):
+        proc = subprocess.run(
+            [sys.executable, str(RUN_BATCH), "--help"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("--arm", proc.stdout)
+        self.assertIn("control", proc.stdout)
+        self.assertIn("scenario", proc.stdout)
+        self.assertIn("both", proc.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()
