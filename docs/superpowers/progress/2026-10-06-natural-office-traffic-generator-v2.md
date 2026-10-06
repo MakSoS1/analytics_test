@@ -21,3 +21,4 @@ Task 3: RED capture/resource/integrity/capability tests committed.
 Task 3: GREEN implementation added after RED run 37494499185 (missing natural_traffic.capture only).
 Task 3: unit GREEN run 37499295791 passed natural and full research-transfer suite.
 Task 3: Ruling: GitHub Actions workflow is configuration, validated by the existing integration test rather than a separate config unit test — cost if wrong: CI syntax/runtime failure blocks Task 3 and is fixed before continuing.
+Task 3: Ruling: real-capture smoke run 37499500808 failed before capture because unittest target `code.tests...` resolved Python stdlib `code`; use unittest discovery against test_natural_capture.py — cost if wrong: smoke remains blocked, no production behavior is affected.
