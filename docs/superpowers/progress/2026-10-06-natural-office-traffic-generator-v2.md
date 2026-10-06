@@ -18,3 +18,4 @@ Task 2: GREEN run 37493371264 passed 21/21 natural tests.
 Task 2: complete (commits b6091cf..53a397e, tests: natural-traffic-tdd run 37493772325 → natural 21/21 pass; full research-transfer 99/99 pass).
 
 Task 3: RED capture/resource/integrity/capability tests committed.
+Task 3: GREEN implementation added after RED run 37494499185 (missing natural_traffic.capture only).
