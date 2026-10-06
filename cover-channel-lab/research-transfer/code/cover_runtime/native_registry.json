@@ -1,0 +1,138 @@
+{
+  "version": "cover-registry-v1",
+  "main_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+  "stage_m_commit": "1028b4a922c9b59e841fc71d58ae1df60ded6da4",
+  "sources": [
+    {
+      "path": "main/src/coverlab/scenarios.py",
+      "sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "path": "main/src/coverlab/scenarios_extra.py",
+      "sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "path": "stage_m/src/coverlab/stage_m.py",
+      "sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    }
+  ],
+  "entries": [
+    {
+      "entry_id": "M-TIMING-XCARRIER",
+      "namespace": "stage_m",
+      "family": "M-TIMING-XCARRIER",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "native_timing-https-curl",
+          "client": "curl_linux",
+          "server": "nginx_reverse_proxy",
+          "topology": "edge-front.test",
+          "implementation_id": "timing-https-curl",
+          "runtime_events": 6,
+          "native_interval": 5
+        },
+        {
+          "profile_id": "native_timing-https-go",
+          "client": "go_nethttp",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test",
+          "implementation_id": "timing-https-go",
+          "runtime_events": 6,
+          "native_interval": 5
+        },
+        {
+          "profile_id": "native_timing-https-browser",
+          "client": "browser_chromium",
+          "server": "nginx_reverse_proxy",
+          "topology": "workers-front.test",
+          "implementation_id": "timing-https-browser",
+          "runtime_events": 6,
+          "native_interval": 5
+        },
+        {
+          "profile_id": "native_timing-dns-udp",
+          "client": "python_dnspython_udp",
+          "server": "local_recursive_forwarder",
+          "topology": "recursive_resolver",
+          "implementation_id": "timing-dns-udp",
+          "runtime_events": 6,
+          "native_interval": 5
+        },
+        {
+          "profile_id": "native_timing-dns-tcp",
+          "client": "python_dnspython_tcp",
+          "server": "local_recursive_forwarder",
+          "topology": "recursive_resolver",
+          "implementation_id": "timing-dns-tcp",
+          "runtime_events": 6,
+          "native_interval": 5
+        },
+        {
+          "profile_id": "native_timing-wss-python",
+          "client": "python_websockets",
+          "server": "python_websockets_server",
+          "topology": "cover-ws.test",
+          "implementation_id": "timing-wss-python",
+          "runtime_events": 6,
+          "native_interval": 5
+        },
+        {
+          "profile_id": "native_timing-wss-node",
+          "client": "node_websocket",
+          "server": "nginx_to_wss",
+          "topology": "edge-ws.test",
+          "implementation_id": "timing-wss-node",
+          "runtime_events": 6,
+          "native_interval": 5
+        },
+        {
+          "profile_id": "native_timing-mqtt-paho",
+          "client": "paho_mqtt_websockets",
+          "server": "mosquitto_websockets",
+          "topology": "mqtt-broker.test",
+          "implementation_id": "timing-mqtt-paho",
+          "runtime_events": 6,
+          "native_interval": 5
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-WSS-LONG",
+      "namespace": "stage_m",
+      "family": "M-WSS-LONG",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "native_wss-python-direct",
+          "client": "python_websockets",
+          "server": "python_websockets_server",
+          "topology": "cover-ws.test",
+          "implementation_id": "wss-python-direct",
+          "runtime_events": 5,
+          "native_interval": 50
+        },
+        {
+          "profile_id": "native_wss-node-nginx",
+          "client": "node_websocket",
+          "server": "nginx_to_wss",
+          "topology": "edge-ws.test",
+          "implementation_id": "wss-node-nginx",
+          "runtime_events": 5,
+          "native_interval": 50
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    }
+  ],
+  "parent_registry_sha256": "5169230a0bea32329c4a1d3b4fe4a844f2b5f5b37d5e9f3b75724c5da8b77151",
+  "scope_policy": "native WSS persistence >180s two real stacks; six native events per all8 crosscarrier profiles",
+  "sha256": "396646a95109b934be06fbfc6646dea48da30d40ad2a52b82c1b458cd5ed6ff3"
+}

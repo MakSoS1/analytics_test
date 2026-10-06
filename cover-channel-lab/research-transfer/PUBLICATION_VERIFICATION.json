@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-06",
+  "standalone_unit_tests": {
+    "tests": 73,
+    "result": "OK"
+  },
+  "python_ast_files": 323,
+  "notebook_outputs_and_attachments": 0,
+  "cli_help_checks": 6,
+  "private_data_extensions": 0,
+  "site_specific_and_secret_pattern_scan": "passed",
+  "new_vm_actions": 0,
+  "native_capture_rerun": false,
+  "naturalness_established": false,
+  "production_ready": false,
+  "upstream_files_verified": 187,
+  "upstream_public_git_blob_verification": 187,
+  "runtime_preflight_removed": true
+}

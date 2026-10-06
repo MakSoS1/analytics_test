@@ -1,0 +1,3 @@
+# Preserve exact pinned source and unified patch bytes.
+code/cover_runtime/upstream/** -whitespace
+code/arkime/config/*.patch -whitespace

@@ -1,0 +1,1939 @@
+[
+  {
+    "scenario_id": "CC_URI_01",
+    "family": "uri",
+    "transport": "http",
+    "carrier": "query_value",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "search",
+    "description": "message in id query"
+  },
+  {
+    "scenario_id": "CC_URI_02",
+    "family": "uri",
+    "transport": "http",
+    "carrier": "query_values",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.001"
+    ],
+    "benign_semantic_type": "pagination",
+    "description": "message split over query values"
+  },
+  {
+    "scenario_id": "CC_URI_03",
+    "family": "uri",
+    "transport": "http",
+    "carrier": "path_segment",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "resource_id",
+    "description": "fragment in path segment"
+  },
+  {
+    "scenario_id": "CC_URI_04",
+    "family": "uri",
+    "transport": "http",
+    "carrier": "multi_request_query",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "spa_polling",
+    "description": "small fragments over requests"
+  },
+  {
+    "scenario_id": "CC_URI_05",
+    "family": "uri",
+    "transport": "http",
+    "carrier": "filename",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "cache_busting",
+    "description": "payload-like filename extension"
+  },
+  {
+    "scenario_id": "CC_URI_06",
+    "family": "uri",
+    "transport": "http",
+    "carrier": "matrix_path",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "api_path",
+    "description": "matrix-like path params"
+  },
+  {
+    "scenario_id": "CC_URI_07",
+    "family": "uri",
+    "transport": "http",
+    "carrier": "query_key",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "analytics",
+    "description": "symbols in query key names"
+  },
+  {
+    "scenario_id": "CC_URI_08",
+    "family": "uri",
+    "transport": "http",
+    "carrier": "uri_length",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.001"
+    ],
+    "benign_semantic_type": "image_resize",
+    "description": "URI length modulation"
+  },
+  {
+    "scenario_id": "CC_HDR_01",
+    "family": "header",
+    "transport": "https",
+    "carrier": "cookie",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "auth",
+    "description": "registration in Cookie"
+  },
+  {
+    "scenario_id": "CC_HDR_02",
+    "family": "header",
+    "transport": "https",
+    "carrier": "cookie",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "session_rotation",
+    "description": "fragments in Cookie"
+  },
+  {
+    "scenario_id": "CC_HDR_03",
+    "family": "header",
+    "transport": "https",
+    "carrier": "authorization",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "auth",
+    "description": "synthetic payload disguised as bearer"
+  },
+  {
+    "scenario_id": "CC_HDR_04",
+    "family": "header",
+    "transport": "https",
+    "carrier": "user_agent",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "custom_sdk",
+    "description": "ID suffix in User-Agent"
+  },
+  {
+    "scenario_id": "CC_HDR_05",
+    "family": "header",
+    "transport": "https",
+    "carrier": "referer",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "navigation",
+    "description": "encoded result in Referer"
+  },
+  {
+    "scenario_id": "CC_HDR_06",
+    "family": "header",
+    "transport": "https",
+    "carrier": "origin",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "cors",
+    "description": "low bandwidth marker in Origin"
+  },
+  {
+    "scenario_id": "CC_HDR_07",
+    "family": "header",
+    "transport": "https",
+    "carrier": "accept_language",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "localization",
+    "description": "Accept-Language order modulation"
+  },
+  {
+    "scenario_id": "CC_HDR_08",
+    "family": "header",
+    "transport": "https",
+    "carrier": "accept_encoding",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "content_negotiation",
+    "description": "Accept-Encoding order modulation"
+  },
+  {
+    "scenario_id": "CC_HDR_09",
+    "family": "header",
+    "transport": "https",
+    "carrier": "if_none_match",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "cache",
+    "description": "synthetic victim ID in If-None-Match"
+  },
+  {
+    "scenario_id": "CC_HDR_10",
+    "family": "header",
+    "transport": "https",
+    "carrier": "if_modified_since",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "cache",
+    "description": "timestamp modulation"
+  },
+  {
+    "scenario_id": "CC_HDR_11",
+    "family": "header",
+    "transport": "https",
+    "carrier": "range",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "video_range",
+    "description": "Range offsets encode symbols"
+  },
+  {
+    "scenario_id": "CC_HDR_12",
+    "family": "header",
+    "transport": "https",
+    "carrier": "content_type_param",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "multipart",
+    "description": "boundary/charset fragment"
+  },
+  {
+    "scenario_id": "CC_XHDR_01",
+    "family": "custom_header",
+    "transport": "https",
+    "carrier": "x_session_id",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "tracing",
+    "description": "X-Session-Id value stream"
+  },
+  {
+    "scenario_id": "CC_XHDR_02",
+    "family": "custom_header",
+    "transport": "https",
+    "carrier": "x_request_id",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "tracing",
+    "description": "X-Request-Id value stream"
+  },
+  {
+    "scenario_id": "CC_XHDR_03",
+    "family": "custom_header",
+    "transport": "https",
+    "carrier": "x_correlation_id",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "tracing",
+    "description": "correlation ID stream"
+  },
+  {
+    "scenario_id": "CC_XHDR_04",
+    "family": "custom_header",
+    "transport": "https",
+    "carrier": "x_telemetry",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "telemetry",
+    "description": "encoded telemetry-like result"
+  },
+  {
+    "scenario_id": "CC_BODY_01",
+    "family": "body",
+    "transport": "https",
+    "carrier": "json",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "telemetry",
+    "description": "direct synthetic command/result JSON"
+  },
+  {
+    "scenario_id": "CC_BODY_02",
+    "family": "body",
+    "transport": "https",
+    "carrier": "json_junk",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.001"
+    ],
+    "benign_semantic_type": "telemetry",
+    "description": "payload among junk JSON fields"
+  },
+  {
+    "scenario_id": "CC_BODY_03",
+    "family": "body",
+    "transport": "http",
+    "carrier": "form",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "form",
+    "description": "fragments in form values"
+  },
+  {
+    "scenario_id": "CC_BODY_04",
+    "family": "body",
+    "transport": "https",
+    "carrier": "multipart",
+    "label_family": "web_c2_plain",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "file_upload",
+    "description": "synthetic file-like result"
+  },
+  {
+    "scenario_id": "CC_BODY_05",
+    "family": "body",
+    "transport": "https",
+    "carrier": "multipart_filename",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "file_upload",
+    "description": "data in multipart filename/boundary"
+  },
+  {
+    "scenario_id": "CC_BODY_06",
+    "family": "body",
+    "transport": "https",
+    "carrier": "octet_stream",
+    "label_family": "web_c2_plain",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1573",
+      "T1041"
+    ],
+    "benign_semantic_type": "crash_report",
+    "description": "encrypted-like bytes"
+  },
+  {
+    "scenario_id": "CC_BODY_07",
+    "family": "body",
+    "transport": "h2",
+    "carrier": "protobuf_like",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "rpc",
+    "description": "opaque protobuf-like bytes"
+  },
+  {
+    "scenario_id": "CC_BODY_08",
+    "family": "body",
+    "transport": "http",
+    "carrier": "xml_attributes",
+    "label_family": "stego_content",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.002"
+    ],
+    "benign_semantic_type": "xml_manifest",
+    "description": "payload in XML attributes"
+  },
+  {
+    "scenario_id": "CC_BODY_09",
+    "family": "body",
+    "transport": "https",
+    "carrier": "graphql_variables",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "graphql",
+    "description": "command disguised as variables"
+  },
+  {
+    "scenario_id": "CC_BODY_10",
+    "family": "body",
+    "transport": "http",
+    "carrier": "chunked",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "resumable_upload",
+    "description": "fragmented HTTP body"
+  },
+  {
+    "scenario_id": "CC_RESP_01",
+    "family": "response",
+    "transport": "http",
+    "carrier": "response_body",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "api_response",
+    "description": "plain task in response"
+  },
+  {
+    "scenario_id": "CC_RESP_02",
+    "family": "response",
+    "transport": "https",
+    "carrier": "response_json",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.001"
+    ],
+    "benign_semantic_type": "api_response",
+    "description": "task in noisy object"
+  },
+  {
+    "scenario_id": "CC_RESP_03",
+    "family": "response",
+    "transport": "http",
+    "carrier": "response_xml",
+    "label_family": "stego_content",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.002"
+    ],
+    "benign_semantic_type": "xml_manifest",
+    "description": "GUID/hex steganography"
+  },
+  {
+    "scenario_id": "CC_RESP_04",
+    "family": "response",
+    "transport": "http",
+    "carrier": "response_html",
+    "label_family": "stego_content",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.002"
+    ],
+    "benign_semantic_type": "static_content",
+    "description": "HTML comment/attribute carrier"
+  },
+  {
+    "scenario_id": "CC_RESP_05",
+    "family": "response",
+    "transport": "http",
+    "carrier": "response_css",
+    "label_family": "stego_content",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.002"
+    ],
+    "benign_semantic_type": "static_content",
+    "description": "CSS value carrier"
+  },
+  {
+    "scenario_id": "CC_RESP_06",
+    "family": "response",
+    "transport": "http",
+    "carrier": "response_image_meta",
+    "label_family": "stego_content",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.002"
+    ],
+    "benign_semantic_type": "image_metadata",
+    "description": "synthetic image metadata carrier"
+  },
+  {
+    "scenario_id": "CC_RESP_07",
+    "family": "response",
+    "transport": "https",
+    "carrier": "set_cookie",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "ab_testing",
+    "description": "downstream command in Set-Cookie"
+  },
+  {
+    "scenario_id": "CC_RESP_08",
+    "family": "response",
+    "transport": "https",
+    "carrier": "etag",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "cache",
+    "description": "downstream ETag fragment"
+  },
+  {
+    "scenario_id": "CC_RESP_09",
+    "family": "response",
+    "transport": "http",
+    "carrier": "status_code",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "healthcheck",
+    "description": "status-code alphabet"
+  },
+  {
+    "scenario_id": "CC_RESP_10",
+    "family": "response",
+    "transport": "http",
+    "carrier": "redirect",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "redirect",
+    "description": "Location carries task"
+  },
+  {
+    "scenario_id": "CC_RESP_11",
+    "family": "response",
+    "transport": "http",
+    "carrier": "response_size",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "content_variant",
+    "description": "response length modulation"
+  },
+  {
+    "scenario_id": "CC_RESP_12",
+    "family": "response",
+    "transport": "http",
+    "carrier": "response_chunks",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "streaming",
+    "description": "chunk-size modulation"
+  },
+  {
+    "scenario_id": "CC_SYN_01",
+    "family": "syntax",
+    "transport": "http",
+    "carrier": "header_order",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "runtime_variation",
+    "description": "header order channel"
+  },
+  {
+    "scenario_id": "CC_SYN_02",
+    "family": "syntax",
+    "transport": "http",
+    "carrier": "header_case",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "runtime_variation",
+    "description": "header case channel"
+  },
+  {
+    "scenario_id": "CC_SYN_03",
+    "family": "syntax",
+    "transport": "http",
+    "carrier": "whitespace",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "runtime_variation",
+    "description": "OWS modulation"
+  },
+  {
+    "scenario_id": "CC_SYN_04",
+    "family": "syntax",
+    "transport": "http",
+    "carrier": "duplicate_headers",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "proxy",
+    "description": "duplicate header order"
+  },
+  {
+    "scenario_id": "CC_SYN_05",
+    "family": "syntax",
+    "transport": "http",
+    "carrier": "method",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "api",
+    "description": "method selection channel"
+  },
+  {
+    "scenario_id": "CC_SYN_06",
+    "family": "syntax",
+    "transport": "http",
+    "carrier": "connection_reuse",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "api",
+    "description": "reuse/close modulation"
+  },
+  {
+    "scenario_id": "CC_SYN_07",
+    "family": "syntax",
+    "transport": "http",
+    "carrier": "content_length_parity",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "api",
+    "description": "body length parity"
+  },
+  {
+    "scenario_id": "CC_SYN_08",
+    "family": "syntax",
+    "transport": "http",
+    "carrier": "request_count",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "api",
+    "description": "request count symbols"
+  },
+  {
+    "scenario_id": "CC_TIME_01",
+    "family": "timing",
+    "transport": "https",
+    "carrier": "fixed_beacon",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "healthcheck",
+    "description": "fixed beacon"
+  },
+  {
+    "scenario_id": "CC_TIME_02",
+    "family": "timing",
+    "transport": "https",
+    "carrier": "low_jitter",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "monitoring",
+    "description": "low jitter beacon"
+  },
+  {
+    "scenario_id": "CC_TIME_03",
+    "family": "timing",
+    "transport": "https",
+    "carrier": "medium_jitter",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "background_sync",
+    "description": "medium jitter beacon"
+  },
+  {
+    "scenario_id": "CC_TIME_04",
+    "family": "timing",
+    "transport": "https",
+    "carrier": "high_jitter",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "background_sync",
+    "description": "lognormal jitter"
+  },
+  {
+    "scenario_id": "CC_TIME_05",
+    "family": "timing",
+    "transport": "https",
+    "carrier": "burst",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "telemetry",
+    "description": "burst then pause"
+  },
+  {
+    "scenario_id": "CC_TIME_06",
+    "family": "timing",
+    "transport": "https",
+    "carrier": "work_hours",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "office_automation",
+    "description": "work-hours schedule"
+  },
+  {
+    "scenario_id": "CC_TIME_07",
+    "family": "timing",
+    "transport": "https",
+    "carrier": "backoff",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "retry",
+    "description": "exponential backoff"
+  },
+  {
+    "scenario_id": "CC_TIME_08",
+    "family": "timing",
+    "transport": "http",
+    "carrier": "binary_timing",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "polling",
+    "description": "short/long interval bits"
+  },
+  {
+    "scenario_id": "CC_TIME_09",
+    "family": "timing",
+    "transport": "https",
+    "carrier": "low_slow",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "background_sync",
+    "description": "accelerated low-and-slow fixture"
+  },
+  {
+    "scenario_id": "CC_TIME_10",
+    "family": "timing",
+    "transport": "https",
+    "carrier": "event_driven",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "notification",
+    "description": "event-driven callback"
+  },
+  {
+    "scenario_id": "CC_WS_01",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_registration",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "chat",
+    "description": "UUID + synthetic system profile"
+  },
+  {
+    "scenario_id": "CC_WS_02",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_json_recv",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "market_data",
+    "description": "JSON recv polling"
+  },
+  {
+    "scenario_id": "CC_WS_03",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_json_send",
+    "label_family": "web_c2_plain",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "chat",
+    "description": "JSON result send"
+  },
+  {
+    "scenario_id": "CC_WS_04",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_b64_envelope",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1573"
+    ],
+    "benign_semantic_type": "market_data",
+    "description": "Base64 JSON envelope"
+  },
+  {
+    "scenario_id": "CC_WS_05",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_binary",
+    "label_family": "web_c2_plain",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "game_telemetry",
+    "description": "binary frames"
+  },
+  {
+    "scenario_id": "CC_WS_06",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_ping",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "notification",
+    "description": "ping timing/payload"
+  },
+  {
+    "scenario_id": "CC_WS_07",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_fragmentation",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "collaboration",
+    "description": "fragmented messages"
+  },
+  {
+    "scenario_id": "CC_WS_08",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_idle",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "notification",
+    "description": "long-lived sparse messages"
+  },
+  {
+    "scenario_id": "CC_WS_09",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_reconnect",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "dashboard",
+    "description": "reconnect continuity"
+  },
+  {
+    "scenario_id": "CC_WS_10",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_multipersona",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "chat",
+    "description": "multiple personas same endpoint"
+  },
+  {
+    "scenario_id": "CC_WS_11",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_browser_headers",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "browser_app",
+    "description": "browser mimicry"
+  },
+  {
+    "scenario_id": "CC_WS_12",
+    "family": "websocket",
+    "transport": "wss",
+    "carrier": "ws_appliance",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "management",
+    "description": "appliance-like WSS"
+  },
+  {
+    "scenario_id": "CC_H2_01",
+    "family": "http2",
+    "transport": "h2",
+    "carrier": "h2_request",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "browser_h2",
+    "description": "GET/POST streams"
+  },
+  {
+    "scenario_id": "CC_H2_02",
+    "family": "http2",
+    "transport": "h2",
+    "carrier": "h2_parallel",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "browser_h2",
+    "description": "parallel stream fragments"
+  },
+  {
+    "scenario_id": "CC_H2_03",
+    "family": "http2",
+    "transport": "h2",
+    "carrier": "h2_order",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "browser_h2",
+    "description": "stream ordering channel"
+  },
+  {
+    "scenario_id": "CC_H2_04",
+    "family": "http2",
+    "transport": "h2",
+    "carrier": "h2_header",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "browser_h2",
+    "description": "header value carrier"
+  },
+  {
+    "scenario_id": "CC_H2_05",
+    "family": "http2",
+    "transport": "h2",
+    "carrier": "h2_data_size",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "browser_h2",
+    "description": "DATA size classes"
+  },
+  {
+    "scenario_id": "CC_H2_06",
+    "family": "http2",
+    "transport": "h2",
+    "carrier": "h2_reset",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "browser_h2",
+    "description": "selective resets fixture"
+  },
+  {
+    "scenario_id": "CC_H2_07",
+    "family": "http2",
+    "transport": "h2",
+    "carrier": "h2_sparse",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "browser_h2",
+    "description": "sparse streams on long connection"
+  },
+  {
+    "scenario_id": "CC_H2_08",
+    "family": "http2",
+    "transport": "h2",
+    "carrier": "h2_client_mismatch",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "service_rpc",
+    "description": "browser-like headers from script stack"
+  },
+  {
+    "scenario_id": "CC_BROWSER_01",
+    "family": "browser",
+    "transport": "https",
+    "carrier": "extension_registration",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "extension_update",
+    "description": "extension registration"
+  },
+  {
+    "scenario_id": "CC_BROWSER_02",
+    "family": "browser",
+    "transport": "https",
+    "carrier": "service_worker_alarm",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "background_sync",
+    "description": "Service Worker alarm"
+  },
+  {
+    "scenario_id": "CC_BROWSER_03",
+    "family": "browser",
+    "transport": "https",
+    "carrier": "push_wakeup",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "web_push",
+    "description": "push-like wake-up"
+  },
+  {
+    "scenario_id": "CC_BROWSER_04",
+    "family": "browser",
+    "transport": "https",
+    "carrier": "keepalive_tab",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "background_sync",
+    "description": "hidden helper fetch"
+  },
+  {
+    "scenario_id": "CC_BROWSER_05",
+    "family": "browser",
+    "transport": "https",
+    "carrier": "native_echo",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "extension_update",
+    "description": "safe local echo bridge"
+  },
+  {
+    "scenario_id": "CC_BROWSER_06",
+    "family": "browser",
+    "transport": "wss",
+    "carrier": "browser_wss",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "collaboration",
+    "description": "WSS from browser-like context"
+  },
+  {
+    "scenario_id": "CC_BROWSER_07",
+    "family": "browser",
+    "transport": "https",
+    "carrier": "headless",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "headless_monitoring",
+    "description": "headless browser timing"
+  },
+  {
+    "scenario_id": "CC_BROWSER_08",
+    "family": "browser",
+    "transport": "https",
+    "carrier": "fetch_stream",
+    "label_family": "web_c2_plain",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "browser_upload",
+    "description": "synthetic blob fetch stream"
+  },
+  {
+    "scenario_id": "CC_BROWSER_09",
+    "family": "browser",
+    "transport": "https",
+    "carrier": "send_beacon",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "analytics",
+    "description": "sendBeacon-like exfil"
+  },
+  {
+    "scenario_id": "CC_BROWSER_10",
+    "family": "browser",
+    "transport": "https",
+    "carrier": "csp_report",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "csp_reporting",
+    "description": "CSP report carrier"
+  },
+  {
+    "scenario_id": "CC_BROWSER_11",
+    "family": "browser",
+    "transport": "https",
+    "carrier": "prefetch",
+    "label_family": "covert_storage",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "resource_hints",
+    "description": "resource hint subdomain symbols"
+  },
+  {
+    "scenario_id": "CC_SSE_01",
+    "family": "sse",
+    "transport": "http",
+    "carrier": "sse_command",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "deployment_logs",
+    "description": "command event stream"
+  },
+  {
+    "scenario_id": "CC_SSE_02",
+    "family": "sse",
+    "transport": "http",
+    "carrier": "sse_encoded",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "deployment_logs",
+    "description": "encoded events"
+  },
+  {
+    "scenario_id": "CC_SSE_03",
+    "family": "sse",
+    "transport": "http",
+    "carrier": "sse_comment_timing",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "deployment_logs",
+    "description": "comment timing"
+  },
+  {
+    "scenario_id": "CC_SSE_04",
+    "family": "sse",
+    "transport": "http",
+    "carrier": "last_event_id",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "notification",
+    "description": "Last-Event-ID carrier"
+  },
+  {
+    "scenario_id": "CC_SSE_05",
+    "family": "sse",
+    "transport": "http",
+    "carrier": "sse_sparse",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "observability",
+    "description": "sparse long-lived SSE"
+  },
+  {
+    "scenario_id": "CC_LP_01",
+    "family": "longpoll",
+    "transport": "https",
+    "carrier": "long_poll_recv",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "chat_polling",
+    "description": "long polling receive"
+  },
+  {
+    "scenario_id": "CC_LP_02",
+    "family": "longpoll",
+    "transport": "https",
+    "carrier": "rotating_poll",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "chat_polling",
+    "description": "rotating poll ID"
+  },
+  {
+    "scenario_id": "CC_LP_03",
+    "family": "longpoll",
+    "transport": "https",
+    "carrier": "poll_upload",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "chat_polling",
+    "description": "poll + result upload"
+  },
+  {
+    "scenario_id": "CC_GRPC_01",
+    "family": "grpc",
+    "transport": "h2",
+    "carrier": "grpc_unary",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "service_rpc",
+    "description": "gRPC wire-format unary fixture"
+  },
+  {
+    "scenario_id": "CC_GRPC_02",
+    "family": "grpc",
+    "transport": "h2",
+    "carrier": "grpc_server_stream",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "service_rpc",
+    "description": "server stream fixture"
+  },
+  {
+    "scenario_id": "CC_GRPC_03",
+    "family": "grpc",
+    "transport": "h2",
+    "carrier": "grpc_client_stream",
+    "label_family": "web_c2_plain",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1071.001",
+      "T1041"
+    ],
+    "benign_semantic_type": "otlp",
+    "description": "client stream fixture"
+  },
+  {
+    "scenario_id": "CC_GRPC_04",
+    "family": "grpc",
+    "transport": "h2",
+    "carrier": "grpc_bidi",
+    "label_family": "web_tunnel",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572"
+    ],
+    "benign_semantic_type": "otlp",
+    "description": "bidi stream fixture"
+  },
+  {
+    "scenario_id": "CC_GRPC_05",
+    "family": "grpc",
+    "transport": "h2",
+    "carrier": "grpc_metadata",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "service_rpc",
+    "description": "metadata carrier"
+  },
+  {
+    "scenario_id": "CC_GRPC_06",
+    "family": "grpc",
+    "transport": "h2",
+    "carrier": "grpc_trailers",
+    "label_family": "covert_storage",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "service_rpc",
+    "description": "status/trailer signal"
+  },
+  {
+    "scenario_id": "CC_GRPC_07",
+    "family": "grpc",
+    "transport": "h2",
+    "carrier": "grpc_compressed",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "otlp",
+    "description": "compressed messages"
+  },
+  {
+    "scenario_id": "CC_GRPC_08",
+    "family": "grpc",
+    "transport": "h2",
+    "carrier": "grpc_multiplex",
+    "label_family": "web_tunnel",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572"
+    ],
+    "benign_semantic_type": "service_rpc",
+    "description": "multiplexed methods"
+  },
+  {
+    "scenario_id": "CC_TUN_01",
+    "family": "tunnel",
+    "transport": "wss",
+    "carrier": "fixed_echo_relay",
+    "label_family": "web_tunnel",
+    "label_intent": "tunnel",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572",
+      "T1090"
+    ],
+    "benign_semantic_type": "remote_support",
+    "description": "fixed local echo service"
+  },
+  {
+    "scenario_id": "CC_TUN_02",
+    "family": "tunnel",
+    "transport": "wss",
+    "carrier": "allowlisted_connect",
+    "label_family": "web_tunnel",
+    "label_intent": "proxy",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572",
+      "T1090"
+    ],
+    "benign_semantic_type": "remote_support",
+    "description": "SOCKS-like grammar to synthetic target only"
+  },
+  {
+    "scenario_id": "CC_TUN_03",
+    "family": "tunnel",
+    "transport": "wss",
+    "carrier": "multiplex_conn_id",
+    "label_family": "web_tunnel",
+    "label_intent": "proxy",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572",
+      "T1090"
+    ],
+    "benign_semantic_type": "browser_ide",
+    "description": "2-16 logical synthetic streams"
+  },
+  {
+    "scenario_id": "CC_TUN_04",
+    "family": "tunnel",
+    "transport": "wss",
+    "carrier": "mixed_inner",
+    "label_family": "web_tunnel",
+    "label_intent": "tunnel",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572"
+    ],
+    "benign_semantic_type": "browser_ide",
+    "description": "synthetic inner protocol labels"
+  },
+  {
+    "scenario_id": "CC_TUN_05",
+    "family": "tunnel",
+    "transport": "wss",
+    "carrier": "backpressure",
+    "label_family": "web_tunnel",
+    "label_intent": "tunnel",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572"
+    ],
+    "benign_semantic_type": "collaboration",
+    "description": "safe window/update-like controls"
+  },
+  {
+    "scenario_id": "CC_TUN_06",
+    "family": "tunnel",
+    "transport": "wss",
+    "carrier": "stream_lifecycle",
+    "label_family": "web_tunnel",
+    "label_intent": "tunnel",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572"
+    ],
+    "benign_semantic_type": "collaboration",
+    "description": "half-close/reset grammar"
+  },
+  {
+    "scenario_id": "CC_TUN_07",
+    "family": "tunnel",
+    "transport": "wss",
+    "carrier": "interactive",
+    "label_family": "web_tunnel",
+    "label_intent": "tunnel",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572"
+    ],
+    "benign_semantic_type": "game_relay",
+    "description": "small bidirectional messages"
+  },
+  {
+    "scenario_id": "CC_TUN_08",
+    "family": "tunnel",
+    "transport": "wss",
+    "carrier": "bulk",
+    "label_family": "web_tunnel",
+    "label_intent": "tunnel",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572"
+    ],
+    "benign_semantic_type": "backup",
+    "description": "larger one-way synthetic phase"
+  },
+  {
+    "scenario_id": "CC_TUN_09",
+    "family": "tunnel",
+    "transport": "wss",
+    "carrier": "keepalive",
+    "label_family": "web_tunnel",
+    "label_intent": "tunnel",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572"
+    ],
+    "benign_semantic_type": "notification",
+    "description": "idle + sparse ping/pong"
+  },
+  {
+    "scenario_id": "CC_TUN_10",
+    "family": "tunnel",
+    "transport": "wss",
+    "carrier": "endpoint_migration",
+    "label_family": "web_tunnel",
+    "label_intent": "tunnel",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572"
+    ],
+    "benign_semantic_type": "developer_tunnel",
+    "description": "same campaign second local hostname"
+  },
+  {
+    "scenario_id": "CC_TLS_01",
+    "family": "tls",
+    "transport": "https",
+    "carrier": "script_default",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "api",
+    "description": "default script TLS"
+  },
+  {
+    "scenario_id": "CC_TLS_02",
+    "family": "tls",
+    "transport": "https",
+    "carrier": "browser_like",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "browser_app",
+    "description": "browser-like headers/TLS challenge"
+  },
+  {
+    "scenario_id": "CC_TLS_03",
+    "family": "tls",
+    "transport": "https",
+    "carrier": "clienthello_variation",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "browser_app",
+    "description": "TLS stack diversity challenge"
+  },
+  {
+    "scenario_id": "CC_TLS_04",
+    "family": "tls",
+    "transport": "https",
+    "carrier": "resumption",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "browser_app",
+    "description": "session resumption"
+  },
+  {
+    "scenario_id": "CC_TLS_05",
+    "family": "tls",
+    "transport": "https",
+    "carrier": "zero_rtt_marker",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "browser_app",
+    "description": "0-RTT capability marker fixture"
+  },
+  {
+    "scenario_id": "CC_TLS_06",
+    "family": "tls",
+    "transport": "https",
+    "carrier": "sni_loss_fixture",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "privacy",
+    "description": "visibility-loss fixture"
+  },
+  {
+    "scenario_id": "CC_TLS_07",
+    "family": "tls",
+    "transport": "h2",
+    "carrier": "fallback",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "browser_app",
+    "description": "H3/H2/H1 metadata fallback fixture"
+  },
+  {
+    "scenario_id": "CC_TLS_08",
+    "family": "tls",
+    "transport": "https",
+    "carrier": "shared_edge",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "cdn",
+    "description": "shared-edge hostname categories"
+  },
+  {
+    "scenario_id": "CC_TLS_09",
+    "family": "tls",
+    "transport": "https",
+    "carrier": "cert_rotation",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "cdn",
+    "description": "certificate/destination rotation fixture"
+  },
+  {
+    "scenario_id": "CC_TLS_10",
+    "family": "tls",
+    "transport": "https",
+    "carrier": "inspection_bypass",
+    "label_family": "web_c2_plain",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001"
+    ],
+    "benign_semantic_type": "management",
+    "description": "pinning-like inspection outcome label"
+  },
+  {
+    "scenario_id": "CC_LOTS_01",
+    "family": "lots",
+    "transport": "https",
+    "carrier": "chatops_poll",
+    "label_family": "lots_web_api",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1102",
+      "T1071.001"
+    ],
+    "benign_semantic_type": "ci_notification",
+    "description": "local getUpdates-like polling"
+  },
+  {
+    "scenario_id": "CC_LOTS_02",
+    "family": "lots",
+    "transport": "https",
+    "carrier": "chatops_push",
+    "label_family": "lots_web_api",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1102",
+      "T1071.001"
+    ],
+    "benign_semantic_type": "ci_notification",
+    "description": "local sendMessage-like request"
+  },
+  {
+    "scenario_id": "CC_LOTS_03",
+    "family": "lots",
+    "transport": "https",
+    "carrier": "chatops_document",
+    "label_family": "lots_web_api",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1102",
+      "T1071.001",
+      "T1567"
+    ],
+    "benign_semantic_type": "ci_artifact",
+    "description": "local sendDocument-like multipart"
+  },
+  {
+    "scenario_id": "CC_LOTS_04",
+    "family": "lots",
+    "transport": "https",
+    "carrier": "webhook",
+    "label_family": "lots_web_api",
+    "label_intent": "exfil",
+    "attack_mapping": [
+      "T1102",
+      "T1071.001",
+      "T1567"
+    ],
+    "benign_semantic_type": "monitoring_notification",
+    "description": "local webhook-like one-way POST"
+  },
+  {
+    "scenario_id": "CC_LOTS_05",
+    "family": "lots",
+    "transport": "wss",
+    "carrier": "ephemeral_relay",
+    "label_family": "web_tunnel",
+    "label_intent": "tunnel",
+    "attack_mapping": [
+      "T1071.001",
+      "T1572"
+    ],
+    "benign_semantic_type": "developer_tunnel",
+    "description": "local ephemeral relay analogue"
+  },
+  {
+    "scenario_id": "CC_LOTS_06",
+    "family": "lots",
+    "transport": "wss",
+    "carrier": "paas_endpoint",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "developer_tunnel",
+    "description": "local PaaS-style endpoint"
+  },
+  {
+    "scenario_id": "CC_LOTS_07",
+    "family": "lots",
+    "transport": "wss",
+    "carrier": "dyndns_endpoint",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1001.003"
+    ],
+    "benign_semantic_type": "self_hosting",
+    "description": "local dynamic-DNS-style endpoint"
+  },
+  {
+    "scenario_id": "CC_LOTS_08",
+    "family": "lots",
+    "transport": "https",
+    "carrier": "bucket_dead_drop",
+    "label_family": "lots_web_api",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1102",
+      "T1071.001"
+    ],
+    "benign_semantic_type": "backup_sync",
+    "description": "local S3-like time-slot object name"
+  },
+  {
+    "scenario_id": "CC_MQTT_01",
+    "family": "mqtt_ws",
+    "transport": "wss",
+    "carrier": "mqtt_topic",
+    "label_family": "web_tunnel",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.005",
+      "T1071.001"
+    ],
+    "benign_semantic_type": "iot_telemetry",
+    "description": "MQTT-like CONNECT/PUBLISH frames over WSS"
+  },
+  {
+    "scenario_id": "CC_MQTT_02",
+    "family": "mqtt_ws",
+    "transport": "wss",
+    "carrier": "mqtt_payload",
+    "label_family": "web_tunnel",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.005",
+      "T1071.001"
+    ],
+    "benign_semantic_type": "iot_telemetry",
+    "description": "MQTT-like topic/payload carrier"
+  },
+  {
+    "scenario_id": "CC_MQTT_03",
+    "family": "mqtt_ws",
+    "transport": "wss",
+    "carrier": "mqtt_timing",
+    "label_family": "covert_timing",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.005",
+      "T1071.001"
+    ],
+    "benign_semantic_type": "iot_telemetry",
+    "description": "MQTT-over-WSS timing fixture"
+  },
+  {
+    "scenario_id": "CC_DOH_01",
+    "family": "doh",
+    "transport": "https",
+    "carrier": "dns_message",
+    "label_family": "web_c2_mimicry",
+    "label_intent": "c2",
+    "attack_mapping": [
+      "T1071.001",
+      "T1071.004"
+    ],
+    "benign_semantic_type": "legitimate_doh",
+    "description": "DNS wire-format in local /dns-query"
+  }
+]

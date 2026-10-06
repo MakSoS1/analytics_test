@@ -1,0 +1,33 @@
+{
+  "version": "public-research-transfer-v1",
+  "source_date": "2026-10-06",
+  "base_branch": "coverlab-finish-2026-09",
+  "base_commit": "78b6a90d8c05c2eccafa4ecbcb947d2570630365",
+  "removed_live_and_site_specific_entries": [
+    "pull_office_pcaps.py",
+    "office_injection/publish.py",
+    "lab_pipeline/deploy_to_wsl.sh",
+    "arkime/bin/sensor_trial.py",
+    "arkime/bin/stream_run.py",
+    "arkime/bin/sensor_capture.sh",
+    "arkime/bin/run_stream.py",
+    "arkime/historical",
+    "arkime/release",
+    "arkime/bin/run_stream.sh",
+    "arkime/bin/stream_entry.sh"
+  ],
+  "text_files_with_placeholder_replacement": [
+    "code/arkime/README.md",
+    "code/arkime/configure_paths.py",
+    "code/arkime/config/capture.ini.template",
+    "code/arkime/config/office.ini.template",
+    "code/tests/fixtures/cover_channels_source_inventory_2026-10-02.json"
+  ],
+  "office_data_published": false,
+  "raw_captures_published": false,
+  "notebook_outputs_published": false,
+  "new_vm_actions": false,
+  "naturalness_established": false,
+  "production_ready": false,
+  "external_source_archives_included": false
+}

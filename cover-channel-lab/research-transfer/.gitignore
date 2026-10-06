@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example
+.DS_Store
+data/
+outputs/
+runs/
+*.pcap
+*.pcapng
+*.parquet
+*.pkts
+*.pay
+*.tar.gz
+*.zip

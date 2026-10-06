@@ -1,0 +1,8 @@
+{
+  "purpose": "resume corrected Cover Channel corpus after canonical main smoke PASS",
+  "source_release": "gh-31309279116-a1",
+  "dataset_contract_revision": 2,
+  "reuse_policy_revision": 4,
+  "capture_tail_guard_revision": 1,
+  "browser_hotfix_validated": true
+}

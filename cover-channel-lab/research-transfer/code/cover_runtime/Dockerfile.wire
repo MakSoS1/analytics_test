@@ -1,0 +1,2 @@
+FROM cover-complete:20261002
+RUN apt-get update && apt-get install -y --no-install-recommends ethtool && rm -rf /var/lib/apt/lists/*

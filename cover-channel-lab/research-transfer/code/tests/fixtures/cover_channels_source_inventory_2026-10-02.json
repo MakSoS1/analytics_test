@@ -1,0 +1,3160 @@
+{
+  "repository": "MakSoS1/analytics_test",
+  "main_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+  "stage_m_commit": "1028b4a922c9b59e841fc71d58ae1df60ded6da4",
+  "catalog_scenarios": [
+    {
+      "scenario_id": "CC_URI_01",
+      "family": "uri",
+      "transport": "http",
+      "carrier": "query_value",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "search",
+      "notes": "message in id query",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 35,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L35",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_URI_02",
+      "family": "uri",
+      "transport": "http",
+      "carrier": "query_values",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "pagination",
+      "notes": "message split over query values",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 36,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L36",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_URI_03",
+      "family": "uri",
+      "transport": "http",
+      "carrier": "path_segment",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "resource_id",
+      "notes": "fragment in path segment",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 37,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L37",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_URI_04",
+      "family": "uri",
+      "transport": "http",
+      "carrier": "multi_request_query",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "spa_polling",
+      "notes": "small fragments over requests",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 38,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L38",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_URI_05",
+      "family": "uri",
+      "transport": "http",
+      "carrier": "filename",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "cache_busting",
+      "notes": "payload-like filename extension",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 39,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L39",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_URI_06",
+      "family": "uri",
+      "transport": "http",
+      "carrier": "matrix_path",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "api_path",
+      "notes": "matrix-like path params",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 40,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L40",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_URI_07",
+      "family": "uri",
+      "transport": "http",
+      "carrier": "query_key",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "analytics",
+      "notes": "symbols in query key names",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 41,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L41",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_URI_08",
+      "family": "uri",
+      "transport": "http",
+      "carrier": "uri_length",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "image_resize",
+      "notes": "URI length modulation",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 42,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L42",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_01",
+      "family": "header",
+      "transport": "https",
+      "carrier": "cookie",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "auth",
+      "notes": "registration in Cookie",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 44,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L44",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_02",
+      "family": "header",
+      "transport": "https",
+      "carrier": "cookie",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "session_rotation",
+      "notes": "fragments in Cookie",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 45,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L45",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_03",
+      "family": "header",
+      "transport": "https",
+      "carrier": "authorization",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "auth",
+      "notes": "synthetic payload disguised as bearer",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 46,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L46",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_04",
+      "family": "header",
+      "transport": "https",
+      "carrier": "user_agent",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "custom_sdk",
+      "notes": "ID suffix in User-Agent",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 47,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L47",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_05",
+      "family": "header",
+      "transport": "https",
+      "carrier": "referer",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "navigation",
+      "notes": "encoded result in Referer",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 48,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L48",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_06",
+      "family": "header",
+      "transport": "https",
+      "carrier": "origin",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "cors",
+      "notes": "low bandwidth marker in Origin",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 49,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L49",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_07",
+      "family": "header",
+      "transport": "https",
+      "carrier": "accept_language",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "localization",
+      "notes": "Accept-Language order modulation",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 50,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L50",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_08",
+      "family": "header",
+      "transport": "https",
+      "carrier": "accept_encoding",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "content_negotiation",
+      "notes": "Accept-Encoding order modulation",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 51,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L51",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_09",
+      "family": "header",
+      "transport": "https",
+      "carrier": "if_none_match",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "cache",
+      "notes": "synthetic victim ID in If-None-Match",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 52,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L52",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_10",
+      "family": "header",
+      "transport": "https",
+      "carrier": "if_modified_since",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "cache",
+      "notes": "timestamp modulation",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 53,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L53",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_11",
+      "family": "header",
+      "transport": "https",
+      "carrier": "range",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "video_range",
+      "notes": "Range offsets encode symbols",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 54,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L54",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_HDR_12",
+      "family": "header",
+      "transport": "https",
+      "carrier": "content_type_param",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "multipart",
+      "notes": "boundary/charset fragment",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 55,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L55",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_XHDR_01",
+      "family": "custom_header",
+      "transport": "https",
+      "carrier": "x_session_id",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "tracing",
+      "notes": "X-Session-Id value stream",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 57,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L57",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_XHDR_02",
+      "family": "custom_header",
+      "transport": "https",
+      "carrier": "x_request_id",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "tracing",
+      "notes": "X-Request-Id value stream",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 58,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L58",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_XHDR_03",
+      "family": "custom_header",
+      "transport": "https",
+      "carrier": "x_correlation_id",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "tracing",
+      "notes": "correlation ID stream",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 59,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L59",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_XHDR_04",
+      "family": "custom_header",
+      "transport": "https",
+      "carrier": "x_telemetry",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "telemetry",
+      "notes": "encoded telemetry-like result",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 60,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L60",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BODY_01",
+      "family": "body",
+      "transport": "https",
+      "carrier": "json",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "telemetry",
+      "notes": "direct synthetic command/result JSON",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 62,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L62",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BODY_02",
+      "family": "body",
+      "transport": "https",
+      "carrier": "json_junk",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "telemetry",
+      "notes": "payload among junk JSON fields",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 63,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L63",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BODY_03",
+      "family": "body",
+      "transport": "http",
+      "carrier": "form",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "form",
+      "notes": "fragments in form values",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 64,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L64",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BODY_04",
+      "family": "body",
+      "transport": "https",
+      "carrier": "multipart",
+      "label_family": "web_c2_plain",
+      "intent": "exfil",
+      "benign_twin": "file_upload",
+      "notes": "synthetic file-like result",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 65,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L65",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BODY_05",
+      "family": "body",
+      "transport": "https",
+      "carrier": "multipart_filename",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "file_upload",
+      "notes": "data in multipart filename/boundary",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 66,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L66",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BODY_06",
+      "family": "body",
+      "transport": "https",
+      "carrier": "octet_stream",
+      "label_family": "web_c2_plain",
+      "intent": "exfil",
+      "benign_twin": "crash_report",
+      "notes": "encrypted-like bytes",
+      "attack_mapping": [
+        "T1071.001",
+        "T1573",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 67,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L67",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BODY_07",
+      "family": "body",
+      "transport": "h2",
+      "carrier": "protobuf_like",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "rpc",
+      "notes": "opaque protobuf-like bytes",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 68,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L68",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BODY_08",
+      "family": "body",
+      "transport": "http",
+      "carrier": "xml_attributes",
+      "label_family": "stego_content",
+      "intent": "c2",
+      "benign_twin": "xml_manifest",
+      "notes": "payload in XML attributes",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.002"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 69,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L69",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BODY_09",
+      "family": "body",
+      "transport": "https",
+      "carrier": "graphql_variables",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "graphql",
+      "notes": "command disguised as variables",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 70,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L70",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BODY_10",
+      "family": "body",
+      "transport": "http",
+      "carrier": "chunked",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "resumable_upload",
+      "notes": "fragmented HTTP body",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 71,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L71",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_01",
+      "family": "response",
+      "transport": "http",
+      "carrier": "response_body",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "api_response",
+      "notes": "plain task in response",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 73,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L73",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_02",
+      "family": "response",
+      "transport": "https",
+      "carrier": "response_json",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "api_response",
+      "notes": "task in noisy object",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 74,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L74",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_03",
+      "family": "response",
+      "transport": "http",
+      "carrier": "response_xml",
+      "label_family": "stego_content",
+      "intent": "c2",
+      "benign_twin": "xml_manifest",
+      "notes": "GUID/hex steganography",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.002"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 75,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L75",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_04",
+      "family": "response",
+      "transport": "http",
+      "carrier": "response_html",
+      "label_family": "stego_content",
+      "intent": "c2",
+      "benign_twin": "static_content",
+      "notes": "HTML comment/attribute carrier",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.002"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 76,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L76",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_05",
+      "family": "response",
+      "transport": "http",
+      "carrier": "response_css",
+      "label_family": "stego_content",
+      "intent": "c2",
+      "benign_twin": "static_content",
+      "notes": "CSS value carrier",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.002"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 77,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L77",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_06",
+      "family": "response",
+      "transport": "http",
+      "carrier": "response_image_meta",
+      "label_family": "stego_content",
+      "intent": "c2",
+      "benign_twin": "image_metadata",
+      "notes": "synthetic image metadata carrier",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.002"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 78,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L78",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_07",
+      "family": "response",
+      "transport": "https",
+      "carrier": "set_cookie",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "ab_testing",
+      "notes": "downstream command in Set-Cookie",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 79,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L79",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_08",
+      "family": "response",
+      "transport": "https",
+      "carrier": "etag",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "cache",
+      "notes": "downstream ETag fragment",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 80,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L80",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_09",
+      "family": "response",
+      "transport": "http",
+      "carrier": "status_code",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "healthcheck",
+      "notes": "status-code alphabet",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 81,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L81",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_10",
+      "family": "response",
+      "transport": "http",
+      "carrier": "redirect",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "redirect",
+      "notes": "Location carries task",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 82,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L82",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_11",
+      "family": "response",
+      "transport": "http",
+      "carrier": "response_size",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "content_variant",
+      "notes": "response length modulation",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 83,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L83",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_RESP_12",
+      "family": "response",
+      "transport": "http",
+      "carrier": "response_chunks",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "streaming",
+      "notes": "chunk-size modulation",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 84,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L84",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SYN_01",
+      "family": "syntax",
+      "transport": "http",
+      "carrier": "header_order",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "runtime_variation",
+      "notes": "header order channel",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 86,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L86",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SYN_02",
+      "family": "syntax",
+      "transport": "http",
+      "carrier": "header_case",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "runtime_variation",
+      "notes": "header case channel",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 87,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L87",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SYN_03",
+      "family": "syntax",
+      "transport": "http",
+      "carrier": "whitespace",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "runtime_variation",
+      "notes": "OWS modulation",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 88,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L88",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SYN_04",
+      "family": "syntax",
+      "transport": "http",
+      "carrier": "duplicate_headers",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "proxy",
+      "notes": "duplicate header order",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 89,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L89",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SYN_05",
+      "family": "syntax",
+      "transport": "http",
+      "carrier": "method",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "api",
+      "notes": "method selection channel",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 90,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L90",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SYN_06",
+      "family": "syntax",
+      "transport": "http",
+      "carrier": "connection_reuse",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "api",
+      "notes": "reuse/close modulation",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 91,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L91",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SYN_07",
+      "family": "syntax",
+      "transport": "http",
+      "carrier": "content_length_parity",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "api",
+      "notes": "body length parity",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 92,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L92",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SYN_08",
+      "family": "syntax",
+      "transport": "http",
+      "carrier": "request_count",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "api",
+      "notes": "request count symbols",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 93,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L93",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TIME_01",
+      "family": "timing",
+      "transport": "https",
+      "carrier": "fixed_beacon",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "healthcheck",
+      "notes": "fixed beacon",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 94,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L94",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TIME_02",
+      "family": "timing",
+      "transport": "https",
+      "carrier": "low_jitter",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "monitoring",
+      "notes": "low jitter beacon",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 95,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L95",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TIME_03",
+      "family": "timing",
+      "transport": "https",
+      "carrier": "medium_jitter",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "background_sync",
+      "notes": "medium jitter beacon",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 96,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L96",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TIME_04",
+      "family": "timing",
+      "transport": "https",
+      "carrier": "high_jitter",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "background_sync",
+      "notes": "lognormal jitter",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 97,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L97",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TIME_05",
+      "family": "timing",
+      "transport": "https",
+      "carrier": "burst",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "telemetry",
+      "notes": "burst then pause",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 98,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L98",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TIME_06",
+      "family": "timing",
+      "transport": "https",
+      "carrier": "work_hours",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "office_automation",
+      "notes": "work-hours schedule",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 99,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L99",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TIME_07",
+      "family": "timing",
+      "transport": "https",
+      "carrier": "backoff",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "retry",
+      "notes": "exponential backoff",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 100,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L100",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TIME_08",
+      "family": "timing",
+      "transport": "http",
+      "carrier": "binary_timing",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "polling",
+      "notes": "short/long interval bits",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 101,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L101",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TIME_09",
+      "family": "timing",
+      "transport": "https",
+      "carrier": "low_slow",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "background_sync",
+      "notes": "accelerated low-and-slow fixture",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 102,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L102",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TIME_10",
+      "family": "timing",
+      "transport": "https",
+      "carrier": "event_driven",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "notification",
+      "notes": "event-driven callback",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 103,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L103",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_01",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_registration",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "chat",
+      "notes": "UUID + synthetic system profile",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 105,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L105",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_02",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_json_recv",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "market_data",
+      "notes": "JSON recv polling",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 106,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L106",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_03",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_json_send",
+      "label_family": "web_c2_plain",
+      "intent": "exfil",
+      "benign_twin": "chat",
+      "notes": "JSON result send",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 107,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L107",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_04",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_b64_envelope",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "market_data",
+      "notes": "Base64 JSON envelope",
+      "attack_mapping": [
+        "T1071.001",
+        "T1573"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 108,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L108",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_05",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_binary",
+      "label_family": "web_c2_plain",
+      "intent": "exfil",
+      "benign_twin": "game_telemetry",
+      "notes": "binary frames",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 109,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L109",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_06",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_ping",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "notification",
+      "notes": "ping timing/payload",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 110,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L110",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_07",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_fragmentation",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "collaboration",
+      "notes": "fragmented messages",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 111,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L111",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_08",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_idle",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "notification",
+      "notes": "long-lived sparse messages",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 112,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L112",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_09",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_reconnect",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "dashboard",
+      "notes": "reconnect continuity",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 113,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L113",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_10",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_multipersona",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "chat",
+      "notes": "multiple personas same endpoint",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 114,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L114",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_11",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_browser_headers",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "browser_app",
+      "notes": "browser mimicry",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 115,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L115",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WS_12",
+      "family": "websocket",
+      "transport": "wss",
+      "carrier": "ws_appliance",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "management",
+      "notes": "appliance-like WSS",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 116,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L116",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H2_01",
+      "family": "http2",
+      "transport": "h2",
+      "carrier": "h2_request",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "browser_h2",
+      "notes": "GET/POST streams",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 118,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L118",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H2_02",
+      "family": "http2",
+      "transport": "h2",
+      "carrier": "h2_parallel",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "browser_h2",
+      "notes": "parallel stream fragments",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 119,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L119",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H2_03",
+      "family": "http2",
+      "transport": "h2",
+      "carrier": "h2_order",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "browser_h2",
+      "notes": "stream ordering channel",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 120,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L120",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H2_04",
+      "family": "http2",
+      "transport": "h2",
+      "carrier": "h2_header",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "browser_h2",
+      "notes": "header value carrier",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 121,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L121",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H2_05",
+      "family": "http2",
+      "transport": "h2",
+      "carrier": "h2_data_size",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "browser_h2",
+      "notes": "DATA size classes",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 122,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L122",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H2_06",
+      "family": "http2",
+      "transport": "h2",
+      "carrier": "h2_reset",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "browser_h2",
+      "notes": "selective resets fixture",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 123,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L123",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H2_07",
+      "family": "http2",
+      "transport": "h2",
+      "carrier": "h2_sparse",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "browser_h2",
+      "notes": "sparse streams on long connection",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 124,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L124",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H2_08",
+      "family": "http2",
+      "transport": "h2",
+      "carrier": "h2_client_mismatch",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "service_rpc",
+      "notes": "browser-like headers from script stack",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 125,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L125",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_01",
+      "family": "browser",
+      "transport": "https",
+      "carrier": "extension_registration",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "extension_update",
+      "notes": "extension registration",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 127,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L127",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_02",
+      "family": "browser",
+      "transport": "https",
+      "carrier": "service_worker_alarm",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "background_sync",
+      "notes": "Service Worker alarm",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 128,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L128",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_03",
+      "family": "browser",
+      "transport": "https",
+      "carrier": "push_wakeup",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "web_push",
+      "notes": "push-like wake-up",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 129,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L129",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_04",
+      "family": "browser",
+      "transport": "https",
+      "carrier": "keepalive_tab",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "background_sync",
+      "notes": "hidden helper fetch",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 130,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L130",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_05",
+      "family": "browser",
+      "transport": "https",
+      "carrier": "native_echo",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "extension_update",
+      "notes": "safe local echo bridge",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 131,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L131",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_06",
+      "family": "browser",
+      "transport": "wss",
+      "carrier": "browser_wss",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "collaboration",
+      "notes": "WSS from browser-like context",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 132,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L132",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_07",
+      "family": "browser",
+      "transport": "https",
+      "carrier": "headless",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "headless_monitoring",
+      "notes": "headless browser timing",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 133,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L133",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_08",
+      "family": "browser",
+      "transport": "https",
+      "carrier": "fetch_stream",
+      "label_family": "web_c2_plain",
+      "intent": "exfil",
+      "benign_twin": "browser_upload",
+      "notes": "synthetic blob fetch stream",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 134,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L134",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_09",
+      "family": "browser",
+      "transport": "https",
+      "carrier": "send_beacon",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "analytics",
+      "notes": "sendBeacon-like exfil",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 135,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L135",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_10",
+      "family": "browser",
+      "transport": "https",
+      "carrier": "csp_report",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "csp_reporting",
+      "notes": "CSP report carrier",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 136,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L136",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_BROWSER_11",
+      "family": "browser",
+      "transport": "https",
+      "carrier": "prefetch",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "resource_hints",
+      "notes": "resource hint subdomain symbols",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 137,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L137",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SSE_01",
+      "family": "sse",
+      "transport": "http",
+      "carrier": "sse_command",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "deployment_logs",
+      "notes": "command event stream",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 139,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L139",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SSE_02",
+      "family": "sse",
+      "transport": "http",
+      "carrier": "sse_encoded",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "deployment_logs",
+      "notes": "encoded events",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 140,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L140",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SSE_03",
+      "family": "sse",
+      "transport": "http",
+      "carrier": "sse_comment_timing",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "deployment_logs",
+      "notes": "comment timing",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 141,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L141",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SSE_04",
+      "family": "sse",
+      "transport": "http",
+      "carrier": "last_event_id",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "notification",
+      "notes": "Last-Event-ID carrier",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 142,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L142",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_SSE_05",
+      "family": "sse",
+      "transport": "http",
+      "carrier": "sse_sparse",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "observability",
+      "notes": "sparse long-lived SSE",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 143,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L143",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LP_01",
+      "family": "longpoll",
+      "transport": "https",
+      "carrier": "long_poll_recv",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "chat_polling",
+      "notes": "long polling receive",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 144,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L144",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LP_02",
+      "family": "longpoll",
+      "transport": "https",
+      "carrier": "rotating_poll",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "chat_polling",
+      "notes": "rotating poll ID",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 145,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L145",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LP_03",
+      "family": "longpoll",
+      "transport": "https",
+      "carrier": "poll_upload",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "chat_polling",
+      "notes": "poll + result upload",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 146,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L146",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_GRPC_01",
+      "family": "grpc",
+      "transport": "h2",
+      "carrier": "grpc_unary",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "service_rpc",
+      "notes": "gRPC wire-format unary fixture",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 147,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L147",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_GRPC_02",
+      "family": "grpc",
+      "transport": "h2",
+      "carrier": "grpc_server_stream",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "service_rpc",
+      "notes": "server stream fixture",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 148,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L148",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_GRPC_03",
+      "family": "grpc",
+      "transport": "h2",
+      "carrier": "grpc_client_stream",
+      "label_family": "web_c2_plain",
+      "intent": "exfil",
+      "benign_twin": "otlp",
+      "notes": "client stream fixture",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 149,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L149",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_GRPC_04",
+      "family": "grpc",
+      "transport": "h2",
+      "carrier": "grpc_bidi",
+      "label_family": "web_tunnel",
+      "intent": "c2",
+      "benign_twin": "otlp",
+      "notes": "bidi stream fixture",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 150,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L150",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_GRPC_05",
+      "family": "grpc",
+      "transport": "h2",
+      "carrier": "grpc_metadata",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "service_rpc",
+      "notes": "metadata carrier",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 151,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L151",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_GRPC_06",
+      "family": "grpc",
+      "transport": "h2",
+      "carrier": "grpc_trailers",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "service_rpc",
+      "notes": "status/trailer signal",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 152,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L152",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_GRPC_07",
+      "family": "grpc",
+      "transport": "h2",
+      "carrier": "grpc_compressed",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "otlp",
+      "notes": "compressed messages",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 153,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L153",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_GRPC_08",
+      "family": "grpc",
+      "transport": "h2",
+      "carrier": "grpc_multiplex",
+      "label_family": "web_tunnel",
+      "intent": "c2",
+      "benign_twin": "service_rpc",
+      "notes": "multiplexed methods",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 154,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L154",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TUN_01",
+      "family": "tunnel",
+      "transport": "wss",
+      "carrier": "fixed_echo_relay",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "remote_support",
+      "notes": "fixed local echo service",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572",
+        "T1090"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 156,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L156",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TUN_02",
+      "family": "tunnel",
+      "transport": "wss",
+      "carrier": "allowlisted_connect",
+      "label_family": "web_tunnel",
+      "intent": "proxy",
+      "benign_twin": "remote_support",
+      "notes": "SOCKS-like grammar to synthetic target only",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572",
+        "T1090"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 157,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L157",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TUN_03",
+      "family": "tunnel",
+      "transport": "wss",
+      "carrier": "multiplex_conn_id",
+      "label_family": "web_tunnel",
+      "intent": "proxy",
+      "benign_twin": "browser_ide",
+      "notes": "2-16 logical synthetic streams",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572",
+        "T1090"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 158,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L158",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TUN_04",
+      "family": "tunnel",
+      "transport": "wss",
+      "carrier": "mixed_inner",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "browser_ide",
+      "notes": "synthetic inner protocol labels",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 159,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L159",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TUN_05",
+      "family": "tunnel",
+      "transport": "wss",
+      "carrier": "backpressure",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "collaboration",
+      "notes": "safe window/update-like controls",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 160,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L160",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TUN_06",
+      "family": "tunnel",
+      "transport": "wss",
+      "carrier": "stream_lifecycle",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "collaboration",
+      "notes": "half-close/reset grammar",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 161,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L161",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TUN_07",
+      "family": "tunnel",
+      "transport": "wss",
+      "carrier": "interactive",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "game_relay",
+      "notes": "small bidirectional messages",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 162,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L162",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TUN_08",
+      "family": "tunnel",
+      "transport": "wss",
+      "carrier": "bulk",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "backup",
+      "notes": "larger one-way synthetic phase",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 163,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L163",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TUN_09",
+      "family": "tunnel",
+      "transport": "wss",
+      "carrier": "keepalive",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "notification",
+      "notes": "idle + sparse ping/pong",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 164,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L164",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TUN_10",
+      "family": "tunnel",
+      "transport": "wss",
+      "carrier": "endpoint_migration",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "developer_tunnel",
+      "notes": "same campaign second local hostname",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 165,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L165",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TLS_01",
+      "family": "tls",
+      "transport": "https",
+      "carrier": "script_default",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "api",
+      "notes": "default script TLS",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 167,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L167",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TLS_02",
+      "family": "tls",
+      "transport": "https",
+      "carrier": "browser_like",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "browser_app",
+      "notes": "browser-like headers/TLS challenge",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 168,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L168",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TLS_03",
+      "family": "tls",
+      "transport": "https",
+      "carrier": "clienthello_variation",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "browser_app",
+      "notes": "TLS stack diversity challenge",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 169,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L169",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TLS_04",
+      "family": "tls",
+      "transport": "https",
+      "carrier": "resumption",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "browser_app",
+      "notes": "session resumption",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 170,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L170",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TLS_05",
+      "family": "tls",
+      "transport": "https",
+      "carrier": "zero_rtt_marker",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "browser_app",
+      "notes": "0-RTT capability marker fixture",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 171,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L171",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TLS_06",
+      "family": "tls",
+      "transport": "https",
+      "carrier": "sni_loss_fixture",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "privacy",
+      "notes": "visibility-loss fixture",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 172,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L172",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TLS_07",
+      "family": "tls",
+      "transport": "h2",
+      "carrier": "fallback",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "browser_app",
+      "notes": "H3/H2/H1 metadata fallback fixture",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 173,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L173",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TLS_08",
+      "family": "tls",
+      "transport": "https",
+      "carrier": "shared_edge",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "cdn",
+      "notes": "shared-edge hostname categories",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 174,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L174",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TLS_09",
+      "family": "tls",
+      "transport": "https",
+      "carrier": "cert_rotation",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "cdn",
+      "notes": "certificate/destination rotation fixture",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 175,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L175",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_TLS_10",
+      "family": "tls",
+      "transport": "https",
+      "carrier": "inspection_bypass",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "management",
+      "notes": "pinning-like inspection outcome label",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 176,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L176",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LOTS_01",
+      "family": "lots",
+      "transport": "https",
+      "carrier": "chatops_poll",
+      "label_family": "lots_web_api",
+      "intent": "c2",
+      "benign_twin": "ci_notification",
+      "notes": "local getUpdates-like polling",
+      "attack_mapping": [
+        "T1102",
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 178,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L178",
+      "intended_dataset_role": "hard_negative",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LOTS_02",
+      "family": "lots",
+      "transport": "https",
+      "carrier": "chatops_push",
+      "label_family": "lots_web_api",
+      "intent": "c2",
+      "benign_twin": "ci_notification",
+      "notes": "local sendMessage-like request",
+      "attack_mapping": [
+        "T1102",
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 179,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L179",
+      "intended_dataset_role": "hard_negative",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LOTS_03",
+      "family": "lots",
+      "transport": "https",
+      "carrier": "chatops_document",
+      "label_family": "lots_web_api",
+      "intent": "exfil",
+      "benign_twin": "ci_artifact",
+      "notes": "local sendDocument-like multipart",
+      "attack_mapping": [
+        "T1102",
+        "T1071.001",
+        "T1567"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 180,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L180",
+      "intended_dataset_role": "hard_negative",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LOTS_04",
+      "family": "lots",
+      "transport": "https",
+      "carrier": "webhook",
+      "label_family": "lots_web_api",
+      "intent": "exfil",
+      "benign_twin": "monitoring_notification",
+      "notes": "local webhook-like one-way POST",
+      "attack_mapping": [
+        "T1102",
+        "T1071.001",
+        "T1567"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 181,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L181",
+      "intended_dataset_role": "hard_negative",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LOTS_05",
+      "family": "lots",
+      "transport": "wss",
+      "carrier": "ephemeral_relay",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "developer_tunnel",
+      "notes": "local ephemeral relay analogue",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 182,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L182",
+      "intended_dataset_role": "hard_negative",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LOTS_06",
+      "family": "lots",
+      "transport": "wss",
+      "carrier": "paas_endpoint",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "developer_tunnel",
+      "notes": "local PaaS-style endpoint",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 183,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L183",
+      "intended_dataset_role": "hard_negative",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LOTS_07",
+      "family": "lots",
+      "transport": "wss",
+      "carrier": "dyndns_endpoint",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "self_hosting",
+      "notes": "local dynamic-DNS-style endpoint",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 184,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L184",
+      "intended_dataset_role": "hard_negative",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_LOTS_08",
+      "family": "lots",
+      "transport": "https",
+      "carrier": "bucket_dead_drop",
+      "label_family": "lots_web_api",
+      "intent": "c2",
+      "benign_twin": "backup_sync",
+      "notes": "local S3-like time-slot object name",
+      "attack_mapping": [
+        "T1102",
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 185,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L185",
+      "intended_dataset_role": "hard_negative",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_MQTT_01",
+      "family": "mqtt_ws",
+      "transport": "wss",
+      "carrier": "mqtt_topic",
+      "label_family": "web_tunnel",
+      "intent": "c2",
+      "benign_twin": "iot_telemetry",
+      "notes": "MQTT-like CONNECT/PUBLISH frames over WSS",
+      "attack_mapping": [
+        "T1071.005",
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 187,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L187",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_MQTT_02",
+      "family": "mqtt_ws",
+      "transport": "wss",
+      "carrier": "mqtt_payload",
+      "label_family": "web_tunnel",
+      "intent": "c2",
+      "benign_twin": "iot_telemetry",
+      "notes": "MQTT-like topic/payload carrier",
+      "attack_mapping": [
+        "T1071.005",
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 188,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L188",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_MQTT_03",
+      "family": "mqtt_ws",
+      "transport": "wss",
+      "carrier": "mqtt_timing",
+      "label_family": "covert_timing",
+      "intent": "c2",
+      "benign_twin": "iot_telemetry",
+      "notes": "MQTT-over-WSS timing fixture",
+      "attack_mapping": [
+        "T1071.005",
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 189,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L189",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_DOH_01",
+      "family": "doh",
+      "transport": "https",
+      "carrier": "dns_message",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "legitimate_doh",
+      "notes": "DNS wire-format in local /dns-query",
+      "attack_mapping": [
+        "T1071.001",
+        "T1071.004"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios.py",
+      "source_line": 191,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios.py#L191",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H3_01",
+      "family": "http3",
+      "transport": "h3",
+      "carrier": "h3_request",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "browser_h3",
+      "notes": "HTTP/3 GET/POST streams",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 8,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L8",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H3_02",
+      "family": "http3",
+      "transport": "h3",
+      "carrier": "h3_parallel",
+      "label_family": "covert_storage",
+      "intent": "exfil",
+      "benign_twin": "browser_h3",
+      "notes": "parallel H3 stream fragments",
+      "attack_mapping": [
+        "T1071.001",
+        "T1041"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 9,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L9",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H3_03",
+      "family": "http3",
+      "transport": "h3",
+      "carrier": "h3_order",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "browser_h3",
+      "notes": "stream ordering channel",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 10,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L10",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H3_04",
+      "family": "http3",
+      "transport": "h3",
+      "carrier": "h3_header",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "browser_h3",
+      "notes": "H3 header value carrier",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 11,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L11",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H3_05",
+      "family": "http3",
+      "transport": "h3",
+      "carrier": "h3_data_size",
+      "label_family": "covert_storage",
+      "intent": "c2",
+      "benign_twin": "media_h3",
+      "notes": "H3 DATA size classes",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 12,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L12",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H3_06",
+      "family": "http3",
+      "transport": "h3",
+      "carrier": "h3_sparse",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "browser_h3",
+      "notes": "sparse H3 streams",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 13,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L13",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H3_07",
+      "family": "http3",
+      "transport": "h3",
+      "carrier": "h3_reconnect",
+      "label_family": "web_c2_plain",
+      "intent": "c2",
+      "benign_twin": "browser_h3",
+      "notes": "QUIC reconnect/NAT-rebinding-like profile",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 14,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L14",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_H3_08",
+      "family": "http3",
+      "transport": "h3",
+      "carrier": "h3_fallback",
+      "label_family": "web_c2_mimicry",
+      "intent": "c2",
+      "benign_twin": "browser_h3",
+      "notes": "H3 to H2 to H1 fallback campaign",
+      "attack_mapping": [
+        "T1071.001",
+        "T1001.003"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 15,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L15",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_CONNECT_01",
+      "family": "connect",
+      "transport": "http",
+      "carrier": "http_connect",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "authorized_proxy",
+      "notes": "HTTP CONNECT-like local echo fixture",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572",
+        "T1090"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 17,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L17",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_CONNECT_02",
+      "family": "connect",
+      "transport": "h2",
+      "carrier": "extended_connect",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "authorized_proxy",
+      "notes": "H2 Extended CONNECT semantic fixture",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572",
+        "T1090"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 18,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L18",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_CONNECT_03",
+      "family": "connect",
+      "transport": "h2",
+      "carrier": "websocket_h2",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "collaboration",
+      "notes": "WebSocket-over-H2 semantic fixture",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 19,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L19",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_MASQUE_01",
+      "family": "masque",
+      "transport": "h3",
+      "carrier": "connect_udp",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "authorized_masque",
+      "notes": "real H3 datagram CONNECT-UDP-like fixture",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572",
+        "T1090"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 20,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L20",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_MASQUE_02",
+      "family": "masque",
+      "transport": "h3",
+      "carrier": "connect_ip",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "authorized_masque",
+      "notes": "CONNECT-IP-like isolated synthetic datagram fixture",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572",
+        "T1090"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 21,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L21",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_WEBTRANS_01",
+      "family": "webtransport",
+      "transport": "h3",
+      "carrier": "webtransport_stream",
+      "label_family": "web_tunnel",
+      "intent": "tunnel",
+      "benign_twin": "browser_realtime",
+      "notes": "real WebTransport bidirectional stream fixture",
+      "attack_mapping": [
+        "T1071.001",
+        "T1572"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 22,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L22",
+      "intended_dataset_role": "scenario_and_matched_control",
+      "execution_status": "not_run"
+    },
+    {
+      "scenario_id": "CC_OHTTP_01",
+      "family": "privacy",
+      "transport": "https",
+      "carrier": "ohttp_binary",
+      "label_family": "web_c2_plain",
+      "intent": "unknown",
+      "benign_twin": "privacy_relay",
+      "notes": "OHTTP-like encrypted binary benign hard-negative",
+      "attack_mapping": [
+        "T1071.001"
+      ],
+      "source_path": "cover-channel-lab/src/coverlab/scenarios_extra.py",
+      "source_line": 23,
+      "source_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+      "source_url": "https://github.com/MakSoS1/analytics_test/blob/b4869a7695df464a5d3d1845f4c50719eb5dab09/cover-channel-lab/src/coverlab/scenarios_extra.py#L23",
+      "intended_dataset_role": "hard_negative",
+      "execution_status": "not_run"
+    }
+  ],
+  "stage_m_families": [
+    "M-HTTPS-BEACON",
+    "M-HTTPS-FRONT",
+    "M-HTTPS-LOWENT",
+    "M-HTTPS-FRAG",
+    "M-HTTP-443",
+    "M-DNS-BEACON",
+    "M-DNS-BULK",
+    "M-DOH",
+    "M-DOQ",
+    "M-H3-QUIC",
+    "M-DEAD-DROP",
+    "M-WSS-LONG",
+    "M-TUNNEL",
+    "M-FALLBACK",
+    "M-CLOUD-API",
+    "M-TIMING-XCARRIER",
+    "M-PUBSUB-MQTT",
+    "M-GRPC-BIDI",
+    "M-RMM-SHAPE",
+    "M-L34-STORAGE"
+  ],
+  "source_sha256": {
+    "cover-stage-m-20261002.py": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc",
+    "cover-main-extra-20261002.py": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273",
+    "cover-main-dispatch-20261002.py": "f812fd1233902d3ff03c437f5ef4ee452bd999ab25cabb6fa186d83d38720f24",
+    "cover-main-catalog-20261002.py": "39ca5573faf71ae737cc4e497ca13b57024be62e8b66e46cd49583766880ddc5",
+    "cover-stage-scenarios-20261002.py": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d",
+    "cover-main-run-20261002.py": "e778a6d836c7346166790651186ed25bd95f41ef2a9ea40c96ac34d5da2939b0",
+    "cover-main-scenarios-20261002.py": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d",
+    "cover-main-init-20261002.py": "363b209220664ace10b02a1213432925ab6f9ae600a8f15128610819d80a96cd",
+    "cover-main-orchestrate-20261002.py": "e68ac73006045bcfdad8a2dd05be1e0fa9a7833b2972cc5667b355b365daf144",
+    "cover-main-base-orchestrate-20261002.py": "938bfdf6e6d54fa027c7b8edda4f90bf07ba1ab28a50ed91fe302a3126926721",
+    "cover-main-client-runtime-20261002.py": "b64dbb8ac4ccceff5c6b45d6b809a2503da75e2b8f37f9506733a6e78793dcbf",
+    "cover-main-orchestrate-v2-20261002.py": "475b7231ab5810b8559c7a1b39d022605a9acb006dec3d056525ec95a725609a"
+  },
+  "scope": "178 distinct registry entries: catalog scenario IDs and Stage M families are separate namespaces; count is not measured successful coverage",
+  "inspection_status": "static source and dispatcher review; execution not yet performed",
+  "additional_source_review_required": [
+    "cover-channel-lab/scripts/bootstrap_framework_tools_v5.sh",
+    "cover-channel-lab/scripts/capture_isolated_framework_v5.sh",
+    "cover-channel-lab/scripts/process_external_framework_v5.sh",
+    "cover-channel-lab/scripts/process_external_long_timing_v5.sh",
+    "cover-channel-lab/scripts/run_local_ech_curl_v5.sh",
+    "cover-channel-lab/src/coverlab/adversarial_gen.py",
+    "cover-channel-lab/src/coverlab/browser_runtime.py",
+    "cover-channel-lab/src/coverlab/ech_v3.py",
+    "cover-channel-lab/src/coverlab/external_campaign_adapter_v5.py",
+    "cover-channel-lab/src/coverlab/framework_generalization_v3.py",
+    "cover-channel-lab/src/coverlab/framework_holdout_v3.py",
+    "cover-channel-lab/src/coverlab/framework_metrics_v4.py",
+    "cover-channel-lab/src/coverlab/import_generated_long_timing_v5.py",
+    "cover-channel-lab/src/coverlab/long_timing_evidence_v4.py",
+    "cover-channel-lab/src/coverlab/nuisance.py",
+    "cover-channel-lab/src/coverlab/score_framework_holdout_v5.py",
+    "cover-channel-lab/src/coverlab/score_long_timing_holdout_v5.py",
+    "cover-channel-lab/src/coverlab/sequence_campaign.py",
+    "cover-channel-lab/tests/test_external_campaign_adapter_v5.py",
+    "cover-channel-lab/tests/test_nuisance_sequence.py"
+  ]
+}
