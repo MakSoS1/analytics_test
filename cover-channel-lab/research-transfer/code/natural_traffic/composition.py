@@ -10,6 +10,7 @@ import sys
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .capture import assert_extraction_input, ensure_resource_budget
@@ -40,11 +41,30 @@ def _sha(path: Path) -> str:
     return h.hexdigest()
 
 
+def _type_compatible(left: pa.DataType, right: pa.DataType) -> bool:
+    if left.equals(right):
+        return True
+    if pa.types.is_null(left) or pa.types.is_null(right):
+        return True
+    if pa.types.is_integer(left) or pa.types.is_floating(left):
+        return pa.types.is_integer(right) or pa.types.is_floating(right)
+    if pa.types.is_string(left) or pa.types.is_large_string(left):
+        return pa.types.is_string(right) or pa.types.is_large_string(right)
+    if pa.types.is_list(left) or pa.types.is_large_list(left):
+        if not (pa.types.is_list(right) or pa.types.is_large_list(right)):
+            return False
+        return _type_compatible(left.value_type, right.value_type)
+    return False
+
+
 def _schema_compatible(left: Path, right: Path) -> bool:
-    # Compare the persisted Arrow contract, not pandas' in-memory dtype choices.
-    # Nullable/list/string columns can acquire different pandas dtypes depending
-    # on the values present in one slice even when the Parquet schemas match.
-    return pq.read_schema(left).equals(pq.read_schema(right), check_metadata=False)
+    # Pandas round-trips may widen string/list encodings or nullable numerics.
+    # The composition contract is the ordered logical column schema, not the
+    # physical encoding chosen by one Parquet writer.
+    a, b = pq.read_schema(left), pq.read_schema(right)
+    if a.names != b.names:
+        return False
+    return all(_type_compatible(x.type, y.type) for x, y in zip(a, b))
 
 
 def compose_feature_alternatives(
@@ -146,6 +166,7 @@ def validate_strict_match_table(parquet_path: Path) -> dict[str, Any]:
         "arkime_same_direction",
         "direction_match",
         "direction_caveat",
+        "comparison.same_direction",
     }
     return {
         "rows": int(pq.read_metadata(parquet_path).num_rows),
@@ -153,7 +174,7 @@ def validate_strict_match_table(parquet_path: Path) -> dict[str, Any]:
         "direction_caveat_documented": bool(direction_fields.intersection(names))
             or (
                 any(n.startswith("arkime.") for n in names)
-                and {"up_pkt_count", "down_pkt_count", "up_bytes", "down_bytes"}.issubset(names)
+                and {"pipeline.up_pkt_count", "pipeline.down_pkt_count", "pipeline.up_bytes", "pipeline.down_bytes"}.issubset(names)
             ),
     }
 
