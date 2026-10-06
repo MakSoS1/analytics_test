@@ -39,3 +39,24 @@ jobs:
         env:
           PYTHONPATH: code
         run: python -m unittest discover -s code/tests -v
+
+  real-capture-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install capture dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tcpdump
+          python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Run real Linux TLS capture smoke
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_TRAFFIC_REAL_CAPTURE: '1'
+        run: python -m unittest code.tests.test_natural_capture.NaturalCaptureIntegrationTests.test_real_linux_python_tls_capture_is_pinned_and_parseable -v
