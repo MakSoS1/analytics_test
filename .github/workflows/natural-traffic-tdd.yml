@@ -139,7 +139,12 @@ jobs:
           allowed = {'https', 'h2', 'wss'}
           selected = []
           for entry in prepared['entries']:
-              if str(entry.get('transport','')).lower() not in allowed:
+              transport = str(entry.get('transport','')).lower()
+              if transport not in allowed:
+                  continue
+              # common-web calibration excludes protocol-specialized grpc/mqtt strata
+              protocol_hints = ' '.join(str(entry.get(k,'')).lower() for k in ('transport','family','carrier'))
+              if any(token in protocol_hints for token in ('grpc','mqtt')):
                   continue
               profiles = [p for p in entry.get('profiles',[]) if p.get('profile_id') == 'original_dispatch']
               if not profiles:
