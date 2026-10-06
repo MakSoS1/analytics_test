@@ -27,3 +27,4 @@ Task 3: Diagnostic probe added after run 37499992284 repeated 0 userspace captur
 Task 3: Independent runner probe in run 37500267650 captured and read loopback packets successfully. Root cause is short-lived libpcap TPACKET_V3 buffering: -U only flushes delivered packets; backend now requests --immediate-mode so short TLS sessions reach userspace before shutdown — cost if wrong: third capture attempt fails and capture backend architecture must be reconsidered.
 Task 3: complete (commits 831e454..b67f9ac, tests: natural-traffic-tdd run 37500566115 → unit/full regression + real Linux TLS capture all pass).
 Task 4: RED adapter tests committed; awaiting natural-traffic-tdd evidence.
+Task 4: GREEN implementation added after RED run 37500995186 confirmed missing natural_traffic.adapters only.
