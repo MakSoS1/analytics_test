@@ -6,6 +6,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[4]
 WORKFLOW = ROOT / ".github" / "workflows" / "natural-office-traffic-v2.yml"
+TDD_WORKFLOW = ROOT / ".github" / "workflows" / "natural-traffic-tdd.yml"
 
 
 class NaturalWorkflowContractTests(unittest.TestCase):
@@ -57,6 +58,23 @@ class NaturalWorkflowContractTests(unittest.TestCase):
             upload_index = next(i for i,s in enumerate(steps) if str(s.get("uses", "")).startswith("actions/upload-artifact"))
             cleanup_index = next(i for i,s in enumerate(steps) if s.get("name") == "Cleanup scratch")
             self.assertLess(upload_index, cleanup_index, name)
+
+    def test_real_capture_flag_is_isolated_to_real_capture_job(self):
+        body = yaml.safe_load(TDD_WORKFLOW.read_text())
+        natural_steps = body["jobs"]["natural-unit"]["steps"]
+        real_steps = body["jobs"]["real-capture-smoke"]["steps"]
+        natural_env = {
+            key: value
+            for step in natural_steps
+            for key, value in (step.get("env") or {}).items()
+        }
+        real_env = {
+            key: value
+            for step in real_steps
+            for key, value in (step.get("env") or {}).items()
+        }
+        self.assertNotIn("NATURAL_TRAFFIC_REAL_CAPTURE", natural_env)
+        self.assertEqual(str(real_env.get("NATURAL_TRAFFIC_REAL_CAPTURE")), "1")
 
     def test_pr_path_only_runs_reference_validation_and_unit_tests(self):
         raw = WORKFLOW.read_text()
