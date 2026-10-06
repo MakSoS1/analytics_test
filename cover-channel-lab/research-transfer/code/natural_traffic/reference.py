@@ -59,9 +59,7 @@ def model_feature_columns(df: pd.DataFrame, dictionary: Iterable[dict]) -> list[
         low = col.lower()
         if any(fragment in low for fragment in _FORBIDDEN_FRAGMENTS):
             continue
-        dtype = df[col].dtype
-        if pd.api.types.is_numeric_dtype(dtype) or pd.api.types.is_bool_dtype(dtype):
-            result.append(col)
+        result.append(col)
     return result
 
 
