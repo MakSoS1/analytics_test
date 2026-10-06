@@ -40,8 +40,11 @@ def _sha(path: Path) -> str:
     return h.hexdigest()
 
 
-def _schema_signature(frame: pd.DataFrame) -> tuple[tuple[str, str], ...]:
-    return tuple((name, str(dtype)) for name, dtype in zip(frame.columns, frame.dtypes))
+def _schema_compatible(left: Path, right: Path) -> bool:
+    # Compare the persisted Arrow contract, not pandas' in-memory dtype choices.
+    # Nullable/list/string columns can acquire different pandas dtypes depending
+    # on the values present in one slice even when the Parquet schemas match.
+    return pq.read_schema(left).equals(pq.read_schema(right), check_metadata=False)
 
 
 def compose_feature_alternatives(
@@ -62,9 +65,8 @@ def compose_feature_alternatives(
         "scenario": pd.read_parquet(scenario_path),
         "control": pd.read_parquet(control_path),
     }
-    sig = _schema_signature(office)
-    for role, frame in arms.items():
-        if _schema_signature(frame) != sig:
+    for role, path in (("scenario", scenario_path), ("control", control_path)):
+        if not _schema_compatible(office_path, path):
             raise CompositionIntegrityError(f"{role} schema differs from office schema")
     out.mkdir(parents=True)
     report: dict[str, Any] = {
@@ -149,7 +151,10 @@ def validate_strict_match_table(parquet_path: Path) -> dict[str, Any]:
         "rows": int(pq.read_metadata(parquet_path).num_rows),
         "columns": len(names),
         "direction_caveat_documented": bool(direction_fields.intersection(names))
-            or (any(n.startswith("arkime.") for n in names) and any(n.startswith("pipeline_") for n in names)),
+            or (
+                any(n.startswith("arkime.") for n in names)
+                and {"up_pkt_count", "down_pkt_count", "up_bytes", "down_bytes"}.issubset(names)
+            ),
     }
 
 
