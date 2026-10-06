@@ -7,9 +7,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_BATCH = ROOT / "cover_runtime" / "run_batch.py"
+ENTRYPOINT = ROOT / "cover_runtime" / "entrypoint.py"
 spec = importlib.util.spec_from_file_location("natural_run_batch", RUN_BATCH)
 run_batch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(run_batch)
+entry_spec = importlib.util.spec_from_file_location("natural_entrypoint", ENTRYPOINT)
+entrypoint = importlib.util.module_from_spec(entry_spec)
+entry_spec.loader.exec_module(entrypoint)
 
 
 class NaturalRunBatchArmTests(unittest.TestCase):
@@ -108,6 +112,24 @@ class NaturalRunBatchArmTests(unittest.TestCase):
             self.assertIn(service, run_batch.required_runtime_services(jobs))
         stage = [{"entry": {"namespace": "stage_m", "transport": "https"}}]
         self.assertIn("stage_m", run_batch.required_runtime_services(stage))
+
+    def test_entrypoint_skips_only_unrequired_service_probes(self):
+        sample = "\n".join([
+            "required_probe h3-request /tmp/h3 cmd",
+            "required_probe grpc /tmp/grpc cmd",
+            "required_probe mqtt-wss /tmp/mqtt cmd",
+            "required_probe stage-m-nginx /tmp/nginx cmd",
+            "echo core",
+        ]) + "\n"
+        filtered = entrypoint.filter_required_service_probes(sample, {"core"})
+        self.assertNotIn("required_probe h3-request", filtered)
+        self.assertNotIn("required_probe grpc", filtered)
+        self.assertNotIn("required_probe mqtt-wss", filtered)
+        self.assertNotIn("required_probe stage-m-nginx", filtered)
+        self.assertIn("echo core", filtered)
+        mqtt = entrypoint.filter_required_service_probes(sample, {"core", "mqtt"})
+        self.assertIn("required_probe mqtt-wss", mqtt)
+        self.assertNotIn("required_probe grpc", mqtt)
 
     def test_runtime_image_installs_entrypoint_network_tools(self):
         dockerfile = (ROOT / "cover_runtime" / "Dockerfile").read_text()
