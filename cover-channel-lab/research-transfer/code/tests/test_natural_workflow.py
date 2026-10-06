@@ -95,6 +95,20 @@ class NaturalWorkflowContractTests(unittest.TestCase):
                 checked += 1
         self.assertGreaterEqual(checked, 1)
 
+    def test_generated_e2e_artifact_excludes_runtime_private_scratch(self):
+        body = yaml.safe_load(TDD_WORKFLOW.read_text())
+        steps = body["jobs"]["generated-benign-e2e"]["steps"]
+        upload = next(
+            step for step in steps
+            if str(step.get("uses", "")).startswith("actions/upload-artifact")
+        )
+        paths = str(upload["with"]["path"])
+        whole_run = "$" + "{{ runner.temp }}/natural-control-run\n"
+        self.assertNotIn(whole_run, paths)
+        self.assertNotIn("coverlab-certs", paths)
+        self.assertIn("natural-control-run/results.json", paths)
+        self.assertIn("natural-control-run/*/client.log", paths)
+        self.assertIn("natural-control-run/*/result.json", paths)
     def test_pr_path_only_runs_reference_validation_and_unit_tests(self):
         raw = WORKFLOW.read_text()
         body = yaml.safe_load(raw)
