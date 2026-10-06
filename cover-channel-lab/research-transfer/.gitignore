@@ -15,3 +15,10 @@ runs/
 *.pay
 *.tar.gz
 *.zip
+
+# Explicit reviewed public dataset; original/private exports remain ignored.
+!datasets/office-cover-20261006/*.parquet
+**/PRIVATE-KEY.asc
+**/hmac-key.bin
+**/dictionary.json
+**/dictionary.roundtrip.json

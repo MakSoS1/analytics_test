@@ -23,11 +23,14 @@
     "code/arkime/config/office.ini.template",
     "code/tests/fixtures/cover_channels_source_inventory_2026-10-02.json"
   ],
-  "office_data_published": false,
+  "office_data_published": true,
   "raw_captures_published": false,
   "notebook_outputs_published": false,
   "new_vm_actions": false,
   "naturalness_established": false,
   "production_ready": false,
-  "external_source_archives_included": false
+  "external_source_archives_included": false,
+  "office_data_form": "pseudonymized Parquet only; exact numbers, masked sensitive text; encrypted recovery dictionary",
+  "private_key_published": false,
+  "dataset_release": "datasets/office-cover-20261006"
 }

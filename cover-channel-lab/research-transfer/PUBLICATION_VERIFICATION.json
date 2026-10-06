@@ -1,13 +1,13 @@
 {
   "date": "2026-10-06",
   "standalone_unit_tests": {
-    "tests": 73,
+    "tests": 78,
     "result": "OK"
   },
-  "python_ast_files": 323,
+  "python_ast_files": 326,
   "notebook_outputs_and_attachments": 0,
   "cli_help_checks": 6,
-  "private_data_extensions": 0,
+  "private_data_extensions": "raw capture/sidecar/unencrypted dictionary absent; reviewed pseudonymized Parquet explicitly included",
   "site_specific_and_secret_pattern_scan": "passed",
   "new_vm_actions": 0,
   "native_capture_rerun": false,
@@ -15,5 +15,15 @@
   "production_ready": false,
   "upstream_files_verified": 187,
   "upstream_public_git_blob_verification": 187,
-  "runtime_preflight_removed": true
+  "runtime_preflight_removed": true,
+  "pseudonymized_dataset_release": {
+    "parquet_tables": 12,
+    "numeric_and_array_values_preserved": true,
+    "complete_schema_and_cell_restoration_from_cipher": true,
+    "text_leaves_checked": 4622038,
+    "public_key_only_decryption": "refused",
+    "private_key_backup_decryption": "OK",
+    "raw_pcaps": 0,
+    "private_key_in_checkout": false
+  }
 }
