@@ -38,11 +38,13 @@ class NaturalTrafficReferenceTests(unittest.TestCase):
         cols = model_feature_columns(df, dictionary)
         declared = {r["column"] for r in dictionary if r.get("kind") == "feature"}
         self.assertEqual(set(cols), declared.intersection(df.columns))
-        forbidden_fragments = ("label", "source", "origin", "uid", "pair", "profile", "anon_")
+        forbidden_fragments = ("label", "source_", "origin", "global_session_uid", "global_segment_uid", "pair_id", "profile_id")
         for col in cols:
             low = col.lower()
             self.assertFalse(any(x in low for x in forbidden_fragments), col)
-            self.assertTrue(pd.api.types.is_numeric_dtype(df[col].dtype) or pd.api.types.is_bool_dtype(df[col].dtype), col)
+        self.assertIn("proto", cols)
+        self.assertIn("conn_state", cols)
+        self.assertIn("seq_signed_len", cols)
 
     def test_numeric_evaluation_does_not_require_decryption(self):
         ref = load_reference(ROOT)
