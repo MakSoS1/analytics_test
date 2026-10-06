@@ -115,6 +115,30 @@ class NaturalRunBatchArmTests(unittest.TestCase):
         stage = [{"entry": {"namespace": "stage_m", "transport": "https"}}]
         self.assertIn("stage_m", run_batch.required_runtime_services(stage))
 
+    def test_mqtt_family_requires_broker_even_when_transport_is_wss(self):
+        jobs = [{
+            "entry": {
+                "entry_id": "CC_MQTT_01",
+                "namespace": "catalog",
+                "family": "mqtt_ws",
+                "carrier": "mqtt_topic",
+                "transport": "wss",
+            }
+        }]
+        self.assertIn("mqtt", run_batch.required_runtime_services(jobs))
+
+    def test_mqtt_carrier_requires_broker_even_without_mqtt_transport_name(self):
+        jobs = [{
+            "entry": {
+                "entry_id": "custom",
+                "namespace": "catalog",
+                "family": "websocket",
+                "carrier": "mqtt_payload",
+                "transport": "wss",
+            }
+        }]
+        self.assertIn("mqtt", run_batch.required_runtime_services(jobs))
+
     def test_entrypoint_skips_only_unrequired_service_probes(self):
         sample = "\n".join([
             "required_probe h3-request /tmp/h3 cmd",
