@@ -6,6 +6,8 @@ on:
       - natural-traffic-generator-v2-2026-10-06
     paths:
       - 'cover-channel-lab/research-transfer/code/natural_traffic/**'
+      - 'cover-channel-lab/research-transfer/code/cover_runtime/Dockerfile'
+      - 'cover-channel-lab/research-transfer/code/cover_runtime/*.py'
       - 'cover-channel-lab/research-transfer/code/tests/test_natural_*.py'
       - 'cover-channel-lab/research-transfer/datasets/office-cover-20261006/**'
       - '.github/workflows/natural-traffic-tdd.yml'
@@ -13,6 +15,8 @@ on:
   pull_request:
     paths:
       - 'cover-channel-lab/research-transfer/code/natural_traffic/**'
+      - 'cover-channel-lab/research-transfer/code/cover_runtime/Dockerfile'
+      - 'cover-channel-lab/research-transfer/code/cover_runtime/*.py'
       - 'cover-channel-lab/research-transfer/code/tests/test_natural_*.py'
 
 permissions:
