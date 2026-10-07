@@ -112,6 +112,8 @@ def setup(required_services=None):
     Path('/out/setup_patch.json').write_text(json.dumps({'original_sha256':hashlib.sha256(original.encode()).hexdigest(),
         'patched_sha256':hashlib.sha256(patched.encode()).hexdigest(),'reason':'Docker hosts mount write in place'})+'\n')
     subprocess.run(['bash','/tmp/setup_netns.sh'],check=True)
+    from environment import apply_office_wire_translation
+    apply_office_wire_translation('/out')
     for ns in ('cc-office','cc-dev','cc-c2','cc-dns','cc-devops','cc-soc'):
         routes=subprocess.check_output(['ip','netns','exec',ns,'ip','route'],text=True)
         if 'default' in routes:raise RuntimeError('unexpected default route')
