@@ -48,6 +48,44 @@ def _largest_remainder_quotas(
     return quotas
 
 
+def frozen_confirmation_deficits(
+    manifest: FrozenProfileManifest,
+    controls: pd.DataFrame,
+    *,
+    min_groups: int = 30,
+    group_column: str = "capture_group",
+    profile_column: str = "profile_id",
+) -> dict[str, dict[str, int]]:
+    """Report held-out capacity shortfalls for the already-frozen mixture."""
+    if group_column not in controls or profile_column not in controls:
+        raise ValueError("confirmation controls require group/profile columns")
+    group_meta = controls[[group_column, profile_column]].drop_duplicates()
+    counts = group_meta.groupby(group_column)[profile_column].nunique()
+    if bool((counts > 1).any()):
+        raise ValueError("one confirmation group maps to multiple profiles")
+
+    quotas = _largest_remainder_quotas(manifest.profile_weights, int(min_groups))
+    available = {
+        profile_id: int(
+            group_meta.loc[
+                group_meta[profile_column].astype(str).eq(profile_id),
+                group_column,
+            ].astype(str).nunique()
+        )
+        for profile_id in quotas
+    }
+    deficits = {
+        profile_id: int(quota - available.get(profile_id, 0))
+        for profile_id, quota in quotas.items()
+        if available.get(profile_id, 0) < quota
+    }
+    return {
+        "quotas": dict(sorted(quotas.items())),
+        "available": dict(sorted(available.items())),
+        "deficits": dict(sorted(deficits.items())),
+    }
+
+
 def select_frozen_confirmation_groups(
     manifest: FrozenProfileManifest,
     controls: pd.DataFrame,
