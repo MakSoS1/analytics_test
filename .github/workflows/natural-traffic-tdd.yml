@@ -64,6 +64,54 @@ jobs:
           PYTHONPATH: code
         run: python -m unittest discover -s code/tests -v
 
+  office-behavior-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install behavior-profile dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy
+      - name: Freeze office-train behavior envelope
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from natural_traffic.behavior import derive_behavior_envelope, select_office_web_slice
+
+          root = Path('datasets/office-cover-20261006')
+          office = pd.read_parquet(root / 'pipeline_office_full.parquet')
+          office = select_office_web_slice(office, min_host_groups=60)
+          hosts = sorted(office['host_key'].astype(str).unique())
+          if len(hosts) < 60:
+              raise SystemExit(f'office behavior profile requires >=60 host groups, got {len(hosts)}')
+          train_hosts = set(hosts[::2])
+          office_train = office[office['host_key'].astype(str).isin(train_hosts)].copy()
+          profile = derive_behavior_envelope(office_train, seed=20261004)
+          if profile['source_policy'] != 'office_train_only':
+              raise SystemExit('behavior profile source policy drifted')
+          Path('office_behavior_profile.json').write_text(
+              json.dumps(profile, sort_keys=True, separators=(',', ':')) + '\n'
+          )
+          print('OFFICE_BEHAVIOR_SHA256', profile['sha256'])
+          print('OFFICE_BEHAVIOR_ROWS', profile['rows'])
+          print('OFFICE_BEHAVIOR_HOST_GROUPS', profile['host_groups'])
+          print('GENERATION_TARGETS', json.dumps(profile['generation_targets'], sort_keys=True))
+          print('TLS_VERSION_DIST', json.dumps(profile['categorical'].get('tls_version', {}), sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: office-behavior-profile
+          path: cover-channel-lab/research-transfer/office_behavior_profile.json
+          retention-days: 30
+
   real-capture-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 20
