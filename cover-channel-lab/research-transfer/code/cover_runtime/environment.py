@@ -137,6 +137,7 @@ def apply(rtt_ms,out,client_mtu=None,client_tcp_timestamps=None,path_profile=Non
 
 WIRE_CORE_IP = '100.64.0.20'
 WIRE_WSS_IP = '100.64.0.21'
+WIRE_FRONT_IP = '100.64.0.22'
 WIRE_OUT_CHAIN = 'COVERLAB_WIRE_OUT'
 WIRE_IN_CHAIN = 'COVERLAB_WIRE_IN'
 
@@ -154,21 +155,28 @@ def office_wire_translation_plan():
     commands = [
         ['ip','netns','exec','cc-c2','ip','addr','replace',WIRE_CORE_IP+'/32','dev','eth0'],
         ['ip','netns','exec','cc-c2','ip','addr','replace',WIRE_WSS_IP+'/32','dev','eth0'],
+        ['ip','netns','exec','cc-c2','ip','addr','replace',WIRE_FRONT_IP+'/32','dev','eth0'],
         ['ip','netns','exec','cc-dev','ip','route','replace',WIRE_CORE_IP+'/32','dev','eth0'],
         ['ip','netns','exec','cc-dev','ip','route','replace',WIRE_WSS_IP+'/32','dev','eth0'],
+        ['ip','netns','exec','cc-dev','ip','route','replace',WIRE_FRONT_IP+'/32','dev','eth0'],
         ['ip','netns','exec','cc-dev','iptables','-t','nat','-A',WIRE_OUT_CHAIN,
          '-p','tcp','-d','10.20.0.20','--dport','8443','-j','DNAT','--to-destination',WIRE_CORE_IP+':443'],
         ['ip','netns','exec','cc-dev','iptables','-t','nat','-A',WIRE_OUT_CHAIN,
          '-p','tcp','-d','10.20.0.21','--dport','8443','-j','DNAT','--to-destination',WIRE_WSS_IP+':443'],
+        ['ip','netns','exec','cc-dev','iptables','-t','nat','-A',WIRE_OUT_CHAIN,
+         '-p','tcp','-d','10.20.0.22','--dport','8443','-j','DNAT','--to-destination',WIRE_FRONT_IP+':443'],
         ['ip','netns','exec','cc-c2','iptables','-t','nat','-A',WIRE_IN_CHAIN,
          '-p','tcp','-d',WIRE_CORE_IP,'--dport','443','-j','DNAT','--to-destination','10.20.0.20:8443'],
         ['ip','netns','exec','cc-c2','iptables','-t','nat','-A',WIRE_IN_CHAIN,
          '-p','tcp','-d',WIRE_WSS_IP,'--dport','443','-j','DNAT','--to-destination','10.20.0.21:8443'],
+        ['ip','netns','exec','cc-c2','iptables','-t','nat','-A',WIRE_IN_CHAIN,
+         '-p','tcp','-d',WIRE_FRONT_IP,'--dport','443','-j','DNAT','--to-destination','10.20.0.22:8443'],
     ]
     return {
         'version': 'office-wire-v1',
         'wire_core_ip': WIRE_CORE_IP,
         'wire_wss_ip': WIRE_WSS_IP,
+        'wire_front_ip': WIRE_FRONT_IP,
         'commands': commands,
         'default_route_added': False,
         'post_capture_rewrite': False,
@@ -197,7 +205,7 @@ def apply_office_wire_translation(out='/out'):
     routes=subprocess.check_output(['ip','netns','exec','cc-dev','ip','route'],text=True)
     if 'default' in routes:
         raise RuntimeError('office wire translation must not add a default route')
-    for token in (WIRE_CORE_IP, WIRE_WSS_IP):
+    for token in (WIRE_CORE_IP, WIRE_WSS_IP, WIRE_FRONT_IP):
         if token not in dev_rules or token not in c2_rules or token not in routes:
             raise RuntimeError('office wire translation readback missing '+token)
     report={**plan,'client_nat_rules':dev_rules,'server_nat_rules':c2_rules,'client_routes':routes}
