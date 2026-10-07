@@ -16,7 +16,7 @@ class NaturalCliTests(unittest.TestCase):
         expected = {
             "validate-reference", "probe", "generate-benign", "calibrate",
             "confirm", "generate-scenarios", "evaluate-techniques",
-            "compose", "package",
+            "compose", "audit-pcap", "build-external-reference", "package",
         }
         self.assertEqual(set(COMMANDS), expected)
         for command in sorted(expected):
