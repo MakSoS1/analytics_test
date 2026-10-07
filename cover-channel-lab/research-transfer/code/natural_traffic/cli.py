@@ -16,6 +16,8 @@ from .contracts import FrozenProfileManifest
 from .evaluation import ManifestIntegrityError, confirm_naturalness, evaluate_technique_signal
 from .profiles import ProfileRegistry
 from .reference import load_reference, model_feature_columns
+from .pcap_quality import audit_pcap
+from .external_reference import build_reference_manifest, load_source_descriptor
 from .reporting import package_release, write_report
 
 HERE = Path(__file__).resolve()
@@ -34,6 +36,8 @@ COMMANDS = (
     "generate-scenarios",
     "evaluate-techniques",
     "compose",
+    "audit-pcap",
+    "build-external-reference",
     "package",
 )
 
@@ -242,6 +246,29 @@ def _cmd_compose(args: argparse.Namespace) -> int:
     print(json.dumps(report, sort_keys=True))
     return 0
 
+
+def _write_json(path: Path, body: dict) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n")
+
+def _cmd_audit_pcap(args: argparse.Namespace) -> int:
+    report = audit_pcap(args.pcap, max_timestamp_regression_us=args.max_regression_us)
+    body = report.as_dict()
+    if args.out:
+        _write_json(args.out, body)
+    print(json.dumps(body, sort_keys=True))
+    return 0 if report.accepted else 2
+
+def _cmd_build_external_reference(args: argparse.Namespace) -> int:
+    source = load_source_descriptor(args.source)
+    manifest = build_reference_manifest(
+        args.root, source, max_timestamp_regression_us=args.max_regression_us
+    )
+    _write_json(args.out, manifest)
+    print(json.dumps(manifest["summary"], sort_keys=True))
+    return 0
+
 def _cmd_package(args: argparse.Namespace) -> int:
     report = package_release(args.input, args.out)
     print(json.dumps(report, sort_keys=True))
@@ -325,6 +352,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--pair-id", required=True)
     p.set_defaults(func=_cmd_compose)
+
+
+    p = sub.add_parser("audit-pcap")
+    p.add_argument("--pcap", type=Path, required=True)
+    p.add_argument("--max-regression-us", type=float, default=50.0)
+    p.add_argument("--out", type=Path)
+    p.set_defaults(func=_cmd_audit_pcap)
+
+    p = sub.add_parser("build-external-reference")
+    p.add_argument("--root", type=Path, required=True)
+    p.add_argument("--source", type=Path, required=True)
+    p.add_argument("--max-regression-us", type=float, default=50.0)
+    p.add_argument("--out", type=Path, required=True)
+    p.set_defaults(func=_cmd_build_external_reference)
 
     p = sub.add_parser("package")
     p.add_argument("--input", type=Path, nargs="+", required=True)

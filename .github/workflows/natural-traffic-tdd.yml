@@ -361,6 +361,7 @@ jobs:
                   'office_scope': 'tcp web comparison slice; destination 443/8443/9443 when >=60 host groups, otherwise all TCP',
                   'profile_weights': list(manifest.profile_weights),
                   'temporal_environment_manifest_sha256': temporal_manifest.sha256,
+                  'pcap_quality': quality_report,
                   'production_ready': False,
               },
           )
@@ -394,4 +395,51 @@ jobs:
             ${{ runner.temp }}/natural-control-run/*/path_environment.json
             ${{ runner.temp }}/natural-control-run/*/dispatch.json
             ${{ runner.temp }}/natural-control-run/*/capture.pcap
+          retention-days: 30
+  external-reference-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ArtemSelin/MITRE-ATTACK-pcaps
+          ref: 0b408bff41f04e2ecd198f4e78568686e3cdcc8d
+          path: external-mitre-pcaps
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install audit dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Verify immutable external source and build OOD manifest
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          EXTERNAL_ROOT: ${{ github.workspace }}/external-mitre-pcaps
+        run: |
+          test "$(git -C "$EXTERNAL_ROOT" rev-parse HEAD)" = "0b408bff41f04e2ecd198f4e78568686e3cdcc8d"
+          python -m natural_traffic.cli build-external-reference \
+            --root "$EXTERNAL_ROOT" \
+            --source references/attack-replay-external.json \
+            --out external-reference.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          body=json.loads(Path('external-reference.json').read_text())
+          if body['summary']['pcaps'] != 41:
+              raise SystemExit(f"pinned external corpus drift: {body['summary']['pcaps']} != 41")
+          if any(row['training_eligible'] for row in body['entries']):
+              raise SystemExit('external replay capture became training_eligible')
+          if any(row['naturalness_calibration_eligible'] for row in body['entries']):
+              raise SystemExit('external replay capture became naturalness_calibration_eligible')
+          print('EXTERNAL_PCAPS', body['summary']['pcaps'])
+          print('TECHNIQUES', body['summary']['techniques'])
+          print('QUALITY_ACCEPTED', body['summary']['accepted_quality'])
+          print('QUALITY_REJECTED', body['summary']['rejected_quality'])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: attack-replay-external-reference
+          path: cover-channel-lab/research-transfer/external-reference.json
           retention-days: 30
