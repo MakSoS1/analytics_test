@@ -62,7 +62,7 @@ class CoverCapture:
 def discover_cover_captures(
     run_root: Path,
     *,
-    high_level_profile_id: str,
+    high_level_profile_id: str | None,
     role: str,
 ) -> list[CoverCapture]:
     if role not in {"control", "scenario"}:
@@ -101,10 +101,15 @@ def discover_cover_captures(
         ancestor = str(job["job_id"])
         source_profile = str(job["profile_id"])
         entry_id = str(job["entry_id"])
+        resolved_profile_id = (
+            high_level_profile_id
+            if high_level_profile_id is not None
+            else classify_cover_runtime_profile(dict(job.get("profile") or {}))
+        )
         bundle = CaptureBundle(
             pair_id=ancestor,
             role=role,
-            profile_id=high_level_profile_id,
+            profile_id=resolved_profile_id,
             fidelity=str(result.get("source_fidelity", "unknown")),
             pcap_path=pcap_path,
             pcap_sha256=actual,
@@ -118,7 +123,7 @@ def discover_cover_captures(
                 ancestor_id=ancestor,
                 entry_id=entry_id,
                 source_profile_id=source_profile,
-                high_level_profile_id=high_level_profile_id,
+                high_level_profile_id=resolved_profile_id,
                 role=role,
                 seed=int(job["seed"]),
                 job_dir=job_dir,

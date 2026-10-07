@@ -133,40 +133,39 @@ jobs:
           from demo.prepare_research_registry import prepare
           from office_injection.cover_registry import digest
 
-          base_path = Path('code/cover_runtime/registry.json')
-          base = json.loads(base_path.read_text())
+          base = json.loads(Path('code/cover_runtime/registry.json').read_text())
           prepared = prepare(base, seed=20261004, path_profile='office_path_v1')
-          allowed = {'https', 'h2', 'wss'}
+          target_entries = {
+              'M-CLOUD-API',
+              'M-HTTPS-BEACON',
+              'M-HTTPS-FRAG',
+              'M-HTTPS-FRONT',
+              'M-HTTPS-LOWENT',
+              'M-RMM-SHAPE',
+          }
           selected = []
           for entry in prepared['entries']:
-              transport = str(entry.get('transport','')).lower()
-              if transport not in allowed:
-                  continue
-              # common-web calibration excludes protocol-specialized grpc/mqtt strata
-              protocol_hints = ' '.join(str(entry.get(k,'')).lower() for k in ('transport','family','carrier'))
-              if any(token in protocol_hints for token in ('grpc','mqtt')):
-                  continue
-              profiles = [p for p in entry.get('profiles',[]) if p.get('profile_id') == 'original_dispatch']
-              if not profiles:
+              if entry.get('entry_id') not in target_entries:
                   continue
               item = dict(entry)
-              item['profiles'] = []
-              for profile in profiles:
-                  p = dict(profile)
-                  p['runtime_events'] = 1
-                  item['profiles'].append(p)
+              item['profiles'] = [dict(profile) for profile in entry.get('profiles', [])]
+              if not item['profiles']:
+                  raise SystemExit(f"selected entry has no profiles: {entry.get('entry_id')}")
               selected.append(item)
-              if len(selected) == 64:
-                  break
-          if len(selected) < 64:
-              raise SystemExit(f'need 64 comparable web entries, found {len(selected)}')
+          found = {entry['entry_id'] for entry in selected}
+          if found != target_entries:
+              raise SystemExit(f'missing Stage-M entries: {sorted(target_entries-found)}')
+          profile_count = sum(len(entry['profiles']) for entry in selected)
+          if profile_count != 64:
+              raise SystemExit(f'expected exactly 64 Stage-M stack profiles, got {profile_count}')
           body = {k:v for k,v in prepared.items() if k != 'sha256'}
           body['entries'] = selected
-          body['research_policy'] += '; e2e benign-only 64 independent control captures; one event each'
+          body['research_policy'] += '; e2e benign-only Stage-M real-stack matrix; office-train temporal profile'
           body['sha256'] = digest(body)
           out = Path(os.environ['NATURAL_REGISTRY'])
           out.write_text(json.dumps(body, indent=2) + '\n')
-          print('SELECTED_CONTROL_ENTRIES', len(selected))
+          print('SELECTED_STAGE_M_ENTRIES', sorted(found))
+          print('SELECTED_STACK_PROFILES', profile_count)
           print('REGISTRY_SHA256', body['sha256'])
           print('PATH_PROFILE', body['path_profile'])
           PY
@@ -180,7 +179,14 @@ jobs:
           NATURAL_REGISTRY: ${{ runner.temp }}/natural-controls-registry.json
           NATURAL_RUN: ${{ runner.temp }}/natural-control-run
         run: |
-          python code/cover_runtime/run_batch.py             --image cover-natural-e2e:ci             --registry "$NATURAL_REGISTRY"             --all             --profile original_dispatch             --arm control             --timing accelerated_smoke             --seed 20261004             --out "$NATURAL_RUN"
+          python code/cover_runtime/run_batch.py \
+            --image cover-natural-e2e:ci \
+            --registry "$NATURAL_REGISTRY" \
+            --all \
+            --arm control \
+            --timing native \
+            --seed 20261004 \
+            --out "$NATURAL_RUN"
       - name: Extract controls, freeze benign profile, confirm against held-out office web sessions
         working-directory: cover-channel-lab/research-transfer
         env:
@@ -190,11 +196,18 @@ jobs:
         run: |
           python - <<'PY'
           import json, os
+          from dataclasses import replace
           from pathlib import Path
           import pandas as pd
 
-          from natural_traffic.calibration import calibrate_profiles, validate_group_disjointness
-          from natural_traffic.composition import extract_pipeline_capture
+          from natural_traffic.calibration import (
+              assign_temporal_starts,
+              calibrate_profiles,
+              derive_temporal_environment,
+              validate_group_disjointness,
+          )
+          from natural_traffic.composition import extract_pipeline_capture, retime_capture_bundle
+          from natural_traffic.contracts import FrozenProfileManifest
           from natural_traffic.corpus import discover_cover_captures, aggregate_extracted_tables
           from natural_traffic.evaluation import confirm_naturalness
           from natural_traffic.profiles import ProfileRegistry
@@ -205,34 +218,10 @@ jobs:
           out = Path(os.environ['NATURAL_OUT'])
           out.mkdir(parents=True, exist_ok=True)
           captures = discover_cover_captures(
-              run, high_level_profile_id='linux-protocol-native', role='control'
+              run, high_level_profile_id=None, role='control'
           )
-          if len(captures) < 64:
-              raise SystemExit(f'expected 64 captured controls, got {len(captures)}')
-
-          extracted = []
-          for i, capture in enumerate(captures):
-              result = extract_pipeline_capture(
-                  capture.bundle,
-                  out / 'extract' / f'{i:03d}',
-                  run_id=f'natural-control-{i:03d}',
-                  min_free_gib=15,
-              )
-              extracted.append((capture, result.parquet_path))
-          controls_path = out / 'controls.parquet'
-          corpus_report = aggregate_extracted_tables(
-              extracted, controls_path, benign_only=True
-          )
-          controls = pd.read_parquet(controls_path)
-
-          control_groups = sorted(controls['capture_group'].astype(str).unique())
-          if len(control_groups) < 64:
-              raise SystemExit(f'expected 64 independent control groups, got {len(control_groups)}')
-          train_control_groups = set(control_groups[:32])
-          confirm_control_groups = set(control_groups[32:64])
-          validate_group_disjointness(train_control_groups, confirm_control_groups)
-          control_train = controls[controls['capture_group'].astype(str).isin(train_control_groups)].copy()
-          control_confirm = controls[controls['capture_group'].astype(str).isin(confirm_control_groups)].copy()
+          if len(captures) != 64:
+              raise SystemExit(f'expected exactly 64 captured controls, got {len(captures)}')
 
           ref = load_reference(Path('datasets/office-cover-20261006'), verify_hashes=True)
           office = ref.pipeline_office.copy()
@@ -240,7 +229,9 @@ jobs:
           dport = pd.to_numeric(office['destination_port'], errors='coerce')
           office = office[tcp & dport.isin([443, 8443, 9443])].copy()
           if office['host_key'].nunique() < 60:
-              office = ref.pipeline_office[pd.to_numeric(ref.pipeline_office['ip_protocol'], errors='coerce').eq(6)].copy()
+              office = ref.pipeline_office[
+                  pd.to_numeric(ref.pipeline_office['ip_protocol'], errors='coerce').eq(6)
+              ].copy()
           hosts = sorted(office['host_key'].astype(str).unique())
           if len(hosts) < 60:
               raise SystemExit(f'office comparison requires >=60 host groups, got {len(hosts)}')
@@ -249,6 +240,68 @@ jobs:
           validate_group_disjointness(train_hosts, confirm_hosts)
           office_train = office[office['host_key'].astype(str).isin(train_hosts)].copy()
           office_confirm = office[office['host_key'].astype(str).isin(confirm_hosts)].copy()
+
+          temporal_environment = derive_temporal_environment(office_train)
+          temporal_manifest = FrozenProfileManifest(
+              seed=20261004,
+              profile_weights=(('linux-protocol-native', 1.0),),
+              reference_id='temporal:office-train-only',
+              environment_json=json.dumps(
+                  temporal_environment, sort_keys=True, separators=(',', ':')
+              ),
+          )
+          (out / 'temporal_environment_manifest.json').write_text(
+              temporal_manifest.to_json() + '\n'
+          )
+          starts = assign_temporal_starts(
+              temporal_manifest, [capture.ancestor_id for capture in captures]
+          )
+
+          extracted = []
+          for i, capture in enumerate(captures):
+              retimed_bundle = retime_capture_bundle(
+                  capture.bundle,
+                  target_start_epoch=starts[capture.ancestor_id],
+                  out_dir=out / 'retimed' / f'{i:03d}',
+              )
+              retimed_capture = replace(capture, bundle=retimed_bundle)
+              result = extract_pipeline_capture(
+                  retimed_bundle,
+                  out / 'extract' / f'{i:03d}',
+                  run_id=f'natural-control-{i:03d}',
+                  min_free_gib=15,
+              )
+              extracted.append((retimed_capture, result.parquet_path))
+
+          controls_path = out / 'controls.parquet'
+          corpus_report = aggregate_extracted_tables(
+              extracted, controls_path, benign_only=True
+          )
+          controls = pd.read_parquet(controls_path)
+          group_meta = (
+              controls[['capture_group', 'profile_id']]
+              .drop_duplicates()
+              .sort_values(['profile_id', 'capture_group'])
+          )
+          if len(group_meta) != 64:
+              raise SystemExit(f'expected 64 independent control groups, got {len(group_meta)}')
+          train_control_groups, confirm_control_groups = set(), set()
+          for _, frame in group_meta.groupby('profile_id', sort=True):
+              ids = frame['capture_group'].astype(str).tolist()
+              train_control_groups.update(ids[::2])
+              confirm_control_groups.update(ids[1::2])
+          validate_group_disjointness(train_control_groups, confirm_control_groups)
+          if len(train_control_groups) < 30 or len(confirm_control_groups) < 30:
+              raise SystemExit(
+                  f'stratified split too small: train={len(train_control_groups)} '
+                  f'confirm={len(confirm_control_groups)}'
+              )
+          control_train = controls[
+              controls['capture_group'].astype(str).isin(train_control_groups)
+          ].copy()
+          control_confirm = controls[
+              controls['capture_group'].astype(str).isin(confirm_control_groups)
+          ].copy()
 
           groups_train = {
               'office': office_train['host_key'].astype(str).tolist(),
@@ -263,11 +316,15 @@ jobs:
               20261004,
               feature_columns=ref.feature_columns,
           )
+          if manifest.environment != temporal_environment:
+              raise SystemExit('calibration manifest temporal environment drifted')
           manifest_path = out / 'frozen_profile_manifest.json'
           manifest_path.write_text(manifest.to_json() + '\n')
           (out / 'frozen_profile_manifest.sha256').write_text(manifest.sha256 + '\n')
 
-          dictionary = json.loads(Path('datasets/office-cover-20261006/pipeline_column_dictionary.json').read_text())
+          dictionary = json.loads(
+              Path('datasets/office-cover-20261006/pipeline_column_dictionary.json').read_text()
+          )
           families = {}
           for row in dictionary:
               if row.get('kind') != 'feature':
@@ -302,12 +359,14 @@ jobs:
                   'calibration_office_groups': len(train_hosts),
                   'confirmation_office_groups': len(confirm_hosts),
                   'office_scope': 'tcp web comparison slice; destination 443/8443/9443 when >=60 host groups, otherwise all TCP',
-                  'profile': 'linux-protocol-native',
+                  'profile_weights': list(manifest.profile_weights),
+                  'temporal_environment_manifest_sha256': temporal_manifest.sha256,
                   'production_ready': False,
               },
           )
           print('NATURALNESS_STATUS', report.status)
           print('MAX_AUC', report.max_auc)
+          print('PROFILE_WEIGHTS', json.dumps(list(manifest.profile_weights)))
           print('SUPPORT', json.dumps(report.support, sort_keys=True))
           print('FAILED_FAMILIES', json.dumps(report.distribution.get('failed_families', [])))
           PY
