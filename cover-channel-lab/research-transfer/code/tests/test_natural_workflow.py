@@ -179,6 +179,33 @@ class NaturalWorkflowContractTests(unittest.TestCase):
         self.assertEqual(upload["with"]["name"], "office-behavior-profile")
         self.assertIn("office_behavior_profile.json", str(upload["with"]["path"]))
 
+
+    def test_generated_e2e_injects_frozen_office_behavior_targets_before_capture(self):
+        body = yaml.safe_load(TDD_WORKFLOW.read_text())
+        job = body["jobs"]["generated-benign-e2e"]
+        needs = job.get("needs", [])
+        if isinstance(needs, str):
+            needs = [needs]
+        self.assertIn("office-behavior-profile", needs)
+        steps = job["steps"]
+        self.assertTrue(any(
+            str(step.get("uses", "")).startswith("actions/download-artifact")
+            and (step.get("with") or {}).get("name") == "office-behavior-profile"
+            for step in steps
+        ))
+        script = "\n".join(str(step.get("run", "")) for step in steps)
+        self.assertIn("assign_behavior_targets", script)
+        self.assertIn("office_behavior_profile.json", script)
+        self.assertIn("runtime_events", script)
+        self.assertIn("native_interval", script)
+        self.assertIn("benign_request_bytes", script)
+        self.assertIn("benign_response_bytes", script)
+        self.assertIn("behavior_profile_sha256", script)
+        self.assertLess(
+            script.index("assign_behavior_targets"),
+            script.index("run_batch.py"),
+        )
+
     def test_external_reference_audit_is_pinned_and_never_training_input(self):
         raw = TDD_WORKFLOW.read_text()
         body = yaml.safe_load(raw)
