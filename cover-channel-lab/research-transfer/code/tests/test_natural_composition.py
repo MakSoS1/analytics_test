@@ -137,6 +137,76 @@ class TimestampOnlyCompositionTests(unittest.TestCase):
             self.assertFalse(meta["post_capture_packet_rewrite"])
             self.assertEqual(meta["source_pcap_sha256"], source_hash)
 
+    def test_retime_accepts_bounded_capture_writer_jitter_without_reordering_or_gap_change(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            source = root / "jitter.pcap"
+            frames = [
+                (100.000000, b"\\x01" * 60),
+                (100.001000, b"\\x02" * 60),
+                (100.000967, b"\\x03" * 60),  # 33 us writer-order regression
+                (100.002000, b"\\x04" * 60),
+            ]
+            write_pcap(source, frames)
+            runtime = root / "runtime.json"
+            runtime.write_text('{"source":"fixture"}\\n')
+            bundle = CaptureBundle(
+                pair_id="jitter",
+                role="control",
+                profile_id="linux-curl",
+                fidelity="wire-real",
+                pcap_path=source,
+                pcap_sha256=sha(source),
+                evidence=(),
+                runtime_metadata_path=runtime,
+                runtime_metadata_sha256=sha(runtime),
+            )
+            shifted = retime_capture_bundle(
+                bundle,
+                target_start_epoch=1_790_000_000.0,
+                out_dir=root / "retimed",
+            )
+            original = list(read_pcap(source, max_regression=0.00005))
+            retimed = list(read_pcap(shifted.pcap_path, max_regression=0.00005))
+            self.assertEqual([b for _, b in original], [b for _, b in retimed])
+            original_gaps = [b[0] - a[0] for a, b in zip(original, original[1:])]
+            retimed_gaps = [b[0] - a[0] for a, b in zip(retimed, retimed[1:])]
+            for old, new in zip(original_gaps, retimed_gaps):
+                self.assertAlmostEqual(old, new, places=5)
+            meta = json.loads(shifted.runtime_metadata_path.read_text())
+            self.assertEqual(meta["capture_writer_jitter_tolerance_us"], 50)
+            self.assertGreaterEqual(meta["max_source_timestamp_regression_us"], 32)
+            self.assertTrue(meta["packet_order_unchanged"])
+
+    def test_retime_rejects_timestamp_regression_above_capture_writer_jitter_bound(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            source = root / "bad-regression.pcap"
+            write_pcap(source, [
+                (100.000000, b"\\x01" * 60),
+                (100.001000, b"\\x02" * 60),
+                (100.000800, b"\\x03" * 60),  # 200 us: outside writer-jitter allowance
+            ])
+            runtime = root / "runtime.json"
+            runtime.write_text('{"source":"fixture"}\\n')
+            bundle = CaptureBundle(
+                pair_id="bad-jitter",
+                role="control",
+                profile_id="linux-curl",
+                fidelity="wire-real",
+                pcap_path=source,
+                pcap_sha256=sha(source),
+                evidence=(),
+                runtime_metadata_path=runtime,
+                runtime_metadata_sha256=sha(runtime),
+            )
+            with self.assertRaises(ValueError):
+                retime_capture_bundle(
+                    bundle,
+                    target_start_epoch=1_790_000_000.0,
+                    out_dir=root / "retimed",
+                )
+
 
 class FullSchemaTests(unittest.TestCase):
     def test_pipeline_contract_is_full_155_with_all_127_declared_features(self):
