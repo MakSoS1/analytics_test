@@ -203,9 +203,12 @@ class NaturalRunBatchArmTests(unittest.TestCase):
         flat = [" ".join(map(str, row)) for row in plan["commands"]]
         self.assertEqual(plan["wire_core_ip"], "100.64.0.20")
         self.assertEqual(plan["wire_wss_ip"], "100.64.0.21")
+        self.assertEqual(plan["wire_front_ip"], "100.64.0.22")
         self.assertTrue(any("cc-dev" in row and "10.20.0.20" in row and "8443" in row and "100.64.0.20" in row and "443" in row for row in flat))
         self.assertTrue(any("cc-dev" in row and "10.20.0.21" in row and "8443" in row and "100.64.0.21" in row and "443" in row for row in flat))
+        self.assertTrue(any("cc-dev" in row and "10.20.0.22" in row and "8443" in row and "100.64.0.22" in row and "443" in row for row in flat))
         self.assertTrue(any("cc-c2" in row and "100.64.0.20" in row and "443" in row and "10.20.0.20" in row and "8443" in row for row in flat))
+        self.assertTrue(any("cc-c2" in row and "100.64.0.22" in row and "443" in row and "10.20.0.22" in row and "8443" in row for row in flat))
         self.assertFalse(any("default" in row for row in flat))
 
     def test_entrypoint_applies_office_wire_translation_before_services(self):
