@@ -233,6 +233,22 @@ class NaturalWorkflowContractTests(unittest.TestCase):
         self.assertIn("'controls': control_confirm_frozen['capture_group']", script)
         self.assertIn("control_confirm_frozen,", script)
 
+
+    def test_generated_e2e_freezes_mixture_with_metadata_only_confirmation_capacity(self):
+        body=yaml.safe_load(TDD_WORKFLOW.read_text())
+        steps=body["jobs"]["generated-benign-e2e"]["steps"]
+        script="\n".join(str(step.get("run","")) for step in steps)
+        self.assertIn("confirmation_profile_capacity",script)
+        self.assertIn("min_confirmation_groups=30",script)
+        self.assertIn("group_meta",script)
+        self.assertLess(
+            script.index("confirmation_profile_capacity"),
+            script.index("manifest = calibrate_profiles"),
+        )
+        call=script[script.index("manifest = calibrate_profiles"):script.index("manifest_path =")]
+        self.assertIn("confirmation_profile_capacity=confirmation_profile_capacity",call)
+        self.assertNotIn("control_confirm[ref.feature_columns]",script)
+
     def test_pr_path_only_runs_reference_validation_and_unit_tests(self):
         raw = WORKFLOW.read_text()
         body = yaml.safe_load(raw)

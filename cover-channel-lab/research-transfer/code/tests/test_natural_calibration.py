@@ -243,6 +243,97 @@ class NaturalCalibrationTests(unittest.TestCase):
                 manifest, controls, min_groups=30, group_column="capture_group"
             )
 
+
+    def test_calibration_respects_predeclared_confirmation_profile_capacities(self):
+        n=40
+        office=pd.DataFrame({"x":np.zeros(n),"role":["office"]*n})
+        left=pd.DataFrame({
+            "x":np.full(n,-2.0),
+            "role":["control"]*n,
+            "profile_id":["linux-curl"]*n,
+        })
+        right=pd.DataFrame({
+            "x":np.full(n,2.0),
+            "role":["control"]*n,
+            "profile_id":["linux-python-ssl"]*n,
+        })
+        controls=pd.concat([left,right],ignore_index=True)
+        groups={
+            "office":[f"o{i}" for i in range(n)],
+            "controls":[f"l{i}" for i in range(n)]+[f"r{i}" for i in range(n)],
+        }
+        manifest=calibrate_profiles(
+            office,controls,groups,ProfileRegistry.default(),
+            seed=41,feature_columns=["x"],
+            confirmation_profile_capacity={
+                "linux-curl":6,
+                "linux-python-ssl":24,
+            },
+            min_confirmation_groups=30,
+        )
+        weights=dict(manifest.profile_weights)
+        self.assertLessEqual(weights.get("linux-curl",0.0),0.20+1e-9)
+        self.assertGreaterEqual(weights.get("linux-python-ssl",0.0),0.80-1e-9)
+        confirm=pd.DataFrame([
+            {"profile_id":"linux-curl","capture_group":f"lc-{i}"}
+            for i in range(6)
+        ]+[
+            {"profile_id":"linux-python-ssl","capture_group":f"lp-{i}"}
+            for i in range(24)
+        ])
+        report=frozen_confirmation_deficits(
+            manifest,confirm,min_groups=30,group_column="capture_group"
+        )
+        self.assertEqual(report["deficits"],{})
+
+    def test_calibration_rejects_declared_capacity_that_cannot_supply_support(self):
+        controls=controls_frame(40)
+        groups={
+            "office":[f"o{i}" for i in range(40)],
+            "controls":[f"a{i}" for i in range(40)]+[f"b{i}" for i in range(40)],
+        }
+        with self.assertRaises(ValueError):
+            calibrate_profiles(
+                office_frame(40),controls,groups,ProfileRegistry.default(),
+                seed=43,feature_columns=["x"],
+                confirmation_profile_capacity={
+                    "linux-curl":5,
+                    "linux-python-ssl":5,
+                },
+                min_confirmation_groups=30,
+            )
+
+    def test_capacity_contract_changes_frozen_manifest_identity(self):
+        controls=controls_frame(40)
+        groups={
+            "office":[f"o{i}" for i in range(40)],
+            "controls":[f"a{i}" for i in range(40)]+[f"b{i}" for i in range(40)],
+        }
+        common=dict(
+            office_train=office_frame(40),
+            benign_controls_train=controls,
+            groups=groups,
+            registry=ProfileRegistry.default(),
+            seed=47,
+            feature_columns=["x"],
+            min_confirmation_groups=30,
+        )
+        one=calibrate_profiles(
+            **common,
+            confirmation_profile_capacity={
+                "linux-curl":30,
+                "linux-python-ssl":30,
+            },
+        )
+        two=calibrate_profiles(
+            **common,
+            confirmation_profile_capacity={
+                "linux-curl":6,
+                "linux-python-ssl":24,
+            },
+        )
+        self.assertNotEqual(one.sha256,two.sha256)
+
     def test_confirmation_rejects_wrong_frozen_manifest_hash(self):
         controls = controls_frame(40).query("profile_id == 'linux-curl'").reset_index(drop=True)
         groups = {
