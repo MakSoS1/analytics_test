@@ -217,7 +217,8 @@ def run(job):
     state=Path('/tmp/coverlab_server_state.json')
     if state.exists():__import__('shutil').copyfile(state,out/'server_state.json')
     result={**base,'status':'captured' if ok else 'failed','reason':None if ok else 'empty_capture' if cp.returncode==0 else 'client_exit:'+str(cp.returncode),
-            'timing':job['timing'],'production_ready':False,'capture_path':str(out/'capture.pcap'),
+            'timing':job['timing'],'behavior_profile_sha256':str((job.get('profile') or {}).get('behavior_profile_sha256','')),
+            'production_ready':False,'capture_path':str(out/'capture.pcap'),
             'capture_sha256':sha(out/'capture.pcap'),'source_fidelity':job['entry']['source_fidelity'],
             'observed_packets':packets,'capture_scope':'client_access_link_v-dev_both_directions'}
     result['evidence_sha256']={p.name:sha(p) for p in sorted(out.iterdir()) if p.is_file() and p.name not in ('result.json','capture.pcap')}
