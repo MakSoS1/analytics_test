@@ -60,6 +60,22 @@ class NaturalCorpusTests(unittest.TestCase):
         for client, expected in cases.items():
             self.assertEqual(classify_cover_runtime_profile({"client": client}), expected)
 
+    def test_discovery_can_classify_high_level_profile_from_job_client(self):
+        with tempfile.TemporaryDirectory() as d:
+            job = self.make_job(d, "control-job", "control", "stage-profile", seed=7)
+            body = json.loads((job / "job.json").read_text())
+            body["profile"] = {"client": "browser_chromium"}
+            (job / "job.json").write_text(json.dumps(body))
+            result = json.loads((job / "result.json").read_text())
+            result["evidence_sha256"]["job.json"] = sha(job / "job.json")
+            (job / "result.json").write_text(json.dumps(result))
+            captures = discover_cover_captures(
+                Path(d), high_level_profile_id=None, role="control"
+            )
+            self.assertEqual(len(captures), 1)
+            self.assertEqual(captures[0].high_level_profile_id, "linux-chromium")
+            self.assertEqual(captures[0].bundle.profile_id, "linux-chromium")
+
     def test_discovery_selects_only_requested_role_and_pins_ancestor(self):
         with tempfile.TemporaryDirectory() as d:
             self.make_job(d, "control-job", "control", "curl-profile", seed=7)

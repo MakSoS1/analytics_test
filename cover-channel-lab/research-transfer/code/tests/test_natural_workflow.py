@@ -119,6 +119,27 @@ class NaturalWorkflowContractTests(unittest.TestCase):
         marker = "common-web calibration excludes protocol-specialized grpc/mqtt strata"
         self.assertIn(marker, raw)
 
+    def test_generated_benign_e2e_uses_real_stack_matrix_native_time_and_frozen_retime(self):
+        body = yaml.safe_load(TDD_WORKFLOW.read_text())
+        steps = body["jobs"]["generated-benign-e2e"]["steps"]
+        script = "\n".join(str(step.get("run", "")) for step in steps)
+        for entry_id in (
+            "M-CLOUD-API",
+            "M-HTTPS-BEACON",
+            "M-HTTPS-FRAG",
+            "M-HTTPS-FRONT",
+            "M-HTTPS-LOWENT",
+            "M-RMM-SHAPE",
+        ):
+            self.assertIn(entry_id, script)
+        self.assertNotIn("--profile original_dispatch", script)
+        self.assertNotIn("runtime_events'] = 1", script)
+        self.assertIn("--timing native", script)
+        self.assertIn("derive_temporal_environment", script)
+        self.assertIn("assign_temporal_starts", script)
+        self.assertIn("retime_capture_bundle", script)
+        self.assertIn("high_level_profile_id=None", script)
+
     def test_pr_path_only_runs_reference_validation_and_unit_tests(self):
         raw = WORKFLOW.read_text()
         body = yaml.safe_load(raw)
