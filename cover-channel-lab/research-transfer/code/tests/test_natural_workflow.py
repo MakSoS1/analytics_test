@@ -112,12 +112,19 @@ class NaturalWorkflowContractTests(unittest.TestCase):
 
     def test_generated_benign_e2e_keeps_common_web_protocol_stratum_homogeneous(self):
         raw = TDD_WORKFLOW.read_text()
-        self.assertIn("protocol_hints", raw)
-        self.assertIn("grpc", raw)
-        self.assertIn("mqtt", raw)
-        self.assertIn("continue", raw)
-        marker = "common-web calibration excludes protocol-specialized grpc/mqtt strata"
-        self.assertIn(marker, raw)
+        allowed = (
+            "M-CLOUD-API",
+            "M-HTTPS-BEACON",
+            "M-HTTPS-FRAG",
+            "M-HTTPS-FRONT",
+            "M-HTTPS-LOWENT",
+            "M-RMM-SHAPE",
+        )
+        for entry_id in allowed:
+            self.assertIn(entry_id, raw)
+        self.assertNotIn("'M-GRPC-BIDI'", raw)
+        self.assertNotIn("'M-PUBSUB-MQTT'", raw)
+        self.assertIn("target_entries", raw)
 
     def test_generated_benign_e2e_uses_real_stack_matrix_native_time_and_frozen_retime(self):
         body = yaml.safe_load(TDD_WORKFLOW.read_text())
