@@ -78,6 +78,8 @@ class NaturalEvaluationTests(unittest.TestCase):
         bad = evaluate_family_distances(office, shifted, groups["office"], families)
         self.assertFalse(bad["passed"])
         self.assertIn("volume", bad["failed_families"])
+        self.assertEqual(bad["families"]["volume"]["top_features"][0]["feature"], "x")
+        self.assertGreater(bad["families"]["volume"]["top_features"][0]["distance"], 0.9)
 
     def test_technique_signal_requires_naturalness_and_detects_paired_shift(self):
         n = 40
