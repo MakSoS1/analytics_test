@@ -16,6 +16,7 @@ import pyarrow.parquet as pq
 from .capture import assert_extraction_input, ensure_resource_budget
 from .contracts import CaptureBundle
 from .reference import model_feature_columns
+from office_injection.source import read_pcap, write_pcap
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +40,69 @@ def _sha(path: Path) -> str:
         for block in iter(lambda: fh.read(1 << 20), b""):
             h.update(block)
     return h.hexdigest()
+
+
+
+def retime_capture_bundle(
+    bundle: CaptureBundle,
+    *,
+    target_start_epoch: float,
+    out_dir: Path,
+) -> CaptureBundle:
+    """Copy a capture to a frozen office-like clock without changing packet bytes."""
+    assert_extraction_input(bundle, bundle.pcap_path)
+    source_hash = bundle.pcap_sha256
+    frames = list(read_pcap(bundle.pcap_path, max_regression=0.00001))
+    if not frames:
+        raise CompositionIntegrityError("cannot retime an empty capture")
+    target = float(target_start_epoch)
+    if not (target == target and abs(target) != float("inf")):
+        raise ValueError("finite target_start_epoch required")
+    offset = target - float(frames[0][0])
+    out = Path(out_dir)
+    if out.exists():
+        raise FileExistsError(f"retime output already exists: {out}")
+    out.mkdir(parents=True)
+    pcap = out / "capture.pcap"
+    write_pcap(pcap, frames, offset=offset)
+    shifted = list(read_pcap(pcap, max_regression=0.00001))
+    if [frame for _, frame in shifted] != [frame for _, frame in frames]:
+        raise CompositionIntegrityError("retime changed packet bytes")
+    old_gaps = [b[0] - a[0] for a, b in zip(frames, frames[1:])]
+    new_gaps = [b[0] - a[0] for a, b in zip(shifted, shifted[1:])]
+    if any(abs(a - b) > 2e-6 for a, b in zip(old_gaps, new_gaps)):
+        raise CompositionIntegrityError("retime changed inter-packet timing")
+    if _sha(bundle.pcap_path) != source_hash:
+        raise CompositionIntegrityError("source capture changed during retime")
+    metadata = out / "runtime_metadata.json"
+    body = {
+        "version": "natural-retime-v2",
+        "pair_id": bundle.pair_id,
+        "role": bundle.role,
+        "profile_id": bundle.profile_id,
+        "source_pcap_sha256": source_hash,
+        "retimed_pcap_sha256": _sha(pcap),
+        "source_runtime_metadata_sha256": bundle.runtime_metadata_sha256,
+        "source_start_epoch": float(frames[0][0]),
+        "target_start_epoch": target,
+        "offset_seconds": offset,
+        "timestamp_only_composition": True,
+        "packet_bytes_unchanged": True,
+        "inter_packet_gaps_unchanged": True,
+        "post_capture_packet_rewrite": False,
+    }
+    metadata.write_text(json.dumps(body, sort_keys=True, indent=2) + "\n")
+    return CaptureBundle(
+        pair_id=bundle.pair_id,
+        role=bundle.role,
+        profile_id=bundle.profile_id,
+        fidelity=bundle.fidelity,
+        pcap_path=pcap,
+        pcap_sha256=_sha(pcap),
+        evidence=bundle.evidence,
+        runtime_metadata_path=metadata,
+        runtime_metadata_sha256=_sha(metadata),
+    )
 
 
 def _type_compatible(left: pa.DataType, right: pa.DataType) -> bool:

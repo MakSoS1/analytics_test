@@ -83,13 +83,22 @@ class FrozenProfileManifest:
     seed: int
     profile_weights: tuple[tuple[str, float], ...]
     reference_id: str = ""
+    environment_json: str = "{}"
     version: str = "natural-profile-v2"
+
+    @property
+    def environment(self) -> dict[str, object]:
+        value = json.loads(self.environment_json)
+        if not isinstance(value, dict):
+            raise ValueError("frozen environment must be a JSON object")
+        return value
 
     def as_dict(self) -> dict[str, object]:
         return {
             "version": self.version,
             "seed": int(self.seed),
             "reference_id": self.reference_id,
+            "environment": self.environment,
             "profile_weights": [
                 {"profile_id": profile_id, "weight": float(weight)}
                 for profile_id, weight in self.profile_weights

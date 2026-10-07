@@ -19,6 +19,34 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+
+
+_CLIENT_PROFILE_MAP = {
+    "browser_chromium": "linux-chromium",
+    "chromium_websocket": "linux-chromium",
+    "curl_linux": "linux-curl",
+    "python_httpx": "linux-python-ssl",
+    "python_httpx_h2": "linux-python-ssl",
+    "python_httpx_reuse": "linux-python-ssl",
+    "python_httpx_h2_reuse": "linux-python-ssl",
+    "python_stdlib": "linux-python-ssl",
+    "go_nethttp": "linux-protocol-native",
+    "java_httpclient": "linux-protocol-native",
+    "node_fetch": "linux-protocol-native",
+    "node_websocket": "linux-protocol-native",
+    "rust_reqwest": "linux-protocol-native",
+    "python_websockets": "linux-protocol-native",
+}
+
+
+def classify_cover_runtime_profile(profile: dict[str, object]) -> str:
+    client = str(profile.get("client", "")).lower()
+    try:
+        return _CLIENT_PROFILE_MAP[client]
+    except KeyError:
+        raise ValueError(f"unsupported Cover runtime client for natural profile: {client}") from None
+
+
 @dataclass(frozen=True)
 class CoverCapture:
     bundle: CaptureBundle
