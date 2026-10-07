@@ -193,3 +193,118 @@ def derive_behavior_envelope(
     ).encode("utf-8")
     body["sha256"] = hashlib.sha256(encoded).hexdigest()
     return body
+
+def _choose_quantile(
+    values: dict[str, float],
+    identity: str,
+    *,
+    seed: int,
+    field: str,
+) -> float:
+    if not values:
+        raise ValueError(f"behavior envelope has no values for {field}")
+    keys = sorted(values)
+    digest = hashlib.sha256(
+        f"{int(seed)}:{identity}:{field}".encode("utf-8")
+    ).digest()
+    key = keys[int.from_bytes(digest[:8], "big") % len(keys)]
+    return float(values[key])
+
+
+def _probability_choice(
+    probability: float,
+    identity: str,
+    *,
+    seed: int,
+    field: str,
+) -> bool:
+    probability = max(0.0, min(1.0, float(probability)))
+    digest = hashlib.sha256(
+        f"{int(seed)}:{identity}:{field}:bernoulli".encode("utf-8")
+    ).digest()
+    value = int.from_bytes(digest[:8], "big") / float(2**64)
+    return value < probability
+
+
+def assign_behavior_targets(
+    envelope: dict[str, object],
+    identities: Iterable[object],
+    *,
+    seed: int,
+) -> dict[str, dict[str, object]]:
+    if str(envelope.get("source_policy")) != "office_train_only":
+        raise ValueError("behavior targets require office_train_only envelope")
+    profile_sha = str(envelope.get("sha256", ""))
+    if len(profile_sha) != 64:
+        raise ValueError("behavior envelope requires frozen sha256")
+    targets = dict(envelope.get("generation_targets") or {})
+    numeric = dict(envelope.get("numeric") or {})
+    events = dict(targets.get("events") or {})
+    minimum_events = max(1, int(events.get("min", 1)))
+    maximum_events = max(minimum_events, min(20, int(events.get("max", minimum_events))))
+    raw_event_values = [
+        value for key, value in events.items()
+        if key in {"min", "p50", "max"}
+    ]
+    event_choices = sorted(
+        set(
+            max(minimum_events, min(maximum_events, int(round(float(v)))))
+            for v in raw_event_values
+        )
+    )
+    if not event_choices:
+        event_choices = [minimum_events]
+
+    sni_quantiles = dict(numeric.get("tls_sni_len") or {})
+    result: dict[str, dict[str, object]] = {}
+    for identity in sorted({str(x) for x in identities}):
+        event_digest = hashlib.sha256(
+            f"{int(seed)}:{identity}:runtime_events".encode("utf-8")
+        ).digest()
+        runtime_events = event_choices[
+            int.from_bytes(event_digest[:8], "big") % len(event_choices)
+        ]
+        sni_len = (
+            int(round(_choose_quantile(
+                sni_quantiles, identity, seed=seed, field="tls_sni_len"
+            )))
+            if sni_quantiles
+            else 16
+        )
+        result[identity] = {
+            "runtime_events": max(1, min(20, int(runtime_events))),
+            "native_interval": _choose_quantile(
+                dict(targets.get("iat_seconds") or {}),
+                identity,
+                seed=seed,
+                field="iat_seconds",
+            ),
+            "benign_request_bytes": int(round(_choose_quantile(
+                dict(targets.get("request_bytes") or {}),
+                identity,
+                seed=seed,
+                field="request_bytes",
+            ))),
+            "benign_response_bytes": int(round(_choose_quantile(
+                dict(targets.get("response_bytes") or {}),
+                identity,
+                seed=seed,
+                field="response_bytes",
+            ))),
+            "benign_sni_len": max(5, min(253, sni_len)),
+            "prefer_h2": _probability_choice(
+                float(targets.get("prefer_h2_probability", 0.0)),
+                identity,
+                seed=seed,
+                field="prefer_h2",
+            ),
+            "target_clean_close": _probability_choice(
+                float(targets.get("close_cleanly_probability", 0.0)),
+                identity,
+                seed=seed,
+                field="target_clean_close",
+            ),
+            "behavior_profile_sha256": profile_sha,
+        }
+    return result
+
