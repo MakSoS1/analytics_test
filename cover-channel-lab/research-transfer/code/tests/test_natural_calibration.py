@@ -9,6 +9,7 @@ from natural_traffic.calibration import (
     assign_temporal_starts,
     calibrate_profiles,
     select_frozen_confirmation_groups,
+    frozen_confirmation_deficits,
     InsufficientFrozenMixtureSupport,
     validate_group_disjointness,
 )
@@ -177,6 +178,46 @@ class NaturalCalibrationTests(unittest.TestCase):
             sorted(groups["capture_group"]),
             sorted(again["capture_group"].drop_duplicates()),
         )
+
+
+    def test_frozen_confirmation_deficits_report_only_missing_positive_profile_groups(self):
+        from natural_traffic.contracts import FrozenProfileManifest
+        rows = []
+        for profile, count in (
+            ("linux-chromium", 3),
+            ("linux-protocol-native", 12),
+            ("linux-python-ssl", 14),
+            ("linux-curl", 3),
+        ):
+            for i in range(count):
+                rows.append({
+                    "profile_id": profile,
+                    "capture_group": f"{profile}-{i}",
+                })
+        controls = pd.DataFrame(rows)
+        manifest = FrozenProfileManifest(
+            seed=37,
+            profile_weights=(
+                ("linux-chromium", 0.11322746960017983),
+                ("linux-protocol-native", 0.5262965032344724),
+                ("linux-python-ssl", 0.3604760271653477),
+            ),
+            reference_id="frozen:deficits",
+        )
+        report = frozen_confirmation_deficits(
+            manifest, controls, min_groups=30, group_column="capture_group"
+        )
+        self.assertEqual(report["quotas"], {
+            "linux-chromium": 3,
+            "linux-protocol-native": 16,
+            "linux-python-ssl": 11,
+        })
+        self.assertEqual(report["available"], {
+            "linux-chromium": 3,
+            "linux-protocol-native": 12,
+            "linux-python-ssl": 14,
+        })
+        self.assertEqual(report["deficits"], {"linux-protocol-native": 4})
 
     def test_frozen_confirmation_selection_fails_closed_when_profile_capacity_is_short(self):
         from natural_traffic.contracts import FrozenProfileManifest
