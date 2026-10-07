@@ -156,8 +156,8 @@ class NaturalWorkflowContractTests(unittest.TestCase):
         self.assertIn("pcap_quality.json", script)
         self.assertIn("max_timestamp_regression_us=50", script)
         self.assertLess(
-            script.index("filter_cover_captures_by_quality"),
-            script.index("retime_capture_bundle"),
+            script.index("captures, rejected_quality = filter_cover_captures_by_quality("),
+            script.index("retimed_bundle = retime_capture_bundle("),
         )
         self.assertNotIn("max_timestamp_regression_us=60", script)
 
