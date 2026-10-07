@@ -8,6 +8,8 @@ from natural_traffic.calibration import (
     GroupLeakageError,
     assign_temporal_starts,
     calibrate_profiles,
+    select_frozen_confirmation_groups,
+    InsufficientFrozenMixtureSupport,
     validate_group_disjointness,
 )
 from natural_traffic.evaluation import ManifestIntegrityError, confirm_naturalness
@@ -123,6 +125,82 @@ class NaturalCalibrationTests(unittest.TestCase):
         assigned2 = assign_temporal_starts(manifest, [f"g{i}" for i in range(32)])
         self.assertEqual(assigned1, assigned2)
         self.assertTrue(set(assigned1.values()).issubset(set(pool)))
+
+
+    def test_frozen_confirmation_selection_applies_weights_by_whole_capture_group(self):
+        rows = []
+        for profile, count in (
+            ("linux-chromium", 12),
+            ("linux-protocol-native", 20),
+            ("linux-python-ssl", 16),
+            ("linux-curl", 8),
+        ):
+            for i in range(count):
+                rows.append({
+                    "x": float(i),
+                    "role": "control",
+                    "profile_id": profile,
+                    "capture_group": f"{profile}-{i:02d}",
+                })
+        controls = pd.DataFrame(rows)
+        manifest = ProfileRegistry.default().manifest(
+            ["linux-chromium", "linux-protocol-native", "linux-python-ssl"],
+            seed=29,
+        )
+        # Override the equal registry manifest with an explicit frozen mixture.
+        from natural_traffic.contracts import FrozenProfileManifest
+        manifest = FrozenProfileManifest(
+            seed=29,
+            profile_weights=(
+                ("linux-chromium", 0.30),
+                ("linux-protocol-native", 0.50),
+                ("linux-python-ssl", 0.20),
+            ),
+            reference_id="frozen:test-mixture",
+        )
+        selected = select_frozen_confirmation_groups(
+            manifest, controls, min_groups=30, group_column="capture_group"
+        )
+        groups = selected[["capture_group", "profile_id"]].drop_duplicates()
+        self.assertEqual(groups["capture_group"].nunique(), 30)
+        self.assertNotIn("linux-curl", set(groups["profile_id"]))
+        counts = groups["profile_id"].value_counts().to_dict()
+        self.assertEqual(counts, {
+            "linux-protocol-native": 15,
+            "linux-chromium": 9,
+            "linux-python-ssl": 6,
+        })
+        again = select_frozen_confirmation_groups(
+            manifest, controls, min_groups=30, group_column="capture_group"
+        )
+        self.assertEqual(
+            sorted(groups["capture_group"]),
+            sorted(again["capture_group"].drop_duplicates()),
+        )
+
+    def test_frozen_confirmation_selection_fails_closed_when_profile_capacity_is_short(self):
+        from natural_traffic.contracts import FrozenProfileManifest
+        controls = pd.DataFrame([
+            {
+                "x": float(i),
+                "role": "control",
+                "profile_id": "linux-chromium" if i < 3 else "linux-protocol-native",
+                "capture_group": f"g{i:02d}",
+            }
+            for i in range(40)
+        ])
+        manifest = FrozenProfileManifest(
+            seed=31,
+            profile_weights=(
+                ("linux-chromium", 0.30),
+                ("linux-protocol-native", 0.70),
+            ),
+            reference_id="frozen:capacity",
+        )
+        with self.assertRaises(InsufficientFrozenMixtureSupport):
+            select_frozen_confirmation_groups(
+                manifest, controls, min_groups=30, group_column="capture_group"
+            )
 
     def test_confirmation_rejects_wrong_frozen_manifest_hash(self):
         controls = controls_frame(40).query("profile_id == 'linux-curl'").reset_index(drop=True)
