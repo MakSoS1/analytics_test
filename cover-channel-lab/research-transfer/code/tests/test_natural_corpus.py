@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from natural_traffic.corpus import aggregate_extracted_tables, discover_cover_captures
+from natural_traffic.corpus import (
+    aggregate_extracted_tables,
+    classify_cover_runtime_profile,
+    discover_cover_captures,
+)
 from office_injection.source import write_pcap
 
 
@@ -40,6 +44,21 @@ class NaturalCorpusTests(unittest.TestCase):
         }
         (d / "result.json").write_text(json.dumps(result))
         return d
+
+    def test_client_stack_is_mapped_to_declared_high_level_runtime_profile(self):
+        cases = {
+            "browser_chromium": "linux-chromium",
+            "chromium_websocket": "linux-chromium",
+            "curl_linux": "linux-curl",
+            "python_httpx": "linux-python-ssl",
+            "python_stdlib": "linux-python-ssl",
+            "go_nethttp": "linux-protocol-native",
+            "java_httpclient": "linux-protocol-native",
+            "node_fetch": "linux-protocol-native",
+            "rust_reqwest": "linux-protocol-native",
+        }
+        for client, expected in cases.items():
+            self.assertEqual(classify_cover_runtime_profile({"client": client}), expected)
 
     def test_discovery_selects_only_requested_role_and_pins_ancestor(self):
         with tempfile.TemporaryDirectory() as d:

@@ -6,6 +6,7 @@ import pandas as pd
 from natural_traffic.calibration import (
     CalibrationLeakageError,
     GroupLeakageError,
+    assign_temporal_starts,
     calibrate_profiles,
     validate_group_disjointness,
 )
@@ -73,6 +74,55 @@ class NaturalCalibrationTests(unittest.TestCase):
         second = calibrate_profiles(**kwargs)
         self.assertEqual(first.sha256, second.sha256)
         self.assertEqual(first.profile_weights, (("linux-curl", 1.0),))
+
+    def test_calibration_can_freeze_a_convex_profile_mixture(self):
+        n = 40
+        office = pd.DataFrame({"x": np.zeros(n), "role": ["office"] * n})
+        left = pd.DataFrame({
+            "x": np.full(n, -2.0),
+            "role": ["control"] * n,
+            "profile_id": ["linux-curl"] * n,
+        })
+        right = pd.DataFrame({
+            "x": np.full(n, 2.0),
+            "role": ["control"] * n,
+            "profile_id": ["linux-python-ssl"] * n,
+        })
+        controls = pd.concat([left, right], ignore_index=True)
+        groups = {
+            "office": [f"o{i}" for i in range(n)],
+            "controls": [f"l{i}" for i in range(n)] + [f"r{i}" for i in range(n)],
+        }
+        manifest = calibrate_profiles(
+            office, controls, groups, ProfileRegistry.default(),
+            seed=19, feature_columns=["x"],
+        )
+        weights = dict(manifest.profile_weights)
+        self.assertEqual(set(weights), {"linux-curl", "linux-python-ssl"})
+        self.assertAlmostEqual(sum(weights.values()), 1.0, places=6)
+        self.assertGreater(weights["linux-curl"], 0.35)
+        self.assertGreater(weights["linux-python-ssl"], 0.35)
+
+    def test_temporal_profile_is_frozen_from_calibration_office_only(self):
+        office = office_frame(40)
+        office["session_start_epoch"] = 1_790_000_000.0 + np.arange(40) * 3600.0
+        controls = controls_frame(40).query("profile_id == 'linux-curl'").reset_index(drop=True)
+        groups = {
+            "office": [f"o{i}" for i in range(40)],
+            "controls": [f"c{i}" for i in range(40)],
+        }
+        manifest = calibrate_profiles(
+            office, controls, groups, ProfileRegistry.default(),
+            seed=23, feature_columns=["x"],
+        )
+        environment = manifest.environment
+        pool = environment["temporal_start_epoch_pool"]
+        self.assertGreaterEqual(len(pool), 24)
+        self.assertTrue(set(pool).issubset(set(office["session_start_epoch"].astype(float))))
+        assigned1 = assign_temporal_starts(manifest, [f"g{i}" for i in range(32)])
+        assigned2 = assign_temporal_starts(manifest, [f"g{i}" for i in range(32)])
+        self.assertEqual(assigned1, assigned2)
+        self.assertTrue(set(assigned1.values()).issubset(set(pool)))
 
     def test_confirmation_rejects_wrong_frozen_manifest_hash(self):
         controls = controls_frame(40).query("profile_id == 'linux-curl'").reset_index(drop=True)

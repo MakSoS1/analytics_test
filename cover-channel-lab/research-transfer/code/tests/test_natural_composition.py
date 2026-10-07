@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -13,12 +14,14 @@ from natural_traffic.composition import (
     CompositionIntegrityError,
     compose_feature_alternatives,
     extract_pipeline_capture,
+    retime_capture_bundle,
     validate_arkime_table,
     validate_pipeline_table,
     validate_strict_match_table,
 )
-from natural_traffic.contracts import GenerationContext
+from natural_traffic.contracts import CaptureBundle, GenerationContext
 from natural_traffic.profiles import ProfileRegistry
+from office_injection.source import read_pcap, write_pcap
 
 
 ROOT = Path(__file__).resolve().parents[2] / "datasets" / "office-cover-20261006"
@@ -87,6 +90,52 @@ class PublicFeatureCompositionTests(unittest.TestCase):
             added.to_parquet(good, index=False)
             with self.assertRaises(CompositionIntegrityError):
                 compose_feature_alternatives(office_path, bad, good, root / "out", pair_id="p")
+
+
+class TimestampOnlyCompositionTests(unittest.TestCase):
+    def test_retime_copy_preserves_every_frame_byte_and_inter_packet_gap(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            source = root / "source.pcap"
+            frames = [
+                (100.0, b"\\x02" * 60),
+                (100.125, b"\\x03" * 74),
+                (101.0, b"\\x04" * 90),
+            ]
+            write_pcap(source, frames)
+            runtime = root / "runtime.json"
+            runtime.write_text('{"source":"fixture"}\\n')
+            bundle = CaptureBundle(
+                pair_id="p",
+                role="control",
+                profile_id="linux-curl",
+                fidelity="wire-real",
+                pcap_path=source,
+                pcap_sha256=sha(source),
+                evidence=(),
+                runtime_metadata_path=runtime,
+                runtime_metadata_sha256=sha(runtime),
+            )
+            source_hash = sha(source)
+            shifted = retime_capture_bundle(
+                bundle,
+                target_start_epoch=1_790_123_456.0,
+                out_dir=root / "retimed",
+            )
+            original_frames = list(read_pcap(source))
+            shifted_frames = list(read_pcap(shifted.pcap_path))
+            self.assertEqual(source_hash, sha(source))
+            self.assertEqual([b for _, b in original_frames], [b for _, b in shifted_frames])
+            self.assertAlmostEqual(shifted_frames[0][0], 1_790_123_456.0, places=5)
+            old_gaps = [b[0] - a[0] for a, b in zip(original_frames, original_frames[1:])]
+            new_gaps = [b[0] - a[0] for a, b in zip(shifted_frames, shifted_frames[1:])]
+            for old, new in zip(old_gaps, new_gaps):
+                self.assertAlmostEqual(old, new, places=5)
+            meta = json.loads(shifted.runtime_metadata_path.read_text())
+            self.assertTrue(meta["timestamp_only_composition"])
+            self.assertTrue(meta["packet_bytes_unchanged"])
+            self.assertFalse(meta["post_capture_packet_rewrite"])
+            self.assertEqual(meta["source_pcap_sha256"], source_hash)
 
 
 class FullSchemaTests(unittest.TestCase):
