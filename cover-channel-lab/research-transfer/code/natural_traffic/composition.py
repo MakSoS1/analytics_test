@@ -52,9 +52,14 @@ def retime_capture_bundle(
     """Copy a capture to a frozen office-like clock without changing packet bytes."""
     assert_extraction_input(bundle, bundle.pcap_path)
     source_hash = bundle.pcap_sha256
-    frames = list(read_pcap(bundle.pcap_path, max_regression=0.00001))
+    capture_writer_jitter = 0.00005
+    frames = list(read_pcap(bundle.pcap_path, max_regression=capture_writer_jitter))
     if not frames:
         raise CompositionIntegrityError("cannot retime an empty capture")
+    max_source_regression = max(
+        (max(0.0, float(a[0]) - float(b[0])) for a, b in zip(frames, frames[1:])),
+        default=0.0,
+    )
     target = float(target_start_epoch)
     if not (target == target and abs(target) != float("inf")):
         raise ValueError("finite target_start_epoch required")
@@ -65,7 +70,7 @@ def retime_capture_bundle(
     out.mkdir(parents=True)
     pcap = out / "capture.pcap"
     write_pcap(pcap, frames, offset=offset)
-    shifted = list(read_pcap(pcap, max_regression=0.00001))
+    shifted = list(read_pcap(pcap, max_regression=capture_writer_jitter))
     if [frame for _, frame in shifted] != [frame for _, frame in frames]:
         raise CompositionIntegrityError("retime changed packet bytes")
     old_gaps = [b[0] - a[0] for a, b in zip(frames, frames[1:])]
@@ -90,6 +95,9 @@ def retime_capture_bundle(
         "packet_bytes_unchanged": True,
         "inter_packet_gaps_unchanged": True,
         "post_capture_packet_rewrite": False,
+        "packet_order_unchanged": True,
+        "capture_writer_jitter_tolerance_us": 50,
+        "max_source_timestamp_regression_us": round(max_source_regression * 1e6, 3),
     }
     metadata.write_text(json.dumps(body, sort_keys=True, indent=2) + "\n")
     return CaptureBundle(
