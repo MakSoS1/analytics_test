@@ -3,7 +3,11 @@ import unittest
 
 import pandas as pd
 
-from natural_traffic.behavior import derive_behavior_envelope, select_office_web_slice
+from natural_traffic.behavior import (
+    assign_behavior_targets,
+    derive_behavior_envelope,
+    select_office_web_slice,
+)
 
 
 class OfficeBehaviorProfileTests(unittest.TestCase):
@@ -73,6 +77,35 @@ class OfficeBehaviorProfileTests(unittest.TestCase):
         self.assertNotIn("label_binary",raw)
         self.assertNotIn("secret",raw)
         self.assertNotIn("source_file",raw)
+
+
+    def test_behavior_targets_are_deterministic_bounded_and_profile_specific(self):
+        envelope=derive_behavior_envelope(self._frame(),seed=123)
+        identities=[f"entry-{i}:profile-{i}" for i in range(12)]
+        first=assign_behavior_targets(envelope,identities,seed=777)
+        second=assign_behavior_targets(envelope,list(reversed(identities)),seed=777)
+        self.assertEqual(first,second)
+        self.assertEqual(set(first),set(identities))
+        event_bounds=envelope["generation_targets"]["events"]
+        allowed_iat=set(envelope["generation_targets"]["iat_seconds"].values())
+        allowed_req=set(envelope["generation_targets"]["request_bytes"].values())
+        allowed_resp=set(envelope["generation_targets"]["response_bytes"].values())
+        observed=set()
+        for identity,target in first.items():
+            self.assertGreaterEqual(target["runtime_events"],event_bounds["min"])
+            self.assertLessEqual(target["runtime_events"],event_bounds["max"])
+            self.assertIn(target["native_interval"],allowed_iat)
+            self.assertIn(target["benign_request_bytes"],allowed_req)
+            self.assertIn(target["benign_response_bytes"],allowed_resp)
+            self.assertEqual(target["behavior_profile_sha256"],envelope["sha256"])
+            self.assertGreaterEqual(target["benign_sni_len"],5)
+            observed.add((
+                target["runtime_events"],
+                target["native_interval"],
+                target["benign_request_bytes"],
+                target["benign_response_bytes"],
+            ))
+        self.assertGreater(len(observed),1)
 
     def test_behavior_sampler_is_supported_by_empirical_office_ranges(self):
         body=derive_behavior_envelope(self._frame(),seed=123)
