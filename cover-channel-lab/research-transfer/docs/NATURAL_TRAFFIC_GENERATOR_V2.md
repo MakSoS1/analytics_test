@@ -74,6 +74,30 @@ Public GitHub не содержит raw office PCAP, поэтому public CI м
 python -m natural_traffic.cli compose --office datasets/office-cover-20261006/pipeline_office_full.parquet --scenario /data/scenario.parquet --control /data/control.parquet --pair-id example-pair --out /tmp/composed
 ```
 
+
+## PCAP quality gate
+
+Managed real-stack captures проходят read-only проверку **до** temporal retime и extraction. Проверка не сортирует пакеты, не меняет timestamp, не обрезает MTU и не переписывает байты. Capture-writer jitter до 50 мкс допускается с предупреждением; превышение границы исключает capture из calibration.
+
+```bash
+python -m natural_traffic.cli audit-pcap --pcap /data/capture.pcap --max-regression-us 50 --out /tmp/pcap-quality.json
+```
+
+Если после quality gate остаётся недостаточно независимых control-групп, результат fail-closed, а порог naturalness не ослабляется.
+
+## Attack Replay / MITRE external reference
+
+Attack Replay и внешний PCAP-банк используются только как **read-only OOD/extractor regression reference**. Они не являются backend для naturalness: stateless replay, IP/MAC rewriting, MTU truncation и изменение скорости не превращают записанный PCAP в office-native session.
+
+Источник закрепляется на immutable commit, а каждый внешний capture получает `training_eligible=false` и `naturalness_calibration_eligible=false`.
+
+```bash
+python -m natural_traffic.cli build-external-reference --root /data/MITRE-ATTACK-pcaps --source references/attack-replay-external.json --out /tmp/external-reference.json
+```
+
+Текущий pinned snapshot содержит 41 PCAP и фактически покрывает T1595.001 active scanning; будущие категории из README не считаются фактическим покрытием, пока в pinned tree нет соответствующих PCAP.
+
+
 ## Release package
 
 ```bash

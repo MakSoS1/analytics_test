@@ -210,6 +210,7 @@ jobs:
           from natural_traffic.contracts import FrozenProfileManifest
           from natural_traffic.corpus import discover_cover_captures, aggregate_extracted_tables
           from natural_traffic.evaluation import confirm_naturalness
+          from natural_traffic.pcap_quality import filter_cover_captures_by_quality
           from natural_traffic.profiles import ProfileRegistry
           from natural_traffic.reference import load_reference
           from natural_traffic.reporting import write_report
@@ -222,6 +223,26 @@ jobs:
           )
           if len(captures) != 64:
               raise SystemExit(f'expected exactly 64 captured controls, got {len(captures)}')
+          raw_capture_count = len(captures)
+          captures, rejected_quality = filter_cover_captures_by_quality(
+              captures, max_timestamp_regression_us=50
+          )
+          quality_report = {
+              'version': 'natural-managed-pcap-quality-v1',
+              'raw_captures': raw_capture_count,
+              'accepted_captures': len(captures),
+              'rejected_captures': len(rejected_quality),
+              'max_timestamp_regression_us': 50,
+              'rejected': rejected_quality,
+              'policy': 'reject_before_retime_no_packet_rewrite',
+          }
+          (out / 'pcap_quality.json').write_text(
+              json.dumps(quality_report, sort_keys=True, separators=(',', ':')) + '\n'
+          )
+          if len(captures) < 60:
+              raise SystemExit(
+                  f'quality gate left insufficient independent controls: {len(captures)} < 60'
+              )
 
           ref = load_reference(Path('datasets/office-cover-20261006'), verify_hashes=True)
           office = ref.pipeline_office.copy()
@@ -283,8 +304,10 @@ jobs:
               .drop_duplicates()
               .sort_values(['profile_id', 'capture_group'])
           )
-          if len(group_meta) != 64:
-              raise SystemExit(f'expected 64 independent control groups, got {len(group_meta)}')
+          if len(group_meta) != len(captures):
+              raise SystemExit(
+                  f'expected {len(captures)} independent control groups, got {len(group_meta)}'
+              )
           train_control_groups, confirm_control_groups = set(), set()
           for _, frame in group_meta.groupby('profile_id', sort=True):
               ids = frame['capture_group'].astype(str).tolist()
