@@ -204,6 +204,8 @@ jobs:
               assign_temporal_starts,
               calibrate_profiles,
               derive_temporal_environment,
+              frozen_confirmation_deficits,
+              select_frozen_confirmation_groups,
               validate_group_disjointness,
           )
           from natural_traffic.composition import extract_pipeline_capture, retime_capture_bundle
@@ -345,6 +347,41 @@ jobs:
           manifest_path.write_text(manifest.to_json() + '\n')
           (out / 'frozen_profile_manifest.sha256').write_text(manifest.sha256 + '\n')
 
+          deficits = frozen_confirmation_deficits(
+              manifest, control_confirm, min_groups=30
+          )
+          if deficits['deficits']:
+              raise SystemExit(
+                  'held-out controls cannot realize frozen mixture: '
+                  + json.dumps(deficits, sort_keys=True)
+              )
+          control_confirm_frozen = select_frozen_confirmation_groups(
+              manifest, control_confirm, min_groups=30
+          )
+          frozen_group_count = int(
+              control_confirm_frozen['capture_group'].astype(str).nunique()
+          )
+          if frozen_group_count != 30:
+              raise SystemExit(
+                  f'frozen confirmation selection returned {frozen_group_count} groups'
+              )
+          (out / 'frozen_confirmation_selection.json').write_text(
+              json.dumps(
+                  {
+                      'version': 'natural-frozen-confirmation-v1',
+                      'pool_groups': int(control_confirm['capture_group'].astype(str).nunique()),
+                      'selected_groups': frozen_group_count,
+                      'profile_weights': list(manifest.profile_weights),
+                      'capacity': deficits,
+                      'selected_capture_groups': sorted(
+                          control_confirm_frozen['capture_group'].astype(str).unique()
+                      ),
+                  },
+                  sort_keys=True,
+                  separators=(',', ':'),
+              ) + '\n'
+          )
+
           dictionary = json.loads(
               Path('datasets/office-cover-20261006/pipeline_column_dictionary.json').read_text()
           )
@@ -356,12 +393,12 @@ jobs:
 
           confirm_groups = {
               'office': office_confirm['host_key'].astype(str).tolist(),
-              'controls': control_confirm['capture_group'].astype(str).tolist(),
+              'controls': control_confirm_frozen['capture_group'].astype(str).tolist(),
           }
           report = confirm_naturalness(
               manifest,
               office_confirm,
-              control_confirm,
+              control_confirm_frozen,
               confirm_groups,
               expected_manifest_sha=manifest.sha256,
               feature_columns=ref.feature_columns,
@@ -378,7 +415,9 @@ jobs:
                   **report.as_dict(),
                   'corpus': corpus_report,
                   'calibration_control_groups': len(train_control_groups),
-                  'confirmation_control_groups': len(confirm_control_groups),
+                  'confirmation_control_pool_groups': len(confirm_control_groups),
+                  'confirmation_control_groups': frozen_group_count,
+                  'frozen_confirmation_capacity': deficits,
                   'calibration_office_groups': len(train_hosts),
                   'confirmation_office_groups': len(confirm_hosts),
                   'office_scope': 'tcp web comparison slice; destination 443/8443/9443 when >=60 host groups, otherwise all TCP',
