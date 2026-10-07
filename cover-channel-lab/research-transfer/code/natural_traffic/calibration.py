@@ -20,6 +20,79 @@ class GroupLeakageError(ValueError):
     """Raised when one source ancestor crosses train/confirmation."""
 
 
+
+class InsufficientFrozenMixtureSupport(ValueError):
+    """Raised when held-out independent groups cannot realize the frozen mixture."""
+
+
+def _largest_remainder_quotas(
+    weights: Sequence[tuple[str, float]],
+    total_groups: int,
+) -> dict[str, int]:
+    if int(total_groups) < 1:
+        raise ValueError("total_groups must be positive")
+    positive = [(str(name), float(weight)) for name, weight in weights if float(weight) > 0]
+    if not positive:
+        raise ValueError("frozen manifest has no positive profile weights")
+    total_weight = sum(weight for _, weight in positive)
+    normalized = [(name, weight / total_weight) for name, weight in positive]
+    exact = [(name, weight * int(total_groups)) for name, weight in normalized]
+    quotas = {name: int(np.floor(value)) for name, value in exact}
+    remaining = int(total_groups) - sum(quotas.values())
+    ranked = sorted(
+        ((value - np.floor(value), name) for name, value in exact),
+        key=lambda row: (-float(row[0]), str(row[1])),
+    )
+    for _, name in ranked[:remaining]:
+        quotas[name] += 1
+    return quotas
+
+
+def select_frozen_confirmation_groups(
+    manifest: FrozenProfileManifest,
+    controls: pd.DataFrame,
+    *,
+    min_groups: int = 30,
+    group_column: str = "capture_group",
+    profile_column: str = "profile_id",
+) -> pd.DataFrame:
+    """Select whole independent groups to realize the already-frozen mixture.
+
+    Selection is deterministic and does not duplicate a capture group. Profiles
+    absent from the frozen positive-weight list are never admitted.
+    """
+    if group_column not in controls or profile_column not in controls:
+        raise ValueError("confirmation controls require group/profile columns")
+    group_meta = controls[[group_column, profile_column]].drop_duplicates()
+    counts = group_meta.groupby(group_column)[profile_column].nunique()
+    if bool((counts > 1).any()):
+        raise ValueError("one confirmation group maps to multiple profiles")
+
+    quotas = _largest_remainder_quotas(manifest.profile_weights, int(min_groups))
+    selected_groups: list[str] = []
+    for profile_id, quota in sorted(quotas.items()):
+        candidates = sorted(
+            group_meta.loc[
+                group_meta[profile_column].astype(str).eq(profile_id),
+                group_column,
+            ].astype(str).tolist(),
+            key=lambda group: hashlib.sha256(
+                f"{manifest.seed}:{manifest.reference_id}:{profile_id}:{group}:confirm".encode("utf-8")
+            ).hexdigest(),
+        )
+        if len(candidates) < quota:
+            raise InsufficientFrozenMixtureSupport(
+                f"frozen profile {profile_id} needs {quota} independent groups, "
+                f"only {len(candidates)} available"
+            )
+        selected_groups.extend(candidates[:quota])
+
+    if len(selected_groups) != int(min_groups) or len(set(selected_groups)) != int(min_groups):
+        raise RuntimeError("frozen confirmation selection did not produce unique requested support")
+    chosen = set(selected_groups)
+    return controls[controls[group_column].astype(str).isin(chosen)].copy()
+
+
 def validate_group_disjointness(
     train_groups: Sequence[object],
     confirmation_groups: Sequence[object],
