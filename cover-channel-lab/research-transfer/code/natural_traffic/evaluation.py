@@ -407,23 +407,24 @@ def evaluate_family_distances(
             if distances:
                 baseline[family].append(max(distances))
 
-    family_rows: dict[str, dict[str, float | bool]] = {}
+    family_rows: dict[str, dict[str, object]] = {}
     failed: list[str] = []
     at_reference = 0
     measurable = 0
     for family, cols in feature_families.items():
-        distances = [
-            d
-            for col in cols
-            if col in office.columns and col in control.columns
-            for d in [_univariate_distance(office[col], control[col])]
-            if d is not None
-        ]
+        feature_rows = []
+        for col in cols:
+            if col not in office.columns or col not in control.columns:
+                continue
+            value = _univariate_distance(office[col], control[col])
+            if value is not None:
+                feature_rows.append({"feature": col, "distance": float(value)})
         refs = baseline.get(family, [])
-        if not distances or not refs:
+        if not feature_rows or not refs:
             continue
+        feature_rows.sort(key=lambda row: (-float(row["distance"]), str(row["feature"])))
         measurable += 1
-        distance = float(max(distances))
+        distance = float(feature_rows[0]["distance"])
         p95 = float(np.quantile(refs, 0.95))
         at_p95 = distance <= p95 + 1e-12
         hard_limit = max(1.5 * p95, 0.05)
@@ -437,6 +438,7 @@ def evaluate_family_distances(
             "office_reference_p95": p95,
             "within_reference_p95": at_p95,
             "within_1_5x_reference": hard_ok,
+            "top_features": feature_rows[:10],
         }
 
     share = (at_reference / measurable) if measurable else 0.0
