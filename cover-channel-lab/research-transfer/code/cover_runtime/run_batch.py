@@ -70,7 +70,6 @@ def required_runtime_services(jobs):
         transport = str(entry.get("transport", "")).lower()
         family = str(entry.get("family", "")).lower()
         carrier = str(entry.get("carrier", "")).lower()
-        # Service dependencies may be encoded by carrier/family even when the wire transport is WSS.
         protocol_hints = " ".join((transport, family, carrier))
         if namespace and namespace != "catalog":
             services.add("stage_m")
