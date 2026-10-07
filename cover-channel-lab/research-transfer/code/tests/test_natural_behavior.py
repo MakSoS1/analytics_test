@@ -88,8 +88,8 @@ class OfficeBehaviorProfileTests(unittest.TestCase):
         self.assertEqual(set(first),set(identities))
         event_bounds=envelope["generation_targets"]["events"]
         allowed_iat=set(envelope["generation_targets"]["iat_seconds"].values())
-        allowed_req=set(envelope["generation_targets"]["request_bytes"].values())
-        allowed_resp=set(envelope["generation_targets"]["response_bytes"].values())
+        allowed_req={int(round(v)) for v in envelope["generation_targets"]["request_bytes"].values()}
+        allowed_resp={int(round(v)) for v in envelope["generation_targets"]["response_bytes"].values()}
         observed=set()
         for identity,target in first.items():
             self.assertGreaterEqual(target["runtime_events"],event_bounds["min"])
