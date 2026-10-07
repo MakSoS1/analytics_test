@@ -37,6 +37,18 @@ class StageControlBehaviorTests(unittest.TestCase):
             self.assertEqual(len(body), 469)
             self.assertIn(b"ok", body.lower())
 
+
+    def test_url_carried_control_payload_is_uri_safe_at_target_size(self):
+        import random
+        allowed=set(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+        for mode in ("fragment_2_6", "low_entropy"):
+            body=stage_controls.business_payload(
+                random.Random(7),mode,2,target_size=469
+            )
+            self.assertEqual(len(body),469)
+            self.assertTrue(set(body).issubset(allowed), body[:80])
+            self.assertIn(b"ok",body.lower())
+
     def test_install_accepts_job_and_entrypoint_passes_it(self):
         self.assertIn("job", inspect.signature(stage_controls.install).parameters)
         source = ENTRYPOINT.read_text()
