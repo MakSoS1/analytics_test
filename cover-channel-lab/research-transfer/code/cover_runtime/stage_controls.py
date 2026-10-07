@@ -32,6 +32,12 @@ def behavior_targets(job):
 
 def business_payload(r, mode, i, size=48, target_size=None):
     target=max(16,min(8192,int(target_size if target_size is not None else size)))
+    if mode in ('fragment_2_6','low_entropy'):
+        prefix=f'status-ok-{i}-'.encode()
+        token=b'item' if mode=='fragment_2_6' else b'low'
+        need=max(0,target-len(prefix))
+        filler=(token*((need+len(token)-1)//len(token)))[:need]
+        return (prefix+filler)[:target].ljust(target,b'.')
     prefix=json.dumps(
         {'event':'health','sequence':i,'status':'ok','queue_depth':r.randrange(5)},
         separators=(',',':'),
@@ -39,9 +45,8 @@ def business_payload(r, mode, i, size=48, target_size=None):
     if len(prefix)>=target:
         body=(b'ok'+prefix)[:target]
         return body.ljust(target,b'.')
-    token=b'low' if mode=='low_entropy' else b'item' if mode=='fragment_2_6' else b'metric'
     need=target-len(prefix)
-    filler=(token*((need+len(token)-1)//len(token)))[:need]
+    filler=(b'metric'*((need+5)//6))[:need]
     return prefix+filler
 
 
