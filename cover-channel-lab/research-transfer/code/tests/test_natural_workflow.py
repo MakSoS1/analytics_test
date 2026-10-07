@@ -174,6 +174,20 @@ class NaturalWorkflowContractTests(unittest.TestCase):
         self.assertIn("training_eligible", script)
         self.assertIn("naturalness_calibration_eligible", script)
 
+    def test_generated_benign_e2e_confirms_only_frozen_profile_mixture(self):
+        body = yaml.safe_load(TDD_WORKFLOW.read_text())
+        steps = body["jobs"]["generated-benign-e2e"]["steps"]
+        script = "\n".join(str(step.get("run", "")) for step in steps)
+        self.assertIn("select_frozen_confirmation_groups", script)
+        self.assertIn("frozen_confirmation_deficits", script)
+        self.assertIn("control_confirm_frozen", script)
+        self.assertLess(
+            script.index("manifest = calibrate_profiles"),
+            script.index("control_confirm_frozen = select_frozen_confirmation_groups"),
+        )
+        self.assertIn("'controls': control_confirm_frozen['capture_group']", script)
+        self.assertIn("control_confirm_frozen,", script)
+
     def test_pr_path_only_runs_reference_validation_and_unit_tests(self):
         raw = WORKFLOW.read_text()
         body = yaml.safe_load(raw)
