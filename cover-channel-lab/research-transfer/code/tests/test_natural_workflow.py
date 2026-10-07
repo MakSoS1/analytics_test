@@ -161,6 +161,24 @@ class NaturalWorkflowContractTests(unittest.TestCase):
         )
         self.assertNotIn("max_timestamp_regression_us=60", script)
 
+
+    def test_office_behavior_profile_job_is_train_only_and_publishes_frozen_envelope(self):
+        body = yaml.safe_load(TDD_WORKFLOW.read_text())
+        self.assertIn("office-behavior-profile", body["jobs"])
+        job = body["jobs"]["office-behavior-profile"]
+        script = "\n".join(str(step.get("run", "")) for step in job["steps"])
+        self.assertIn("derive_behavior_envelope", script)
+        self.assertIn("select_office_web_slice", script)
+        self.assertIn("train_hosts = set(hosts[::2])", script)
+        self.assertNotIn("confirm_hosts", script)
+        self.assertIn("office_behavior_profile.json", script)
+        upload = next(
+            step for step in job["steps"]
+            if str(step.get("uses", "")).startswith("actions/upload-artifact")
+        )
+        self.assertEqual(upload["with"]["name"], "office-behavior-profile")
+        self.assertIn("office_behavior_profile.json", str(upload["with"]["path"]))
+
     def test_external_reference_audit_is_pinned_and_never_training_input(self):
         raw = TDD_WORKFLOW.read_text()
         body = yaml.safe_load(raw)
