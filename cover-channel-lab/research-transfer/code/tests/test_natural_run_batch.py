@@ -189,6 +189,31 @@ class NaturalRunBatchArmTests(unittest.TestCase):
             summary = run_batch.validate_runtime_results(root, jobs)
             self.assertEqual(summary, {"expected": 2, "captured": 2, "failed": 0})
 
+
+    def test_runtime_image_installs_nat_tooling_for_office_wire_translation(self):
+        dockerfile = (ROOT / "cover_runtime" / "Dockerfile").read_text()
+        self.assertIn("iptables", dockerfile)
+
+    def test_office_wire_translation_maps_lab_tls_to_external_like_443_without_default_route(self):
+        env_path = ROOT / "cover_runtime" / "environment.py"
+        env_spec = importlib.util.spec_from_file_location("natural_environment", env_path)
+        environment = importlib.util.module_from_spec(env_spec)
+        env_spec.loader.exec_module(environment)
+        plan = environment.office_wire_translation_plan()
+        flat = [" ".join(map(str, row)) for row in plan["commands"]]
+        self.assertEqual(plan["wire_core_ip"], "100.64.0.20")
+        self.assertEqual(plan["wire_wss_ip"], "100.64.0.21")
+        self.assertTrue(any("cc-dev" in row and "10.20.0.20" in row and "8443" in row and "100.64.0.20" in row and "443" in row for row in flat))
+        self.assertTrue(any("cc-dev" in row and "10.20.0.21" in row and "8443" in row and "100.64.0.21" in row and "443" in row for row in flat))
+        self.assertTrue(any("cc-c2" in row and "100.64.0.20" in row and "443" in row and "10.20.0.20" in row and "8443" in row for row in flat))
+        self.assertFalse(any("default" in row for row in flat))
+
+    def test_entrypoint_applies_office_wire_translation_before_services(self):
+        source = ENTRYPOINT.read_text()
+        apply_pos = source.index("apply_office_wire_translation")
+        services_pos = source.index("start_services.container.sh")
+        self.assertLess(apply_pos, services_pos)
+
     def test_runtime_image_installs_entrypoint_network_tools(self):
         dockerfile = (ROOT / "cover_runtime" / "Dockerfile").read_text()
         for package in ("iproute2", "tcpdump", "ethtool", "iputils-ping"):
