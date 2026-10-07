@@ -153,7 +153,7 @@ jobs:
         run: python -m unittest discover -s code/tests -p 'test_natural_composition.py' -v
 
   generated-benign-e2e:
-    needs: [natural-unit, real-capture-smoke]
+    needs: [natural-unit, real-capture-smoke, office-behavior-profile]
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
@@ -169,6 +169,11 @@ jobs:
         env:
           PYTHONPATH: code
         run: python -c "from pathlib import Path; from natural_traffic.capture import ensure_resource_budget; ensure_resource_budget(Path('.'), min_free_gib=15)"
+      - name: Download frozen office behavior profile
+        uses: actions/download-artifact@v4
+        with:
+          name: office-behavior-profile
+          path: cover-channel-lab/research-transfer/behavior-profile
       - name: Prepare frozen office-path control registry
         working-directory: cover-channel-lab/research-transfer
         env:
@@ -180,6 +185,7 @@ jobs:
           from pathlib import Path
           from demo.prepare_research_registry import prepare
           from office_injection.cover_registry import digest
+          from natural_traffic.behavior import assign_behavior_targets
 
           base = json.loads(Path('code/cover_runtime/registry.json').read_text())
           prepared = prepare(base, seed=20261004, path_profile='office_path_v1')
@@ -206,9 +212,21 @@ jobs:
           profile_count = sum(len(entry['profiles']) for entry in selected)
           if profile_count != 64:
               raise SystemExit(f'expected exactly 64 Stage-M stack profiles, got {profile_count}')
+          envelope = json.loads(Path('behavior-profile/office_behavior_profile.json').read_text())
+          identities = [
+              f"{entry['entry_id']}:{profile['profile_id']}"
+              for entry in selected
+              for profile in entry['profiles']
+          ]
+          targets = assign_behavior_targets(envelope, identities, seed=20261004)
+          for entry in selected:
+              for profile in entry['profiles']:
+                  identity = f"{entry['entry_id']}:{profile['profile_id']}"
+                  profile.update(targets[identity])
           body = {k:v for k,v in prepared.items() if k != 'sha256'}
           body['entries'] = selected
-          body['research_policy'] += '; e2e benign-only Stage-M real-stack matrix; office-train temporal profile'
+          body['research_policy'] += '; e2e benign-only Stage-M real-stack matrix; office-train temporal+behavior profile'
+          body['behavior_profile_sha256'] = envelope['sha256']
           body['sha256'] = digest(body)
           out = Path(os.environ['NATURAL_REGISTRY'])
           out.write_text(json.dumps(body, indent=2) + '\n')
@@ -216,6 +234,11 @@ jobs:
           print('SELECTED_STACK_PROFILES', profile_count)
           print('REGISTRY_SHA256', body['sha256'])
           print('PATH_PROFILE', body['path_profile'])
+          print('BEHAVIOR_PROFILE_SHA256', envelope['sha256'])
+          print('BEHAVIOR_EVENT_TARGETS', sorted({p['runtime_events'] for e in selected for p in e['profiles']}))
+          print('BEHAVIOR_INTERVAL_TARGETS', sorted({p['native_interval'] for e in selected for p in e['profiles']}))
+          print('BEHAVIOR_REQUEST_TARGETS', sorted({p['benign_request_bytes'] for e in selected for p in e['profiles']}))
+          print('BEHAVIOR_RESPONSE_TARGETS', sorted({p['benign_response_bytes'] for e in selected for p in e['profiles']}))
           PY
       - name: Build pinned Cover runtime image
         working-directory: cover-channel-lab/research-transfer

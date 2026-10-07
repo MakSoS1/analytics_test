@@ -51,7 +51,7 @@ def client(job):
         control=None
         if job['arm']=='control':
             from stage_controls import install
-            control=install(sm)
+            control=install(sm,job)
         if job.get('mechanics'):
             from application_patch import install as install_application
             application=install_application(sm,job)
@@ -164,7 +164,7 @@ def setup(required_services=None):
     patched_server=patched_server.replace('ws.onmessage = () => { recv++; if (recv >= %d) ws.close(); };',
         'ws.onmessage = event => { window.__cover_evidence.received_times_ms.push(Date.now()); window.__cover_evidence.received_lengths.push(event.data.length); recv++; window.__cover_evidence.received=recv; window.__cover_evidence.received_bytes+=event.data.length; if (recv >= %d) ws.close(); };')
     target='    resp=response_for(sid, suspicious, seed)'
-    replacement='    if path.startswith(\"bounded/\"):\n        import asyncio\n        from cover_application import server_answer\n        answer=await asyncio.to_thread(server_answer,\"/\"+path,dict(request.query_params),req_body,str(st.get(\"campaign_id\",\"\")))\n        resp=JSONResponse(answer)\n    else:\n        resp=response_for(sid,suspicious,seed)'
+    replacement='    if not suspicious and st.get(\"benign_response_bytes\"):\n        target_size=max(32,min(65536,int(st.get(\"benign_response_bytes\",256))))\n        raw=json.dumps({\"status\":\"ok\",\"service\":\"office-control\",\"value\":token(seed,12)},separators=(\",\",\":\")).encode()\n        response_body=(raw+(b\" \"*target_size))[:target_size]\n        resp=Response(response_body,media_type=\"application/octet-stream\")\n    elif path.startswith(\"bounded/\"):\n        import asyncio\n        from cover_application import server_answer\n        answer=await asyncio.to_thread(server_answer,\"/\"+path,dict(request.query_params),req_body,str(st.get(\"campaign_id\",\"\")))\n        resp=JSONResponse(answer)\n    else:\n        resp=response_for(sid,suspicious,seed)'
     if patched_server.count(target)!=1:raise RuntimeError('bounded application patch target changed')
     patched_server=patched_server.replace(target,replacement)
     server_path.write_text(patched_server)

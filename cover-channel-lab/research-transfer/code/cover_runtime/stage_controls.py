@@ -9,28 +9,62 @@ import random
 import time
 from pathlib import Path
 
-VERSION='stage-m-benign-fixture-control-v1'
+VERSION='stage-m-benign-fixture-control-v2'
 
 
-def business_payload(r, mode, i, size=48):
-    if mode=='fragment_2_6':return f'item-{i}'.encode()
-    if mode=='low_entropy':return f'status-ok-{i}'.encode()
-    return json.dumps({'event':'health','sequence':i,'status':'ok','queue_depth':r.randrange(5)},separators=(',',':')).encode()
+def behavior_targets(job):
+    profile=dict((job or {}).get('profile') or {})
+    request=max(16,min(8192,int(profile.get('benign_request_bytes',96))))
+    response=max(32,min(65536,int(profile.get('benign_response_bytes',256))))
+    sni=max(5,min(253,int(profile.get('benign_sni_len',16))))
+    profile_sha=str(profile.get('behavior_profile_sha256',''))
+    if profile_sha and len(profile_sha)!=64:
+        raise ValueError('invalid behavior_profile_sha256')
+    return {
+        'request_bytes':request,
+        'response_bytes':response,
+        'sni_len':sni,
+        'behavior_profile_sha256':profile_sha,
+        'target_clean_close':bool(profile.get('target_clean_close',False)),
+        'prefer_h2':bool(profile.get('prefer_h2',False)),
+    }
 
 
-def install(sm):
+def business_payload(r, mode, i, size=48, target_size=None):
+    target=max(16,min(8192,int(target_size if target_size is not None else size)))
+    prefix=json.dumps(
+        {'event':'health','sequence':i,'status':'ok','queue_depth':r.randrange(5)},
+        separators=(',',':'),
+    ).encode()
+    if len(prefix)>=target:
+        body=(b'ok'+prefix)[:target]
+        return body.ljust(target,b'.')
+    token=b'low' if mode=='low_entropy' else b'item' if mode=='fragment_2_6' else b'metric'
+    need=target-len(prefix)
+    filler=(token*((need+len(token)-1)//len(token)))[:need]
+    return prefix+filler
+
+
+def install(sm,job=None):
+    behavior=behavior_targets(job)
     original_state=sm._set_server_state
     def state(source_ip,family,seed,campaign_id):
         original_state(source_ip,family,seed,campaign_id)
         path=Path('/tmp/coverlab_server_state.json');raw=json.loads(path.read_text())
-        raw['clients'][source_ip]['suspicious']=False;raw['default']['suspicious']=False
+        for target in (raw['clients'][source_ip],raw['default']):
+            target['suspicious']=False
+            target['benign_response_bytes']=behavior['response_bytes']
+            target['benign_sni_len']=behavior['sni_len']
+            target['behavior_profile_sha256']=behavior['behavior_profile_sha256']
+            target['target_clean_close']=behavior['target_clean_close']
+            target['prefer_h2']=behavior['prefer_h2']
         path.write_text(json.dumps(raw))
     original_payload=sm._payload
     def payload(r,mode,i,size=48):
         # Preserve the generator RNG consumption so payload semantics cannot
         # accidentally alter the paired native jitter schedule.
         original_payload(r,mode,i,size)
-        return business_payload(random.Random(i),mode,i,size)
+        return business_payload(random.Random(i),mode,i,size,target_size=behavior['request_bytes'])
     sm._set_server_state=state;sm._payload=payload
     # Business lookup names, not base32-encoded payload fragments. Used by
     # DNS, DoH and DoQ while their genuine client stacks remain unchanged.
@@ -64,4 +98,4 @@ def install(sm):
     sm._raw_header_events=raw_events
     return {'version':VERSION,'payload':'business_health_telemetry','dns':'service_lookup',
             'wss':'application_messages','raw':'diagnostic_probe','fidelity':'benign_application_fixture',
-            'office_domain_equivalence':False}
+            'office_domain_equivalence':False,'behavior_targets':behavior}
