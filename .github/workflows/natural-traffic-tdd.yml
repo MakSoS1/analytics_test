@@ -100,12 +100,29 @@ jobs:
             --out defender-domain-smoke
           python -m natural_traffic.defender_domain baseline \
             --prepared defender-domain-smoke --alert-budget 0.01
+          python -m natural_traffic.defender_model_selection \
+            --prepared defender-domain-smoke \
+            --alert-budget 0.01 --validation-tolerance 0.02 --max-attempts 3
           python - <<'PY'
           import json
           from pathlib import Path
           p=Path('defender-domain-smoke')
           manifest=json.loads((p/'manifest.json').read_text())
           scores=json.loads((p/'baseline_report.json').read_text())
+          adaptive=json.loads((p/'model_selection_report.json').read_text())
+          assert 1 <= adaptive['attempts_executed'] <= 3
+          assert adaptive['validation_uses_only_office_train_groups']
+          assert not adaptive['holdout_or_source_used_for_selection']
+          assert not adaptive['office_naturalness_proven']
+          assert adaptive['reported_alert_rate_is_not_fpr']
+          assert (p/'defender_model.joblib').is_file()
+          print('DEFENDER_MODEL_VALIDATION',json.dumps({
+             'status':adaptive['status'],
+             'attempts':adaptive['attempts_executed'],
+             'selected':adaptive['selected_candidate'],
+             'validation_pass':adaptive['selected_validation_passed'],
+             'office_holdout_alert_fraction':adaptive['office_holdout_alert_fraction']
+          },sort_keys=True))
           assert manifest['office_train_rows'] == 4000
           assert manifest['office_holdout_rows'] == 4002
           assert manifest['source_rows'] == 40
@@ -130,6 +147,7 @@ jobs:
           path: |
             cover-channel-lab/research-transfer/defender-domain-smoke/manifest.json
             cover-channel-lab/research-transfer/defender-domain-smoke/baseline_report.json
+            cover-channel-lab/research-transfer/defender-domain-smoke/model_selection_report.json
           if-no-files-found: warn
           retention-days: 14
 

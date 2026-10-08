@@ -60,6 +60,43 @@ uploaded traffic. This is a **diagnostic** of shifts in alert rates, not
 a verified FPR: the office reference labels are unknown and their traffic
 may include attacks. A single uploaded capture cannot validate attack recall.
 
+## Bounded automatic model adaptation (not packet adaptation)
+
+The optional `defender_model_selection` command tries at most three fixed
+IsolationForest candidates. It uses group-disjoint **within-day** validation
+on office TRAIN only, and stops early if the validation alert-rate budget
+is consistent with the predeclared threshold. There is **no** indefinite
+search to beat an office-vs-upload classifier, no packet edits, and no
+test-day feedback in candidate selection:
+
+```bash
+python -m natural_traffic.defender_model_selection \
+  --prepared /secure/output/ndrdomain-001 \
+  --alert-budget 0.01 \
+  --validation-tolerance 0.02 \
+  --max-attempts 3
+```
+
+Artifacts:
+- `defender_model.joblib` (trusted local scikit-learn model, threshold and
+  feature contract; **do not load untrusted joblib files**)
+- `model_selection_report.json` (all attempts, train-only split, chosen
+  configuration and later-day diagnostic)
+
+All candidates are evaluated against the same *training-day* group split,
+and both the source upload and the separate office day remain untouched
+until the final selected model is frozen. A green validation means only
+that the model's **office TRAIN** alert budget generalizes to unseen
+training-day host groups at the declared tolerance. A pass does **not**
+certify that the uploaded traffic looks like ordinary office traffic.
+Missing labels mean that the later-day alert fraction is **not** FPR.
+`office_naturalness_proven=false` and `production_ready=false` are
+unconditional: neither a good alert fraction nor successful CI can unlock
+them.
+
+This is the available **model-side** auto-adaptation loop; it does not
+reshape, re-time or otherwise blend PCAPs to fool an IDS.
+
 ## Guardrails
 
 - No copying real office data to client hosts, no PCAP editing, NAT/IP/port
