@@ -106,9 +106,13 @@ class NaturalWorkflowContractTests(unittest.TestCase):
         whole_run = "$" + "{{ runner.temp }}/natural-control-run\n"
         self.assertNotIn(whole_run, paths)
         self.assertNotIn("coverlab-certs", paths)
-        self.assertIn("natural-control-run/results.json", paths)
-        self.assertIn("natural-control-run/*/client.log", paths)
-        self.assertIn("natural-control-run/*/result.json", paths)
+        self.assertNotIn("natural-control-run", paths)
+        self.assertNotIn("capture.pcap", paths)
+        self.assertNotIn("controls.parquet", paths)
+        for expected in ("natural-e2e/naturalness.json",
+                         "natural-e2e/additional_day_control_transfer.json",
+                         "natural-e2e/release_gate.json"):
+            self.assertIn(expected, paths)
 
     def test_generated_benign_e2e_keeps_common_web_protocol_stratum_homogeneous(self):
         raw = TDD_WORKFLOW.read_text()

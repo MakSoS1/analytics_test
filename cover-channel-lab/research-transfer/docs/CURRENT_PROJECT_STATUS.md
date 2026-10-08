@@ -33,6 +33,8 @@
 | Детектор техники | `code/natural_traffic/adaptix_detector_research.py` | Медиана признаков на **физический capture**, парные train-only features, LOPO/LOTO logistic и ExtraTrees, не FPR на офисе |
 | Проверка качества | `.github/workflows/natural-traffic-tdd.yml`, `.github/workflows/isolated-cover-adaptix-research.yml` | TLS/capture/extractor gates, group-held-out отчёт и только безопасные JSON артефакты |
 
+**Исключение в истории артефактов:** отменённый прежний run [37855273730](https://github.com/MakSoS1/analytics_test/actions/runs/37855273730) успел создать `natural-generated-benign-e2e-37855273730` (artifact ID `11584696320`) по старой матрице, где upload path включал **лабораторные raw PCAP**. Это не офисные packet captures; однако архив не соответствует текущему контракту безопасной публикации. Новая матрица публикует только `naturalness.json`, `additional_day_control_transfer.json`, `release_gate.json`; тест запрещает возврат пути к capture. Удаление **старого** Actions-артефакта остаётся операционным действием владельца репозитория (в доступном GitHub-интерфейсе нет операции delete artifact).
+
 ## Офисные выборки (локальный воспроизводимый аудит)
 
 | День | Измеренных строк | Внутридневных групп | Медиана `pkt_count` | TLS |
@@ -44,6 +46,8 @@
 Источник: `office_profile_audit` с закреплёнными manifest; повторяйте команду ниже. Группы и HMAC между выгрузками **не соединяются**; сравнение 22/28 исторически уже использовалось при подборе диагностики и **не является свежим blind holdout**.
 
 Первый новый подтверждённый [CI-захват 37855273730](https://github.com/MakSoS1/analytics_test/actions/runs/37855273730): 3 HTTPS-сессии/12 действий/3 handshake с extractor parity, 1 независимый benign runner, а потому C2ST `insufficient_support`. После исключения не измеренного офисного TCP RTT воспроизведён office-only отрицательный контроль ExtraTrees ROC-AUC 0.52687 и HGB 0.58594; точные fold-level числа — в [отчёте](OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS.md). `office_labels=unverified`.
+
+Повторный [verified benign job 37856781527](https://github.com/MakSoS1/analytics_test/actions/runs/37856781527) подтвердил offline office-negative-control ExtraTrees **0.52687** / HGB **0.58607** ROC-AUC на 60 общих transport features; generated-vs-office по-прежнему `insufficient_support` из-за одной независимой группы. Он также выявил устаревший тест публикации runtime-логов (исправлен, требуется повтор CI); научные C2ST-артефакты самого benign job корректны.
 
 Новый [Adaptix paired v2 CI 37855273740](https://github.com/MakSoS1/analytics_test/actions/runs/37855273740) **успешен**: ExtraTrees LOPO AUC/AP 1.0/1.0, LOTO AUC/AP **0.8333/0.9167**; logistic LOTO AUC/AP лишь **0.5556/0.6528**, recall на withheld TCP **0/3**. `hard_negative_status=insufficient_support` (0 независимых hard negatives). Полная таблица и числа офисных тревог — в [результатах](OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS.md); production-валидации нет.
 
