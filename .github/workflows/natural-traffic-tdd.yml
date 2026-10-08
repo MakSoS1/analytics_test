@@ -766,5 +766,7 @@ jobs:
         if: always()
         with:
           name: office-additional-day-transfer
-          path: |\n            cover-channel-lab/research-transfer/office-additional-day-transfer.json\n            cover-channel-lab/research-transfer/office-workload-evidence.json
+          path: |
+            cover-channel-lab/research-transfer/office-additional-day-transfer.json
+            cover-channel-lab/research-transfer/office-workload-evidence.json
           retention-days: 30
