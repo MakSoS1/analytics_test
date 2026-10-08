@@ -228,6 +228,21 @@ def analyze_additional_days(
     return result
 
 
+def _comparable_tcp443_scope(frame: pd.DataFrame) -> pd.DataFrame:
+    """Same predeclared 443 and >=6-packet row support for both domains.
+
+    The stored office selection includes 80/443 and at least one >=6-packet
+    segment per source session. For a conservative per-segment diagnostic,
+    restrict every compared side to 443 and >=6 measured packets. We do not
+    claim this reproduces the original whole-session sampling exactly.
+    """
+    if "dest_port" not in frame or "pkt_count" not in frame:
+        raise ValueError("TCP/443 scope needs dest_port and pkt_count")
+    ports = pd.to_numeric(frame["dest_port"], errors="coerce")
+    counts = pd.to_numeric(frame["pkt_count"], errors="coerce")
+    return frame.loc[ports.eq(443) & counts.ge(6)].copy()
+
+
 def compare_generated_controls_to_office_days(
     day02: pd.DataFrame,
     day03: pd.DataFrame,
@@ -252,22 +267,31 @@ def compare_generated_controls_to_office_days(
         }
     if "capture_group" not in control_confirm:
         return {"status": "missing_control_ancestry", "production_ready": False}
-    n_controls = int(control_confirm["capture_group"].astype(str).nunique())
+    scoped_control = _comparable_tcp443_scope(control_confirm)
+    n_controls = int(scoped_control["capture_group"].astype(str).nunique())
     if n_controls < 30:
         return {
-            "status": "insufficient_independent_control_groups",
+            "status": "insufficient_comparable_control_groups",
             "independent_controls": n_controls,
+            "scope": "tcp_destination_443_and_segment_pkt_count_gte_6",
             "production_ready": False,
         }
     reports: dict[str, object] = {}
     for idx, (day, frame) in enumerate((("2026-09-22", day02), ("2026-09-28", day03))):
-        sample = frame.sample(n=min(1500, len(frame)), random_state=seed + idx)
+        scoped_office = _comparable_tcp443_scope(frame)
+        if int(scoped_office["independent_source_group"].nunique()) < 30:
+            return {
+                "status": "insufficient_comparable_office_groups",
+                "day": day,
+                "production_ready": False,
+            }
+        sample = scoped_office.sample(n=min(1500, len(scoped_office)), random_state=seed + idx)
         c2st = evaluate_c2st(
             sample.loc[:, names],
-            control_confirm.loc[:, names],
+            scoped_control.loc[:, names],
             {
                 "office": sample["independent_source_group"].astype(str).tolist(),
-                "controls": control_confirm["capture_group"].astype(str).tolist(),
+                "controls": scoped_control["capture_group"].astype(str).tolist(),
             },
             feature_columns=names,
             min_groups=30,
@@ -278,7 +302,7 @@ def compare_generated_controls_to_office_days(
             "status": c2st["status"],
             "support": c2st["support"],
             "office_rows": int(len(sample)),
-            "control_rows": int(len(control_confirm)),
+            "control_rows": int(len(scoped_control)),
             "classifiers": c2st["classifiers"],
             "max_auc": max((float(v["auc"]) for v in c2st["classifiers"].values()), default=None),
         }
@@ -287,6 +311,8 @@ def compare_generated_controls_to_office_days(
         "status": "diagnostic_only",
         "transport_columns": names,
         "independent_control_groups": n_controls,
+        "comparison_scope": "tcp_destination_443_and_segment_pkt_count_gte_6",
+        "original_session_selection_equivalence": False,
         "evaluations": reports,
         "measurement_policy": {
             "tls_from_day02_imputed": False,

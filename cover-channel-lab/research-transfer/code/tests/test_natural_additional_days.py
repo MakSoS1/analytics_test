@@ -77,6 +77,15 @@ class AdditionalDaysTests(unittest.TestCase):
         self.assertFalse(result["measurement_policy"]["production_ready"])
         self.assertFalse(result["measurement_policy"]["attack_scenario_training_allowed"])
 
+    def test_matching_transport_scope_filters_both_ports_and_short_rows(self):
+        from natural_traffic.office_day_transfer import _comparable_tcp443_scope
+        frame = pd.DataFrame({
+            "dest_port": [443, 80, 443, 443],
+            "pkt_count": [7, 8, 3, 6],
+        })
+        result = _comparable_tcp443_scope(frame)
+        self.assertEqual(result.index.tolist(), [0, 3])
+
     def test_generated_control_transfer_rejects_missing_ancestry(self):
         from natural_traffic.office_day_transfer import (
             compare_generated_controls_to_office_days,
