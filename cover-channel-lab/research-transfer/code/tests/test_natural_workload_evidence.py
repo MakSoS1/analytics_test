@@ -24,7 +24,8 @@ class BenignOfficeWorkloadEvidenceTests(unittest.TestCase):
             (office_frame([None, None]), office_frame([771, 772])),
         )
         self.assertFalse(result["office_workload_model_ready"])
-        self.assertEqual(result["measured_tls_version_rows_by_day"], [0, 2])
+        self.assertEqual(result["non_null_tls_version_field_rows_by_day"], [0, 2])
+        self.assertEqual(result["nonzero_tls_version_rows_by_day"], [0, 2])
         self.assertFalse(result["office_app_mix_inferable_from_port_443"])
         self.assertIn("verified_application_and_user_action_annotation", result["missing_evidence"])
         self.assertIn("mirror_nat_and_tls_proxy_position", result["missing_evidence"])
