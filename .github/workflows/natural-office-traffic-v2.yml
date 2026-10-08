@@ -21,7 +21,7 @@ permissions:
 
 env:
   RESEARCH_ROOT: cover-channel-lab/research-transfer
-  PYTHONPATH: cover-channel-lab/research-transfer/code
+  PYTHONPATH: ${{ github.workspace }}/cover-channel-lab/research-transfer/code
 
 jobs:
   validate-reference-data:
@@ -34,10 +34,17 @@ jobs:
       - run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
       - name: Validate committed reference
         run: python -m natural_traffic.cli validate-reference --verify-hashes --out reference-report.json
+      - name: Validate additional office days and provenance
+        run: |
+          python -m natural_traffic.office_day_transfer \
+            --root cover-channel-lab/research-transfer/datasets/office-additional-days-20261008 \
+            --out reference-additional-days.json
       - uses: actions/upload-artifact@v4
         with:
           name: reference-report
-          path: reference-report.json
+          path: |
+            reference-report.json
+            reference-additional-days.json
 
   unit-tests:
     runs-on: ubuntu-latest

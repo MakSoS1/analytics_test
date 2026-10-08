@@ -142,6 +142,8 @@ python -m natural_traffic.cli package --input /tmp/naturalness.json /tmp/techniq
 
 Packaging исключает private key, plaintext dictionary и HMAC key.
 
+The primary PR workflow also validates the additional-day manifest and reports cross-day transport stability. `PYTHONPATH` is rooted at `github.workspace` so unit checks from a working-directory cannot accidentally fail on module import.
+
 ## GitHub Actions
 
 - `.github/workflows/natural-traffic-tdd.yml` — веточный TDD/regression gate, real-capture smoke и экспериментальный generated-benign E2E.
