@@ -43,6 +43,8 @@
 
 Источник: `office_profile_audit` с закреплёнными manifest; повторяйте команду ниже. Группы и HMAC между выгрузками **не соединяются**; сравнение 22/28 исторически уже использовалось при подборе диагностики и **не является свежим blind holdout**.
 
+Первый новый подтверждённый [CI-захват 37855273730](https://github.com/MakSoS1/analytics_test/actions/runs/37855273730): 3 HTTPS-сессии/12 действий/3 handshake с extractor parity, 1 независимый benign runner, а потому C2ST `insufficient_support`. После исключения не измеренного офисного TCP RTT воспроизведён office-only отрицательный контроль ExtraTrees ROC-AUC 0.52687 и HGB 0.58594; точные fold-level числа — в [отчёте](OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS.md). `office_labels=unverified`.
+
 ## Повторить проверки
 
 ```bash

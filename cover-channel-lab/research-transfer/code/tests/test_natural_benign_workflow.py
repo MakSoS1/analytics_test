@@ -26,6 +26,7 @@ class BenignWorkflowTests(unittest.TestCase):
         code = steps[transfer]["run"]
         self.assertIn("natural_traffic.office_profile_audit", code)
         self.assertIn("evaluate_benign_transfer", code)
+        self.assertIn("OFFICE_COMPARABLE_TRANSPORT_FEATURES", code)
         self.assertIn("single_verified_local_python_fixture", code)
         self.assertIn("insufficient_support", code)
         upload = next(step for step in steps if step.get("uses", "").startswith("actions/upload-artifact"))

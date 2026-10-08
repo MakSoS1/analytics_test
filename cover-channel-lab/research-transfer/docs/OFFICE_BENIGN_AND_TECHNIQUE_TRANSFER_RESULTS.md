@@ -29,6 +29,19 @@
 
 ## Новая реализация v2 и протокол воспроизведения
 
+### Фактическая проверка benign-фона 9 октября
+
+[Первый свежий CI run 37855273730](https://github.com/MakSoS1/analytics_test/actions/runs/37855273730), job `verified-benign-office-workload`, **успешен**. Прочитан его `benign-office-workload-evidence` artifact (четыре агрегированных JSON, без PCAP): три реальные извлечённые TLS-сессии, три захваченных TCP-handshake, 12 подтверждённых заданий; совпадение hash, семантика и extractor coverage подтверждены. Независимых benign-клиентов **1** против **348** офисных групп; `generated_vs_office.status=insufficient_support`. Никакого нового `generated_vs_office` AUC не существует.
+
+В первом артефакте `office_negative_control.status=insufficient_support`: полный список 61 transport feature ошибочно включал `tcp_handshake_rtt_ms`, не измеренный на 22 сентября. Это **не пропуск данных, который допустимо заменить нулём**. Исправление заранее фиксирует 60 общих числовых transport features без RTT. Локальный повтор на **реальных 4 000 и 4 002 офисных строках, 382 и 348 группах**, с тремя `StratifiedGroupKFold` даёт следующие *исследовательские* office-vs-office результаты:
+
+| Модель | Mean C2ST ROC-AUC | Worst ROC-AUC | Фолды AUC |
+|---|---:|---:|---|
+| ExtraTrees | **0.52687** | 0.51066 | 0.52588, 0.51066, 0.54408 |
+| HGB | **0.58594** | 0.56940 | 0.57848, 0.56940, 0.60994 |
+
+Это независимые *групповые* разбиения внутри уже исследованных дней, а не новый blind holdout. Значения локальные и станут частью воспроизводимого CI-артефакта только после отдельного запуска с исправленным frozen feature set. Они не свидетельствуют о естественности лабораторного трафика.
+
 Новый модуль `natural_traffic.adaptix_detector_research` добавляет **ExtraTrees как заранее зафиксированный сравнительный алгоритм** на тех же train-only отобранных признаках; fold-level `positive_count`, `control_count`, `threshold_source`, `recall_at_train_control_threshold`, `hard_negative_alert_fraction`, `uncertainty_status`. Выбор порога — p99 **только training-control**; статистика не заявляется как production FPR. Hard negatives разрешены только при явной semantic verification и не подставляются из unverified офиса.
 
 Workflow `.github/workflows/isolated-cover-adaptix-research.yml` на ветке `office-benign-adaptix-transfer-2026-10-09` заново получает pinned Adaptix, строит изолированное окружение, верифицирует все 12 PCAP, извлекает штатные признаки, запускает оценку и сохраняет **только безопасный агрегированный JSON**. В историческом v1 отчёте ExtraTrees/threshold/hard negatives отсутствовали — их новые числа можно публиковать **только после завершения нового CI run**.

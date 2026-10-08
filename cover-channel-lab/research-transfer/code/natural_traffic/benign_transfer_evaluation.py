@@ -20,6 +20,14 @@ from office_dictionary import group as feature_family
 from .office_day_transfer import TRANSPORT_FEATURES
 
 
+# Frozen before the 22/28 September comparison: the historical Sep 22
+# mirror did not record TCP handshake RTT, so it is not a comparable signal.
+# Never impute an unmeasured feature as 0 to make office-vs-office C2ST run.
+OFFICE_COMPARABLE_TRANSPORT_FEATURES = tuple(
+    name for name in TRANSPORT_FEATURES if name != "tcp_handshake_rtt_ms"
+)
+
+
 def _group_folds(labels: np.ndarray, groups: Sequence[str]) -> list[tuple[np.ndarray, np.ndarray]]:
     """Deterministic outer splits; group IDs never become model inputs."""
     labels = np.asarray(labels, dtype=int)

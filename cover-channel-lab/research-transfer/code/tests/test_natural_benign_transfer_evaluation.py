@@ -6,6 +6,7 @@ import pandas as pd
 
 from natural_traffic.benign_transfer_evaluation import (
     _group_folds, evaluate_benign_transfer,
+    OFFICE_COMPARABLE_TRANSPORT_FEATURES,
 )
 from natural_traffic.office_day_transfer import TRANSPORT_FEATURES
 
@@ -32,6 +33,12 @@ def _fixture(*, shift: float = 0, groups: int = 9) -> tuple[dict, pd.DataFrame, 
 
 
 class BenignOfficeTransferTests(unittest.TestCase):
+    def test_predeclared_comparable_features_exclude_unmeasured_office_rtt(self):
+        self.assertNotIn("tcp_handshake_rtt_ms", OFFICE_COMPARABLE_TRANSPORT_FEATURES)
+        self.assertGreaterEqual(len(OFFICE_COMPARABLE_TRANSPORT_FEATURES), 12)
+        self.assertEqual(set(OFFICE_COMPARABLE_TRANSPORT_FEATURES),
+                         set(TRANSPORT_FEATURES) - {"tcp_handshake_rtt_ms"})
+
     def test_group_split_has_no_source_overlap(self):
         labels = np.array([0] * 24 + [1] * 24)
         groups = [f"office-{i // 3}" for i in range(24)] + [

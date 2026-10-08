@@ -132,9 +132,10 @@ jobs:
           import json
           from pathlib import Path
 
-          from natural_traffic.benign_transfer_evaluation import evaluate_benign_transfer
+          from natural_traffic.benign_transfer_evaluation import (
+              OFFICE_COMPARABLE_TRANSPORT_FEATURES, evaluate_benign_transfer,
+          )
           from natural_traffic.defender_domain import load_user_input
-          from natural_traffic.office_day_transfer import TRANSPORT_FEATURES
           from natural_traffic.office_reference import load_office_reference
 
           root = Path('verified-benign-office')
@@ -148,7 +149,7 @@ jobs:
               Path('datasets/office-additional-days-20261008'),
               Path('datasets/office-cover-20261006'),
           )
-          features = [name for name in TRANSPORT_FEATURES
+          features = [name for name in OFFICE_COMPARABLE_TRANSPORT_FEATURES
                       if name in measured.columns and
                       all(name in office[day].columns for day in ('2026-09-22', '2026-09-28'))]
           # A few sessions within one host process are NOT independent lab groups.

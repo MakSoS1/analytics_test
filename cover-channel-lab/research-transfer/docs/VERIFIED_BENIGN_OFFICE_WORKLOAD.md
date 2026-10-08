@@ -46,6 +46,12 @@ capture group**; the generated-vs-office C2ST therefore reports
 `insufficient_support`, not a fabricated naturalness pass. The office-vs-office
 22/28 September comparison is only a previously inspected negative control,
 not a new blinded validation set.
+The [first verified new Actions run 37855273730](https://github.com/MakSoS1/analytics_test/actions/runs/37855273730)
+confirmed exactly three physical TLS sessions, three wire handshakes and 12
+application tasks with production extractor parity. It also exposed a missing
+Sep 22 `tcp_handshake_rtt_ms` field: the comparable office negative-control
+feature set now excludes that *unmeasured* RTT before modelling, instead of
+inventing a zero value or treating absent coverage as evidence.
 
 For the full module map and experiment results see
 [current project status](CURRENT_PROJECT_STATUS.md),
