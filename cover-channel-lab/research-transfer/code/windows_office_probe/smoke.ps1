@@ -11,10 +11,26 @@ try {
     if (-not (Get-Command pktmon -ErrorAction SilentlyContinue)) {
         throw "pktmon unavailable"
     }
+    $targetIpFile = Join-Path $root "probe-target-ips.json"
+    $probeIps = @(
+        [System.Net.Dns]::GetHostAddresses("example.com") |
+        ForEach-Object { $_.ToString() } |
+        Select-Object -Unique
+    )
+    if ($probeIps.Count -lt 1 -or $probeIps.Count -gt 16) {
+        throw "cannot establish bounded test-target IP allowlist"
+    }
+    [System.IO.File]::WriteAllText(
+        $targetIpFile, (ConvertTo-Json -InputObject @($probeIps) -Compress)
+    )
     & pktmon filter remove | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "pktmon filter reset failed" }
-    & pktmon filter add PublicHttpsProbe -p 443 -t TCP | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "pktmon filter install failed" }
+    $idx = 0
+    foreach ($ip in $probeIps) {
+        & pktmon filter add "ExampleTarget$idx" -i $ip -p 443 -t TCP | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "pktmon IP-scoped filter install failed" }
+        $idx++
+    }
     & pktmon start --capture --comp nics --pkt-size 0 --file-name $etl | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "pktmon start failed" }
     $captureStarted = $true
@@ -43,11 +59,12 @@ try {
     if (-not (Test-Path $pcapng)) { throw "pktmon pcapng was not created" }
     Write-Host "PKTMON_ETL_BYTES $((Get-Item $etl).Length)"
     Write-Host "PKTMON_PCAPNG_BYTES $((Get-Item $pcapng).Length)"
-    & python $checker --pcapng $pcapng --report $report --port 443
+    & python $checker --pcapng $pcapng --report $report --port 443 --allowed-ips $targetIpFile
     if ($LASTEXITCODE -ne 0) { throw "native Windows HTTPS pcapng evidence insufficient" }
 } finally {
     if ($captureStarted) { & pktmon stop | Out-Null }
     & pktmon filter remove | Out-Null
+    Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $root "probe-target-ips.json")
     Remove-Item -Force -ErrorAction SilentlyContinue $etl
     Remove-Item -Force -ErrorAction SilentlyContinue $pcapng
 }
