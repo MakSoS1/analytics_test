@@ -28,6 +28,66 @@ permissions:
   contents: read
 
 jobs:
+  verified-benign-office-workload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install native packet capture and feature dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tcpdump openssl
+          python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn
+      - name: Exercise real authenticated TLS client and stateful office tasks
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.office_workload \
+            --out verified-benign-office --sessions 3 --capture
+      - name: Verify PCAP integrity and production feature extraction
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from natural_traffic.defender_domain import load_user_input
+          root = Path('verified-benign-office')
+          receipt = json.loads((root/'workload_receipt.json').read_text())
+          assert receipt['sessions_completed'] == 3
+          assert receipt['tasks_completed'] == 12
+          assert receipt['tls_peer_verified']
+          assert receipt['capture_status'] == 'quality_accepted'
+          assert not receipt['production_ready']
+          measured, source = load_user_input(root/'benign_workload.pcap', root, min_free_gib=1)
+          assert len(measured) > 0
+          assert source['source_sha256'] == receipt['pcap_sha256']
+          assert source['raw_capture_rewritten'] is False
+          assert source['raw_intermediates_retained'] is False
+          summary = {
+            'sessions_observed': int(len(measured)),
+            'tls_tasks': receipt['tasks_completed'],
+            'source_sha256': source['source_sha256'],
+            'office_naturalness_proven': False,
+            'production_ready': False,
+          }
+          (root/'extractor_summary.json').write_text(json.dumps(summary, sort_keys=True)+'\n')
+          print('VERIFIED_BENIGN_OFFICE_FIXTURE', json.dumps(summary, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benign-office-workload-evidence
+          path: |
+            cover-channel-lab/research-transfer/verified-benign-office/workload_receipt.json
+            cover-channel-lab/research-transfer/verified-benign-office/extractor_summary.json
+          if-no-files-found: warn
+
   natural-unit:
     runs-on: ubuntu-latest
     timeout-minutes: 20

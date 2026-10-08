@@ -29,7 +29,7 @@ def _digest(path: Path) -> str:
 
 
 def load_user_input(path: Path, work: Path, *, min_free_gib: float = 1) -> tuple[pd.DataFrame, dict]:
-    """Support existing Parquet features or a classic Ethernet PCAP."""
+    """Load immutable measured features or a classic Ethernet PCAP."""
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(p)
@@ -37,6 +37,21 @@ def load_user_input(path: Path, work: Path, *, min_free_gib: float = 1) -> tuple
     if p.suffix.lower() == ".parquet":
         table = pd.read_parquet(p)
         source_info = {"format": "parquet", "extractor": "already_extracted"}
+    elif p.suffix.lower() in {".csv", ".tsv", ".jsonl"}:
+        file_format = p.suffix.lower().lstrip(".")
+        if file_format == "jsonl":
+            table = pd.read_json(p, lines=True, orient="records")
+        else:
+            table = pd.read_csv(p, sep="\t" if file_format == "tsv" else ",")
+        source_info = {
+            "format": file_format,
+            "extractor": "already_extracted_unverified",
+        }
+        if not set(table.columns).intersection(TRANSPORT_FEATURES):
+            raise ValueError(
+                "input contains no measured transport features; raw Zeek/Suricata "
+                "events require their own provenance-aware feature extractor"
+            )
     elif p.suffix.lower() == ".pcap":
         from .pcap_quality import audit_pcap
         from .contracts import CaptureBundle
@@ -82,7 +97,10 @@ def load_user_input(path: Path, work: Path, *, min_free_gib: float = 1) -> tuple
             "raw_intermediates_retained": False,
         }
     else:
-        raise ValueError("supported inputs: .pcap and .parquet; unsupported formats fail closed")
+        raise ValueError(
+            "supported inputs: .pcap, .parquet, .csv, .tsv, .jsonl; "
+            "unsupported formats fail closed"
+        )
     if _digest(p) != source_hash:
         raise RuntimeError("source changed during reading")
     if table.empty:

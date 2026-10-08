@@ -27,7 +27,7 @@ export PYTHONPATH="$PWD/code"
 .venv/bin/python code/prepare_arkime_inputs.py --help
 ```
 
-[Natural Traffic Generator v2](docs/NATURAL_TRAFFIC_GENERATOR_V2.md), [общий импорт](docs/UNIVERSAL_IMPORT.md), [запуск и зависимости](docs/RUNNING.md), [следующие шаги](docs/NEXT_STEPS.md), [агрегированные результаты](RESULTS.md).
+[Natural Traffic Generator v2](docs/NATURAL_TRAFFIC_GENERATOR_V2.md), [проверяемые легитимные офисные действия](docs/VERIFIED_BENIGN_OFFICE_WORKLOAD.md), [общий импорт](docs/UNIVERSAL_IMPORT.md), [запуск и зависимости](docs/RUNNING.md), [следующие шаги](docs/NEXT_STEPS.md), [агрегированные результаты](RESULTS.md).
 
 Исходные офисные Parquet, PCAP, payload sidecars, salt, приватные индексы, outputs ноутбука, site-specific live collectors, deployment scripts и архивы исходников внешних инструментов не публикуются. По отдельному поручению владельца добавлены [12 псевдонимизированных полных Parquet и зашифрованный словарь](datasets/office-cover-20261006/README.md). Приватный ключ остаётся только на Mac; закрытый исходный комплект передан отдельно. Типовой общий импорт поддерживает целые клиентские TCP/UDP обмены; replay adapter ограничен 35 секундами. Другим carrier/длительным захватам нужен отдельный проверяемый adapter. Linux нужен для capture/replay/native Arkime, Mac подходит для таблиц и Python tests.
 

@@ -85,6 +85,42 @@ class OfficeDomainPreparationTests(unittest.TestCase):
             self.assertEqual(info["format"], "parquet")
             self.assertEqual(len(got), 30)
 
+    def test_csv_tsv_and_jsonl_feature_inputs_are_immutable(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for extension in ("csv", "tsv", "jsonl"):
+                with self.subTest(extension=extension):
+                    path = root / ("input." + extension)
+                    if extension == "jsonl":
+                        self.source.to_json(path, orient="records", lines=True)
+                    else:
+                        self.source.to_csv(
+                            path, index=False, sep="\t" if extension == "tsv" else ","
+                        )
+                    original = hashlib.sha256(path.read_bytes()).hexdigest()
+                    table, info = load_user_input(path, root)
+                    self.assertEqual(len(table), 30)
+                    self.assertEqual(info["format"], extension)
+                    self.assertEqual(info["source_sha256"], original)
+                    self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), original)
+                    self.assertIn("pkt_count", table)
+
+    def test_generic_security_json_not_mislabeled_as_feature_rows(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            p = root / "events.jsonl"
+            p.write_text('{"event_type":"alert","flow":{"pkts_toserver":12}}\n')
+            with self.assertRaisesRegex(ValueError, "measured transport features"):
+                load_user_input(p, root)
+
+    def test_malformed_jsonl_is_rejected(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            p = root / "events.jsonl"
+            p.write_text("{not json}\n")
+            with self.assertRaises(ValueError):
+                load_user_input(p, root)
+
     def test_unknown_format_rejected_without_writing(self):
         with TemporaryDirectory() as tmp:
             p = Path(tmp) / "archive.bin"
