@@ -1,0 +1,35 @@
+name: windows-benign-native-capture-probe
+
+on:
+  push:
+    branches:
+      - natural-traffic-generator-v2-2026-10-06
+    paths:
+      - '.github/workflows/windows-benign-native-capture-probe.yml'
+      - 'cover-channel-lab/research-transfer/code/windows_office_probe/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pktmon-local-httpclient:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install benign-fixture dependencies
+        run: python -m pip install cryptography scapy
+      - name: Capture native .NET HTTP client against loopback TLS fixture
+        shell: pwsh
+        run: '& ./cover-channel-lab/research-transfer/code/windows_office_probe/smoke.ps1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-benign-native-pktmon-report
+          path: ${{ runner.temp }}/native-windows-office-probe/report.json
+          if-no-files-found: warn
+          retention-days: 14
