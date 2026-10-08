@@ -96,7 +96,20 @@ def extract_smoke(pcap: Path, directory: Path) -> dict:
     )
     frame=pd.read_parquet(result.parquet_path)
     durations=pd.to_numeric(frame["flow_duration"],errors="coerce").dropna()
+    from lab_pipeline.extract_lab_features import MAX_ETHERNET_FRAME
+    from natural_traffic.packet_accounting import reconcile
+    with PcapReader(str(pcap)) as reader:
+        frame_lengths = [len(bytes(packet)) for packet in reader]
+    counts = [int(v) for v in frame["pkt_count"]]
+    seq_lengths = {
+        name: [len(items) if items is not None else -1 for items in frame[name]]
+        for name in ("seq_signed_len", "seq_iat_us", "seq_flags")
+    }
+    accounting = reconcile(frame_lengths, counts, seq_lengths, mtu=MAX_ETHERNET_FRAME)
+    if not accounting["passed"]:
+        raise ValueError("physical Ethernet, virtual MTU and sequence counts disagree")
     return {
+        "packet_accounting": accounting,
         "version":"windows-real-stack-production-extractor-smoke-v1",
         "extracted_session_rows":len(frame),
         "positive_duration_rows":int((durations>0).sum()),
