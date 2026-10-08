@@ -228,6 +228,78 @@ def analyze_additional_days(
     return result
 
 
+def compare_generated_controls_to_office_days(
+    day02: pd.DataFrame,
+    day03: pd.DataFrame,
+    control_confirm: pd.DataFrame,
+    *,
+    seed: int = 20261008,
+    bootstrap_reps: int = 30,
+) -> dict[str, object]:
+    """Fixed-observable benign-control transfer check; no model selection or tuning.
+
+    The frozen control pool is held fixed. Both days use the same predetermined
+    common measured transport features and day-local group identities. This is
+    diagnostic and cannot set production_ready or training eligibility.
+    """
+    names = transport_columns(day02, day03)
+    missing = [name for name in names if name not in control_confirm.columns]
+    if missing:
+        return {
+            "status": "unsupported_feature_contract",
+            "missing_feature_columns": missing,
+            "production_ready": False,
+        }
+    if "capture_group" not in control_confirm:
+        return {"status": "missing_control_ancestry", "production_ready": False}
+    n_controls = int(control_confirm["capture_group"].astype(str).nunique())
+    if n_controls < 30:
+        return {
+            "status": "insufficient_independent_control_groups",
+            "independent_controls": n_controls,
+            "production_ready": False,
+        }
+    reports: dict[str, object] = {}
+    for idx, (day, frame) in enumerate((("2026-09-22", day02), ("2026-09-28", day03))):
+        sample = frame.sample(n=min(1500, len(frame)), random_state=seed + idx)
+        c2st = evaluate_c2st(
+            sample.loc[:, names],
+            control_confirm.loc[:, names],
+            {
+                "office": sample["independent_source_group"].astype(str).tolist(),
+                "controls": control_confirm["capture_group"].astype(str).tolist(),
+            },
+            feature_columns=names,
+            min_groups=30,
+            bootstrap_reps=bootstrap_reps,
+            random_state=seed + idx,
+        )
+        reports[day] = {
+            "status": c2st["status"],
+            "support": c2st["support"],
+            "office_rows": int(len(sample)),
+            "control_rows": int(len(control_confirm)),
+            "classifiers": c2st["classifiers"],
+            "max_auc": max((float(v["auc"]) for v in c2st["classifiers"].values()), default=None),
+        }
+    return {
+        "version": "additional-day-benign-control-transfer-v1",
+        "status": "diagnostic_only",
+        "transport_columns": names,
+        "independent_control_groups": n_controls,
+        "evaluations": reports,
+        "measurement_policy": {
+            "tls_from_day02_imputed": False,
+            "same_transport_features_both_days": True,
+            "frozen_controls_not_recalibrated": True,
+            "office_labels_assumed_benign": False,
+            "naturalness_gate_changes": False,
+            "attack_scenario_training_allowed": False,
+            "production_ready": False,
+        },
+    }
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--root", type=Path, required=True)

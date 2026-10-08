@@ -60,6 +60,35 @@ class AdditionalDaysTests(unittest.TestCase):
         self.assertEqual(result["sequence_length_mismatches"], 1)
         self.assertNotIn("10", str(result))
 
+    def test_generated_control_transfer_keeps_frozen_policy(self):
+        from natural_traffic.office_day_transfer import (
+            compare_generated_controls_to_office_days,
+        )
+        d2 = fixture(2, n=120, null_tls=True)
+        d3 = fixture(3, n=120, null_tls=False)
+        controls = fixture(4, n=120, null_tls=False)
+        controls["capture_group"] = [f"lab-capture-{i}" for i in range(120)]
+        result = compare_generated_controls_to_office_days(
+            d2, d3, controls, bootstrap_reps=3
+        )
+        self.assertEqual(result["status"], "diagnostic_only")
+        self.assertEqual(set(result["evaluations"]), {"2026-09-22", "2026-09-28"})
+        self.assertNotIn("tls_version", result["transport_columns"])
+        self.assertFalse(result["measurement_policy"]["production_ready"])
+        self.assertFalse(result["measurement_policy"]["attack_scenario_training_allowed"])
+
+    def test_generated_control_transfer_rejects_missing_ancestry(self):
+        from natural_traffic.office_day_transfer import (
+            compare_generated_controls_to_office_days,
+        )
+        d2=fixture(2, null_tls=True)
+        d3=fixture(3, null_tls=False)
+        controls=fixture(4, null_tls=False)
+        self.assertEqual(
+            compare_generated_controls_to_office_days(d2,d3,controls)["status"],
+            "missing_control_ancestry",
+        )
+
     def test_transport_measurement_insufficient_is_fail_closed(self):
         d2 = fixture(2, null_tls=True)
         d3 = fixture(3, null_tls=False)

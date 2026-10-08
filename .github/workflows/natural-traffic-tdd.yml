@@ -285,6 +285,10 @@ jobs:
           from natural_traffic.corpus import discover_cover_captures, aggregate_extracted_tables
           from natural_traffic.evaluation import confirm_naturalness
           from natural_traffic.pcap_quality import filter_cover_captures_by_quality
+          from natural_traffic.office_day_transfer import (
+              compare_generated_controls_to_office_days,
+              load_additional_days,
+          )
           from natural_traffic.profiles import ProfileRegistry
           from natural_traffic.reference import load_reference
           from natural_traffic.reporting import write_report
@@ -511,6 +515,25 @@ jobs:
                   'production_ready': False,
               },
           )
+          # Cross-day transport-only diagnostic. This consumes the already
+          # frozen confirm controls; it does not alter profile weights or gates.
+          office_day02, office_day03 = load_additional_days(
+              Path('datasets/office-additional-days-20261008'),
+              verify_hashes=True,
+          )
+          day_transfer = compare_generated_controls_to_office_days(
+              office_day02, office_day03, control_confirm_frozen,
+              seed=20261008, bootstrap_reps=30,
+          )
+          (out / 'additional_day_control_transfer.json').write_text(
+              json.dumps(day_transfer, sort_keys=True, indent=2) + '\n'
+          )
+          if day_transfer['status'] != 'diagnostic_only':
+              raise SystemExit('additional-day control transfer unsupported: ' + day_transfer['status'])
+          print('ADDITIONAL_DAY_CONTROL_AUC', json.dumps({
+              day: row['max_auc']
+              for day, row in day_transfer['evaluations'].items()
+          }, sort_keys=True))
           print('NATURALNESS_STATUS', report.status)
           print('MAX_AUC', report.max_auc)
           print('PROFILE_WEIGHTS', json.dumps(list(manifest.profile_weights)))
@@ -641,4 +664,3 @@ jobs:
           name: office-additional-day-transfer
           path: cover-channel-lab/research-transfer/office-additional-day-transfer.json
           retention-days: 30
-
