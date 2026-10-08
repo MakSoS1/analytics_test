@@ -754,9 +754,17 @@ jobs:
           python -m natural_traffic.office_day_transfer \
             --root datasets/office-additional-days-20261008 \
             --out office-additional-day-transfer.json
+      - name: Audit whether actual office application workflows can be learned
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.workload_evidence \
+            --root datasets/office-additional-days-20261008 \
+            --out office-workload-evidence.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: office-additional-day-transfer
-          path: cover-channel-lab/research-transfer/office-additional-day-transfer.json
+          path: |\n            cover-channel-lab/research-transfer/office-additional-day-transfer.json\n            cover-channel-lab/research-transfer/office-workload-evidence.json
           retention-days: 30
