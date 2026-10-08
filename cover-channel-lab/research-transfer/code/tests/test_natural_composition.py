@@ -284,6 +284,18 @@ class FullPipelineIntegrationTests(unittest.TestCase):
             self.assertEqual(report["declared_features"], 127)
             self.assertGreater(result.rows, 0)
             self.assertEqual(result.source_pcap_sha256, before)
+            # Validate defender-facing uploads using the original production
+            # extractor; no edit or re-timestamping of the source PCAP.
+            from natural_traffic.defender_domain import load_user_input
+            neutral_work = root / "neutral"
+            neutral_work.mkdir()
+            uploaded, provenance = load_user_input(
+                bundle.pcap_path, neutral_work, min_free_gib=0,
+            )
+            self.assertEqual(provenance["format"], "pcap")
+            self.assertEqual(provenance["source_sha256"], before)
+            self.assertEqual(len(uploaded), result.rows)
+            self.assertEqual(before, sha(bundle.pcap_path))
 
 
 if __name__ == "__main__":
