@@ -85,7 +85,10 @@ jobs:
           import json
           from pathlib import Path
           import pandas as pd
-          from natural_traffic.behavior import derive_behavior_envelope, select_office_web_slice
+          from natural_traffic.behavior import (
+              derive_behavior_envelope, select_office_web_slice,
+              freeze_transport_duration_from_day,
+          )
 
           root = Path('datasets/office-cover-20261006')
           office = pd.read_parquet(root / 'pipeline_office_full.parquet')
@@ -96,6 +99,16 @@ jobs:
           train_hosts = set(hosts[::2])
           office_train = office[office['host_key'].astype(str).isin(train_hosts)].copy()
           profile = derive_behavior_envelope(office_train, seed=20261004)
+          # Use Sep-22 transport-only observations. Keep Sep-28 out of fitting.
+          transport_day = pd.read_parquet(
+              Path('datasets/office-additional-days-20261008/office_day_02.parquet')
+          )
+          port = pd.to_numeric(transport_day['dest_port'], errors='coerce')
+          packets = pd.to_numeric(transport_day['pkt_count'], errors='coerce')
+          transport_train = transport_day[port.eq(443) & packets.ge(6)]
+          profile = freeze_transport_duration_from_day(
+              profile, transport_train, source_id='office-sep22-tcp443',
+          )
           if profile['source_policy'] != 'office_train_only':
               raise SystemExit('behavior profile source policy drifted')
           Path('office_behavior_profile.json').write_text(
@@ -105,6 +118,7 @@ jobs:
           print('OFFICE_BEHAVIOR_ROWS', profile['rows'])
           print('OFFICE_BEHAVIOR_HOST_GROUPS', profile['host_groups'])
           print('GENERATION_TARGETS', json.dumps(profile['generation_targets'], sort_keys=True))
+          print('TRAINED_SESSION_DURATION_ROWS', profile['transport_duration_provenance']['rows'])
           print('TLS_VERSION_DIST', json.dumps(profile['categorical'].get('tls_version', {}), sort_keys=True))
           PY
       - uses: actions/upload-artifact@v4
@@ -238,6 +252,7 @@ jobs:
           print('BEHAVIOR_PROFILE_SHA256', envelope['sha256'])
           print('BEHAVIOR_EVENT_TARGETS', sorted({p['runtime_events'] for e in selected for p in e['profiles']}))
           print('BEHAVIOR_INTERVAL_TARGETS', sorted({p['native_interval'] for e in selected for p in e['profiles']}))
+          print('BEHAVIOR_SESSION_DURATION_TARGETS', sorted({p['target_session_duration_seconds'] for e in selected for p in e['profiles']}))
           print('BEHAVIOR_REQUEST_TARGETS', sorted({p['benign_request_bytes'] for e in selected for p in e['profiles']}))
           print('BEHAVIOR_RESPONSE_TARGETS', sorted({p['benign_response_bytes'] for e in selected for p in e['profiles']}))
           PY

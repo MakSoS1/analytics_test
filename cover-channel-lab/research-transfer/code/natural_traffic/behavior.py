@@ -184,6 +184,9 @@ def derive_behavior_envelope(
             "request_bytes": request_bytes,
             "response_bytes": response_bytes,
             "iat_seconds": iat_q,
+            "session_duration_seconds": _quantile_map(
+                _finite_series(office_train, "flow_duration").clip(lower=0.2, upper=60.0)
+            ),
             "close_cleanly_probability": round(close_probability, 12),
             "prefer_h2_probability": round(h2_probability, 12),
         },
@@ -193,6 +196,42 @@ def derive_behavior_envelope(
     ).encode("utf-8")
     body["sha256"] = hashlib.sha256(encoded).hexdigest()
     return body
+
+def freeze_transport_duration_from_day(
+    envelope: dict[str, object],
+    transport_train: pd.DataFrame,
+    *,
+    source_id: str,
+) -> dict[str, object]:
+    """Copy only the observed train-day session duration distribution.
+
+    Never pool TLS or identities across releases, never read holdout,
+    and never persist individual training observations.
+    """
+    if envelope.get("source_policy") != "office_train_only":
+        raise ValueError("requires train-only office envelope")
+    if not source_id or source_id.strip() != source_id:
+        raise ValueError("invalid transport source ID")
+    duration = _finite_series(transport_train, "flow_duration")
+    duration = duration[duration > 0]
+    if len(duration) < 100:
+        raise ValueError("insufficient measured transport session duration")
+    frozen = json.loads(json.dumps(envelope))
+    frozen["generation_targets"]["session_duration_seconds"] = _quantile_map(
+        duration.clip(lower=0.2, upper=60.0)
+    )
+    frozen["transport_duration_provenance"] = {
+        "source_id": source_id,
+        "rows": int(len(duration)),
+        "policy": "numeric_quantiles_train_only",
+    }
+    frozen.pop("sha256", None)
+    encoded = json.dumps(
+        frozen, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    frozen["sha256"] = hashlib.sha256(encoded).hexdigest()
+    return frozen
+
 
 def _choose_quantile(
     values: dict[str, float],
@@ -240,7 +279,7 @@ def assign_behavior_targets(
     targets = dict(envelope.get("generation_targets") or {})
     numeric = dict(envelope.get("numeric") or {})
     events = dict(targets.get("events") or {})
-    minimum_events = max(1, int(events.get("min", 1)))
+    minimum_events = max(2, int(events.get("min", 1)))
     maximum_events = max(minimum_events, min(20, int(events.get("max", minimum_events))))
     raw_event_values = [
         value for key, value in events.items()
@@ -271,13 +310,28 @@ def assign_behavior_targets(
             if sni_quantiles
             else 16
         )
-        result[identity] = {
-            "runtime_events": max(1, min(20, int(runtime_events))),
-            "native_interval": _choose_quantile(
+        duration_values = dict(targets.get("session_duration_seconds") or {})
+        if duration_values:
+            requested_duration = _choose_quantile(
+                duration_values, identity, seed=seed,
+                field="session_duration_seconds",
+            )
+            # Packet IAT represents within-burst spacing, not app session dwell.
+            native_interval = max(
+                0.05, min(20.0, requested_duration / max(1, runtime_events - 1))
+            )
+        else:
+            requested_duration = None
+            native_interval = _choose_quantile(
                 dict(targets.get("iat_seconds") or {}),
-                identity,
-                seed=seed,
-                field="iat_seconds",
+                identity, seed=seed, field="iat_seconds",
+            )
+        result[identity] = {
+            "runtime_events": max(2, min(20, int(runtime_events))),
+            "native_interval": round(float(native_interval), 6),
+            "target_session_duration_seconds": (
+                round(float(requested_duration), 6)
+                if requested_duration is not None else None
             ),
             "benign_request_bytes": int(round(_choose_quantile(
                 dict(targets.get("request_bytes") or {}),
@@ -307,4 +361,3 @@ def assign_behavior_targets(
             "behavior_profile_sha256": profile_sha,
         }
     return result
-

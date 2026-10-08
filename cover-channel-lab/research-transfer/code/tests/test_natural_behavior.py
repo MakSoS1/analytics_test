@@ -6,6 +6,7 @@ import pandas as pd
 from natural_traffic.behavior import (
     assign_behavior_targets,
     derive_behavior_envelope,
+    freeze_transport_duration_from_day,
     select_office_web_slice,
 )
 
@@ -94,7 +95,9 @@ class OfficeBehaviorProfileTests(unittest.TestCase):
         for identity,target in first.items():
             self.assertGreaterEqual(target["runtime_events"],event_bounds["min"])
             self.assertLessEqual(target["runtime_events"],event_bounds["max"])
-            self.assertIn(target["native_interval"],allowed_iat)
+            self.assertGreaterEqual(target["native_interval"], 0.05)
+            self.assertLessEqual(target["native_interval"], 20)
+            self.assertIsNotNone(target["target_session_duration_seconds"])
             self.assertIn(target["benign_request_bytes"],allowed_req)
             self.assertIn(target["benign_response_bytes"],allowed_resp)
             self.assertEqual(target["behavior_profile_sha256"],envelope["sha256"])
@@ -106,6 +109,31 @@ class OfficeBehaviorProfileTests(unittest.TestCase):
                 target["benign_response_bytes"],
             ))
         self.assertGreater(len(observed),1)
+
+    def test_session_dwell_from_duration_not_packet_iat(self):
+        frame=self._frame()
+        frame["flow_duration"]=14.0
+        frame["iat_p50"]=0.002
+        envelope=derive_behavior_envelope(frame,seed=1)
+        row=assign_behavior_targets(envelope,["entry:browser"],seed=2)["entry:browser"]
+        self.assertGreaterEqual(row["runtime_events"],2)
+        self.assertAlmostEqual(
+            row["native_interval"]*(row["runtime_events"]-1),14.0,places=4
+        )
+
+    def test_frozen_transport_day_preserves_original_tls_parameters(self):
+        source=derive_behavior_envelope(self._frame(),seed=1)
+        observed=self._frame().copy()
+        observed["flow_duration"]=12.5
+        merged=freeze_transport_duration_from_day(
+            source,observed,source_id="office-day22-443"
+        )
+        self.assertEqual(source["categorical"]["tls_version"],merged["categorical"]["tls_version"])
+        self.assertNotEqual(source["sha256"],merged["sha256"])
+        self.assertAlmostEqual(
+            merged["generation_targets"]["session_duration_seconds"]["p50"],12.5
+        )
+        self.assertNotIn("host_key",json.dumps(merged))
 
     def test_behavior_sampler_is_supported_by_empirical_office_ranges(self):
         body=derive_behavior_envelope(self._frame(),seed=123)
