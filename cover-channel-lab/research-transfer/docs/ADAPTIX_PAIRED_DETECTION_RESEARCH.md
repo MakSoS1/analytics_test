@@ -67,9 +67,14 @@ The [completed v1 run 37844041216](https://github.com/MakSoS1/analytics_test/act
 measured mean logistic LOPO ROC-AUC 1.0, mean AP 1.0, and mean LOTO ROC-AUC
 0.5556, mean AP 0.6528 (worst ROC-AUC 0.3333). The office alert fraction was
 26.095% (2026-09-22, 4000 rows) and 28.5907% (2026-09-28, 4002 rows), **not
-FPR**. No extra_trees, hard-negative, threshold-recall or newly confirmed v2
-metric is inferred from this earlier JSON; they must be read from a new,
-completed CI artifact. `production_ready=false`, `office_labels=unverified`.
+FPR**. The subsequent **successful v2 [run 37855273740](https://github.com/MakSoS1/analytics_test/actions/runs/37855273740)**
+measured `extra_trees` mean LOPO AUC/AP **1.0/1.0** and mean LOTO
+AUC/AP **0.8333/0.9167** (worst AUC **0.6667**) on the same 6 physical
+pairs. Logistic LOTO remained **0.5556**; when testing held-out TCP, its
+recall at train-only control p99 was **0/3**. The new office alert fractions
+were **0.2603** and **0.2847576**, not FPR. There were zero independently
+verified hard negatives, and the report's uncertainty status is
+`insufficient_support`. `production_ready=false`, `office_labels=unverified`.
 
 ## Interpretation and nonclaims
 

@@ -11,7 +11,7 @@
 | Будет ли задет реальный офис? | `unlabeled_alert_fraction` для опубликованных 22/28 сентября | Это не false-positive rate без подтверждённых benign labels |
 | Устойчив ли детектор к похожей легитимной активности? | Дополнительные `hard_negative_captures` с явно подтверждённой семантикой | Пока таких независимых hard-negative наборов нет, оценка `insufficient_support` |
 
-## Последний завершённый независимый Adaptix-прогон (исторический v1)
+## Исторический Adaptix baseline (v1)
 
 Источник: [GitHub Actions run 37844041216](https://github.com/MakSoS1/analytics_test/actions/runs/37844041216), безопасный `adaptix-detector-report.json` (12 подтверждённых физических PCAP, 6 пар, TCP/mTLS и 3 лабораторных профиля). Ниже значения исторического логистического детектора; это **не новые измерения v2**.
 
@@ -26,6 +26,29 @@
 - `unlabeled_alert_fraction` в этом историческом эксперименте: 22 сентября **26.095%** (4 000 строк), 28 сентября **28.5907%** (4 002 строки). Не FPR.
 - Чаще выбирались на train folds: `burst_count` (4/5), `small_data_up_bytes` (3/5), `direction_changes` (2/5), `down_pkt_count` (2/5). Частота выбора — не причинное доказательство техники.
 - Шесть пар не дают узкого confidence interval или независимой проверки на других организациях. Высокая LOPO AUC **не компенсирует** сильную деградацию LOTO.
+
+### Фактически измеренный новый paired v2
+
+Источник: **успешный [GitHub Actions run 37855273740](https://github.com/MakSoS1/analytics_test/actions/runs/37855273740)**, безопасный artifact `isolated-adaptix-safe-evidence` → `adaptix-detector-report.json` версии `adaptix-paired-detection-diagnostic-v2`. Проверены 12 неизменённых физических PCAP, 12 измеренных агрегатов (по одному на capture), 6 пар, 3 профиля, TCP/mTLS, 61 кандидатов transport features. Никакая строка office не использовалась для selection/training.
+
+| Outer holdout | Модель | Mean ROC-AUC | Mean AP / PR-AUC | Worst ROC-AUC | Внешних фолдов |
+|---|---|---:|---:|---:|---:|
+| Новый профиль (LOPO) | LogisticRegression | **1.0000** | **1.0000** | 1.0000 | 3 × (2 scenario + 2 control) |
+| Новый профиль (LOPO) | ExtraTrees | **1.0000** | **1.0000** | 1.0000 | 3 × (2 scenario + 2 control) |
+| Новый транспорт (LOTO) | LogisticRegression | 0.5556 | 0.6528 | 0.3333 | 2 × (3 scenario + 3 control) |
+| Новый транспорт (LOTO) | ExtraTrees | **0.8333** | **0.9167** | 0.6667 | 2 × (3 scenario + 3 control) |
+
+ExtraTrees LOTO fold ROC-AUC: **0.6667** на held-out mTLS, **1.0000** на held-out TCP. Это результат малого sample и дискретных рангов, **не подтверждённая высокая обобщающая способность на другие команды, операционные системы или офисы**. Важно: logistic остался с историческими низкими LOTO-результатами — замена алгоритма улучшила диагностическое ранжирование, но не устранила риск learning shortcuts.
+
+| Фолд logistic | Positive/control | Recall @ train-controls p99 | ROC-AUC | AP |
+|---|---:|---:|---:|---:|
+| Внешний профиль p0 | 2/2 | 1.00 | 1.0000 | 1.0000 |
+| Внешний профиль p1 | 2/2 | 1.00 | 1.0000 | 1.0000 |
+| Внешний профиль p2 | 2/2 | 1.00 | 1.0000 | 1.0000 |
+| Train TCP → test mTLS | 3/3 | 1.00 | 0.7778 | 0.8056 |
+| Train mTLS → test TCP | 3/3 | **0.00** | 0.3333 | 0.5000 |
+
+Новый экспериментальный `office_diagnostic.mean_alert_fraction` = **0.2603** (22 сентября, 4000 сессий) / **0.2847576** (28 сентября, 4002 сессии); только неразмеченные alert fractions, **не false-positive rates**. Семантически аттестованных независимых hard negatives в этом run **0**, поэтому `hard_negative_status=insufficient_support` во всех фолдах и `uncertainty_status=insufficient_support`. `technique_research_validated=false`, `production_ready=false`.
 
 ## Новая реализация v2 и протокол воспроизведения
 
@@ -44,7 +67,7 @@
 
 Новый модуль `natural_traffic.adaptix_detector_research` добавляет **ExtraTrees как заранее зафиксированный сравнительный алгоритм** на тех же train-only отобранных признаках; fold-level `positive_count`, `control_count`, `threshold_source`, `recall_at_train_control_threshold`, `hard_negative_alert_fraction`, `uncertainty_status`. Выбор порога — p99 **только training-control**; статистика не заявляется как production FPR. Hard negatives разрешены только при явной semantic verification и не подставляются из unverified офиса.
 
-Workflow `.github/workflows/isolated-cover-adaptix-research.yml` на ветке `office-benign-adaptix-transfer-2026-10-09` заново получает pinned Adaptix, строит изолированное окружение, верифицирует все 12 PCAP, извлекает штатные признаки, запускает оценку и сохраняет **только безопасный агрегированный JSON**. В историческом v1 отчёте ExtraTrees/threshold/hard negatives отсутствовали — их новые числа можно публиковать **только после завершения нового CI run**.
+Workflow `.github/workflows/isolated-cover-adaptix-research.yml` на ветке `office-benign-adaptix-transfer-2026-10-09` заново получает pinned Adaptix, строит изолированное окружение, верифицирует все 12 PCAP, извлекает штатные признаки, запускает оценку и сохраняет **только безопасный агрегированный JSON**. Новый CI завершён; его точные ExtraTrees/threshold результаты приведены выше отдельно от исторического v1.
 
 ### Проверка benign workload
 
@@ -56,7 +79,7 @@ Workflow `.github/workflows/isolated-cover-adaptix-research.yml` на ветке
 4. Объявляет три сеанса в одном запуске **одной** независимой benign-группой `single_verified_local_python_fixture`. Следовательно, `generated_vs_office.status=insufficient_support` — это **ожидаемый честный результат**, а не ошибка, которую следует обходить клонированием IDs.
 5. Публикует лишь `workload_receipt.json`, `extractor_summary.json`, `office-profile-report.json`, `benign-transfer-report.json`, без raw PCAP, TLS key, пользовательских payloads и per-host строк.
 
-Статус нового paired v2 CI-прогона и новая точная таблица ExtraTrees должны быть заполнены **после завершения GitHub Actions** из его артефактов. На дату подготовки этого текста независимый v2 run ещё не подтверждён, поэтому **не указываем выдуманные AUC/recall**. Историческая naturalness C2ST ExtraTrees/HGB ≈ 0.9997–1.0 остаётся `naturalness_status=not_passed` ([первичный обзор](MEASUREMENT_PARITY_AND_NATURALNESS_2026-10-08.md)).
+Свежий paired v2 CI **подтверждён** запуском 37855273740 и архивом с агрегированным JSON. Историческая naturalness C2ST ExtraTrees/HGB ≈ 0.9997–1.0 остаётся `naturalness_status=not_passed` ([первичный обзор](MEASUREMENT_PARITY_AND_NATURALNESS_2026-10-08.md)). У нового localhost benign workflow C2ST не рассчитана из-за единственной независимой группы.
 
 ## Критерии следующего эксперимента
 
