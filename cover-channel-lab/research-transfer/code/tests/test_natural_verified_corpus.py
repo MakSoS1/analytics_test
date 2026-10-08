@@ -123,6 +123,18 @@ class VerifiedCorpusTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "session"):
             build_verified_corpus(self.manifest(sources), self.root, Path(self.tmp.name) / "corpus")
 
+    def test_duplicate_measured_session_identity_cannot_expand_one_verified_membership(self):
+        source = self.root / "source-0.parquet"
+        frame = pd.read_parquet(source)
+        frame["global_session_uid"] = ["target", "target"]
+        frame.to_parquet(source, index=False)
+        sources = [dict(s) for s in self.sources]
+        sources[0]["sha256"] = _digest(source)
+        out = Path(self.tmp.name) / "corpus"
+        with self.assertRaisesRegex(ValueError, "ambiguous.*session"):
+            build_verified_corpus(self.manifest(sources), self.root, out)
+        self.assertFalse(out.exists())
+
     def test_duplicate_source_id_rejected_before_extraction(self):
         sources = [dict(s) for s in self.sources]
         sources[1]["source_id"] = sources[0]["source_id"]

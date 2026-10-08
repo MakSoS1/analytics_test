@@ -41,6 +41,14 @@ def _verify_checksum(path: Path, expected: str) -> None:
         raise ValueError(f"evaluation artifact checksum mismatch: {path.name}")
 
 
+def _assert_same_validation_metric(reported: float, computed: float, name: str) -> None:
+    """Editable report numbers cannot override measurements from frozen models."""
+    if not np.isfinite(computed) or not np.isfinite(reported) or not np.isclose(
+        reported, computed, rtol=1e-10, atol=1e-12,
+    ):
+        raise ValueError(f"validation {name} mismatch between report and measured model")
+
+
 def evaluate_technique_transfer(
     prepared_dir: Path, model_dir: Path, office_days: dict[str, pd.DataFrame], out: Path,
 ) -> dict:
@@ -69,6 +77,9 @@ def evaluate_technique_transfer(
         list(split_frame["row_index"]) != list(range(len(meta)))
     ):
         raise ValueError("evaluation row/label/split alignment mismatch")
+    actual_techniques = set(meta.loc[meta["label_binary"].eq(1), "technique_id"].dropna().astype(str))
+    if set(training["techniques"]) != actual_techniques:
+        raise ValueError("training technique list mismatch with verified corpus")
     splits = pd.Series(split_frame["split"].to_numpy(), index=meta.index)
     assert_split_independence(meta, splits)
     features = training["feature_columns"]
@@ -86,6 +97,34 @@ def evaluate_technique_transfer(
             bundle["source_corpus_sha256"] != manifest_hash
         ):
             raise ValueError("loaded model contract checksum mismatch")
+        eligible = meta["technique_id"].eq(technique) & meta["label_binary"].isin((0, 1))
+        evidence_tiers = set(meta.loc[eligible, "evidence_tier"])
+        research_evidence_eligible = evidence_tiers == {"independently_verified"}
+        val_mask = eligible & splits.eq("validation")
+        val_y = meta.loc[val_mask, "label_binary"].astype(int).to_numpy()
+        if len(set(val_y)) != 2:
+            raise ValueError(f"validation technique {technique} requires both classes")
+        val_x = x.loc[val_mask, features]
+        val_scores = bundle["model"].predict_proba(val_x)[:, 1]
+        val_shuffled = bundle["shuffled_label_model"].predict_proba(val_x)[:, 1]
+        origin_val = meta.loc[val_mask, bundle["origin_fields"]].fillna("unknown").astype(str)
+        val_provenance = bundle["provenance_only_model"].predict_proba(origin_val)[:, 1]
+        measured_prov_auc = float(roc_auc_score(val_y, val_provenance))
+        measured_shuffled_auc = float(roc_auc_score(val_y, val_shuffled))
+        _assert_same_validation_metric(detail["provenance_only_validation_auc"],
+                                       measured_prov_auc, "provenance AUC")
+        _assert_same_validation_metric(detail["shuffled_label_validation_auc"],
+                                       measured_shuffled_auc, "shuffled-label AUC")
+        budget = bundle["validation_control_alert_budget"]
+        if not isinstance(budget, (float, int)) or not .001 <= budget <= .1 or (
+            not np.isclose(budget, training["validation_control_alert_budget"])
+        ):
+            raise ValueError("validation control alert budget mismatch")
+        expected_threshold = float(np.quantile(val_scores[val_y == 0], 1 - budget))
+        _assert_same_validation_metric(bundle["validation_threshold"], expected_threshold,
+                                       "model threshold")
+        _assert_same_validation_metric(detail["validation_threshold"], expected_threshold,
+                                       "report threshold")
         mask = (meta["technique_id"].eq(technique) &
                 meta["label_binary"].isin((0, 1)) & splits.eq("test"))
         y = meta.loc[mask, "label_binary"].astype(int).to_numpy()
@@ -105,13 +144,13 @@ def evaluate_technique_transfer(
         shuffle_auc = float(roc_auc_score(y, shuffled_scores))
         baseline_auc = float(roc_auc_score(y, baseline_scores))
         reasons = []
-        if not detail["research_evidence_eligible"]:
+        if not research_evidence_eligible:
             reasons.append("evidence_not_independently_verified")
         if roc < MIN_TEST_ROC_AUC or pr < MIN_TEST_PR_AUC or recall < MIN_TEST_RECALL:
             reasons.append("technique_effect_not_confirmed_on_test")
-        if max(prov_auc, detail["provenance_only_validation_auc"]) > MAX_PROVENANCE_AUC:
+        if max(prov_auc, measured_prov_auc) > MAX_PROVENANCE_AUC:
             reasons.append("provenance_shortcut")
-        if max(shuffle_auc, detail["shuffled_label_validation_auc"]) > MAX_SHUFFLED_AUC:
+        if max(shuffle_auc, measured_shuffled_auc) > MAX_SHUFFLED_AUC:
             reasons.append("shuffled_label_control_signal")
         per_technique[technique] = {
             "independent_test_groups": len(groups),
@@ -121,7 +160,10 @@ def evaluate_technique_transfer(
             "unweighted_baseline_roc_auc": baseline_auc,
             "model_improvement_status": "improved" if roc > baseline_auc else "not_improved",
             "provenance_only_test_auc": prov_auc,
+            "provenance_only_validation_auc": measured_prov_auc,
             "shuffled_label_test_auc": shuffle_auc,
+            "shuffled_label_validation_auc": measured_shuffled_auc,
+            "research_evidence_eligible": research_evidence_eligible,
             "research_validated": not reasons,
             "failure_reasons": reasons,
             "scope": "verified_scenario_vs_matched_control_independent_groups_only",

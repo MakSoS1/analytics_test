@@ -33,6 +33,8 @@ def _session_key(frame: pd.DataFrame, *, requires_membership: bool) -> pd.Series
         if key in frame.columns:
             values = frame[key].astype("string")
             if values.notna().all() and not values.str.strip().eq("").any():
+                if requires_membership and values.duplicated().any():
+                    raise ValueError("ambiguous measured session identity: duplicate session_key")
                 return values.astype(str)
     if requires_membership:
         raise ValueError("session membership requires stable measured session identity")

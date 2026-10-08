@@ -102,6 +102,53 @@ class TechniqueTransferEvaluationTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "checksum"):
                     evaluate_technique_transfer(prepared, models, office_fixture(), root / "eval")
 
+    def test_edited_training_report_cannot_promote_fixture_evidence(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared = root / "prepared"
+            splits, contract = make_prepared(prepared)
+            models = root / "models"
+            train_technique_models(prepared, splits, contract, models, seed=17)
+            path = models / "training_report.json"
+            report = json.loads(path.read_text())
+            for entry in report["techniques"].values():
+                entry["research_evidence_eligible"] = True
+            path.write_text(json.dumps(report))
+            evaluated = evaluate_technique_transfer(prepared, models, office_fixture(), root / "eval")
+            self.assertFalse(evaluated["technique_research_validated"])
+            for entry in evaluated["per_technique"].values():
+                self.assertIn("evidence_not_independently_verified", entry["failure_reasons"])
+
+    def test_edited_validation_negative_controls_or_threshold_are_rejected(self):
+        for tampered_field in ("provenance_only_validation_auc", "shuffled_label_validation_auc",
+                               "validation_threshold"):
+            with self.subTest(tampered_field=tampered_field), TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                prepared = root / "prepared"
+                splits, contract = make_prepared(prepared, evidence_tier="independently_verified")
+                models = root / "models"
+                train_technique_models(prepared, splits, contract, models, seed=11)
+                path = models / "training_report.json"
+                report = json.loads(path.read_text())
+                report["techniques"]["T1001"][tampered_field] = -.1
+                path.write_text(json.dumps(report))
+                with self.assertRaisesRegex(ValueError, "validation.*mismatch"):
+                    evaluate_technique_transfer(prepared, models, office_fixture(), root / "eval")
+
+    def test_training_report_cannot_omit_positive_technique(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared = root / "prepared"
+            splits, contract = make_prepared(prepared)
+            models = root / "models"
+            train_technique_models(prepared, splits, contract, models, seed=11)
+            path = models / "training_report.json"
+            report = json.loads(path.read_text())
+            del report["techniques"]["T1001"]
+            path.write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError, "technique.*mismatch"):
+                evaluate_technique_transfer(prepared, models, office_fixture(), root / "eval")
+
 
 if __name__ == "__main__":
     unittest.main()
