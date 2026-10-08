@@ -6,6 +6,7 @@ on:
       - natural-traffic-generator-v2-2026-10-06
     paths:
       - 'cover-channel-lab/research-transfer/code/natural_traffic/**'
+      - 'cover-channel-lab/research-transfer/code/office_injection/technique_training.py'
       - 'cover-channel-lab/research-transfer/code/cover_runtime/Dockerfile'
       - 'cover-channel-lab/research-transfer/code/cover_runtime/*.py'
       - 'cover-channel-lab/research-transfer/code/tests/test_natural_*.py'
@@ -16,6 +17,7 @@ on:
   pull_request:
     paths:
       - 'cover-channel-lab/research-transfer/code/natural_traffic/**'
+      - 'cover-channel-lab/research-transfer/code/office_injection/technique_training.py'
       - 'cover-channel-lab/research-transfer/code/cover_runtime/Dockerfile'
       - 'cover-channel-lab/research-transfer/code/cover_runtime/*.py'
       - 'cover-channel-lab/research-transfer/code/tests/test_natural_*.py'
@@ -239,6 +241,47 @@ jobs:
             'source_alert_fraction':scores['uploaded_input_alert_fraction'],
           },sort_keys=True))
           PY
+      - name: Verify two synthetic MITRE technique labels against pinned office transfer
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code:code/tests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from mitre_ml_fixture import make_prepared
+          make_prepared(Path('defender-mitre-fixture'), evidence_tier='fixture_only')
+          PY
+          python -m natural_traffic.defender_corpus_cli train \
+            --prepared defender-mitre-fixture \
+            --office-dir datasets/office-additional-days-20261008 \
+            --out defender-mitre-models
+          python -m natural_traffic.defender_corpus_cli evaluate \
+            --prepared defender-mitre-fixture \
+            --models defender-mitre-models \
+            --office-dir datasets/office-additional-days-20261008 \
+            --office-cover-dir datasets/office-cover-20261006 \
+            --out defender-mitre-evaluation
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('defender-mitre-evaluation/evaluation_report.json').read_text())
+          assert report['pipeline_verified']
+          assert report['office_transfer_diagnostic']
+          assert set(report['per_technique']) == {'T1001', 'T1071.001'}
+          assert report['office_days']['2026-09-22']['rows'] == 4000
+          assert report['office_days']['2026-09-28']['rows'] == 4002
+          assert report['office_days']['2026-09-23']['rows'] == 5726
+          assert not report['technique_research_validated']  # fixture-only
+          assert not report['office_naturalness_proven']
+          assert not report['production_ready']
+          print('DEFENDER_MITRE_RESEARCH_SMOKE', json.dumps({
+            'techniques': sorted(report['per_technique']),
+            'pipeline_verified': report['pipeline_verified'],
+            'office_transfer_diagnostic': report['office_transfer_diagnostic'],
+            'research_validated': report['technique_research_validated'],
+            'production_ready': report['production_ready'],
+          }, sort_keys=True))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -247,6 +290,7 @@ jobs:
             cover-channel-lab/research-transfer/defender-domain-smoke/manifest.json
             cover-channel-lab/research-transfer/defender-domain-smoke/baseline_report.json
             cover-channel-lab/research-transfer/defender-domain-smoke/model_selection_report.json
+            cover-channel-lab/research-transfer/defender-mitre-evaluation/evaluation_report.json
           if-no-files-found: warn
           retention-days: 14
 
