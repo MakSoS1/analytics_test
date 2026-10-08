@@ -15,7 +15,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "pktmon filter reset failed" }
     & pktmon filter add PublicHttpsProbe -p 443 -t TCP | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "pktmon filter install failed" }
-    & pktmon start --capture --comp all --pkt-size 0 --file-name $etl | Out-Null
+    & pktmon start --capture --comp nics --pkt-size 0 --file-name $etl | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "pktmon start failed" }
     $captureStarted = $true
 
@@ -29,7 +29,7 @@ try {
             $resp = $client.GetAsync("https://example.com/").GetAwaiter().GetResult()
             $resp.EnsureSuccessStatusCode() | Out-Null
             [void]$resp.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
-            Start-Sleep -Milliseconds 1400
+            Start-Sleep -Milliseconds 5900
         }
     } finally {
         $client.Dispose()
