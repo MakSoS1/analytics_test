@@ -38,6 +38,8 @@ class BenignWorkflowTests(unittest.TestCase):
 
     def test_legacy_benign_matrix_must_not_publish_raw_captures(self):
         jobs = yaml.safe_load(WORKFLOW.read_text())["jobs"]
+        self.assertIn("refs/heads/office-benign-adaptix-transfer-2026-10-09",
+                      jobs["generated-benign-e2e"]["if"])
         steps = jobs["generated-benign-e2e"]["steps"]
         upload = next(step for step in steps
                       if step.get("name", "") == "Upload generated benign E2E evidence")
