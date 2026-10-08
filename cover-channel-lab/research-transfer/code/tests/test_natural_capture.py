@@ -89,6 +89,33 @@ class NaturalCaptureUnitTests(unittest.TestCase):
         self.assertEqual(report.profile_id, "windows-native-http")
         self.assertIn("Windows", report.reason)
 
+    def test_windows_pktmon_is_not_equivalent_to_a_working_capture_backend(self):
+        from unittest.mock import patch
+        windows = self.registry.resolve("windows-native-http")
+        with patch("natural_traffic.capture.shutil.which", return_value=r"C:\\Windows\\System32\\pktmon.exe"):
+            report = probe_capability(windows, system_name="Windows")
+        self.assertFalse(report.supported)
+        self.assertIn("backend", report.reason.lower())
+        self.assertEqual(report.profile_id, windows.profile_id)
+
+    def test_windows_default_capture_does_not_fallback_to_linux_tcpdump(self):
+        import tempfile
+        windows = self.registry.resolve("windows-native-http")
+        capability = CapabilityReport(
+            windows.profile_id, True, "pktmon", "injected probe for fail-closed test", {}
+        )
+        with tempfile.TemporaryDirectory() as d:
+            context = GenerationContext(
+                "windows-smoke", "control", windows, 12, Path(d) / "capture"
+            )
+            with self.assertRaisesRegex(RuntimeError, "Windows.*backend"):
+                run_capture(
+                    windows, FixtureAdapter(), context,
+                    capability=capability, min_free_gib=0,
+                )
+            manifest = json.loads((context.output_dir / "run_manifest.json").read_text())
+            self.assertEqual(manifest["status"], "failed")
+
     def test_failed_run_retains_machine_readable_manifest(self):
         with tempfile.TemporaryDirectory() as d:
             ctx = self.context(d)
