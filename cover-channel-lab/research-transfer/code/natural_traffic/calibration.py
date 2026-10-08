@@ -231,6 +231,9 @@ def _mixture_weights(
     controls: pd.DataFrame,
     profile_ids: Sequence[str],
     feature_columns: Sequence[str],
+    *,
+    confirmation_profile_capacity: Mapping[str, int] | None = None,
+    min_confirmation_groups: int = 30,
 ) -> tuple[tuple[str, float], ...]:
     from .evaluation import prepare_diagnostic_frame
 
@@ -262,20 +265,61 @@ def _mixture_weights(
 
     single_scores = [objective(np.eye(len(names))[i]) for i in range(len(names))]
     best_index = int(np.argmin(single_scores))
+    if confirmation_profile_capacity is not None:
+        n = int(min_confirmation_groups)
+        if n < 1:
+            raise ValueError("min_confirmation_groups must be positive")
+        if any(
+            isinstance(v, bool) or not isinstance(v, (int, np.integer)) or v < 0
+            for v in confirmation_profile_capacity.values()
+        ):
+            raise ValueError("confirmation profile capacities must be nonnegative integers")
+        capacity = np.array(
+            [int(confirmation_profile_capacity.get(name, 0)) for name in names],
+            dtype=int,
+        )
+        if int(capacity.sum()) < n:
+            raise ValueError("declared confirmation profile capacity cannot supply support")
+        upper = np.minimum(1.0, capacity.astype(float) / n)
+        initial = capacity.astype(float) / float(capacity.sum())
+        bounds = [(0.0, float(x)) for x in upper]
+    else:
+        capacity = None
+        n = 0
+        initial = np.full(len(names), 1.0 / len(names))
+        bounds = [(0.0, 1.0)] * len(names)
     if len(names) == 1:
         return ((names[0], 1.0),)
 
     result = minimize(
         objective,
-        np.full(len(names), 1.0 / len(names)),
+        initial,
         method="SLSQP",
-        bounds=[(0.0, 1.0)] * len(names),
+        bounds=bounds,
         constraints={"type": "eq", "fun": lambda w: float(np.sum(w) - 1.0)},
         options={"ftol": 1e-12, "maxiter": 500},
     )
-    if not result.success:
+    if not result.success and capacity is None:
         return ((names[best_index], 1.0),)
-    weights = np.clip(np.asarray(result.x, dtype=float), 0.0, 1.0)
+    weights = np.clip(np.asarray(result.x if result.success else initial, dtype=float), 0.0, 1.0)
+    if capacity is not None:
+        # Freeze attainable *whole-group* quotas. Continuous upper bounds
+        # alone may round up to an unavailable independent capture.
+        raw = weights * n
+        quotas = np.minimum(capacity, np.floor(raw + 1e-8).astype(int))
+        remaining = n - int(quotas.sum())
+        while remaining > 0:
+            candidates = [i for i in range(len(names)) if quotas[i] < capacity[i]]
+            if not candidates:
+                raise ValueError("declared confirmation capacity cannot realize an integer mixture")
+            index = min(candidates, key=lambda i: (float(quotas[i]) - float(raw[i]), names[i]))
+            quotas[index] += 1
+            remaining -= 1
+        return tuple(
+            (name, float(quota / n))
+            for name, quota in zip(names, quotas)
+            if int(quota) > 0
+        )
     weights[weights < 1e-4] = 0.0
     total = float(weights.sum())
     if total <= 0:
@@ -299,6 +343,8 @@ def calibrate_profiles(
     seed: int,
     *,
     feature_columns: Sequence[str],
+    confirmation_profile_capacity: Mapping[str, int] | None = None,
+    min_confirmation_groups: int = 30,
 ) -> FrozenProfileManifest:
     """Freeze a benign-only convex runtime mixture and office-train environment."""
 
@@ -314,6 +360,8 @@ def calibrate_profiles(
         benign_controls_train.reset_index(drop=True),
         profile_ids,
         feature_columns,
+        confirmation_profile_capacity=confirmation_profile_capacity,
+        min_confirmation_groups=min_confirmation_groups,
     )
     environment = derive_temporal_environment(office_train)
     environment_json = json.dumps(
@@ -330,6 +378,14 @@ def calibrate_profiles(
                 "features": list(feature_columns),
                 "office_groups": len(set(map(str, groups["office"]))),
                 "control_groups": len(set(map(str, groups["controls"]))),
+                "confirmation_capacity": (
+                    sorted((str(k), int(v)) for k, v in confirmation_profile_capacity.items())
+                    if confirmation_profile_capacity is not None else None
+                ),
+                "min_confirmation_groups": (
+                    int(min_confirmation_groups)
+                    if confirmation_profile_capacity is not None else None
+                ),
                 "seed": int(seed),
             },
             sort_keys=True,

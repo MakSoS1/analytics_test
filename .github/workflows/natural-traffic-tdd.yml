@@ -404,6 +404,16 @@ jobs:
               'controls': control_train['capture_group'].astype(str).tolist(),
           }
           registry = ProfileRegistry.default()
+          # Independent holdout allocation is fixed by group/profile metadata;
+          # confirmation feature values and naturalness scores remain unread.
+          confirmation_profile_capacity = {
+              str(profile): int(group_count)
+              for profile, group_count in (
+                  group_meta[
+                      group_meta['capture_group'].astype(str).isin(confirm_control_groups)
+                  ].groupby('profile_id')['capture_group'].nunique().items()
+              )
+          }
           manifest = calibrate_profiles(
               office_train,
               control_train,
@@ -411,6 +421,8 @@ jobs:
               registry,
               20261004,
               feature_columns=ref.feature_columns,
+              confirmation_profile_capacity=confirmation_profile_capacity,
+              min_confirmation_groups=30,
           )
           if manifest.environment != temporal_environment:
               raise SystemExit('calibration manifest temporal environment drifted')
