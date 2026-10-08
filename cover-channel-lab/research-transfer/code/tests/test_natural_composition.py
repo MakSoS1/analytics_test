@@ -296,6 +296,7 @@ class FullPipelineIntegrationTests(unittest.TestCase):
             self.assertEqual(provenance["source_sha256"], before)
             self.assertEqual(len(uploaded), result.rows)
             self.assertEqual(before, sha(bundle.pcap_path))
+            self.assertEqual(list(neutral_work.iterdir()), [])
 
 
 if __name__ == "__main__":
