@@ -16,6 +16,7 @@ def fixture(day, n=120, *, null_tls):
         "source_session_group": [f"day{day}:session{i}" for i in range(n)],
         "capture_day_id": [f"day{day}"] * n,
         "tls_version": [np.nan if null_tls else 772] * n,
+        "dest_port": [443] * n,
         "seq_signed_len": [[80, -120, 66]] * n,
         "seq_iat_us": [[0, 200, 600]] * n,
         "seq_flags": [[2, 18, 16]] * n,
