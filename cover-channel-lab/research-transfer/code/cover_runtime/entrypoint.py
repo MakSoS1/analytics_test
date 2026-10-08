@@ -51,7 +51,7 @@ def client(job):
         control=None
         if job['arm']=='control':
             from stage_controls import install
-            control=install(sm)
+            control=install(sm,job)
         if job.get('mechanics'):
             from application_patch import install as install_application
             application=install_application(sm,job)
@@ -73,7 +73,69 @@ def client(job):
     (out/'dispatch.json').write_text(json.dumps({'dispatch_verified':True,'catalog_count':len(ids),'package_version':coverlab.__version__})+'\n')
 
 
-def setup():
+def filter_required_service_probes(script, required_services):
+    required = set(required_services or {"all"})
+    if "all" in required:
+        return script
+    def service_for_probe(name):
+        if name.startswith("h3-"):
+            return "h3"
+        if name == "grpc":
+            return "grpc"
+        if name == "mqtt-wss":
+            return "mqtt"
+        if name.startswith("stage-m-"):
+            return "stage_m"
+        return "core"
+    output = []
+    for line in script.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("required_probe "):
+            parts = stripped.split()
+            probe_name = parts[1] if len(parts) > 1 else ""
+            service = service_for_probe(probe_name)
+            if service not in required:
+                output.append(f'echo "optional service probe skipped: {probe_name}"')
+                continue
+        output.append(line)
+    return "\n".join(output) + ("\n" if script.endswith("\n") else "")
+
+
+def bounded_server_response_patch():
+    """Validate fixed application routes on both control and scenario arms."""
+    return (
+        '    if path.startswith("bounded/"):\n'
+        '        import asyncio\n'
+        '        from cover_application import server_answer\n'
+        '        answer=await asyncio.to_thread(server_answer,"/"+path,dict(request.query_params),req_body,str(st.get("campaign_id","")))\n'
+        '        resp=JSONResponse(answer)\n'
+        '    elif not suspicious and st.get("benign_response_bytes"):\n'
+        '        target_size=max(32,min(65536,int(st.get("benign_response_bytes",256))))\n'
+        '        raw=json.dumps({"status":"ok","service":"office-control","value":token(seed,12)},separators=(",",":")).encode()\n'
+        '        response_body=(raw+(b" "*target_size))[:target_size]\n'
+        '        resp=Response(response_body,media_type="application/octet-stream")\n'
+        '    else:\n'
+        '        resp=response_for(sid,suspicious,seed)'
+    )
+
+
+def patch_lab_services(services):
+    """Keep the synthetic WebSocket broker behind a loopback MQTT listener.
+
+    Some Mosquitto/libwebsockets builds cannot start with a WebSocket-only
+    listener. The auxiliary plain MQTT port is bound exclusively to the
+    server namespace's loopback, not to the veth or any host interface.
+    """
+    marker='listener 9443 10.20.0.20\nprotocol websockets'
+    if marker not in services:
+        raise RuntimeError('isolated Mosquitto listener patch target changed')
+    return (services
+        .replace(marker,'listener 1883 127.0.0.1\nprotocol mqtt\n'+marker)
+        .replace('listen 10.20.0.22:8443 ssl;','listen 10.20.0.22:8443 ssl http2;')
+        .replace('allow_anonymous true\npersistence false','allow_anonymous true\nuser root\npersistence false'))
+
+
+def setup(required_services=None):
     # Docker mounts /etc/hosts as an individual file: upstream sed -i cannot
     # rename it. Derive a logged patch that changes only write mechanics.
     import re
@@ -84,6 +146,8 @@ def setup():
     Path('/out/setup_patch.json').write_text(json.dumps({'original_sha256':hashlib.sha256(original.encode()).hexdigest(),
         'patched_sha256':hashlib.sha256(patched.encode()).hexdigest(),'reason':'Docker hosts mount write in place'})+'\n')
     subprocess.run(['bash','/tmp/setup_netns.sh'],check=True)
+    from environment import apply_office_wire_translation
+    apply_office_wire_translation('/out')
     for ns in ('cc-office','cc-dev','cc-c2','cc-dns','cc-devops','cc-soc'):
         routes=subprocess.check_output(['ip','netns','exec',ns,'ip','route'],text=True)
         if 'default' in routes:raise RuntimeError('unexpected default route')
@@ -107,7 +171,8 @@ def setup():
     # Upstream runs Mosquitto as a non-root GitHub runner. Container setup
     # starts as root: its implicit drop to mosquitto cannot read a 0600 root
     # TLS key. The isolated broker stays root inside its network namespace.
-    service_patch=services.replace('listen 10.20.0.22:8443 ssl;','listen 10.20.0.22:8443 ssl http2;').replace('allow_anonymous true\npersistence false','allow_anonymous true\nuser root\npersistence false')
+    service_patch=patch_lab_services(services)
+    service_patch=filter_required_service_probes(service_patch, required_services or {"all"})
     script=Path('/lab/scripts/start_services.container.sh');script.write_text(service_patch)
     Path('/out/services_patch.json').write_text(json.dumps({'original_sha256':hashlib.sha256(services.encode()).hexdigest(),
         'patched_sha256':hashlib.sha256(service_patch.encode()).hexdigest(),'reason':'container-root TLS key ownership and actual HTTP/2 on isolated nginx front'})+'\n')
@@ -133,7 +198,7 @@ def setup():
     patched_server=patched_server.replace('ws.onmessage = () => { recv++; if (recv >= %d) ws.close(); };',
         'ws.onmessage = event => { window.__cover_evidence.received_times_ms.push(Date.now()); window.__cover_evidence.received_lengths.push(event.data.length); recv++; window.__cover_evidence.received=recv; window.__cover_evidence.received_bytes+=event.data.length; if (recv >= %d) ws.close(); };')
     target='    resp=response_for(sid, suspicious, seed)'
-    replacement='    if path.startswith(\"bounded/\"):\n        import asyncio\n        from cover_application import server_answer\n        answer=await asyncio.to_thread(server_answer,\"/\"+path,dict(request.query_params),req_body,str(st.get(\"campaign_id\",\"\")))\n        resp=JSONResponse(answer)\n    else:\n        resp=response_for(sid,suspicious,seed)'
+    replacement=bounded_server_response_patch()
     if patched_server.count(target)!=1:raise RuntimeError('bounded application patch target changed')
     patched_server=patched_server.replace(target,replacement)
     server_path.write_text(patched_server)
@@ -186,7 +251,8 @@ def run(job):
     state=Path('/tmp/coverlab_server_state.json')
     if state.exists():__import__('shutil').copyfile(state,out/'server_state.json')
     result={**base,'status':'captured' if ok else 'failed','reason':None if ok else 'empty_capture' if cp.returncode==0 else 'client_exit:'+str(cp.returncode),
-            'timing':job['timing'],'production_ready':False,'capture_path':str(out/'capture.pcap'),
+            'timing':job['timing'],'behavior_profile_sha256':str((job.get('profile') or {}).get('behavior_profile_sha256','')),
+            'production_ready':False,'capture_path':str(out/'capture.pcap'),
             'capture_sha256':sha(out/'capture.pcap'),'source_fidelity':job['entry']['source_fidelity'],
             'observed_packets':packets,'capture_scope':'client_access_link_v-dev_both_directions'}
     result['evidence_sha256']={p.name:sha(p) for p in sorted(out.iterdir()) if p.is_file() and p.name not in ('result.json','capture.pcap')}
@@ -209,7 +275,7 @@ def run(job):
 
 def main():
     if len(sys.argv)>2 and sys.argv[1]=='--client':client(json.loads(Path(sys.argv[2]).read_text()));return
-    request=json.loads(Path(sys.argv[1]).read_text());setup()
+    request=json.loads(Path(sys.argv[1]).read_text());setup(request.get('required_services'))
     results=[]
     for job in request.get('jobs',[request]):
         try:results.append(run(job))

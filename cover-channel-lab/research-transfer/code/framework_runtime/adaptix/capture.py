@@ -58,12 +58,18 @@ def apply_path(config):
         run(*(prefix+['tc','qdisc','replace','dev',dev,'root','netem','delay',str(config['path_rtt_ms']/2)+'ms']))
         actual = json.loads(run(*(prefix+['ip','-j','link','show','dev',dev])))[0]
         if actual['mtu'] != mtu:raise RuntimeError('MTU readback failed')
-    run('mount','-o','remount,rw','/proc/sys')
-    try:
-        run('ip','netns','exec','client','sysctl','-w','net.ipv4.tcp_timestamps='+str(int(config['client_tcp_timestamps'])))
-    finally:
-        run('mount','-o','remount,ro','/proc/sys')
     value=run('ip','netns','exec','client','sysctl','-n','net.ipv4.tcp_timestamps').decode().strip()
+    # The default fixed laboratory requires timestamps on.  If the namespace
+    # already has the required value, don't request a privileged procfs
+    # remount that GitHub's default Docker confinement denies.  Any mismatch
+    # still fails closed unless the fixed sysctl can be applied and read back.
+    if value!=str(int(config['client_tcp_timestamps'])):
+        run('mount','-o','remount,rw','/proc/sys')
+        try:
+            run('ip','netns','exec','client','sysctl','-w','net.ipv4.tcp_timestamps='+str(int(config['client_tcp_timestamps'])))
+        finally:
+            run('mount','-o','remount,ro','/proc/sys')
+        value=run('ip','netns','exec','client','sysctl','-n','net.ipv4.tcp_timestamps').decode().strip()
     if value != str(int(config['client_tcp_timestamps'])):raise RuntimeError('timestamp readback failed')
     return {**config, 'mtu_readback_verified':True, 'tcp_timestamps_readback_verified':True,
             'office_equivalence_claim':False}

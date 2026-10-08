@@ -1,0 +1,300 @@
+name: natural-office-traffic-v2
+
+on:
+  pull_request:
+    paths:
+      - 'cover-channel-lab/research-transfer/**'
+      - '.github/workflows/natural-office-traffic-v2.yml'
+  workflow_dispatch:
+    inputs:
+      profiles:
+        description: 'High-level runtime profile filter'
+        required: false
+        default: 'linux-curl'
+      techniques:
+        description: 'Cover Channel technique filter'
+        required: false
+        default: 'M-HTTPS-BEACON'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  RESEARCH_ROOT: cover-channel-lab/research-transfer
+  PYTHONPATH: ${{ github.workspace }}/cover-channel-lab/research-transfer/code
+
+jobs:
+  validate-reference-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Validate committed reference
+        run: python -m natural_traffic.cli validate-reference --verify-hashes --out reference-report.json
+      - name: Validate additional office days and provenance
+        run: |
+          python -m natural_traffic.office_day_transfer \
+            --root cover-channel-lab/research-transfer/datasets/office-additional-days-20261008 \
+            --out reference-additional-days.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reference-report
+          path: |
+            reference-report.json
+            reference-additional-days.json
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Run natural traffic tests
+        working-directory: ${{ env.RESEARCH_ROOT }}
+        run: python -m unittest discover -s code/tests -p 'test_natural_*.py' -v
+
+  capture-probe-linux:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [validate-reference-data, unit-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tcpdump
+          python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Probe Linux capture
+        run: python -m natural_traffic.cli probe --profile linux-curl --out linux-capability.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-capability
+          path: linux-capability.json
+
+  capture-probe-windows:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [validate-reference-data, unit-tests]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Probe Windows capture
+        shell: pwsh
+        run: |
+          python -m natural_traffic.cli probe --profile windows-native-http --out windows-capability.json
+          & "${{ env.RESEARCH_ROOT }}\code\natural_traffic\windows_probe.ps1" | Out-File -Encoding utf8 windows-pktmon.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-capability
+          path: |
+            windows-capability.json
+            windows-pktmon.json
+
+  generate-benign-matrix:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [capture-probe-linux, capture-probe-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install generation dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Guard runner disk
+        run: python -c "from pathlib import Path; from natural_traffic.capture import ensure_resource_budget; ensure_resource_budget(Path('.'), min_free_gib=15)"
+      - name: Record generation contract
+        run: |
+          mkdir -p natural-artifacts/benign scratch
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('natural-artifacts/benign/request.json').write_text(json.dumps({
+            'version':'natural-benign-request-v2',
+            'profiles':os.environ.get('INPUT_PROFILES','linux-curl').split(','),
+            'calibration_only':True,
+            'scenario_rows_available_to_calibration':False,
+            'status':'requested',
+          },sort_keys=True)+'\n')
+          PY
+        env:
+          INPUT_PROFILES: ${{ inputs.profiles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benign-generation
+          path: natural-artifacts/benign
+      - name: Cleanup scratch
+        if: always()
+        run: rm -rf scratch
+
+  calibrate-profile-mixture:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [generate-benign-matrix]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - uses: actions/download-artifact@v4
+        with:
+          name: benign-generation
+          path: benign-generation
+      - name: Guard calibration contract
+        run: |
+          mkdir -p calibration
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          request=json.loads(Path('benign-generation/request.json').read_text())
+          if request.get('scenario_rows_available_to_calibration') is not False:
+              raise SystemExit('calibration leakage contract failed')
+          Path('calibration/status.json').write_text(json.dumps({
+            'status':'awaiting_generated_controls',
+            'production_ready':False,
+          },sort_keys=True)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frozen-calibration
+          path: calibration
+
+  confirm-naturalness:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [calibrate-profile-mixture]
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.status.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Emit explicit support status
+        id: status
+        run: |
+          mkdir -p confirmation
+          python - <<'PY'
+          from pathlib import Path
+          from natural_traffic.reporting import write_report
+          write_report(
+              Path('confirmation/naturalness.json'),
+              kind='naturalness',
+              status='insufficient_data',
+              support={'office_groups':0,'control_groups':0},
+              payload={'reason':'independent generated controls have not been attached to this dispatch'},
+          )
+          PY
+          echo "status=insufficient_data" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: naturalness-confirmation
+          path: confirmation
+
+  generate-cover-scenarios:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [calibrate-profile-mixture, confirm-naturalness]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Guard runner disk
+        run: python -c "from pathlib import Path; from natural_traffic.capture import ensure_resource_budget; ensure_resource_budget(Path('.'), min_free_gib=15)"
+      - name: Enforce naturalness gate
+        run: |
+          mkdir -p natural-artifacts/scenarios scratch
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          status=os.environ['NATURAL_STATUS']
+          Path('natural-artifacts/scenarios/status.json').write_text(json.dumps({
+            'status':'ready' if status=='passed_candidate' else 'blocked',
+            'naturalness_status':status,
+            'production_ready':False,
+          },sort_keys=True)+'\n')
+          PY
+        env:
+          NATURAL_STATUS: ${{ needs.confirm-naturalness.outputs.status }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cover-scenarios
+          path: natural-artifacts/scenarios
+      - name: Cleanup scratch
+        if: always()
+        run: rm -rf scratch
+
+  evaluate-technique-signal:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [generate-cover-scenarios, confirm-naturalness]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Emit gated technique report
+        run: |
+          mkdir -p technique
+          python - <<'PY'
+          from pathlib import Path
+          from natural_traffic.reporting import write_report
+          write_report(
+              Path('technique/technique.json'),
+              kind='technique-signal',
+              status='blocked_by_naturalness',
+              support={'pair_groups':0},
+              payload={'training_eligible':False},
+          )
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: technique-evaluation
+          path: technique
+
+  package-release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [evaluate-technique-signal, confirm-naturalness]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*'
+          path: downloaded
+          merge-multiple: false
+      - name: Package reports without private material
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from natural_traffic.reporting import package_release
+          files=[p for p in Path('downloaded').rglob('*') if p.is_file()]
+          package_release(files, Path('release'))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: natural-traffic-v2-release
+          path: release

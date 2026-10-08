@@ -134,3 +134,82 @@ def apply(rtt_ms,out,client_mtu=None,client_tcp_timestamps=None,path_profile=Non
             'office_equivalence_claim':False,'unmatched_dimensions':['tcp_option_order','window_scale','client_tls_stack']}
     (Path(out)/'path_environment.json').write_text(json.dumps(report,indent=2)+'\n')
     return report
+
+WIRE_CORE_IP = '100.64.0.20'
+WIRE_WSS_IP = '100.64.0.21'
+WIRE_FRONT_IP = '100.64.0.22'
+WIRE_OUT_CHAIN = 'COVERLAB_WIRE_OUT'
+WIRE_IN_CHAIN = 'COVERLAB_WIRE_IN'
+
+
+def office_wire_translation_plan():
+    """Pre-capture isolated NAT: preserve app endpoints but expose office-like wire tuples.
+
+    The application still connects to the lab fixture addresses.  DNAT happens
+    inside the client namespace before the packet reaches v-dev, so the capture
+    sees an internal client talking to an external-like RFC6598 address on 443.
+    The server namespace reverses that mapping back to the local fixture.  No
+    default route or Internet path is created and captured bytes are never
+    rewritten after the fact.
+    """
+    commands = [
+        ['ip','netns','exec','cc-c2','ip','addr','replace',WIRE_CORE_IP+'/32','dev','eth0'],
+        ['ip','netns','exec','cc-c2','ip','addr','replace',WIRE_WSS_IP+'/32','dev','eth0'],
+        ['ip','netns','exec','cc-c2','ip','addr','replace',WIRE_FRONT_IP+'/32','dev','eth0'],
+        ['ip','netns','exec','cc-dev','ip','route','replace',WIRE_CORE_IP+'/32','dev','eth0'],
+        ['ip','netns','exec','cc-dev','ip','route','replace',WIRE_WSS_IP+'/32','dev','eth0'],
+        ['ip','netns','exec','cc-dev','ip','route','replace',WIRE_FRONT_IP+'/32','dev','eth0'],
+        ['ip','netns','exec','cc-dev','iptables','-t','nat','-A',WIRE_OUT_CHAIN,
+         '-p','tcp','-d','10.20.0.20','--dport','8443','-j','DNAT','--to-destination',WIRE_CORE_IP+':443'],
+        ['ip','netns','exec','cc-dev','iptables','-t','nat','-A',WIRE_OUT_CHAIN,
+         '-p','tcp','-d','10.20.0.21','--dport','8443','-j','DNAT','--to-destination',WIRE_WSS_IP+':443'],
+        ['ip','netns','exec','cc-dev','iptables','-t','nat','-A',WIRE_OUT_CHAIN,
+         '-p','tcp','-d','10.20.0.22','--dport','8443','-j','DNAT','--to-destination',WIRE_FRONT_IP+':443'],
+        ['ip','netns','exec','cc-c2','iptables','-t','nat','-A',WIRE_IN_CHAIN,
+         '-p','tcp','-d',WIRE_CORE_IP,'--dport','443','-j','DNAT','--to-destination','10.20.0.20:8443'],
+        ['ip','netns','exec','cc-c2','iptables','-t','nat','-A',WIRE_IN_CHAIN,
+         '-p','tcp','-d',WIRE_WSS_IP,'--dport','443','-j','DNAT','--to-destination','10.20.0.21:8443'],
+        ['ip','netns','exec','cc-c2','iptables','-t','nat','-A',WIRE_IN_CHAIN,
+         '-p','tcp','-d',WIRE_FRONT_IP,'--dport','443','-j','DNAT','--to-destination','10.20.0.22:8443'],
+    ]
+    return {
+        'version': 'office-wire-v1',
+        'wire_core_ip': WIRE_CORE_IP,
+        'wire_wss_ip': WIRE_WSS_IP,
+        'wire_front_ip': WIRE_FRONT_IP,
+        'commands': commands,
+        'default_route_added': False,
+        'post_capture_rewrite': False,
+    }
+
+
+def _ensure_nat_chain(namespace, builtin, chain):
+    prefix=['ip','netns','exec',namespace,'iptables','-t','nat']
+    subprocess.run(prefix+['-N',chain],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.run(prefix+['-F',chain],check=True,stdout=subprocess.DEVNULL)
+    check=subprocess.run(prefix+['-C',builtin,'-j',chain],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    if check.returncode:
+        subprocess.run(prefix+['-A',builtin,'-j',chain],check=True,stdout=subprocess.DEVNULL)
+
+
+def apply_office_wire_translation(out='/out'):
+    plan=office_wire_translation_plan()
+    _ensure_nat_chain('cc-dev','OUTPUT',WIRE_OUT_CHAIN)
+    _ensure_nat_chain('cc-c2','PREROUTING',WIRE_IN_CHAIN)
+    for command in plan['commands']:
+        subprocess.run(command,check=True,stdout=subprocess.DEVNULL)
+    dev_rules=subprocess.check_output(
+        ['ip','netns','exec','cc-dev','iptables','-t','nat','-S',WIRE_OUT_CHAIN],text=True)
+    c2_rules=subprocess.check_output(
+        ['ip','netns','exec','cc-c2','iptables','-t','nat','-S',WIRE_IN_CHAIN],text=True)
+    routes=subprocess.check_output(['ip','netns','exec','cc-dev','ip','route'],text=True)
+    if 'default' in routes:
+        raise RuntimeError('office wire translation must not add a default route')
+    for token in (WIRE_CORE_IP, WIRE_WSS_IP, WIRE_FRONT_IP):
+        if token not in dev_rules or token not in c2_rules or token not in routes:
+            raise RuntimeError('office wire translation readback missing '+token)
+    report={**plan,'client_nat_rules':dev_rules,'server_nat_rules':c2_rules,'client_routes':routes}
+    target=Path(out)/'wire_translation.json'
+    target.parent.mkdir(parents=True,exist_ok=True)
+    target.write_text(json.dumps(report,indent=2)+'\n')
+    return report

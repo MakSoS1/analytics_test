@@ -38,7 +38,7 @@ python3 run_batch.py --image cover-complete-wire:20261002 \
   --out /path/to/NEW_NATIVE_CAPTURE
 ```
 
-Образы запускаются без внешней сети, со своими namespaces/veth. Драйвер ограничивает CPU/RAM и проверяет свободное место (20 ГиБ). `captured` означает начальный успех клиента/PCAP; импорт проверяет manifest, прикладное evidence, реальное время, wire membership и coverage отдельно. Новый registry/path profile создавайте отдельным файлом, не переписывая сохранённые source pins.
+Образы запускаются без внешней сети, со своими namespaces/veth. Драйвер ограничивает CPU/RAM и проверяет минимум 15 ГиБ свободного места; load average записывается как telemetry, но сам по себе не является причиной откладывать batch. `captured` означает начальный успех клиента/PCAP; импорт проверяет manifest, прикладное evidence, реальное время, wire membership и coverage отдельно. Новый registry/path profile создавайте отдельным файлом, не переписывая сохранённые source pins.
 
 ## Adaptix
 
@@ -100,3 +100,11 @@ gcc -shared -fPIC -O2 -I downloads/arkime-6.8.0/capture \
   bin/officeentropy.c -o runtime/office-plugins/officeentropy.so \
   $(pkg-config --libs glib-2.0) -lm
 ```
+
+## Natural Traffic Generator v2 и real-capture gates
+
+Полное руководство: [NATURAL_TRAFFIC_GENERATOR_V2.md](NATURAL_TRAFFIC_GENERATOR_V2.md).
+
+В GitHub Actions `natural-traffic-tdd` выполняет unit/full regression, отдельный **real-capture** smoke на Ubuntu и production-extractor smoke. Capture считается пригодным к extraction только пока SHA256 PCAP совпадает с hash, закреплённым сразу после захвата. Полный corpus run дополнительно делает benign-only calibration и confirmation; scenario rows calibration не видит.
+
+Минимальный resource gate перед capture/generation — **15 ГиБ** свободного места. Windows profile не fallback-ится на Linux: неподдерживаемый `pktmon` возвращает explicit unsupported.

@@ -1,0 +1,294 @@
+name: Isolated Cover and Adaptix Research Capture
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - natural-traffic-generator-v2-2026-10-06
+    paths:
+      - '.github/workflows/isolated-cover-adaptix-research.yml'
+      - 'cover-channel-lab/research-transfer/code/natural_traffic/isolated_lab_evidence.py'
+      - 'cover-channel-lab/research-transfer/code/tests/test_natural_isolated_lab_*.py'
+      - 'cover-channel-lab/research-transfer/code/cover_runtime/**'
+      - 'cover-channel-lab/research-transfer/code/framework_runtime/adaptix/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isolated-cover-adaptix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 165
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install read-only quality-audit dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy pyyaml
+      - name: Verify ephemeral VM resources and network tools
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          df -h "$RUNNER_TEMP"
+          docker version
+          docker info --format '{{.Driver}}'
+          python - <<'PY'
+          from pathlib import Path
+          from natural_traffic.capture import ensure_resource_budget
+          import os, sys
+          sys.path.insert(0, 'cover-channel-lab/research-transfer/code')
+          ensure_resource_budget(Path(os.environ['RUNNER_TEMP']), min_free_gib=15)
+          PY
+        env:
+          PYTHONPATH: cover-channel-lab/research-transfer/code
+      - name: Verify fixed source selection and audit tests before capture
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code:code/tests
+        run: |
+          python -m unittest discover -s code/tests -p 'test_natural_isolated_lab_evidence.py' -v
+          python -m unittest discover -s code/tests -p 'test_natural_isolated_lab_workflow.py' -v
+      - name: Build existing native-wire Cover runtime image
+        working-directory: cover-channel-lab/research-transfer
+        run: |
+          set -euo pipefail
+          docker build -t cover-complete:20261002 code/cover_runtime
+          docker build -t cover-complete-wire:20261002 -f code/cover_runtime/Dockerfile.wire code/cover_runtime
+      - name: Generate four bounded, paired real-stack research scenarios
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/safe-evidence"
+          python -m natural_traffic.isolated_lab_evidence select-cover \
+            --registry code/cover_runtime/registry.json \
+            --out "$RUNNER_TEMP/selected-cover-registry.json"
+          python code/cover_runtime/run_batch.py \
+            --image cover-complete-wire:20261002 \
+            --registry "$RUNNER_TEMP/selected-cover-registry.json" \
+            --all --arm both --timing native --mechanics \
+            --seed 20261008 \
+            --out "$RUNNER_TEMP/isolated-cover-captures"
+      - name: Capture non-sensitive diagnostics if Cover execution was rejected
+        if: failure()
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          mkdir -p "$RUNNER_TEMP/safe-evidence"
+          python -m natural_traffic.isolated_lab_evidence diagnose-cover \
+            --run "$RUNNER_TEMP/isolated-cover-captures" \
+            --out "$RUNNER_TEMP/safe-evidence/cover-failure-report.json"
+      - name: Independently verify all eight physical Cover PCAPs
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.isolated_lab_evidence audit-cover \
+            --run "$RUNNER_TEMP/isolated-cover-captures" \
+            --registry "$RUNNER_TEMP/selected-cover-registry.json" \
+            --out "$RUNNER_TEMP/safe-evidence/cover-report.json"
+      - name: Extract every verified Cover PCAP with the production feature pipeline
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from natural_traffic.corpus import discover_cover_captures
+          from natural_traffic.composition import extract_pipeline_capture
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          captures = [capture for arm in ('scenario', 'control')
+                      for capture in discover_cover_captures(
+                          root / 'isolated-cover-captures',
+                          high_level_profile_id='isolated-lab', role=arm)]
+          assert len(captures) == 8
+          rows = 0
+          for index, capture in enumerate(captures):
+              original = capture.bundle.pcap_sha256
+              extraction = extract_pipeline_capture(
+                  capture.bundle, root / 'cover-extract' / f'{index:02d}',
+                  run_id=f'isolated-cover-{index:02d}', min_free_gib=1,
+              )
+              assert extraction.rows > 0, 'source produced zero measured sessions'
+              assert hashlib.sha256(capture.bundle.pcap_path.read_bytes()).hexdigest() == original
+              rows += extraction.rows
+          report = {'version': 'isolated-cover-extractor-v1', 'captures': 8,
+                    'measured_session_rows': rows, 'source_pcap_unchanged': True,
+                    'public_artifacts_exclude_raw_pcap': True,
+                    'technique_research_validated': False,
+                    'office_naturalness_proven': False, 'production_ready': False}
+          (root / 'safe-evidence' / 'cover-extractor-report.json').write_text(
+              json.dumps(report, sort_keys=True) + '\n')
+          print('COVER_EXTRACTOR_AGGREGATE', json.dumps(report, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-research-safe-evidence
+          path: ${{ runner.temp }}/safe-evidence/*-report.json
+          retention-days: 7
+          if-no-files-found: warn
+
+  adaptix-research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install read-only capture audit dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy pyyaml
+      - name: Prepare isolated Adaptix VM and its safe output directory
+        env:
+          PYTHONPATH: cover-channel-lab/research-transfer/code
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/safe-evidence"
+          docker version
+          docker info --format '{{.Driver}}'
+          df -h "$RUNNER_TEMP"
+          python - <<'PY'
+          from pathlib import Path
+          from natural_traffic.capture import ensure_resource_budget
+          import os
+          ensure_resource_budget(Path(os.environ['RUNNER_TEMP']), min_free_gib=15)
+          PY
+      - name: Build pinned Cover base without creating office interfaces
+        working-directory: cover-channel-lab/research-transfer
+        run: |
+          docker build -t cover-complete:20261002 code/cover_runtime
+          docker build -t cover-complete-wire:20261002 -f code/cover_runtime/Dockerfile.wire code/cover_runtime
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.4'
+      - name: Obtain official SHA-pinned Adaptix source and offline Go modules
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          ADAPTIX_PIN: e99535c9ef4642190f7ea125c2983d1611f1a3f3
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none --no-checkout \
+            https://github.com/Adaptix-Framework/AdaptixC2.git \
+            "$RUNNER_TEMP/adaptix-upstream"
+          git -C "$RUNNER_TEMP/adaptix-upstream" checkout --quiet --detach "$ADAPTIX_PIN"
+          test "$(git -C "$RUNNER_TEMP/adaptix-upstream" rev-parse HEAD)" = "$ADAPTIX_PIN"
+          context=code/framework_runtime/adaptix
+          mkdir -p "$context/sources/adaptix" "$context/tools/gomodcache"
+          cp -a "$RUNNER_TEMP/adaptix-upstream/AdaptixServer" \
+            "$context/sources/adaptix/AdaptixServer"
+          test "$(go version | awk '{print $3}')" = go1.25.4
+          tar -C "$(go env GOROOT)" --transform='s,^,go/,' \
+            -czf "$context/tools/go1.25.4.linux-amd64.tar.gz" .
+          cache="$PWD/$context/tools/gomodcache"
+          source="$PWD/$context/sources/adaptix/AdaptixServer"
+          for module in . extenders/gopher_listener_tcp extenders/gopher_agent extenders/gopher_agent/src_gopher; do
+            ( cd "$source/$module" && GOWORK=off GOMODCACHE="$cache" go mod download all )
+            ( cd "$source/$module" && GOPROXY=off GOWORK=off GOMODCACHE="$cache" go mod download all )
+          done
+          test -s "$context/tools/go1.25.4.linux-amd64.tar.gz"
+          test -d "$context/tools/gomodcache/cache/download"
+      - name: Build isolated pinned Adaptix Gopher TCP and mTLS fixture image
+        working-directory: cover-channel-lab/research-transfer
+        run: |
+          set -euo pipefail
+          docker build -t cover-adaptix-isolated:20261004-v4 \
+            -f code/framework_runtime/adaptix/Dockerfile \
+            code/framework_runtime/adaptix
+      - name: Run bounded Adaptix Gopher registration and fixed test-task captures
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/isolated-adaptix-captures"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import subprocess
+          from framework_runtime.adaptix.capture import runtime_command
+          output = Path(os.environ['RUNNER_TEMP']) / 'isolated-adaptix-captures'
+          capture = Path('code/framework_runtime/adaptix/capture.py').resolve()
+          cmd = runtime_command(output.resolve(), capture, 'isolated-adaptix-fixture')
+          assert cmd[cmd.index('--network') + 1] == 'none'
+          assert '-p' not in cmd and '--privileged' not in cmd
+          subprocess.run(cmd, check=True, timeout=2400)
+          PY
+      - name: Independently verify twelve original Adaptix TCP/mTLS captures
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.isolated_lab_evidence audit-adaptix \
+            --run "$RUNNER_TEMP/isolated-adaptix-captures" \
+            --out "$RUNNER_TEMP/safe-evidence/adaptix-report.json"
+          test -s "$RUNNER_TEMP/safe-evidence/adaptix-report.json"
+      - name: Extract every Adaptix PCAP with the same production feature pipeline
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from natural_traffic.composition import extract_pipeline_capture
+          from natural_traffic.contracts import CaptureBundle
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          rows = 0
+          for transport in ('tcp', 'mtls'):
+              for profile in range(3):
+                  for arm in ('scenario', 'control'):
+                      source = root / 'isolated-adaptix-captures' / f'{transport}_p{profile}' / arm
+                      packet = source / 'capture.pcap'
+                      receipt = source / 'receipt.json'
+                      packet_hash = hashlib.sha256(packet.read_bytes()).hexdigest()
+                      receipt_hash = hashlib.sha256(receipt.read_bytes()).hexdigest()
+                      bundle = CaptureBundle(
+                          pair_id=f'{transport}-p{profile}', role=arm,
+                          profile_id='isolated-adaptix-gopher', fidelity='wire-real',
+                          pcap_path=packet, pcap_sha256=packet_hash,
+                          evidence=(), runtime_metadata_path=receipt,
+                          runtime_metadata_sha256=receipt_hash,
+                      )
+                      extracted = extract_pipeline_capture(
+                          bundle, root / 'adaptix-extract' / f'{transport}-p{profile}-{arm}',
+                          run_id=f'isolated-adaptix-{transport}-p{profile}-{arm}',
+                          min_free_gib=1,
+                      )
+                      assert extracted.rows > 0, 'Adaptix capture has zero measured sessions'
+                      assert hashlib.sha256(packet.read_bytes()).hexdigest() == packet_hash
+                      rows += extracted.rows
+          report = {'version': 'isolated-adaptix-extractor-v1', 'captures': 12,
+                    'measured_session_rows': rows, 'source_pcap_unchanged': True,
+                    'public_artifacts_exclude_raw_pcap': True,
+                    'technique_research_validated': False,
+                    'office_naturalness_proven': False, 'production_ready': False}
+          (root / 'safe-evidence' / 'adaptix-extractor-report.json').write_text(
+              json.dumps(report, sort_keys=True) + '\n')
+          print('ADAPTIX_EXTRACTOR_AGGREGATE', json.dumps(report, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-adaptix-safe-evidence
+          path: ${{ runner.temp }}/safe-evidence/*-report.json
+          retention-days: 7
+          if-no-files-found: warn

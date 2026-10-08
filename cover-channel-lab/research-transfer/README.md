@@ -27,12 +27,30 @@ export PYTHONPATH="$PWD/code"
 .venv/bin/python code/prepare_arkime_inputs.py --help
 ```
 
-[Общий импорт](docs/UNIVERSAL_IMPORT.md), [запуск и зависимости](docs/RUNNING.md), [следующие шаги](docs/NEXT_STEPS.md), [агрегированные результаты](RESULTS.md).
+[Natural Traffic Generator v2](docs/NATURAL_TRAFFIC_GENERATOR_V2.md), [проверяемые легитимные офисные действия](docs/VERIFIED_BENIGN_OFFICE_WORKLOAD.md), [общий импорт](docs/UNIVERSAL_IMPORT.md), [запуск и зависимости](docs/RUNNING.md), [следующие шаги](docs/NEXT_STEPS.md), [агрегированные результаты](RESULTS.md).
 
 Исходные офисные Parquet, PCAP, payload sidecars, salt, приватные индексы, outputs ноутбука, site-specific live collectors, deployment scripts и архивы исходников внешних инструментов не публикуются. По отдельному поручению владельца добавлены [12 псевдонимизированных полных Parquet и зашифрованный словарь](datasets/office-cover-20261006/README.md). Приватный ключ остаётся только на Mac; закрытый исходный комплект передан отдельно. Типовой общий импорт поддерживает целые клиентские TCP/UDP обмены; replay adapter ограничен 35 секундами. Другим carrier/длительным захватам нужен отдельный проверяемый adapter. Linux нужен для capture/replay/native Arkime, Mac подходит для таблиц и Python tests.
 
 `PUBLICATION_SCOPE.json` фиксирует исключения и placeholder replacement. `PUBLICATION_MANIFEST.json` содержит hashes опубликованных файлов. Исторические source pins ноутбука относятся к закрытым оригинальным отчётам; их данные не входят в GitHub. Чтобы выполнить ячейку чтения исходного 89-X экспорта, задайте TRAFFIC_RESEARCH_DATA на разрешённый локальный каталог. Он отличается от полного сопоставимого среза.
 
+## Natural Traffic Generator v2
+
+Новый пакет `code/natural_traffic/` отделяет real-stack generation, benign-only calibration, freeze/confirmation и technique-signal evaluation от исторического PCAP replay. Сценарии не используются для подбора naturalness-профиля; `passed_candidate` остаётся исследовательским статусом, `production_ready=false` до независимого production transfer.
+
 ## Дополнительные дни — 8 октября
 
 [Два дополнительных офисных Parquet](datasets/office-additional-days-20261008/README.md): 8 000 отдельных TCP/web-сессий за 22 и 28 сентября, 8 002 строки, полный контракт 155 колонок и три идентификатора групп. Прилагаются контекст зеркала, отчёт о пропусках и зашифрованный словарь для прежнего ключа получателя. TLS-поля 22 сентября отсутствуют в сохранённом источнике; новые native Arkime-данные не включены. Дни ранее использовались в диагностике и не объявляются финальным holdout.
+
+## Defender MITRE corpus: универсальный исследовательский интерфейс
+
+Команда `python -m natural_traffic.defender_corpus_cli` теперь объединяет
+`prepare` → `train` → `evaluate` → `report` для неизменяемых PCAP/измеренных
+таблиц и подтверждённых сессионных MITRE-меток. Добавлены строгие manifest
+hashes, парные контроли, connected-component splits, источник-отдельные
+negative controls и раздельные отчёты по технике и немаркированному офису.
+
+Полный синтаксис, формат `sources.json`, минимум независимых групп,
+ограничения и пример применения описаны в
+[DEFENDER_MITRE_CORPUS.md](docs/DEFENDER_MITRE_CORPUS.md).
+Этот интерфейс **не изменяет исходный сетевой трафик**; старый release gate
+naturalness не смягчён, `production_ready=false`.

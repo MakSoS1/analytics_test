@@ -1,0 +1,18 @@
+{
+  "version": "natural-external-source-v1",
+  "source_id": "attack-replay-mitre-pcaps-2026-10-07",
+  "tool_repository": "https://github.com/ArtemSelin/Attack-Replay",
+  "tool_commit": "5ff437bf136ee3e8c565489ece110beda7228174",
+  "pcap_repository": "https://github.com/ArtemSelin/MITRE-ATTACK-pcaps",
+  "pcap_commit": "0b408bff41f04e2ecd198f4e78568686e3cdcc8d",
+  "replay_semantics": "stateless_record_replay",
+  "observed_pcap_count": 41,
+  "observed_techniques": [
+    "T1595.001"
+  ],
+  "observed_scope": "Pinned tree currently contains 41 PCAPs, all under T1595.001 active scanning. Broader README categories are not treated as populated evidence.",
+  "license_status": "README displays an MIT badge, but no LICENSE file was observed through the repository contents API at the pinned commit; do not vendor or redistribute without separate verification.",
+  "training_eligible": false,
+  "naturalness_calibration_eligible": false,
+  "ood_eval_eligible": true
+}

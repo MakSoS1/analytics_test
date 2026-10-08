@@ -1,0 +1,1011 @@
+name: natural-traffic-tdd
+
+on:
+  push:
+    branches:
+      - natural-traffic-generator-v2-2026-10-06
+    paths:
+      - 'cover-channel-lab/research-transfer/code/natural_traffic/**'
+      - 'cover-channel-lab/research-transfer/code/office_injection/technique_training.py'
+      - 'cover-channel-lab/research-transfer/code/cover_runtime/Dockerfile'
+      - 'cover-channel-lab/research-transfer/code/cover_runtime/*.py'
+      - 'cover-channel-lab/research-transfer/code/tests/test_natural_*.py'
+      - 'cover-channel-lab/research-transfer/datasets/office-cover-20261006/**'
+      - 'cover-channel-lab/research-transfer/datasets/office-additional-days-20261008/**'
+      - '.github/workflows/natural-traffic-tdd.yml'
+      - '.github/workflows/natural-office-traffic-v2.yml'
+  pull_request:
+    paths:
+      - 'cover-channel-lab/research-transfer/code/natural_traffic/**'
+      - 'cover-channel-lab/research-transfer/code/office_injection/technique_training.py'
+      - 'cover-channel-lab/research-transfer/code/cover_runtime/Dockerfile'
+      - 'cover-channel-lab/research-transfer/code/cover_runtime/*.py'
+      - 'cover-channel-lab/research-transfer/code/tests/test_natural_*.py'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verified-benign-office-workload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install native packet capture and feature dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tcpdump openssl
+          python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn
+      - name: Exercise real authenticated TLS client and stateful office tasks
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.office_workload \
+            --out verified-benign-office --sessions 3 --capture
+      - name: Verify PCAP integrity and production feature extraction
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python - <<'PY'
+          import json
+          from hashlib import sha256
+          from pathlib import Path
+          from natural_traffic.defender_domain import load_user_input
+          from natural_traffic.composition import extract_pipeline_capture
+          from natural_traffic.contracts import CaptureBundle
+          root = Path('verified-benign-office')
+          receipt = json.loads((root/'workload_receipt.json').read_text())
+          assert receipt['sessions_completed'] == 3
+          assert receipt['tasks_completed'] == 12
+          assert receipt['tls_peer_verified']
+          assert receipt['capture_status'] == 'quality_accepted'
+          assert receipt['handshake_coverage_validated']
+          assert receipt['client_syn_flows'] == receipt['completed_tcp_handshakes'] == 3
+          assert not receipt['production_ready']
+          # This is exclusively a disposable local fixture: diagnostic
+          # extractor stderr may be printed without exposing office content.
+          meta = root/'fixture_extraction_metadata.json'
+          meta.write_text(json.dumps({'source': 'isolated_disposable_fixture'})+'\n')
+          digest = sha256(meta.read_bytes()).hexdigest()
+          bundle = CaptureBundle(
+            pair_id='benign-fixture', role='control', profile_id='linux-python-ssl',
+            fidelity='wire-real', pcap_path=root/'benign_workload.pcap',
+            pcap_sha256=receipt['pcap_sha256'], evidence=(),
+            runtime_metadata_path=meta, runtime_metadata_sha256=digest,
+          )
+          extracted_root = root/'controlled_extraction'
+          try:
+            extract_pipeline_capture(bundle, extracted_root, run_id='benign-office-ci', min_free_gib=1)
+          except Exception:
+            logfile = extracted_root/'steps.log'
+            if logfile.exists():
+              print('BENIGN_FIXTURE_EXTRACTOR_DIAGNOSTIC', logfile.read_text()[-10000:])
+            raise
+          measured, source = load_user_input(root/'benign_workload.pcap', root, min_free_gib=1)
+          assert len(measured) > 0
+          assert source['source_sha256'] == receipt['pcap_sha256']
+          assert source['raw_capture_rewritten'] is False
+          assert source['raw_intermediates_retained'] is False
+          stats_file = extracted_root/'work'/'session_stats.json'
+          if stats_file.exists():
+            stats = json.loads(stats_file.read_text())
+            print('BENIGN_SESSION_PARSER_COUNTS', json.dumps({
+              key: value for key, value in stats.items()
+              if isinstance(value, int)
+            }, sort_keys=True))
+          if len(measured) != receipt['completed_tcp_handshakes']:
+            raise AssertionError(
+              f"production extractor coverage incomplete: "
+              f"{len(measured)} extracted vs "
+              f"{receipt['completed_tcp_handshakes']} captured TCP handshakes"
+            )
+          summary = {
+            'sessions_observed': int(len(measured)),
+            'wire_handshakes': receipt['completed_tcp_handshakes'],
+            'extractor_session_coverage_verified': True,
+            'tls_tasks': receipt['tasks_completed'],
+            'source_sha256': source['source_sha256'],
+            'office_naturalness_proven': False,
+            'production_ready': False,
+          }
+          (root/'extractor_summary.json').write_text(json.dumps(summary, sort_keys=True)+'\n')
+          print('VERIFIED_BENIGN_OFFICE_FIXTURE', json.dumps(summary, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benign-office-workload-evidence
+          path: |
+            cover-channel-lab/research-transfer/verified-benign-office/workload_receipt.json
+            cover-channel-lab/research-transfer/verified-benign-office/extractor_summary.json
+          if-no-files-found: warn
+
+  natural-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Inspect reference grouping candidates
+        working-directory: cover-channel-lab/research-transfer
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          root=Path('datasets/office-cover-20261006')
+          df=pd.read_parquet(root/'pipeline_office_full.parquet')
+          dictionary=json.loads((root/'pipeline_column_dictionary.json').read_text())
+          features={r['column'] for r in dictionary if r.get('kind')=='feature'}
+          meta=[c for c in df.columns if c not in features]
+          print('OFFICE_META_COLUMNS', meta)
+          for col in meta:
+              try:
+                  print('GROUP_CANDIDATE', col, 'nunique=', int(df[col].nunique(dropna=True)), 'nulls=', int(df[col].isna().sum()))
+              except Exception as exc:
+                  print('GROUP_CANDIDATE', col, 'ERROR', type(exc).__name__)
+          PY
+      - name: Run natural traffic tests
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: python -m unittest discover -s code/tests -p 'test_natural_*.py' -v
+      - name: Run research-transfer regression suite
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: python -m unittest discover -s code/tests -v
+
+  defender-office-domain-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install defender data diagnostics
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scipy scikit-learn
+      - name: Test immutable features and train-day-only anomaly diagnostic
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          original = Path('datasets/office-additional-days-20261008/office_day_02.parquet')
+          fixture = pd.read_parquet(original).head(40)
+          Path('test-benign-office-input.parquet').unlink(missing_ok=True)
+          fixture.to_parquet('test-benign-office-input.parquet', index=False)
+          PY
+          python -m natural_traffic.defender_domain prepare \
+            --input test-benign-office-input.parquet \
+            --office-dir datasets/office-additional-days-20261008 \
+            --source-label unlabeled \
+            --out defender-domain-smoke
+          python -m natural_traffic.defender_domain baseline \
+            --prepared defender-domain-smoke --alert-budget 0.01
+          python -m natural_traffic.defender_model_selection \
+            --prepared defender-domain-smoke \
+            --alert-budget 0.01 --validation-tolerance 0.02 --max-attempts 3
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('defender-domain-smoke')
+          manifest=json.loads((p/'manifest.json').read_text())
+          scores=json.loads((p/'baseline_report.json').read_text())
+          adaptive=json.loads((p/'model_selection_report.json').read_text())
+          assert 1 <= adaptive['attempts_executed'] <= 3
+          assert adaptive['validation_uses_only_office_train_groups']
+          assert not adaptive['holdout_or_source_used_for_selection']
+          assert not adaptive['office_naturalness_proven']
+          assert adaptive['reported_alert_rate_is_not_fpr']
+          assert (p/'defender_model.joblib').is_file()
+          print('DEFENDER_MODEL_VALIDATION',json.dumps({
+             'status':adaptive['status'],
+             'attempts':adaptive['attempts_executed'],
+             'selected':adaptive['selected_candidate'],
+             'validation_pass':adaptive['selected_validation_passed'],
+             'office_holdout_alert_fraction':adaptive['office_holdout_alert_fraction']
+          },sort_keys=True))
+          assert manifest['office_train_rows'] == 4000
+          assert manifest['office_holdout_rows'] == 4002
+          assert manifest['source_rows'] == 40
+          assert manifest['source_label'] == 'unlabeled'
+          assert manifest['office_labels'] == 'unverified_and_unlabeled'
+          assert len(manifest['feature_columns']) >= 12
+          assert scores['threshold_fit'] == 'office_train_only'
+          assert scores['statistics_are_not_fpr_or_recall']
+          assert not scores['production_ready']
+          print('DEFENDER_DOMAIN_SMOKE', json.dumps({
+            'train_rows':manifest['office_train_rows'],
+            'holdout_rows':manifest['office_holdout_rows'],
+            'features':len(manifest['feature_columns']),
+            'holdout_alert_fraction':scores['office_holdout_alert_fraction'],
+            'source_alert_fraction':scores['uploaded_input_alert_fraction'],
+          },sort_keys=True))
+          PY
+      - name: Verify two synthetic MITRE technique labels against pinned office transfer
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code:code/tests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from mitre_ml_fixture import make_prepared
+          make_prepared(Path('defender-mitre-fixture'), evidence_tier='fixture_only')
+          PY
+          python -m natural_traffic.defender_corpus_cli train \
+            --prepared defender-mitre-fixture \
+            --office-dir datasets/office-additional-days-20261008 \
+            --out defender-mitre-models
+          python -m natural_traffic.defender_corpus_cli evaluate \
+            --prepared defender-mitre-fixture \
+            --models defender-mitre-models \
+            --office-dir datasets/office-additional-days-20261008 \
+            --office-cover-dir datasets/office-cover-20261006 \
+            --out defender-mitre-evaluation
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('defender-mitre-evaluation/evaluation_report.json').read_text())
+          assert report['pipeline_verified']
+          assert report['office_transfer_diagnostic']
+          assert set(report['per_technique']) == {'T1001', 'T1071.001'}
+          assert report['office_days']['2026-09-22']['rows'] == 4000
+          assert report['office_days']['2026-09-28']['rows'] == 4002
+          assert report['office_days']['2026-09-23']['rows'] == 5726
+          assert not report['technique_research_validated']  # fixture-only
+          assert not report['office_naturalness_proven']
+          assert not report['production_ready']
+          print('DEFENDER_MITRE_RESEARCH_SMOKE', json.dumps({
+            'techniques': sorted(report['per_technique']),
+            'pipeline_verified': report['pipeline_verified'],
+            'office_transfer_diagnostic': report['office_transfer_diagnostic'],
+            'research_validated': report['technique_research_validated'],
+            'production_ready': report['production_ready'],
+          }, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: defender-office-domain-diagnostic
+          path: |
+            cover-channel-lab/research-transfer/defender-domain-smoke/manifest.json
+            cover-channel-lab/research-transfer/defender-domain-smoke/baseline_report.json
+            cover-channel-lab/research-transfer/defender-domain-smoke/model_selection_report.json
+            cover-channel-lab/research-transfer/defender-mitre-evaluation/evaluation_report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  office-behavior-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install behavior-profile dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy
+      - name: Freeze office-train behavior envelope
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from natural_traffic.behavior import (
+              derive_behavior_envelope, select_office_web_slice,
+              freeze_transport_duration_from_day,
+          )
+
+          root = Path('datasets/office-cover-20261006')
+          office = pd.read_parquet(root / 'pipeline_office_full.parquet')
+          office = select_office_web_slice(office, min_host_groups=60)
+          hosts = sorted(office['host_key'].astype(str).unique())
+          if len(hosts) < 60:
+              raise SystemExit(f'office behavior profile requires >=60 host groups, got {len(hosts)}')
+          train_hosts = set(hosts[::2])
+          office_train = office[office['host_key'].astype(str).isin(train_hosts)].copy()
+          profile = derive_behavior_envelope(office_train, seed=20261004)
+          # Use Sep-22 transport-only observations. Keep Sep-28 out of fitting.
+          transport_day = pd.read_parquet(
+              Path('datasets/office-additional-days-20261008/office_day_02.parquet')
+          )
+          port = pd.to_numeric(transport_day['dest_port'], errors='coerce')
+          packets = pd.to_numeric(transport_day['pkt_count'], errors='coerce')
+          transport_train = transport_day[port.eq(443) & packets.ge(6)]
+          profile = freeze_transport_duration_from_day(
+              profile, transport_train, source_id='office-sep22-tcp443',
+          )
+          if profile['source_policy'] != 'office_train_only':
+              raise SystemExit('behavior profile source policy drifted')
+          Path('office_behavior_profile.json').write_text(
+              json.dumps(profile, sort_keys=True, separators=(',', ':')) + '\n'
+          )
+          print('OFFICE_BEHAVIOR_SHA256', profile['sha256'])
+          print('OFFICE_BEHAVIOR_ROWS', profile['rows'])
+          print('OFFICE_BEHAVIOR_HOST_GROUPS', profile['host_groups'])
+          print('GENERATION_TARGETS', json.dumps(profile['generation_targets'], sort_keys=True))
+          print('TRAINED_SESSION_DURATION_ROWS', profile['transport_duration_provenance']['rows'])
+          print('TLS_VERSION_DIST', json.dumps(profile['categorical'].get('tls_version', {}), sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: office-behavior-profile
+          path: cover-channel-lab/research-transfer/office_behavior_profile.json
+          retention-days: 30
+
+  real-capture-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install capture dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tcpdump
+          python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Probe runner packet capture independently
+        run: |
+          set -euxo pipefail
+          id
+          tcpdump --version
+          sudo timeout 10 tcpdump -i lo -n -c 2 -w /tmp/runner-probe.pcap icmp &
+          cap_pid=$!
+          sleep 1
+          ping -c 2 127.0.0.1
+          wait $cap_pid
+          test -s /tmp/runner-probe.pcap
+          stat -c '%s bytes' /tmp/runner-probe.pcap
+          sudo tcpdump -nn -r /tmp/runner-probe.pcap -c 2
+      - name: Run real Linux TLS capture smoke
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_TRAFFIC_REAL_CAPTURE: '1'
+        run: python -m unittest discover -s code/tests -p 'test_natural_capture.py' -v
+      - name: Run full production extractor smoke
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_TRAFFIC_FULL_PIPELINE: '1'
+        run: python -m unittest discover -s code/tests -p 'test_natural_composition.py' -v
+
+  generated-benign-e2e:
+    if: github.event_name == 'push'
+    needs: [natural-unit, real-capture-smoke, office-behavior-profile]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install evaluation dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scipy scikit-learn pyyaml
+      - name: Guard runner disk before image build
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: python -c "from pathlib import Path; from natural_traffic.capture import ensure_resource_budget; ensure_resource_budget(Path('.'), min_free_gib=15)"
+      - name: Download frozen office behavior profile
+        uses: actions/download-artifact@v4
+        with:
+          name: office-behavior-profile
+          path: cover-channel-lab/research-transfer/behavior-profile
+      - name: Prepare frozen office-path control registry
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_REGISTRY: ${{ runner.temp }}/natural-controls-registry.json
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from demo.prepare_research_registry import prepare
+          from office_injection.cover_registry import digest
+          from natural_traffic.behavior import assign_behavior_targets
+
+          base = json.loads(Path('code/cover_runtime/registry.json').read_text())
+          prepared = prepare(base, seed=20261004, path_profile='office_path_v1')
+          target_entries = {
+              'M-CLOUD-API',
+              'M-HTTPS-BEACON',
+              'M-HTTPS-FRAG',
+              'M-HTTPS-FRONT',
+              'M-HTTPS-LOWENT',
+              'M-RMM-SHAPE',
+          }
+          selected = []
+          for entry in prepared['entries']:
+              if entry.get('entry_id') not in target_entries:
+                  continue
+              item = dict(entry)
+              item['profiles'] = [dict(profile) for profile in entry.get('profiles', [])]
+              if not item['profiles']:
+                  raise SystemExit(f"selected entry has no profiles: {entry.get('entry_id')}")
+              selected.append(item)
+          found = {entry['entry_id'] for entry in selected}
+          if found != target_entries:
+              raise SystemExit(f'missing Stage-M entries: {sorted(target_entries-found)}')
+          profile_count = sum(len(entry['profiles']) for entry in selected)
+          if profile_count != 64:
+              raise SystemExit(f'expected exactly 64 Stage-M stack profiles, got {profile_count}')
+          envelope = json.loads(Path('behavior-profile/office_behavior_profile.json').read_text())
+          identities = [
+              f"{entry['entry_id']}:{profile['profile_id']}"
+              for entry in selected
+              for profile in entry['profiles']
+          ]
+          targets = assign_behavior_targets(envelope, identities, seed=20261004)
+          for entry in selected:
+              for profile in entry['profiles']:
+                  identity = f"{entry['entry_id']}:{profile['profile_id']}"
+                  profile.update(targets[identity])
+          body = {k:v for k,v in prepared.items() if k != 'sha256'}
+          body['entries'] = selected
+          body['research_policy'] += '; e2e benign-only Stage-M real-stack matrix; office-train temporal+behavior profile'
+          body['behavior_profile_sha256'] = envelope['sha256']
+          body['sha256'] = digest(body)
+          out = Path(os.environ['NATURAL_REGISTRY'])
+          out.write_text(json.dumps(body, indent=2) + '\n')
+          print('SELECTED_STAGE_M_ENTRIES', sorted(found))
+          print('SELECTED_STACK_PROFILES', profile_count)
+          print('REGISTRY_SHA256', body['sha256'])
+          print('PATH_PROFILE', body['path_profile'])
+          print('BEHAVIOR_PROFILE_SHA256', envelope['sha256'])
+          print('BEHAVIOR_EVENT_TARGETS', sorted({p['runtime_events'] for e in selected for p in e['profiles']}))
+          print('BEHAVIOR_INTERVAL_TARGETS', sorted({p['native_interval'] for e in selected for p in e['profiles']}))
+          print('BEHAVIOR_SESSION_DURATION_TARGETS', sorted({p['target_session_duration_seconds'] for e in selected for p in e['profiles']}))
+          print('BEHAVIOR_REQUEST_TARGETS', sorted({p['benign_request_bytes'] for e in selected for p in e['profiles']}))
+          print('BEHAVIOR_RESPONSE_TARGETS', sorted({p['benign_response_bytes'] for e in selected for p in e['profiles']}))
+          PY
+      - name: Build pinned Cover runtime image
+        working-directory: cover-channel-lab/research-transfer
+        run: docker build -t cover-natural-e2e:ci code/cover_runtime
+      - name: Generate 64 benign control captures only
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_REGISTRY: ${{ runner.temp }}/natural-controls-registry.json
+          NATURAL_RUN: ${{ runner.temp }}/natural-control-run
+        run: |
+          python code/cover_runtime/run_batch.py \
+            --image cover-natural-e2e:ci \
+            --registry "$NATURAL_REGISTRY" \
+            --all \
+            --arm control \
+            --timing native \
+            --seed 20261004 \
+            --out "$NATURAL_RUN"
+      - name: Extract controls, freeze benign profile, confirm against held-out office web sessions
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_RUN: ${{ runner.temp }}/natural-control-run
+          NATURAL_OUT: ${{ runner.temp }}/natural-e2e
+        run: |
+          python - <<'PY'
+          import json, os
+          from dataclasses import replace
+          from pathlib import Path
+          import pandas as pd
+
+          from natural_traffic.calibration import (
+              assign_temporal_starts,
+              calibrate_profiles,
+              derive_temporal_environment,
+              frozen_confirmation_deficits,
+              select_frozen_confirmation_groups,
+              validate_group_disjointness,
+          )
+          from natural_traffic.composition import extract_pipeline_capture, retime_capture_bundle
+          from natural_traffic.contracts import FrozenProfileManifest
+          from natural_traffic.corpus import discover_cover_captures, aggregate_extracted_tables
+          from natural_traffic.evaluation import confirm_naturalness
+          from natural_traffic.pcap_quality import filter_cover_captures_by_quality
+          from natural_traffic.office_day_transfer import (
+              compare_generated_controls_to_office_days,
+              load_additional_days,
+          )
+          from natural_traffic.profiles import ProfileRegistry
+          from natural_traffic.reference import load_reference
+          from natural_traffic.reporting import write_report
+
+          run = Path(os.environ['NATURAL_RUN'])
+          out = Path(os.environ['NATURAL_OUT'])
+          out.mkdir(parents=True, exist_ok=True)
+          captures = discover_cover_captures(
+              run, high_level_profile_id=None, role='control'
+          )
+          if len(captures) != 64:
+              raise SystemExit(f'expected exactly 64 captured controls, got {len(captures)}')
+          raw_capture_count = len(captures)
+          captures, rejected_quality = filter_cover_captures_by_quality(
+              captures, max_timestamp_regression_us=50
+          )
+          quality_report = {
+              'version': 'natural-managed-pcap-quality-v1',
+              'raw_captures': raw_capture_count,
+              'accepted_captures': len(captures),
+              'rejected_captures': len(rejected_quality),
+              'max_timestamp_regression_us': 50,
+              'rejected': rejected_quality,
+              'policy': 'reject_before_retime_no_packet_rewrite',
+          }
+          (out / 'pcap_quality.json').write_text(
+              json.dumps(quality_report, sort_keys=True, separators=(',', ':')) + '\n'
+          )
+          if len(captures) < 60:
+              raise SystemExit(
+                  f'quality gate left insufficient independent controls: {len(captures)} < 60'
+              )
+
+          ref = load_reference(Path('datasets/office-cover-20261006'), verify_hashes=True)
+          office = ref.pipeline_office.copy()
+          tcp = pd.to_numeric(office['ip_protocol'], errors='coerce').eq(6)
+          dport = pd.to_numeric(office['destination_port'], errors='coerce')
+          office = office[tcp & dport.isin([443, 8443, 9443])].copy()
+          if office['host_key'].nunique() < 60:
+              office = ref.pipeline_office[
+                  pd.to_numeric(ref.pipeline_office['ip_protocol'], errors='coerce').eq(6)
+              ].copy()
+          hosts = sorted(office['host_key'].astype(str).unique())
+          if len(hosts) < 60:
+              raise SystemExit(f'office comparison requires >=60 host groups, got {len(hosts)}')
+          train_hosts = set(hosts[::2])
+          confirm_hosts = set(hosts[1::2])
+          validate_group_disjointness(train_hosts, confirm_hosts)
+          office_train = office[office['host_key'].astype(str).isin(train_hosts)].copy()
+          office_confirm = office[office['host_key'].astype(str).isin(confirm_hosts)].copy()
+
+          temporal_environment = derive_temporal_environment(office_train)
+          temporal_manifest = FrozenProfileManifest(
+              seed=20261004,
+              profile_weights=(('linux-protocol-native', 1.0),),
+              reference_id='temporal:office-train-only',
+              environment_json=json.dumps(
+                  temporal_environment, sort_keys=True, separators=(',', ':')
+              ),
+          )
+          (out / 'temporal_environment_manifest.json').write_text(
+              temporal_manifest.to_json() + '\n'
+          )
+          starts = assign_temporal_starts(
+              temporal_manifest, [capture.ancestor_id for capture in captures]
+          )
+
+          extracted = []
+          for i, capture in enumerate(captures):
+              retimed_bundle = retime_capture_bundle(
+                  capture.bundle,
+                  target_start_epoch=starts[capture.ancestor_id],
+                  out_dir=out / 'retimed' / f'{i:03d}',
+              )
+              retimed_capture = replace(capture, bundle=retimed_bundle)
+              result = extract_pipeline_capture(
+                  retimed_bundle,
+                  out / 'extract' / f'{i:03d}',
+                  run_id=f'natural-control-{i:03d}',
+                  min_free_gib=15,
+              )
+              extracted.append((retimed_capture, result.parquet_path))
+
+          controls_path = out / 'controls.parquet'
+          corpus_report = aggregate_extracted_tables(
+              extracted, controls_path, benign_only=True
+          )
+          controls = pd.read_parquet(controls_path)
+          group_meta = (
+              controls[['capture_group', 'profile_id']]
+              .drop_duplicates()
+              .sort_values(['profile_id', 'capture_group'])
+          )
+          if len(group_meta) != len(captures):
+              raise SystemExit(
+                  f'expected {len(captures)} independent control groups, got {len(group_meta)}'
+              )
+          train_control_groups, confirm_control_groups = set(), set()
+          for _, frame in group_meta.groupby('profile_id', sort=True):
+              ids = frame['capture_group'].astype(str).tolist()
+              train_control_groups.update(ids[::2])
+              confirm_control_groups.update(ids[1::2])
+          validate_group_disjointness(train_control_groups, confirm_control_groups)
+          if len(train_control_groups) < 30 or len(confirm_control_groups) < 30:
+              raise SystemExit(
+                  f'stratified split too small: train={len(train_control_groups)} '
+                  f'confirm={len(confirm_control_groups)}'
+              )
+          control_train = controls[
+              controls['capture_group'].astype(str).isin(train_control_groups)
+          ].copy()
+          control_confirm = controls[
+              controls['capture_group'].astype(str).isin(confirm_control_groups)
+          ].copy()
+
+          groups_train = {
+              'office': office_train['host_key'].astype(str).tolist(),
+              'controls': control_train['capture_group'].astype(str).tolist(),
+          }
+          registry = ProfileRegistry.default()
+          # Independent holdout allocation is fixed by group/profile metadata;
+          # confirmation feature values and naturalness scores remain unread.
+          confirmation_profile_capacity = {
+              str(profile): int(group_count)
+              for profile, group_count in (
+                  group_meta[
+                      group_meta['capture_group'].astype(str).isin(confirm_control_groups)
+                  ].groupby('profile_id')['capture_group'].nunique().items()
+              )
+          }
+          manifest = calibrate_profiles(
+              office_train,
+              control_train,
+              groups_train,
+              registry,
+              20261004,
+              feature_columns=ref.feature_columns,
+              confirmation_profile_capacity=confirmation_profile_capacity,
+              min_confirmation_groups=30,
+          )
+          if manifest.environment != temporal_environment:
+              raise SystemExit('calibration manifest temporal environment drifted')
+          manifest_path = out / 'frozen_profile_manifest.json'
+          manifest_path.write_text(manifest.to_json() + '\n')
+          (out / 'frozen_profile_manifest.sha256').write_text(manifest.sha256 + '\n')
+
+          deficits = frozen_confirmation_deficits(
+              manifest, control_confirm, min_groups=30
+          )
+          if deficits['deficits']:
+              raise SystemExit(
+                  'held-out controls cannot realize frozen mixture: '
+                  + json.dumps(deficits, sort_keys=True)
+              )
+          control_confirm_frozen = select_frozen_confirmation_groups(
+              manifest, control_confirm, min_groups=30
+          )
+          frozen_group_count = int(
+              control_confirm_frozen['capture_group'].astype(str).nunique()
+          )
+          if frozen_group_count != 30:
+              raise SystemExit(
+                  f'frozen confirmation selection returned {frozen_group_count} groups'
+              )
+          (out / 'frozen_confirmation_selection.json').write_text(
+              json.dumps(
+                  {
+                      'version': 'natural-frozen-confirmation-v1',
+                      'pool_groups': int(control_confirm['capture_group'].astype(str).nunique()),
+                      'selected_groups': frozen_group_count,
+                      'profile_weights': list(manifest.profile_weights),
+                      'capacity': deficits,
+                      'selected_capture_groups': sorted(
+                          control_confirm_frozen['capture_group'].astype(str).unique()
+                      ),
+                  },
+                  sort_keys=True,
+                  separators=(',', ':'),
+              ) + '\n'
+          )
+
+          dictionary = json.loads(
+              Path('datasets/office-cover-20261006/pipeline_column_dictionary.json').read_text()
+          )
+          families = {}
+          for row in dictionary:
+              if row.get('kind') != 'feature':
+                  continue
+              families.setdefault(row.get('group_key') or 'other', []).append(row['column'])
+
+          confirm_groups = {
+              'office': office_confirm['host_key'].astype(str).tolist(),
+              'controls': control_confirm_frozen['capture_group'].astype(str).tolist(),
+          }
+          report = confirm_naturalness(
+              manifest,
+              office_confirm,
+              control_confirm_frozen,
+              confirm_groups,
+              expected_manifest_sha=manifest.sha256,
+              feature_columns=ref.feature_columns,
+              feature_families=families,
+              bootstrap_reps=200,
+              random_state=20261004,
+          )
+          write_report(
+              out / 'naturalness.json',
+              kind='naturalness',
+              status=report.status,
+              support=report.support,
+              payload={
+                  **report.as_dict(),
+                  'corpus': corpus_report,
+                  'calibration_control_groups': len(train_control_groups),
+                  'confirmation_control_pool_groups': len(confirm_control_groups),
+                  'confirmation_control_groups': frozen_group_count,
+                  'frozen_confirmation_capacity': deficits,
+                  'calibration_office_groups': len(train_hosts),
+                  'confirmation_office_groups': len(confirm_hosts),
+                  'office_scope': 'tcp web comparison slice; destination 443/8443/9443 when >=60 host groups, otherwise all TCP',
+                  'profile_weights': list(manifest.profile_weights),
+                  'temporal_environment_manifest_sha256': temporal_manifest.sha256,
+                  'pcap_quality': quality_report,
+                  'production_ready': False,
+              },
+          )
+          # Cross-day transport-only diagnostic. This consumes the already
+          # frozen confirm controls; it does not alter profile weights or gates.
+          office_day02, office_day03 = load_additional_days(
+              Path('datasets/office-additional-days-20261008'),
+              verify_hashes=True,
+          )
+          day_transfer = compare_generated_controls_to_office_days(
+              office_day02, office_day03, control_confirm_frozen,
+              seed=20261008, bootstrap_reps=30,
+          )
+          (out / 'additional_day_control_transfer.json').write_text(
+              json.dumps(day_transfer, sort_keys=True, indent=2) + '\n'
+          )
+          if day_transfer['status'] != 'diagnostic_only':
+              raise SystemExit('additional-day control transfer unsupported: ' + day_transfer['status'])
+          print('ADDITIONAL_DAY_CONTROL_AUC', json.dumps({
+              day: row['max_auc']
+              for day, row in day_transfer['evaluations'].items()
+          }, sort_keys=True))
+          print('NATURALNESS_STATUS', report.status)
+          print('MAX_AUC', report.max_auc)
+          print('PROFILE_WEIGHTS', json.dumps(list(manifest.profile_weights)))
+          print('SUPPORT', json.dumps(report.support, sort_keys=True))
+          print('FAILED_FAMILIES', json.dumps(report.distribution.get('failed_families', [])))
+          PY
+      - name: Summarize generated naturalness report
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/natural-e2e/naturalness.json" ]]; then
+            cat "$RUNNER_TEMP/natural-e2e/naturalness.json"
+          fi
+      - name: Fail closed unless independent office naturalness is established
+        if: always()
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_OUT: ${{ runner.temp }}/natural-e2e
+        run: |
+          if [[ ! -f "$NATURAL_OUT/naturalness.json" ]]; then
+            echo "::error::Naturalness evidence is absent; release is blocked"
+            exit 1
+          fi
+          python -m natural_traffic.naturalness_release_gate \
+            --naturalness "$NATURAL_OUT/naturalness.json" \
+            --out "$NATURAL_OUT/release_gate.json"
+      - name: Upload generated benign E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: natural-generated-benign-e2e-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/natural-e2e
+            ${{ runner.temp }}/natural-control-run/results.json
+            ${{ runner.temp }}/natural-control-run/runtime_manifest.json
+            ${{ runner.temp }}/natural-control-run/jobs.json
+            ${{ runner.temp }}/natural-control-run/runtime.log
+            ${{ runner.temp }}/natural-control-run/*/job.json
+            ${{ runner.temp }}/natural-control-run/*/result.json
+            ${{ runner.temp }}/natural-control-run/*/client.log
+            ${{ runner.temp }}/natural-control-run/*/tcpdump.log
+            ${{ runner.temp }}/natural-control-run/*/path_environment.json
+            ${{ runner.temp }}/natural-control-run/*/dispatch.json
+            ${{ runner.temp }}/natural-control-run/*/capture.pcap
+          retention-days: 30
+  external-reference-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ArtemSelin/MITRE-ATTACK-pcaps
+          ref: 0b408bff41f04e2ecd198f4e78568686e3cdcc8d
+          path: external-mitre-pcaps
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install audit dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scikit-learn pyyaml
+      - name: Verify immutable external source and build OOD manifest
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          EXTERNAL_ROOT: ${{ github.workspace }}/external-mitre-pcaps
+        run: |
+          test "$(git -C "$EXTERNAL_ROOT" rev-parse HEAD)" = "0b408bff41f04e2ecd198f4e78568686e3cdcc8d"
+          python -m natural_traffic.cli build-external-reference \
+            --root "$EXTERNAL_ROOT" \
+            --source references/attack-replay-external.json \
+            --out external-reference.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          body=json.loads(Path('external-reference.json').read_text())
+          if body['summary']['pcaps'] != 41:
+              raise SystemExit(f"pinned external corpus drift: {body['summary']['pcaps']} != 41")
+          if any(row['training_eligible'] for row in body['entries']):
+              raise SystemExit('external replay capture became training_eligible')
+          if any(row['naturalness_calibration_eligible'] for row in body['entries']):
+              raise SystemExit('external replay capture became naturalness_calibration_eligible')
+          print('EXTERNAL_PCAPS', body['summary']['pcaps'])
+          print('TECHNIQUES', body['summary']['techniques'])
+          print('QUALITY_ACCEPTED', body['summary']['accepted_quality'])
+          print('QUALITY_REJECTED', body['summary']['rejected_quality'])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: attack-replay-external-reference
+          path: cover-channel-lab/research-transfer/external-reference.json
+          retention-days: 30
+
+  frozen-control-day-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install offline diagnostics
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scipy scikit-learn
+      - name: Read-only download of previously frozen benign controls
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37755015492
+          name: natural-generated-benign-e2e-37755015492
+          path: pinned-controls
+      - name: Compare frozen controls with both office days
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          CONTROLS_ROOT: ${{ github.workspace }}/pinned-controls
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+          from natural_traffic.office_day_transfer import (
+              load_additional_days, compare_generated_controls_to_office_days
+          )
+          root=Path(os.environ['CONTROLS_ROOT'])
+          files=list(root.rglob('controls.parquet'))
+          frozen=list(root.rglob('frozen_confirmation_selection.json'))
+          if len(files)!=1 or len(frozen)!=1:
+              raise SystemExit(f'expected one control table + one frozen selection: {len(files)} / {len(frozen)}')
+          selection=json.loads(frozen[0].read_text())
+          ids=set(selection['selected_capture_groups'])
+          controls=pd.read_parquet(files[0])
+          controls=controls[controls['capture_group'].astype(str).isin(ids)].copy()
+          if controls['capture_group'].nunique() != 30:
+              raise SystemExit('expected exactly 30 frozen controls')
+          day02,day03=load_additional_days(Path('datasets/office-additional-days-20261008'))
+          report=compare_generated_controls_to_office_days(
+              day02,day03,controls,seed=20261008,bootstrap_reps=35
+          )
+          report['pinned_capture_source_run']=37755015492
+          report['pinned_capture_source_sha']='b377f6f21a9361c0d045d89928f2e4e31b0991cf'
+          Path('frozen-control-day-diagnostic.json').write_text(
+              json.dumps(report,sort_keys=True,indent=2)+'\n'
+          )
+          print('FROZEN_DAY_TRANSFER',json.dumps({
+              'status':report['status'],
+              'support': report.get('independent_control_groups',0),
+              'daily_auc':{
+                  day: r['max_auc'] for day,r in report.get('evaluations',{}).items()
+              },
+              'top_gaps':{
+                  day: r['largest_measured_differences'][:5]
+                  for day,r in report.get('evaluations',{}).items()
+              },
+          },sort_keys=True))
+          if report['status']!='diagnostic_only':
+              raise SystemExit('inadequate observational comparison support: '+report['status'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frozen-control-day-diagnostic
+          path: cover-channel-lab/research-transfer/frozen-control-day-diagnostic.json
+          retention-days: 30
+
+  office-feature-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install numerical evaluation dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scipy scikit-learn
+      - name: Evaluate held-out office numeric feature model
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.office_feature_baseline \
+            --reference datasets/office-cover-20261006 \
+            --out office-feature-baseline-report.json \
+            --seed 20261008
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: office-feature-baseline-report
+          path: cover-channel-lab/research-transfer/office-feature-baseline-report.json
+          retention-days: 30
+  office-additional-day-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install offline diagnostics
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scipy scikit-learn
+      - name: Validate hashes and measure between-day transport shift
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.office_day_transfer \
+            --root datasets/office-additional-days-20261008 \
+            --out office-additional-day-transfer.json
+      - name: Audit whether actual office application workflows can be learned
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.workload_evidence \
+            --root datasets/office-additional-days-20261008 \
+            --out office-workload-evidence.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: office-additional-day-transfer
+          path: |
+            cover-channel-lab/research-transfer/office-additional-day-transfer.json
+            cover-channel-lab/research-transfer/office-workload-evidence.json
+          retention-days: 30
