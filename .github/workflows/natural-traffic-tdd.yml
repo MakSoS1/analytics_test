@@ -55,8 +55,11 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          from hashlib import sha256
           from pathlib import Path
           from natural_traffic.defender_domain import load_user_input
+          from natural_traffic.composition import extract_pipeline_capture
+          from natural_traffic.contracts import CaptureBundle
           root = Path('verified-benign-office')
           receipt = json.loads((root/'workload_receipt.json').read_text())
           assert receipt['sessions_completed'] == 3
@@ -64,6 +67,25 @@ jobs:
           assert receipt['tls_peer_verified']
           assert receipt['capture_status'] == 'quality_accepted'
           assert not receipt['production_ready']
+          # This is exclusively a disposable local fixture: diagnostic
+          # extractor stderr may be printed without exposing office content.
+          meta = root/'fixture_extraction_metadata.json'
+          meta.write_text(json.dumps({'source': 'isolated_disposable_fixture'})+'\n')
+          digest = sha256(meta.read_bytes()).hexdigest()
+          bundle = CaptureBundle(
+            pair_id='benign-fixture', role='control', profile_id='linux-python-ssl',
+            fidelity='wire-real', pcap_path=root/'benign_workload.pcap',
+            pcap_sha256=receipt['pcap_sha256'], evidence=(),
+            runtime_metadata_path=meta, runtime_metadata_sha256=digest,
+          )
+          extracted_root = root/'controlled_extraction'
+          try:
+            extract_pipeline_capture(bundle, extracted_root, run_id='benign-office-ci', min_free_gib=1)
+          except Exception:
+            logfile = extracted_root/'steps.log'
+            if logfile.exists():
+              print('BENIGN_FIXTURE_EXTRACTOR_DIAGNOSTIC', logfile.read_text()[-10000:])
+            raise
           measured, source = load_user_input(root/'benign_workload.pcap', root, min_free_gib=1)
           assert len(measured) > 0
           assert source['source_sha256'] == receipt['pcap_sha256']
