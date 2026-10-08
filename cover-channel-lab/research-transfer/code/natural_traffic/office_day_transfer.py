@@ -119,7 +119,7 @@ def _audit_sequences(frame: pd.DataFrame) -> dict[str, int]:
             empty += 1
         if counts is not None:
             raw = counts.iloc[i]
-            if not np.isfinite(raw) or raw < 0 or raw != int(raw):
+            if pd.isna(raw) or not np.isfinite(float(raw)) or raw < 0 or float(raw) != int(raw):
                 invalid_counts += 1
             elif any(size != int(raw) for size in sizes):
                 count_mismatch += 1
