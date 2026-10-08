@@ -61,10 +61,17 @@ try {
     Write-Host "PKTMON_PCAPNG_BYTES $((Get-Item $pcapng).Length)"
     & python $checker --pcapng $pcapng --report $report --port 443 --allowed-ips $targetIpFile
     if ($LASTEXITCODE -ne 0) { throw "native Windows HTTPS pcapng evidence insufficient" }
+    $pcap = Join-Path $root "capture.pcap"
+    $extractorReport = Join-Path $root "extractor-report.json"
+    $extractorWork = Join-Path $root "extractor-work"
+    & python (Join-Path $PSScriptRoot "extract_verified.py") --pcapng $pcapng --pcap $pcap --allowed-ips $targetIpFile --report $extractorReport --work $extractorWork
+    if ($LASTEXITCODE -ne 0) { throw "native Windows production extraction failed" }
 } finally {
     if ($captureStarted) { & pktmon stop | Out-Null }
     & pktmon filter remove | Out-Null
     Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $root "probe-target-ips.json")
+    Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $root "capture.pcap")
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $root "extractor-work")
     Remove-Item -Force -ErrorAction SilentlyContinue $etl
     Remove-Item -Force -ErrorAction SilentlyContinue $pcapng
 }
