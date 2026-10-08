@@ -68,7 +68,8 @@ class OfficeFeatureBaselineTests(unittest.TestCase):
         self.assertFalse(report["policy"]["training_eligible"])
         self.assertFalse(report["policy"]["production_ready"])
         self.assertNotIn("generated_rows",report)
-        self.assertNotIn("host_key",str(report))
+        self.assertNotIn("host-0",str(report))
+        self.assertNotIn("host-159",str(report))
 
 
 if __name__=="__main__":
