@@ -2,11 +2,13 @@
 
 from pathlib import Path
 import ast
+import subprocess
 import unittest
+from unittest.mock import patch
 
 import yaml
 
-from framework_runtime.adaptix.capture import runtime_command
+from framework_runtime.adaptix.capture import apply_path, runtime_command
 from cover_runtime.entrypoint import bounded_server_response_patch, patch_lab_services
 
 
@@ -14,6 +16,38 @@ WORKFLOW = Path(__file__).parents[4] / ".github/workflows/isolated-cover-adaptix
 
 
 class IsolatedLabWorkflowTests(unittest.TestCase):
+    def test_adaptix_uses_readback_without_mount_when_lab_tcp_timestamps_already_match(self):
+        commands = []
+
+        def fake_run(*args):
+            commands.append(args)
+            if "-j" in args and "link" in args:
+                return b'[{"mtu": 1500}]'
+            if "sysctl" in args and "-n" in args:
+                return b'1\n'
+            return b''
+
+        with patch("framework_runtime.adaptix.capture.run", side_effect=fake_run):
+            measured = apply_path({"path_profile": "lab_fixed_v1", "client_mtu": 1500,
+                                   "path_rtt_ms": 8, "client_tcp_timestamps": True})
+        self.assertTrue(measured["tcp_timestamps_readback_verified"])
+        self.assertFalse(any(cmd[0] == "mount" for cmd in commands))
+
+    def test_adaptix_timestamp_mismatch_does_not_silently_accept_restricted_mount(self):
+        def fake_run(*args):
+            if "-j" in args and "link" in args:
+                return b'[{"mtu": 1500}]'
+            if "sysctl" in args and "-n" in args:
+                return b'0\n'
+            if args[0] == "mount":
+                raise subprocess.CalledProcessError(32, args)
+            return b''
+
+        with patch("framework_runtime.adaptix.capture.run", side_effect=fake_run):
+            with self.assertRaises(subprocess.CalledProcessError):
+                apply_path({"path_profile": "lab_fixed_v1", "client_mtu": 1500,
+                            "path_rtt_ms": 8, "client_tcp_timestamps": True})
+
     def test_broker_uses_loopback_mqtt_socket_before_namespaced_websocket_listener(self):
         original = "listener 9443 10.20.0.20\nprotocol websockets\nallow_anonymous true\npersistence false\n"
         patched = patch_lab_services(original)
