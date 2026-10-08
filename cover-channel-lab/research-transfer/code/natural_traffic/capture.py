@@ -107,11 +107,13 @@ def probe_capability(
                 "Windows runtime required; no Linux fallback is allowed",
                 {"system": system},
             )
-        supported = shutil.which("pktmon") is not None
+        # pktmon availability alone is not proof of a working capture path.
+        # The engine does not yet implement a native Windows ETL->PCAP backend.
+        pktmon = shutil.which("pktmon")
         return CapabilityReport(
-            profile.profile_id, supported, profile.capture_type,
-            "pktmon available" if supported else "pktmon is unavailable",
-            {"system": system, "pktmon": shutil.which("pktmon")},
+            profile.profile_id, False, profile.capture_type,
+            "Windows native capture backend is not implemented",
+            {"system": system, "pktmon": pktmon, "pktmon_available": bool(pktmon)},
         )
     if system.lower() != "linux":
         return CapabilityReport(
@@ -239,6 +241,10 @@ def run_capture(
             raise ValueError("capability/profile mismatch")
         if not report.supported:
             raise RuntimeError(f"capture capability unsupported: {report.reason}")
+        if backend is None and profile.os_family == "windows":
+            raise RuntimeError(
+                "Windows native capture backend not implemented; Linux tcpdump fallback forbidden"
+            )
         selected = backend or TcpdumpBackend()
         pcap, evidence_paths, backend_meta = selected.capture(profile, adapter, context, output)
         pcap = Path(pcap)

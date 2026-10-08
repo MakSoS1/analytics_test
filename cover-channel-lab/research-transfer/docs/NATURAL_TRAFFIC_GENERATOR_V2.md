@@ -28,7 +28,7 @@ python -m natural_traffic.cli probe --profile linux-curl --out /tmp/linux-capabi
 python -m natural_traffic.cli probe --profile windows-native-http --out /tmp/windows-capability.json
 ```
 
-Windows profile fail-closed: неподдерживаемый `pktmon` не заменяется Linux-профилем.
+Windows profile fail-closed: наличие `pktmon` само по себе не означает поддержку захвата. На текущей версии native Windows ETL→PCAP backend не реализован, поэтому capability report возвращает `supported=false`; Linux-профилем он не заменяется.
 
 ## Managed benign generation
 

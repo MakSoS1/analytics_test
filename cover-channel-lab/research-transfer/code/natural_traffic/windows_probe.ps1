@@ -1,12 +1,13 @@
 $ErrorActionPreference = "Stop"
 $pktmon = Get-Command pktmon -ErrorAction SilentlyContinue
-$supported = $null -ne $pktmon
-$reason = if ($supported) { "pktmon available" } else { "pktmon unavailable" }
+$supported = $false
+$reason = "Windows native capture backend not implemented; pktmon alone is insufficient"
 [ordered]@{
   version = "natural-windows-capture-probe-v2"
   profile_id = "windows-native-http"
   capture_type = "pktmon"
   supported = $supported
+  pktmon_available = ($null -ne $pktmon)
   reason = $reason
   executable = if ($supported) { $pktmon.Source } else { $null }
   os = [System.Environment]::OSVersion.VersionString
