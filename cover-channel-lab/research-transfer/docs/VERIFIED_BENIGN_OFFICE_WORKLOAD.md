@@ -52,6 +52,12 @@ application tasks with production extractor parity. It also exposed a missing
 Sep 22 `tcp_handshake_rtt_ms` field: the comparable office negative-control
 feature set now excludes that *unmeasured* RTT before modelling, instead of
 inventing a zero value or treating absent coverage as evidence.
+The final [green Actions run 37857455916](https://github.com/MakSoS1/analytics_test/actions/runs/37857455916)
+confirmed 60 comparable transport features, a grouped office-vs-office
+negative-control ROC-AUC of **0.52687** (ExtraTrees) / **0.58607** (HGB),
+and explicit `insufficient_support` for the one-source benign-vs-office
+comparison. Its uploaded benign artifact is precisely four aggregate JSON
+files, without PCAP, TLS secrets or per-host data.
 
 For the full module map and experiment results see
 [current project status](CURRENT_PROJECT_STATUS.md),
