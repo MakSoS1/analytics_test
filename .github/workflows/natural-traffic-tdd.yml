@@ -20,6 +20,10 @@ on:
       - 'cover-channel-lab/research-transfer/code/cover_runtime/*.py'
       - 'cover-channel-lab/research-transfer/code/tests/test_natural_*.py'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

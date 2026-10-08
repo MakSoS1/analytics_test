@@ -9,6 +9,10 @@ on:
       - 'cover-channel-lab/research-transfer/code/windows_office_probe/**'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -23,7 +27,7 @@ jobs:
           python-version: '3.12'
       - name: Install benign-fixture dependencies
         run: python -m pip install cryptography scapy pandas pyarrow numpy scipy scikit-learn pyyaml
-      - name: Capture native .NET HTTP client against loopback TLS fixture
+      - name: Capture native .NET HTTP client against public HTTPS test endpoint
         shell: pwsh
         run: '& ./cover-channel-lab/research-transfer/code/windows_office_probe/smoke.ps1'
       - uses: actions/upload-artifact@v4
