@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from scapy.all import PcapNgReader, TCP, IP, IPv6
 
-def inspect(path: Path, port: int = 18443) -> dict:
+def inspect(path: Path, port: int = 443) -> dict:
     total = matches = syn = 0
     stamps = []
     with PcapNgReader(str(path)) as reader:
@@ -28,7 +28,7 @@ def inspect(path: Path, port: int = 18443) -> dict:
         "syn_flag_frames":syn,
         "capture_span_seconds":round(max(stamps)-min(stamps), 3) if stamps else 0,
         "supported": matches >= 8 and syn >= 1 and (max(stamps)-min(stamps) >= 1 if stamps else False),
-        "scope":"local_only_synthetic_tls_httpclient",
+        "scope":"public_example_com_native_windows_https_probe_no_user_data",
         "authorizes_windows_backend":False,
         "office_naturalness_proven":False,
         "production_ready":False,
@@ -38,8 +38,9 @@ if __name__ == "__main__":
     p=argparse.ArgumentParser()
     p.add_argument("--pcapng",type=Path,required=True)
     p.add_argument("--report",type=Path,required=True)
+    p.add_argument("--port",type=int,default=443)
     a=p.parse_args()
-    out=inspect(a.pcapng)
+    out=inspect(a.pcapng,port=a.port)
     a.report.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
     print(json.dumps(out,sort_keys=True))
     if not out["supported"]:
