@@ -1,0 +1,4336 @@
+{
+  "version": "cover-registry-v1",
+  "main_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+  "stage_m_commit": "1028b4a922c9b59e841fc71d58ae1df60ded6da4",
+  "sources": [
+    {
+      "path": "main/src/coverlab/scenarios.py",
+      "sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "path": "main/src/coverlab/scenarios_extra.py",
+      "sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "path": "stage_m/src/coverlab/stage_m.py",
+      "sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    }
+  ],
+  "entries": [
+    {
+      "entry_id": "CC_BODY_01",
+      "namespace": "catalog",
+      "family": "body",
+      "carrier": "json",
+      "transport": "https",
+      "intent": "c2",
+      "description": "direct synthetic command/result JSON",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BODY_02",
+      "namespace": "catalog",
+      "family": "body",
+      "carrier": "json_junk",
+      "transport": "https",
+      "intent": "c2",
+      "description": "payload among junk JSON fields",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BODY_03",
+      "namespace": "catalog",
+      "family": "body",
+      "carrier": "form",
+      "transport": "http",
+      "intent": "exfil",
+      "description": "fragments in form values",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BODY_04",
+      "namespace": "catalog",
+      "family": "body",
+      "carrier": "multipart",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "synthetic file-like result",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BODY_05",
+      "namespace": "catalog",
+      "family": "body",
+      "carrier": "multipart_filename",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "data in multipart filename/boundary",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BODY_06",
+      "namespace": "catalog",
+      "family": "body",
+      "carrier": "octet_stream",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "encrypted-like bytes",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BODY_07",
+      "namespace": "catalog",
+      "family": "body",
+      "carrier": "protobuf_like",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "opaque protobuf-like bytes",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BODY_08",
+      "namespace": "catalog",
+      "family": "body",
+      "carrier": "xml_attributes",
+      "transport": "http",
+      "intent": "c2",
+      "description": "payload in XML attributes",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BODY_09",
+      "namespace": "catalog",
+      "family": "body",
+      "carrier": "graphql_variables",
+      "transport": "https",
+      "intent": "c2",
+      "description": "command disguised as variables",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BODY_10",
+      "namespace": "catalog",
+      "family": "body",
+      "carrier": "chunked",
+      "transport": "http",
+      "intent": "exfil",
+      "description": "fragmented HTTP body",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_01",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "extension_registration",
+      "transport": "https",
+      "intent": "c2",
+      "description": "extension registration",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_02",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "service_worker_alarm",
+      "transport": "https",
+      "intent": "c2",
+      "description": "Service Worker alarm",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_03",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "push_wakeup",
+      "transport": "https",
+      "intent": "c2",
+      "description": "push-like wake-up",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_04",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "keepalive_tab",
+      "transport": "https",
+      "intent": "c2",
+      "description": "hidden helper fetch",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_05",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "native_echo",
+      "transport": "https",
+      "intent": "c2",
+      "description": "safe local echo bridge",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_06",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "browser_wss",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "WSS from browser-like context",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_07",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "headless",
+      "transport": "https",
+      "intent": "c2",
+      "description": "headless browser timing",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_08",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "fetch_stream",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "synthetic blob fetch stream",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_09",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "send_beacon",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "sendBeacon-like exfil",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_10",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "csp_report",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "CSP report carrier",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_BROWSER_11",
+      "namespace": "catalog",
+      "family": "browser",
+      "carrier": "prefetch",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "resource hint subdomain symbols",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_CONNECT_01",
+      "namespace": "catalog",
+      "family": "connect",
+      "carrier": "http_connect",
+      "transport": "http",
+      "intent": "tunnel",
+      "description": "HTTP CONNECT-like local echo fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_CONNECT_02",
+      "namespace": "catalog",
+      "family": "connect",
+      "carrier": "extended_connect",
+      "transport": "h2",
+      "intent": "tunnel",
+      "description": "H2 Extended CONNECT semantic fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_CONNECT_03",
+      "namespace": "catalog",
+      "family": "connect",
+      "carrier": "websocket_h2",
+      "transport": "h2",
+      "intent": "tunnel",
+      "description": "WebSocket-over-H2 semantic fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_DOH_01",
+      "namespace": "catalog",
+      "family": "doh",
+      "carrier": "dns_message",
+      "transport": "https",
+      "intent": "c2",
+      "description": "DNS wire-format in local /dns-query",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_GRPC_01",
+      "namespace": "catalog",
+      "family": "grpc",
+      "carrier": "grpc_unary",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "gRPC wire-format unary fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_GRPC_02",
+      "namespace": "catalog",
+      "family": "grpc",
+      "carrier": "grpc_server_stream",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "server stream fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_GRPC_03",
+      "namespace": "catalog",
+      "family": "grpc",
+      "carrier": "grpc_client_stream",
+      "transport": "h2",
+      "intent": "exfil",
+      "description": "client stream fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_GRPC_04",
+      "namespace": "catalog",
+      "family": "grpc",
+      "carrier": "grpc_bidi",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "bidi stream fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_GRPC_05",
+      "namespace": "catalog",
+      "family": "grpc",
+      "carrier": "grpc_metadata",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "metadata carrier",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_GRPC_06",
+      "namespace": "catalog",
+      "family": "grpc",
+      "carrier": "grpc_trailers",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "status/trailer signal",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_GRPC_07",
+      "namespace": "catalog",
+      "family": "grpc",
+      "carrier": "grpc_compressed",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "compressed messages",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_GRPC_08",
+      "namespace": "catalog",
+      "family": "grpc",
+      "carrier": "grpc_multiplex",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "multiplexed methods",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_H2_01",
+      "namespace": "catalog",
+      "family": "http2",
+      "carrier": "h2_request",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "GET/POST streams",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_H2_02",
+      "namespace": "catalog",
+      "family": "http2",
+      "carrier": "h2_parallel",
+      "transport": "h2",
+      "intent": "exfil",
+      "description": "parallel stream fragments",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_H2_03",
+      "namespace": "catalog",
+      "family": "http2",
+      "carrier": "h2_order",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "stream ordering channel",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_H2_04",
+      "namespace": "catalog",
+      "family": "http2",
+      "carrier": "h2_header",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "header value carrier",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_H2_05",
+      "namespace": "catalog",
+      "family": "http2",
+      "carrier": "h2_data_size",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "DATA size classes",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_H2_06",
+      "namespace": "catalog",
+      "family": "http2",
+      "carrier": "h2_reset",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "selective resets fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_H2_07",
+      "namespace": "catalog",
+      "family": "http2",
+      "carrier": "h2_sparse",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "sparse streams on long connection",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_H2_08",
+      "namespace": "catalog",
+      "family": "http2",
+      "carrier": "h2_client_mismatch",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "browser-like headers from script stack",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_H3_01",
+      "namespace": "catalog",
+      "family": "http3",
+      "carrier": "h3_request",
+      "transport": "h3",
+      "intent": "c2",
+      "description": "HTTP/3 GET/POST streams",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_H3_02",
+      "namespace": "catalog",
+      "family": "http3",
+      "carrier": "h3_parallel",
+      "transport": "h3",
+      "intent": "exfil",
+      "description": "parallel H3 stream fragments",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_H3_03",
+      "namespace": "catalog",
+      "family": "http3",
+      "carrier": "h3_order",
+      "transport": "h3",
+      "intent": "c2",
+      "description": "stream ordering channel",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_H3_04",
+      "namespace": "catalog",
+      "family": "http3",
+      "carrier": "h3_header",
+      "transport": "h3",
+      "intent": "c2",
+      "description": "H3 header value carrier",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_H3_05",
+      "namespace": "catalog",
+      "family": "http3",
+      "carrier": "h3_data_size",
+      "transport": "h3",
+      "intent": "c2",
+      "description": "H3 DATA size classes",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_H3_06",
+      "namespace": "catalog",
+      "family": "http3",
+      "carrier": "h3_sparse",
+      "transport": "h3",
+      "intent": "c2",
+      "description": "sparse H3 streams",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_H3_07",
+      "namespace": "catalog",
+      "family": "http3",
+      "carrier": "h3_reconnect",
+      "transport": "h3",
+      "intent": "c2",
+      "description": "QUIC reconnect/NAT-rebinding-like profile",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_H3_08",
+      "namespace": "catalog",
+      "family": "http3",
+      "carrier": "h3_fallback",
+      "transport": "h3",
+      "intent": "c2",
+      "description": "H3 to H2 to H1 fallback campaign",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_HDR_01",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "cookie",
+      "transport": "https",
+      "intent": "c2",
+      "description": "registration in Cookie",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_02",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "cookie",
+      "transport": "https",
+      "intent": "c2",
+      "description": "fragments in Cookie",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_03",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "authorization",
+      "transport": "https",
+      "intent": "c2",
+      "description": "synthetic payload disguised as bearer",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_04",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "user_agent",
+      "transport": "https",
+      "intent": "c2",
+      "description": "ID suffix in User-Agent",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_05",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "referer",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "encoded result in Referer",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_06",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "origin",
+      "transport": "https",
+      "intent": "c2",
+      "description": "low bandwidth marker in Origin",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_07",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "accept_language",
+      "transport": "https",
+      "intent": "c2",
+      "description": "Accept-Language order modulation",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_08",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "accept_encoding",
+      "transport": "https",
+      "intent": "c2",
+      "description": "Accept-Encoding order modulation",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_09",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "if_none_match",
+      "transport": "https",
+      "intent": "c2",
+      "description": "synthetic victim ID in If-None-Match",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_10",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "if_modified_since",
+      "transport": "https",
+      "intent": "c2",
+      "description": "timestamp modulation",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_11",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "range",
+      "transport": "https",
+      "intent": "c2",
+      "description": "Range offsets encode symbols",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_HDR_12",
+      "namespace": "catalog",
+      "family": "header",
+      "carrier": "content_type_param",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "boundary/charset fragment",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LOTS_01",
+      "namespace": "catalog",
+      "family": "lots",
+      "carrier": "chatops_poll",
+      "transport": "https",
+      "intent": "c2",
+      "description": "local getUpdates-like polling",
+      "dataset_role": "hard_negative",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LOTS_02",
+      "namespace": "catalog",
+      "family": "lots",
+      "carrier": "chatops_push",
+      "transport": "https",
+      "intent": "c2",
+      "description": "local sendMessage-like request",
+      "dataset_role": "hard_negative",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LOTS_03",
+      "namespace": "catalog",
+      "family": "lots",
+      "carrier": "chatops_document",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "local sendDocument-like multipart",
+      "dataset_role": "hard_negative",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LOTS_04",
+      "namespace": "catalog",
+      "family": "lots",
+      "carrier": "webhook",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "local webhook-like one-way POST",
+      "dataset_role": "hard_negative",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LOTS_05",
+      "namespace": "catalog",
+      "family": "lots",
+      "carrier": "ephemeral_relay",
+      "transport": "wss",
+      "intent": "tunnel",
+      "description": "local ephemeral relay analogue",
+      "dataset_role": "hard_negative",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LOTS_06",
+      "namespace": "catalog",
+      "family": "lots",
+      "carrier": "paas_endpoint",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "local PaaS-style endpoint",
+      "dataset_role": "hard_negative",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LOTS_07",
+      "namespace": "catalog",
+      "family": "lots",
+      "carrier": "dyndns_endpoint",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "local dynamic-DNS-style endpoint",
+      "dataset_role": "hard_negative",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LOTS_08",
+      "namespace": "catalog",
+      "family": "lots",
+      "carrier": "bucket_dead_drop",
+      "transport": "https",
+      "intent": "c2",
+      "description": "local S3-like time-slot object name",
+      "dataset_role": "hard_negative",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LP_01",
+      "namespace": "catalog",
+      "family": "longpoll",
+      "carrier": "long_poll_recv",
+      "transport": "https",
+      "intent": "c2",
+      "description": "long polling receive",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LP_02",
+      "namespace": "catalog",
+      "family": "longpoll",
+      "carrier": "rotating_poll",
+      "transport": "https",
+      "intent": "c2",
+      "description": "rotating poll ID",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_LP_03",
+      "namespace": "catalog",
+      "family": "longpoll",
+      "carrier": "poll_upload",
+      "transport": "https",
+      "intent": "c2",
+      "description": "poll + result upload",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_MASQUE_01",
+      "namespace": "catalog",
+      "family": "masque",
+      "carrier": "connect_udp",
+      "transport": "h3",
+      "intent": "tunnel",
+      "description": "real H3 datagram CONNECT-UDP-like fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_MASQUE_02",
+      "namespace": "catalog",
+      "family": "masque",
+      "carrier": "connect_ip",
+      "transport": "h3",
+      "intent": "tunnel",
+      "description": "CONNECT-IP-like isolated synthetic datagram fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_MQTT_01",
+      "namespace": "catalog",
+      "family": "mqtt_ws",
+      "carrier": "mqtt_topic",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "MQTT-like CONNECT/PUBLISH frames over WSS",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_MQTT_02",
+      "namespace": "catalog",
+      "family": "mqtt_ws",
+      "carrier": "mqtt_payload",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "MQTT-like topic/payload carrier",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_MQTT_03",
+      "namespace": "catalog",
+      "family": "mqtt_ws",
+      "carrier": "mqtt_timing",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "MQTT-over-WSS timing fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_OHTTP_01",
+      "namespace": "catalog",
+      "family": "privacy",
+      "carrier": "ohttp_binary",
+      "transport": "https",
+      "intent": "unknown",
+      "description": "OHTTP-like encrypted binary benign hard-negative",
+      "dataset_role": "hard_negative",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_RESP_01",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "response_body",
+      "transport": "http",
+      "intent": "c2",
+      "description": "plain task in response",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_02",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "response_json",
+      "transport": "https",
+      "intent": "c2",
+      "description": "task in noisy object",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_03",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "response_xml",
+      "transport": "http",
+      "intent": "c2",
+      "description": "GUID/hex steganography",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_04",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "response_html",
+      "transport": "http",
+      "intent": "c2",
+      "description": "HTML comment/attribute carrier",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_05",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "response_css",
+      "transport": "http",
+      "intent": "c2",
+      "description": "CSS value carrier",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_06",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "response_image_meta",
+      "transport": "http",
+      "intent": "c2",
+      "description": "synthetic image metadata carrier",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_07",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "set_cookie",
+      "transport": "https",
+      "intent": "c2",
+      "description": "downstream command in Set-Cookie",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_08",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "etag",
+      "transport": "https",
+      "intent": "c2",
+      "description": "downstream ETag fragment",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_09",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "status_code",
+      "transport": "http",
+      "intent": "c2",
+      "description": "status-code alphabet",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_10",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "redirect",
+      "transport": "http",
+      "intent": "c2",
+      "description": "Location carries task",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_11",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "response_size",
+      "transport": "http",
+      "intent": "c2",
+      "description": "response length modulation",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_RESP_12",
+      "namespace": "catalog",
+      "family": "response",
+      "carrier": "response_chunks",
+      "transport": "http",
+      "intent": "c2",
+      "description": "chunk-size modulation",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SSE_01",
+      "namespace": "catalog",
+      "family": "sse",
+      "carrier": "sse_command",
+      "transport": "http",
+      "intent": "c2",
+      "description": "command event stream",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SSE_02",
+      "namespace": "catalog",
+      "family": "sse",
+      "carrier": "sse_encoded",
+      "transport": "http",
+      "intent": "c2",
+      "description": "encoded events",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SSE_03",
+      "namespace": "catalog",
+      "family": "sse",
+      "carrier": "sse_comment_timing",
+      "transport": "http",
+      "intent": "c2",
+      "description": "comment timing",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SSE_04",
+      "namespace": "catalog",
+      "family": "sse",
+      "carrier": "last_event_id",
+      "transport": "http",
+      "intent": "c2",
+      "description": "Last-Event-ID carrier",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SSE_05",
+      "namespace": "catalog",
+      "family": "sse",
+      "carrier": "sse_sparse",
+      "transport": "http",
+      "intent": "c2",
+      "description": "sparse long-lived SSE",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SYN_01",
+      "namespace": "catalog",
+      "family": "syntax",
+      "carrier": "header_order",
+      "transport": "http",
+      "intent": "c2",
+      "description": "header order channel",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SYN_02",
+      "namespace": "catalog",
+      "family": "syntax",
+      "carrier": "header_case",
+      "transport": "http",
+      "intent": "c2",
+      "description": "header case channel",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SYN_03",
+      "namespace": "catalog",
+      "family": "syntax",
+      "carrier": "whitespace",
+      "transport": "http",
+      "intent": "c2",
+      "description": "OWS modulation",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SYN_04",
+      "namespace": "catalog",
+      "family": "syntax",
+      "carrier": "duplicate_headers",
+      "transport": "http",
+      "intent": "c2",
+      "description": "duplicate header order",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SYN_05",
+      "namespace": "catalog",
+      "family": "syntax",
+      "carrier": "method",
+      "transport": "http",
+      "intent": "c2",
+      "description": "method selection channel",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SYN_06",
+      "namespace": "catalog",
+      "family": "syntax",
+      "carrier": "connection_reuse",
+      "transport": "http",
+      "intent": "c2",
+      "description": "reuse/close modulation",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SYN_07",
+      "namespace": "catalog",
+      "family": "syntax",
+      "carrier": "content_length_parity",
+      "transport": "http",
+      "intent": "c2",
+      "description": "body length parity",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_SYN_08",
+      "namespace": "catalog",
+      "family": "syntax",
+      "carrier": "request_count",
+      "transport": "http",
+      "intent": "c2",
+      "description": "request count symbols",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TIME_01",
+      "namespace": "catalog",
+      "family": "timing",
+      "carrier": "fixed_beacon",
+      "transport": "https",
+      "intent": "c2",
+      "description": "fixed beacon",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TIME_02",
+      "namespace": "catalog",
+      "family": "timing",
+      "carrier": "low_jitter",
+      "transport": "https",
+      "intent": "c2",
+      "description": "low jitter beacon",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TIME_03",
+      "namespace": "catalog",
+      "family": "timing",
+      "carrier": "medium_jitter",
+      "transport": "https",
+      "intent": "c2",
+      "description": "medium jitter beacon",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TIME_04",
+      "namespace": "catalog",
+      "family": "timing",
+      "carrier": "high_jitter",
+      "transport": "https",
+      "intent": "c2",
+      "description": "lognormal jitter",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TIME_05",
+      "namespace": "catalog",
+      "family": "timing",
+      "carrier": "burst",
+      "transport": "https",
+      "intent": "c2",
+      "description": "burst then pause",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TIME_06",
+      "namespace": "catalog",
+      "family": "timing",
+      "carrier": "work_hours",
+      "transport": "https",
+      "intent": "c2",
+      "description": "work-hours schedule",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TIME_07",
+      "namespace": "catalog",
+      "family": "timing",
+      "carrier": "backoff",
+      "transport": "https",
+      "intent": "c2",
+      "description": "exponential backoff",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TIME_08",
+      "namespace": "catalog",
+      "family": "timing",
+      "carrier": "binary_timing",
+      "transport": "http",
+      "intent": "c2",
+      "description": "short/long interval bits",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TIME_09",
+      "namespace": "catalog",
+      "family": "timing",
+      "carrier": "low_slow",
+      "transport": "https",
+      "intent": "c2",
+      "description": "accelerated low-and-slow fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TIME_10",
+      "namespace": "catalog",
+      "family": "timing",
+      "carrier": "event_driven",
+      "transport": "https",
+      "intent": "c2",
+      "description": "event-driven callback",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TLS_01",
+      "namespace": "catalog",
+      "family": "tls",
+      "carrier": "script_default",
+      "transport": "https",
+      "intent": "c2",
+      "description": "default script TLS",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TLS_02",
+      "namespace": "catalog",
+      "family": "tls",
+      "carrier": "browser_like",
+      "transport": "https",
+      "intent": "c2",
+      "description": "browser-like headers/TLS challenge",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TLS_03",
+      "namespace": "catalog",
+      "family": "tls",
+      "carrier": "clienthello_variation",
+      "transport": "https",
+      "intent": "c2",
+      "description": "TLS stack diversity challenge",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TLS_04",
+      "namespace": "catalog",
+      "family": "tls",
+      "carrier": "resumption",
+      "transport": "https",
+      "intent": "c2",
+      "description": "session resumption",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TLS_05",
+      "namespace": "catalog",
+      "family": "tls",
+      "carrier": "zero_rtt_marker",
+      "transport": "https",
+      "intent": "c2",
+      "description": "0-RTT capability marker fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TLS_06",
+      "namespace": "catalog",
+      "family": "tls",
+      "carrier": "sni_loss_fixture",
+      "transport": "https",
+      "intent": "c2",
+      "description": "visibility-loss fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TLS_07",
+      "namespace": "catalog",
+      "family": "tls",
+      "carrier": "fallback",
+      "transport": "h2",
+      "intent": "c2",
+      "description": "H3/H2/H1 metadata fallback fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TLS_08",
+      "namespace": "catalog",
+      "family": "tls",
+      "carrier": "shared_edge",
+      "transport": "https",
+      "intent": "c2",
+      "description": "shared-edge hostname categories",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TLS_09",
+      "namespace": "catalog",
+      "family": "tls",
+      "carrier": "cert_rotation",
+      "transport": "https",
+      "intent": "c2",
+      "description": "certificate/destination rotation fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TLS_10",
+      "namespace": "catalog",
+      "family": "tls",
+      "carrier": "inspection_bypass",
+      "transport": "https",
+      "intent": "c2",
+      "description": "pinning-like inspection outcome label",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TUN_01",
+      "namespace": "catalog",
+      "family": "tunnel",
+      "carrier": "fixed_echo_relay",
+      "transport": "wss",
+      "intent": "tunnel",
+      "description": "fixed local echo service",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TUN_02",
+      "namespace": "catalog",
+      "family": "tunnel",
+      "carrier": "allowlisted_connect",
+      "transport": "wss",
+      "intent": "proxy",
+      "description": "SOCKS-like grammar to synthetic target only",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TUN_03",
+      "namespace": "catalog",
+      "family": "tunnel",
+      "carrier": "multiplex_conn_id",
+      "transport": "wss",
+      "intent": "proxy",
+      "description": "2-16 logical synthetic streams",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TUN_04",
+      "namespace": "catalog",
+      "family": "tunnel",
+      "carrier": "mixed_inner",
+      "transport": "wss",
+      "intent": "tunnel",
+      "description": "synthetic inner protocol labels",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TUN_05",
+      "namespace": "catalog",
+      "family": "tunnel",
+      "carrier": "backpressure",
+      "transport": "wss",
+      "intent": "tunnel",
+      "description": "safe window/update-like controls",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TUN_06",
+      "namespace": "catalog",
+      "family": "tunnel",
+      "carrier": "stream_lifecycle",
+      "transport": "wss",
+      "intent": "tunnel",
+      "description": "half-close/reset grammar",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TUN_07",
+      "namespace": "catalog",
+      "family": "tunnel",
+      "carrier": "interactive",
+      "transport": "wss",
+      "intent": "tunnel",
+      "description": "small bidirectional messages",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TUN_08",
+      "namespace": "catalog",
+      "family": "tunnel",
+      "carrier": "bulk",
+      "transport": "wss",
+      "intent": "tunnel",
+      "description": "larger one-way synthetic phase",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TUN_09",
+      "namespace": "catalog",
+      "family": "tunnel",
+      "carrier": "keepalive",
+      "transport": "wss",
+      "intent": "tunnel",
+      "description": "idle + sparse ping/pong",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_TUN_10",
+      "namespace": "catalog",
+      "family": "tunnel",
+      "carrier": "endpoint_migration",
+      "transport": "wss",
+      "intent": "tunnel",
+      "description": "same campaign second local hostname",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_URI_01",
+      "namespace": "catalog",
+      "family": "uri",
+      "carrier": "query_value",
+      "transport": "http",
+      "intent": "c2",
+      "description": "message in id query",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_URI_02",
+      "namespace": "catalog",
+      "family": "uri",
+      "carrier": "query_values",
+      "transport": "http",
+      "intent": "c2",
+      "description": "message split over query values",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_URI_03",
+      "namespace": "catalog",
+      "family": "uri",
+      "carrier": "path_segment",
+      "transport": "http",
+      "intent": "c2",
+      "description": "fragment in path segment",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_URI_04",
+      "namespace": "catalog",
+      "family": "uri",
+      "carrier": "multi_request_query",
+      "transport": "http",
+      "intent": "c2",
+      "description": "small fragments over requests",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_URI_05",
+      "namespace": "catalog",
+      "family": "uri",
+      "carrier": "filename",
+      "transport": "http",
+      "intent": "c2",
+      "description": "payload-like filename extension",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_URI_06",
+      "namespace": "catalog",
+      "family": "uri",
+      "carrier": "matrix_path",
+      "transport": "http",
+      "intent": "c2",
+      "description": "matrix-like path params",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_URI_07",
+      "namespace": "catalog",
+      "family": "uri",
+      "carrier": "query_key",
+      "transport": "http",
+      "intent": "c2",
+      "description": "symbols in query key names",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_URI_08",
+      "namespace": "catalog",
+      "family": "uri",
+      "carrier": "uri_length",
+      "transport": "http",
+      "intent": "c2",
+      "description": "URI length modulation",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WEBTRANS_01",
+      "namespace": "catalog",
+      "family": "webtransport",
+      "carrier": "webtransport_stream",
+      "transport": "h3",
+      "intent": "tunnel",
+      "description": "real WebTransport bidirectional stream fixture",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "semantic_fixture",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios_extra.py",
+      "source_sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "entry_id": "CC_WS_01",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_registration",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "UUID + synthetic system profile",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_02",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_json_recv",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "JSON recv polling",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_03",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_json_send",
+      "transport": "wss",
+      "intent": "exfil",
+      "description": "JSON result send",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_04",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_b64_envelope",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "Base64 JSON envelope",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_05",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_binary",
+      "transport": "wss",
+      "intent": "exfil",
+      "description": "binary frames",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_06",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_ping",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "ping timing/payload",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_07",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_fragmentation",
+      "transport": "wss",
+      "intent": "exfil",
+      "description": "fragmented messages",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_08",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_idle",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "long-lived sparse messages",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_09",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_reconnect",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "reconnect continuity",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_10",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_multipersona",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "multiple personas same endpoint",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_11",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_browser_headers",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "browser mimicry",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_WS_12",
+      "namespace": "catalog",
+      "family": "websocket",
+      "carrier": "ws_appliance",
+      "transport": "wss",
+      "intent": "c2",
+      "description": "appliance-like WSS",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_XHDR_01",
+      "namespace": "catalog",
+      "family": "custom_header",
+      "carrier": "x_session_id",
+      "transport": "https",
+      "intent": "c2",
+      "description": "X-Session-Id value stream",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_XHDR_02",
+      "namespace": "catalog",
+      "family": "custom_header",
+      "carrier": "x_request_id",
+      "transport": "https",
+      "intent": "c2",
+      "description": "X-Request-Id value stream",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_XHDR_03",
+      "namespace": "catalog",
+      "family": "custom_header",
+      "carrier": "x_correlation_id",
+      "transport": "https",
+      "intent": "c2",
+      "description": "correlation ID stream",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "CC_XHDR_04",
+      "namespace": "catalog",
+      "family": "custom_header",
+      "carrier": "x_telemetry",
+      "transport": "https",
+      "intent": "exfil",
+      "description": "encoded telemetry-like result",
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_protocol_generator",
+      "profiles": [
+        {
+          "profile_id": "original_dispatch",
+          "client": "upstream_dispatch",
+          "server": "upstream_fixture",
+          "topology": "isolated"
+        }
+      ],
+      "source_path": "main/src/coverlab/scenarios.py",
+      "source_sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "entry_id": "M-CLOUD-API",
+      "namespace": "stage_m",
+      "family": "M-CLOUD-API",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "cloud-api-python_httpx-0",
+          "client": "python_httpx",
+          "server": "nginx_reverse_proxy",
+          "topology": "edge-front.test"
+        },
+        {
+          "profile_id": "cloud-api-python_httpx_h2-1",
+          "client": "python_httpx_h2",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "cloud-api-python_stdlib-2",
+          "client": "python_stdlib",
+          "server": "nginx_reverse_proxy",
+          "topology": "workers-front.test"
+        },
+        {
+          "profile_id": "cloud-api-curl_linux-3",
+          "client": "curl_linux",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "cloud-api-go_nethttp-4",
+          "client": "go_nethttp",
+          "server": "nginx_reverse_proxy",
+          "topology": "telegram-front.test"
+        },
+        {
+          "profile_id": "cloud-api-node_fetch-5",
+          "client": "node_fetch",
+          "server": "nginx_reverse_proxy",
+          "topology": "resolver-front.test"
+        },
+        {
+          "profile_id": "cloud-api-java_httpclient-6",
+          "client": "java_httpclient",
+          "server": "nginx_reverse_proxy",
+          "topology": "edge-front.test"
+        },
+        {
+          "profile_id": "cloud-api-rust_reqwest-7",
+          "client": "rust_reqwest",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "cloud-api-browser_chromium-8",
+          "client": "browser_chromium",
+          "server": "nginx_reverse_proxy",
+          "topology": "workers-front.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-DEAD-DROP",
+      "namespace": "stage_m",
+      "family": "M-DEAD-DROP",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "m-dead-drop-python_httpx-0",
+          "client": "python_httpx",
+          "server": "nginx+hypercorn",
+          "topology": "edge-front.test"
+        },
+        {
+          "profile_id": "m-dead-drop-python_httpx_h2-1",
+          "client": "python_httpx_h2",
+          "server": "nginx+hypercorn",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-dead-drop-python_stdlib-2",
+          "client": "python_stdlib",
+          "server": "nginx+hypercorn",
+          "topology": "workers-front.test"
+        },
+        {
+          "profile_id": "m-dead-drop-curl_linux-0",
+          "client": "curl_linux",
+          "server": "nginx+hypercorn",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-dead-drop-go_nethttp-1",
+          "client": "go_nethttp",
+          "server": "nginx+hypercorn",
+          "topology": "telegram-front.test"
+        },
+        {
+          "profile_id": "m-dead-drop-node_fetch-2",
+          "client": "node_fetch",
+          "server": "nginx+hypercorn",
+          "topology": "resolver-front.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-DNS-BEACON",
+      "namespace": "stage_m",
+      "family": "M-DNS-BEACON",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "dns-python-auth-udp",
+          "client": "python_dnspython_udp",
+          "server": "local_authoritative",
+          "topology": "direct_authoritative"
+        },
+        {
+          "profile_id": "dns-python-auth-tcp",
+          "client": "python_dnspython_tcp",
+          "server": "local_authoritative",
+          "topology": "direct_authoritative"
+        },
+        {
+          "profile_id": "dns-python-rec-udp",
+          "client": "python_dnspython_udp",
+          "server": "local_recursive_forwarder",
+          "topology": "recursive_resolver"
+        },
+        {
+          "profile_id": "dns-python-rec-tcp",
+          "client": "python_dnspython_tcp",
+          "server": "local_recursive_forwarder",
+          "topology": "recursive_resolver"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-DNS-BULK",
+      "namespace": "stage_m",
+      "family": "M-DNS-BULK",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "dns-python-auth-udp",
+          "client": "python_dnspython_udp",
+          "server": "local_authoritative",
+          "topology": "direct_authoritative"
+        },
+        {
+          "profile_id": "dns-python-auth-tcp",
+          "client": "python_dnspython_tcp",
+          "server": "local_authoritative",
+          "topology": "direct_authoritative"
+        },
+        {
+          "profile_id": "dns-python-rec-udp",
+          "client": "python_dnspython_udp",
+          "server": "local_recursive_forwarder",
+          "topology": "recursive_resolver"
+        },
+        {
+          "profile_id": "dns-python-rec-tcp",
+          "client": "python_dnspython_tcp",
+          "server": "local_recursive_forwarder",
+          "topology": "recursive_resolver"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-DOH",
+      "namespace": "stage_m",
+      "family": "M-DOH",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "doh-python_httpx-direct",
+          "client": "python_httpx",
+          "server": "hypercorn",
+          "topology": "doh-relay.test"
+        },
+        {
+          "profile_id": "doh-python_httpx_h2-nginx",
+          "client": "python_httpx_h2",
+          "server": "nginx_reverse_proxy",
+          "topology": "resolver-front.test"
+        },
+        {
+          "profile_id": "doh-python_stdlib-direct",
+          "client": "python_stdlib",
+          "server": "hypercorn",
+          "topology": "doh-relay.test"
+        },
+        {
+          "profile_id": "doh-curl_linux-nginx",
+          "client": "curl_linux",
+          "server": "nginx_reverse_proxy",
+          "topology": "resolver-front.test"
+        },
+        {
+          "profile_id": "doh-go_nethttp-direct",
+          "client": "go_nethttp",
+          "server": "hypercorn",
+          "topology": "doh-relay.test"
+        },
+        {
+          "profile_id": "doh-node_fetch-nginx",
+          "client": "node_fetch",
+          "server": "nginx_reverse_proxy",
+          "topology": "resolver-front.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-DOQ",
+      "namespace": "stage_m",
+      "family": "M-DOQ",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "doq-aioquic-newconn",
+          "client": "python_aioquic_doq",
+          "server": "aioquic_doq",
+          "topology": "direct_doq"
+        },
+        {
+          "profile_id": "doq-aioquic-reuse",
+          "client": "python_aioquic_doq_reuse",
+          "server": "aioquic_doq",
+          "topology": "direct_doq"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-FALLBACK",
+      "namespace": "stage_m",
+      "family": "M-FALLBACK",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "m-fallback-python_httpx-0",
+          "client": "python_httpx",
+          "server": "hypercorn+nginx+dns",
+          "topology": "edge-front.test"
+        },
+        {
+          "profile_id": "m-fallback-python_httpx_h2-1",
+          "client": "python_httpx_h2",
+          "server": "hypercorn+nginx+dns",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-fallback-python_stdlib-2",
+          "client": "python_stdlib",
+          "server": "hypercorn+nginx+dns",
+          "topology": "workers-front.test"
+        },
+        {
+          "profile_id": "m-fallback-curl_linux-0",
+          "client": "curl_linux",
+          "server": "hypercorn+nginx+dns",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-fallback-go_nethttp-1",
+          "client": "go_nethttp",
+          "server": "hypercorn+nginx+dns",
+          "topology": "telegram-front.test"
+        },
+        {
+          "profile_id": "m-fallback-node_fetch-2",
+          "client": "node_fetch",
+          "server": "hypercorn+nginx+dns",
+          "topology": "resolver-front.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-GRPC-BIDI",
+      "namespace": "stage_m",
+      "family": "M-GRPC-BIDI",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "grpc-python-bidi",
+          "client": "grpcio",
+          "server": "grpcio_generic_h2",
+          "topology": "cover-h2.test"
+        },
+        {
+          "profile_id": "grpc-python-stream-unary",
+          "client": "grpcio_stream_unary",
+          "server": "grpcio_generic_h2",
+          "topology": "cover-h2.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-H3-QUIC",
+      "namespace": "stage_m",
+      "family": "M-H3-QUIC",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "h3-aioquic-newconn",
+          "client": "python_aioquic_h3",
+          "server": "aioquic_h3",
+          "topology": "cover-h3.test"
+        },
+        {
+          "profile_id": "h3-aioquic-reuse",
+          "client": "python_aioquic_h3_reuse",
+          "server": "aioquic_h3",
+          "topology": "cover-h3.test"
+        },
+        {
+          "profile_id": "h3-aioquic-parallel",
+          "client": "python_aioquic_h3_parallel",
+          "server": "aioquic_h3",
+          "topology": "cover-h3.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-HTTP-443",
+      "namespace": "stage_m",
+      "family": "M-HTTP-443",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "http443-python_httpx-nginx",
+          "client": "python_httpx",
+          "server": "nginx_plain_http_443",
+          "topology": "plain-front.test"
+        },
+        {
+          "profile_id": "http443-python_httpx_h2-nginx",
+          "client": "python_httpx_h2",
+          "server": "nginx_plain_http_443",
+          "topology": "plain-front.test"
+        },
+        {
+          "profile_id": "http443-python_stdlib-nginx",
+          "client": "python_stdlib",
+          "server": "nginx_plain_http_443",
+          "topology": "plain-front.test"
+        },
+        {
+          "profile_id": "http443-curl_linux-nginx",
+          "client": "curl_linux",
+          "server": "nginx_plain_http_443",
+          "topology": "plain-front.test"
+        },
+        {
+          "profile_id": "http443-go_nethttp-nginx",
+          "client": "go_nethttp",
+          "server": "nginx_plain_http_443",
+          "topology": "plain-front.test"
+        },
+        {
+          "profile_id": "http443-node_fetch-nginx",
+          "client": "node_fetch",
+          "server": "nginx_plain_http_443",
+          "topology": "plain-front.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-HTTPS-BEACON",
+      "namespace": "stage_m",
+      "family": "M-HTTPS-BEACON",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "m-https-beacon-python_httpx-hypercorn",
+          "client": "python_httpx",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-beacon-python_httpx_h2-nginx_reverse_proxy",
+          "client": "python_httpx_h2",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-https-beacon-python_stdlib-hypercorn",
+          "client": "python_stdlib",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-beacon-curl_linux-nginx_reverse_proxy",
+          "client": "curl_linux",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-https-beacon-go_nethttp-hypercorn",
+          "client": "go_nethttp",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-beacon-node_fetch-nginx_reverse_proxy",
+          "client": "node_fetch",
+          "server": "nginx_reverse_proxy",
+          "topology": "resolver-front.test"
+        },
+        {
+          "profile_id": "m-https-beacon-java_httpclient-hypercorn",
+          "client": "java_httpclient",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-beacon-rust_reqwest-nginx_reverse_proxy",
+          "client": "rust_reqwest",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-https-beacon-browser_chromium-hypercorn",
+          "client": "browser_chromium",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-beacon-python_httpx_reuse-nginx_reverse_proxy",
+          "client": "python_httpx_reuse",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-https-beacon-python_httpx_h2_reuse-hypercorn",
+          "client": "python_httpx_h2_reuse",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-HTTPS-FRAG",
+      "namespace": "stage_m",
+      "family": "M-HTTPS-FRAG",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "m-https-frag-python_httpx-hypercorn",
+          "client": "python_httpx",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-frag-python_httpx_h2-nginx_reverse_proxy",
+          "client": "python_httpx_h2",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-https-frag-python_stdlib-hypercorn",
+          "client": "python_stdlib",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-frag-curl_linux-nginx_reverse_proxy",
+          "client": "curl_linux",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-https-frag-go_nethttp-hypercorn",
+          "client": "go_nethttp",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-frag-node_fetch-nginx_reverse_proxy",
+          "client": "node_fetch",
+          "server": "nginx_reverse_proxy",
+          "topology": "resolver-front.test"
+        },
+        {
+          "profile_id": "m-https-frag-java_httpclient-hypercorn",
+          "client": "java_httpclient",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-frag-rust_reqwest-nginx_reverse_proxy",
+          "client": "rust_reqwest",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-https-frag-browser_chromium-hypercorn",
+          "client": "browser_chromium",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-frag-python_httpx_reuse-nginx_reverse_proxy",
+          "client": "python_httpx_reuse",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-https-frag-python_httpx_h2_reuse-hypercorn",
+          "client": "python_httpx_h2_reuse",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-HTTPS-FRONT",
+      "namespace": "stage_m",
+      "family": "M-HTTPS-FRONT",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "m-https-front-python_httpx-0",
+          "client": "python_httpx",
+          "server": "nginx_reverse_proxy",
+          "topology": "edge-front.test"
+        },
+        {
+          "profile_id": "m-https-front-python_httpx_h2-1",
+          "client": "python_httpx_h2",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-https-front-python_stdlib-2",
+          "client": "python_stdlib",
+          "server": "nginx_reverse_proxy",
+          "topology": "workers-front.test"
+        },
+        {
+          "profile_id": "m-https-front-curl_linux-3",
+          "client": "curl_linux",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-https-front-go_nethttp-4",
+          "client": "go_nethttp",
+          "server": "nginx_reverse_proxy",
+          "topology": "telegram-front.test"
+        },
+        {
+          "profile_id": "m-https-front-node_fetch-5",
+          "client": "node_fetch",
+          "server": "nginx_reverse_proxy",
+          "topology": "resolver-front.test"
+        },
+        {
+          "profile_id": "m-https-front-java_httpclient-6",
+          "client": "java_httpclient",
+          "server": "nginx_reverse_proxy",
+          "topology": "edge-front.test"
+        },
+        {
+          "profile_id": "m-https-front-rust_reqwest-7",
+          "client": "rust_reqwest",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-https-front-browser_chromium-8",
+          "client": "browser_chromium",
+          "server": "nginx_reverse_proxy",
+          "topology": "workers-front.test"
+        },
+        {
+          "profile_id": "m-https-front-python_httpx_reuse-9",
+          "client": "python_httpx_reuse",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-https-front-python_httpx_h2_reuse-10",
+          "client": "python_httpx_h2_reuse",
+          "server": "nginx_reverse_proxy",
+          "topology": "telegram-front.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-HTTPS-LOWENT",
+      "namespace": "stage_m",
+      "family": "M-HTTPS-LOWENT",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "m-https-lowent-python_httpx-hypercorn",
+          "client": "python_httpx",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-lowent-python_httpx_h2-nginx_reverse_proxy",
+          "client": "python_httpx_h2",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-https-lowent-python_stdlib-hypercorn",
+          "client": "python_stdlib",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-lowent-curl_linux-nginx_reverse_proxy",
+          "client": "curl_linux",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-https-lowent-go_nethttp-hypercorn",
+          "client": "go_nethttp",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-lowent-node_fetch-nginx_reverse_proxy",
+          "client": "node_fetch",
+          "server": "nginx_reverse_proxy",
+          "topology": "resolver-front.test"
+        },
+        {
+          "profile_id": "m-https-lowent-java_httpclient-hypercorn",
+          "client": "java_httpclient",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-lowent-rust_reqwest-nginx_reverse_proxy",
+          "client": "rust_reqwest",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-https-lowent-browser_chromium-hypercorn",
+          "client": "browser_chromium",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-https-lowent-python_httpx_reuse-nginx_reverse_proxy",
+          "client": "python_httpx_reuse",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-https-lowent-python_httpx_h2_reuse-hypercorn",
+          "client": "python_httpx_h2_reuse",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-L34-STORAGE",
+      "namespace": "stage_m",
+      "family": "M-L34-STORAGE",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "raw-ipv4-id-udp",
+          "client": "scapy_raw",
+          "server": "kernel_udp_sink",
+          "topology": "ipv4_id_udp"
+        },
+        {
+          "profile_id": "raw-udp-source-port",
+          "client": "scapy_raw",
+          "server": "kernel_udp_sink",
+          "topology": "udp_source_port"
+        },
+        {
+          "profile_id": "raw-icmp-id-seq",
+          "client": "scapy_raw",
+          "server": "kernel_icmp",
+          "topology": "icmp_id_seq"
+        },
+        {
+          "profile_id": "raw-tcp-initial-seq",
+          "client": "scapy_raw",
+          "server": "kernel_tcp",
+          "topology": "tcp_initial_seq"
+        },
+        {
+          "profile_id": "raw-tcp-timestamp",
+          "client": "scapy_raw",
+          "server": "kernel_tcp",
+          "topology": "tcp_timestamp"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-PUBSUB-MQTT",
+      "namespace": "stage_m",
+      "family": "M-PUBSUB-MQTT",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "mqtt-paho-qos0",
+          "client": "paho_mqtt_websockets",
+          "server": "mosquitto_websockets",
+          "topology": "mqtt-broker.test"
+        },
+        {
+          "profile_id": "mqtt-paho-qos1",
+          "client": "paho_mqtt_websockets_qos1",
+          "server": "mosquitto_websockets",
+          "topology": "mqtt-broker.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-RMM-SHAPE",
+      "namespace": "stage_m",
+      "family": "M-RMM-SHAPE",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "m-rmm-shape-python_httpx-hypercorn",
+          "client": "python_httpx",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-rmm-shape-python_httpx_h2-nginx_reverse_proxy",
+          "client": "python_httpx_h2",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-rmm-shape-python_stdlib-hypercorn",
+          "client": "python_stdlib",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-rmm-shape-curl_linux-nginx_reverse_proxy",
+          "client": "curl_linux",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-rmm-shape-go_nethttp-hypercorn",
+          "client": "go_nethttp",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-rmm-shape-node_fetch-nginx_reverse_proxy",
+          "client": "node_fetch",
+          "server": "nginx_reverse_proxy",
+          "topology": "resolver-front.test"
+        },
+        {
+          "profile_id": "m-rmm-shape-java_httpclient-hypercorn",
+          "client": "java_httpclient",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-rmm-shape-rust_reqwest-nginx_reverse_proxy",
+          "client": "rust_reqwest",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "m-rmm-shape-browser_chromium-hypercorn",
+          "client": "browser_chromium",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        },
+        {
+          "profile_id": "m-rmm-shape-python_httpx_reuse-nginx_reverse_proxy",
+          "client": "python_httpx_reuse",
+          "server": "nginx_reverse_proxy",
+          "topology": "graph-front.test"
+        },
+        {
+          "profile_id": "m-rmm-shape-python_httpx_h2_reuse-hypercorn",
+          "client": "python_httpx_h2_reuse",
+          "server": "hypercorn",
+          "topology": "cover-api.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-TIMING-XCARRIER",
+      "namespace": "stage_m",
+      "family": "M-TIMING-XCARRIER",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "timing-https-curl",
+          "client": "curl_linux",
+          "server": "nginx_reverse_proxy",
+          "topology": "edge-front.test"
+        },
+        {
+          "profile_id": "timing-https-go",
+          "client": "go_nethttp",
+          "server": "nginx_reverse_proxy",
+          "topology": "cdn-front.test"
+        },
+        {
+          "profile_id": "timing-https-browser",
+          "client": "browser_chromium",
+          "server": "nginx_reverse_proxy",
+          "topology": "workers-front.test"
+        },
+        {
+          "profile_id": "timing-dns-udp",
+          "client": "python_dnspython_udp",
+          "server": "local_recursive_forwarder",
+          "topology": "recursive_resolver"
+        },
+        {
+          "profile_id": "timing-dns-tcp",
+          "client": "python_dnspython_tcp",
+          "server": "local_recursive_forwarder",
+          "topology": "recursive_resolver"
+        },
+        {
+          "profile_id": "timing-wss-python",
+          "client": "python_websockets",
+          "server": "python_websockets_server",
+          "topology": "cover-ws.test"
+        },
+        {
+          "profile_id": "timing-wss-node",
+          "client": "node_websocket",
+          "server": "nginx_to_wss",
+          "topology": "edge-ws.test"
+        },
+        {
+          "profile_id": "timing-mqtt-paho",
+          "client": "paho_mqtt_websockets",
+          "server": "mosquitto_websockets",
+          "topology": "mqtt-broker.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-TUNNEL",
+      "namespace": "stage_m",
+      "family": "M-TUNNEL",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "wss-python-direct",
+          "client": "python_websockets",
+          "server": "python_websockets_server",
+          "topology": "cover-ws.test"
+        },
+        {
+          "profile_id": "wss-python-nginx",
+          "client": "python_websockets",
+          "server": "nginx_to_wss",
+          "topology": "edge-ws.test"
+        },
+        {
+          "profile_id": "wss-node-nginx",
+          "client": "node_websocket",
+          "server": "nginx_to_wss",
+          "topology": "edge-ws.test"
+        },
+        {
+          "profile_id": "wss-chromium-nginx",
+          "client": "chromium_websocket",
+          "server": "nginx_to_wss",
+          "topology": "edge-ws.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    },
+    {
+      "entry_id": "M-WSS-LONG",
+      "namespace": "stage_m",
+      "family": "M-WSS-LONG",
+      "carrier": "implementation_specific",
+      "profiles": [
+        {
+          "profile_id": "wss-python-direct",
+          "client": "python_websockets",
+          "server": "python_websockets_server",
+          "topology": "cover-ws.test"
+        },
+        {
+          "profile_id": "wss-python-nginx",
+          "client": "python_websockets",
+          "server": "nginx_to_wss",
+          "topology": "edge-ws.test"
+        },
+        {
+          "profile_id": "wss-node-nginx",
+          "client": "node_websocket",
+          "server": "nginx_to_wss",
+          "topology": "edge-ws.test"
+        },
+        {
+          "profile_id": "wss-chromium-nginx",
+          "client": "chromium_websocket",
+          "server": "nginx_to_wss",
+          "topology": "edge-ws.test"
+        }
+      ],
+      "dataset_role": "scenario_and_matched_control",
+      "source_fidelity": "bounded_shape_generator",
+      "source_path": "stage_m/src/coverlab/stage_m.py",
+      "source_sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    }
+  ],
+  "sha256": "5169230a0bea32329c4a1d3b4fe4a844f2b5f5b37d5e9f3b75724c5da8b77151"
+}

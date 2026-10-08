@@ -1,0 +1,23 @@
+{
+  "not_included": [
+    "Docker runtime images",
+    "OpenSearch 2.19.4 distribution",
+    "Go 1.25.4 Linux binary distribution",
+    "Go module cache",
+    "GeoIP databases",
+    "raw office and lab PCAP",
+    "private salt or index database"
+  ],
+  "offline_build_complete": false,
+  "expected_source_archives_not_included": [
+    {
+      "path": "arkime/source-arkime-6.8.0.tar.gz",
+      "sha256": "ec2134bebde8ccdebdc1c1230344c5d913a54caee9fe9f406a554accc4077f69"
+    },
+    {
+      "path": "framework_runtime/adaptix/pinned-sources.tar.gz",
+      "sha256": "84a2a7f82fe8296c89f352b601eb9236f00a7341951aa18388d482ff0e330501"
+    }
+  ],
+  "public_copy": true
+}

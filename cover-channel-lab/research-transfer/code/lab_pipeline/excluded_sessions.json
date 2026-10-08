@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "created": "2026-09-12",
+  "source": "workspace/docs/tunnel_protocol_audit_2026-09-11.md",
+  "reason": "Captures whose payload contradicts their label. The audit found TLS ClientHello/ServerHello inside sessions labelled shadowsocks_native, and first payloads that are neither the labelled protocol nor TLS inside vmess_tls_stack and trojan_reality. The cause could not be established from per-session evidence, so they are excluded rather than relabelled: a wrong label is worse than a missing sample.",
+  "policy": "Excluded from every training and evaluation corpus. Keep the captures; an exclusion is a claim about provenance, not a licence to delete evidence. Re-collect these conditions and compare before/after. The list is no longer hand-maintained: qc_protocol.py reproduces it, and it runs over every new corpus.",
+  "sessions": [
+    "shadowsocks_native_campaign_02_browse_clean_0074_tunnel",
+    "shadowsocks_native_campaign_02_bulk_download_lossy_0093_tunnel",
+    "shadowsocks_native_campaign_02_interactive_lossy_0069_tunnel",
+    "shadowsocks_native_campaign_03_browse_lossy_0141_tunnel",
+    "shadowsocks_native_campaign_03_mixed_mobile_0179_tunnel",
+    "shadowsocks_native_campaign_04_bulk_download_mobile_0215_tunnel",
+    "shadowsocks_native_campaign_04_idle_clean_0217_tunnel",
+    "shadowsocks_native_campaign_04_idle_wan_0221_tunnel",
+    "trojan_reality_campaign_02_mixed_clean_0111_tunnel",
+    "trojan_reality_campaign_04_idle_mobile_0227_tunnel",
+    "trojan_reality_campaign_04_interactive_clean_0181_tunnel",
+    "vmess_tls_stack_campaign_01_browse_lossy_0021_tunnel",
+    "vmess_tls_stack_campaign_01_idle_wan_0040_tunnel",
+    "vmess_tls_stack_campaign_01_interactive_lossy_0008_tunnel",
+    "vmess_tls_stack_campaign_01_mixed_mobile_0058_tunnel",
+    "vmess_tls_stack_campaign_02_mixed_clean_0111_tunnel",
+    "vmess_tls_stack_campaign_03_bulk_download_wan_0150_tunnel",
+    "vmess_tls_stack_campaign_03_interactive_mobile_0132_tunnel",
+    "vmess_tls_stack_campaign_04_browse_mobile_0202_tunnel",
+    "vmess_tls_stack_campaign_04_bulk_download_lossy_0213_tunnel",
+    "vmess_tls_stack_campaign_04_idle_mobile_0227_tunnel",
+    "vmess_tls_stack_campaign_04_interactive_clean_0181_tunnel"
+  ],
+  "verified": {
+    "date": "2026-09-12",
+    "by": "detector/capture/qc_protocol.py",
+    "result": "exact match: the checker found these 22 and only these 22",
+    "how": "Re-derived from wire bytes with no knowledge of this file: the first payload each capture sends to its own outer_dst, compared with what the family must and must not look like. 8 shadowsocks_native carry a readable TLS ClientHello; 3 trojan_reality and 11 vmess_tls_stack open with bytes that are neither their protocol nor TLS.",
+    "corpus": "/opt/tunnel_lab (2 773 tunnel sessions)"
+  }
+}

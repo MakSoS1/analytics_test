@@ -1,0 +1,36 @@
+# Feature sets: which columns a model gets, described by rules, not long lists.
+#
+# A set picks columns by group (group_key from office_dictionary.py) plus named
+# additions and removals. Only columns of kind `feature` can ever be picked;
+# identifiers, labels and service columns are refused whatever a set says.
+# `where` narrows the rows (Spark SQL over the table). `decorrelate` is the
+# |Spearman rho| above which `office_features.freeze()` keeps one column of a
+# correlated pair; the result is frozen with a version, and a model records the
+# set name and version it was trained on.
+#
+# Groups of office_sessions: volume sizes intervals bursts tcp_flags payload tls
+# quic dns ssh remote_admin retransmissions context sequence capwap identity.
+
+[sets.ra_v1]
+about = "удалённое администрирование: сессии к портам SSH/RDP/VNC/…"
+table = "office_sessions"
+where = "coalesce(admin_service_by_port, '') <> ''"
+include_groups = ["remote_admin", "volume", "intervals", "sizes", "bursts", "retransmissions"]
+include = ["conn_state", "tcp_handshake_rtt_ms", "data_pkt_up", "data_pkt_down",
+           "small_data_up_bytes", "internal_pair", "start_hour_sin", "start_hour_cos"]
+exclude = ["tcp_share", "udp_share"]      # constant inside TCP-only admin services
+decorrelate = 0.9
+
+[sets.tunnel_v1]
+about = "туннели против обычного трафика: форма потока без имён и портов"
+table = "office_sessions"
+where = "coalesce(is_capwap_tunnel, 0) = 0"
+include_groups = ["volume", "sizes", "intervals", "bursts", "tcp_flags", "payload", "tls", "quic"]
+exclude = []
+decorrelate = 0.9
+
+[sets.nabor1_windows]
+about = "Набор 1: 29 оконных признаков хоста (5 мин / 1 ч / 24 ч)"
+table = "office_host_windows"
+include_nabor1 = true
+decorrelate = 0.0                          # 0 = keep every column of the set

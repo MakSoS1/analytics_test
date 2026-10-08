@@ -146,7 +146,3 @@ FPR promotion policy are documented in [EXTERNAL_HOLDOUTS_V5.md](EXTERNAL_HOLDOU
 
 Use **Cover Channel Complete V5** for resume-first corpus/model work and
 **Cover Channel External Holdouts V5** on the isolated self-hosted lab runner.
-
-## October 2026 research transfer
-
-[Office-background import and full Arkime comparison](research-transfer/README.md) contains the standalone research code, diagnostics and audited notebook from October 2–6. Office data is excluded. Naturalness and production transfer are not established; historical laboratory metrics above do not certify the new office evaluation.

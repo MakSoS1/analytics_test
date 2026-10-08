@@ -1,0 +1,9 @@
+{
+  "public_key_only_decryption": "refused; no plaintext returned",
+  "private_key_backup_decryption": "OK",
+  "all_public_text_leaves_checked": 4622038,
+  "allowed_plaintext": "bounded enums, count strings and known presence-mask field names only",
+  "private_key_in_repository": false,
+  "plaintext_dictionary_retained": false,
+  "private_key_mode": "0o600"
+}

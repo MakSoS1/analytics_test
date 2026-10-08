@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -lt 5 ]]; then echo "usage: $0 STAGE SHARD SHARDS OUT_DIR CAPTURE_FILE" >&2; exit 2; fi
+STAGE="$1" SHARD="$2" SHARDS="$3" OUT="$4" PCAP="$5"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON_BIN="$(command -v python)"
+WSS_LOCK=/tmp/coverlab_wss_client.lock
+CAPTURE_DRAIN_SECONDS="${COVERLAB_CAPTURE_DRAIN_SECONDS:-1.0}"
+rm -f /tmp/coverlab_server_trace.jsonl /tmp/coverlab_server_trace.jsonl.lock /tmp/coverlab_wss_trace.jsonl "$WSS_LOCK"
+mkdir -p "$OUT" "$(dirname "$PCAP")"
+rm -f "$PCAP"
+
+CAPTURE_IF="${COVERLAB_CAPTURE_IF:-v-c2}"
+sudo ip link show "$CAPTURE_IF" >/dev/null
+sudo tcpdump -i "$CAPTURE_IF" -B 8192 -s 0 -U -w "$PCAP" 'net 10.20.0.0/24' >"$OUT/tcpdump.log" 2>&1 &
+TCPDUMP_PID=$!
+cleanup_capture() {
+  if [[ -n "${TCPDUMP_PID:-}" ]]; then
+    sudo kill -INT "$TCPDUMP_PID" 2>/dev/null || true
+    wait "$TCPDUMP_PID" 2>/dev/null || true
+    TCPDUMP_PID=""
+  fi
+}
+drain_capture() {
+  sleep "$CAPTURE_DRAIN_SECONDS"
+  sudo kill -USR2 "$TCPDUMP_PID" 2>/dev/null || true
+  sleep 0.20
+}
+trap cleanup_capture EXIT
+sleep .3
+
+NAMESPACES=(cc-office cc-dev cc-devops cc-soc)
+WORKER_PIDS=()
+for idx in 0 1 2 3; do
+  ns="${NAMESPACES[$idx]}"; pdir="$OUT/persona-$idx"; mkdir -p "$pdir"
+  if [[ "$STAGE" == "stage_m" ]]; then
+    RUN_ARGS=(-m coverlab.stage_m generate --mode "${COVERLAB_STAGE_M_MODE:-smoke}" --shard "$SHARD" --shards "$SHARDS" --persona-index "$idx" --out "$pdir" --capture-file "$(basename "$PCAP")")
+  else
+    RUN_ARGS=(-m coverlab.orchestrate_v3 --stage "$STAGE" --shard "$SHARD" --shards "$SHARDS" --persona-index "$idx" --out "$pdir" --capture-file "$(basename "$PCAP")")
+  fi
+  sudo ip netns exec "$ns" runuser -u "$USER" -- env \
+    PYTHONPATH="$ROOT/src" GITHUB_SHA="${GITHUB_SHA:-local}" COVERLAB_GO_CLIENT=/tmp/coverlab-go-client COVERLAB_NODE_CLIENT="$ROOT/clients/node_client.mjs" \
+    COVERLAB_JAVA_CLIENT_DIR=/tmp/coverlab-java-client COVERLAB_RUST_CLIENT=/tmp/coverlab-rust-client \
+    COVERLAB_WSS_CLIENT_LOCK="$WSS_LOCK" COVERLAB_CHROME="${COVERLAB_CHROME:-}" \
+    COVERLAB_STAGE_M_MODE="${COVERLAB_STAGE_M_MODE:-smoke}" COVERLAB_STAGE_M_TIME_SCALE="${COVERLAB_STAGE_M_TIME_SCALE:-0.001}" \
+    COVERLAB_STAGE_M_MAX_SLEEP_SECONDS="${COVERLAB_STAGE_M_MAX_SLEEP_SECONDS-0.05}" \
+    COVERLAB_NETEM_PROFILE="${COVERLAB_NETEM_PROFILE:-clean}" COVERLAB_ENVIRONMENT_TIER="${COVERLAB_ENVIRONMENT_TIER:-ci_netns}" \
+    COVERLAB_BENIGN_SESSIONS="${COVERLAB_BENIGN_SESSIONS:-60000}" \
+    COVERLAB_BENIGN_RANGE_START="${COVERLAB_BENIGN_RANGE_START:-0}" COVERLAB_BENIGN_RANGE_END="${COVERLAB_BENIGN_RANGE_END:-${COVERLAB_BENIGN_SESSIONS:-60000}}" \
+    COVERLAB_LONG_REPETITIONS="${COVERLAB_LONG_REPETITIONS:-2}" \
+    NO_PROXY='.test,10.20.0.0/24,localhost,127.0.0.1' no_proxy='.test,10.20.0.0/24,localhost,127.0.0.1' \
+    "$PYTHON_BIN" "${RUN_ARGS[@]}" &
+  WORKER_PIDS+=("$!")
+done
+worker_rc=0
+for pid in "${WORKER_PIDS[@]}"; do
+  if ! wait "$pid"; then worker_rc=1; fi
+done
+drain_capture
+cleanup_capture
+trap - EXIT
+if [[ "$worker_rc" -ne 0 ]]; then
+  echo "one or more persona workers failed for stage=$STAGE shard=$SHARD" >&2
+  exit 1
+fi
+
+mkdir -p "$OUT/manifests"
+: > "$OUT/manifests/campaigns.jsonl"; : > "$OUT/manifests/events.jsonl"
+for idx in 0 1 2 3; do
+  cat "$OUT/persona-$idx/campaigns.jsonl" >> "$OUT/manifests/campaigns.jsonl"
+  cat "$OUT/persona-$idx/events.jsonl" >> "$OUT/manifests/events.jsonl"
+done
+cp "$OUT/manifests/campaigns.jsonl" "$OUT/campaigns.jsonl"
+cp "$OUT/manifests/events.jsonl" "$OUT/events.jsonl"
+
+: > "$OUT/manifests/decrypted_transactions.jsonl"
+[[ -f /tmp/coverlab_server_trace.jsonl ]] && cat /tmp/coverlab_server_trace.jsonl >> "$OUT/manifests/decrypted_transactions.jsonl"
+[[ -f /tmp/coverlab_wss_trace.jsonl ]] && cat /tmp/coverlab_wss_trace.jsonl >> "$OUT/manifests/decrypted_transactions.jsonl"
+
+if [[ "$STAGE" == "lots" ]]; then
+  python - "$OUT/manifests/campaigns.jsonl" <<'PY'
+import json, sys
+from pathlib import Path
+p = Path(sys.argv[1]); out=[]
+for line in p.read_text().splitlines():
+    if not line.strip(): continue
+    r=json.loads(line); r.update({"label_binary":0,"label_family":"benign","label_intent":"benign","attack_mapping":[],"experiment_stage":"G_trusted_background","dataset_role":"hard_negative","source_family":"trusted_site_inspired","target_task":"cover_channel_detection"}); out.append(json.dumps(r,separators=(",",":"),default=str))
+p.write_text("\n".join(out) + ("\n" if out else ""))
+PY
+  cp "$OUT/manifests/campaigns.jsonl" "$OUT/campaigns.jsonl"
+fi
+
+PYTHONPATH="$ROOT/src" python -m coverlab.validate_dataset_contract_v3 --stage-dir "$OUT" --out "$OUT/manifests/dataset_contract.json"
+if [[ "$STAGE" == "stage_m" ]]; then
+  PYTHONPATH="$ROOT/src" python -m coverlab.stage_m validate --manifest "$OUT/manifests/campaigns.jsonl" > "$OUT/manifests/stage_m_positive_contract.json"
+fi
+python - <<PY
+import json
+from pathlib import Path
+p=Path('$OUT/manifests/campaigns.jsonl'); e=Path('$OUT/manifests/events.jsonl')
+print(json.dumps({'stage':'$STAGE','shard':$SHARD,'campaigns':sum(1 for _ in p.open()),'events':sum(1 for _ in e.open()),'pcap_bytes':Path('$PCAP').stat().st_size,'capture_if':'$CAPTURE_IF','capture_drain_seconds':float('$CAPTURE_DRAIN_SECONDS'),'dataset_contract_revision':3}))
+PY

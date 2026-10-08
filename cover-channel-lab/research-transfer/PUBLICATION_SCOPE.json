@@ -1,0 +1,39 @@
+{
+  "version": "public-research-transfer-v1",
+  "source_date": "2026-10-06",
+  "base_branch": "coverlab-finish-2026-09",
+  "base_commit": "78b6a90d8c05c2eccafa4ecbcb947d2570630365",
+  "removed_live_and_site_specific_entries": [
+    "pull_office_pcaps.py",
+    "office_injection/publish.py",
+    "lab_pipeline/deploy_to_wsl.sh",
+    "arkime/bin/sensor_trial.py",
+    "arkime/bin/stream_run.py",
+    "arkime/bin/sensor_capture.sh",
+    "arkime/bin/run_stream.py",
+    "arkime/historical",
+    "arkime/release",
+    "arkime/bin/run_stream.sh",
+    "arkime/bin/stream_entry.sh"
+  ],
+  "text_files_with_placeholder_replacement": [
+    "code/arkime/README.md",
+    "code/arkime/configure_paths.py",
+    "code/arkime/config/capture.ini.template",
+    "code/arkime/config/office.ini.template",
+    "code/tests/fixtures/cover_channels_source_inventory_2026-10-02.json"
+  ],
+  "office_data_published": true,
+  "raw_captures_published": false,
+  "notebook_outputs_published": false,
+  "new_vm_actions": false,
+  "naturalness_established": false,
+  "production_ready": false,
+  "external_source_archives_included": false,
+  "office_data_form": "pseudonymized Parquet only; exact numbers, masked sensitive text; encrypted recovery dictionary",
+  "private_key_published": false,
+  "dataset_release": "datasets/office-cover-20261006",
+  "additional_dataset_release": "datasets/office-additional-days-20261008",
+  "additional_saved_days_read_on_research_host": true,
+  "additional_vm_operations": "saved-table selection only; no GitHub/keys, no live capture"
+}

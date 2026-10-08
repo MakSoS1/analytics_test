@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example
+.DS_Store
+data/
+outputs/
+runs/
+*.pcap
+*.pcapng
+*.parquet
+*.pkts
+*.pay
+*.tar.gz
+*.zip
+
+# Explicit reviewed public dataset; original/private exports remain ignored.
+!datasets/office-cover-20261006/*.parquet
+**/PRIVATE-KEY.asc
+**/hmac-key.bin
+**/dictionary.json
+**/dictionary.roundtrip.json
+
+# Additional reviewed office day samples.
+!datasets/office-additional-days-20261008/*.parquet

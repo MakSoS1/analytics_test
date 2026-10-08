@@ -1,0 +1,311 @@
+--- a/capture/arkime.h
++++ b/capture/arkime.h
+@@ -798,6 +798,12 @@
+     char                  *rootId;
+     GHashTable            *pythonAttrs;
+ 
++    uint64_t               officeInstance;
++    uint8_t                officeSeenMask;
++    uint8_t                officeFinMask;
++    uint8_t                officeClosed;
++    uint8_t                officeStartObserved;
++    uint8_t                officeEndReason;
+     struct timeval         firstPacket;
+     struct timeval         lastPacket;
+     struct in6_addr        addr1;
+@@ -1377,7 +1383,13 @@
+ int      arkime_session_idle_seconds(int mProtocol);
+ int      arkime_session_close_outstanding();
+ 
+-void     arkime_session_flush();
++void arkime_session_flush();
++void office_session_sweep(int thread, double now);
++void office_session_checkpoint(int thread);
++extern uint64_t officeFragmentSeq;
++extern uint64_t officeFragmentPackets, officeReassembled, officeInputFileNum;
++uint64_t office_frag_hold_file(void);
++extern double officePacketClock[ARKIME_MAX_PACKET_THREADS];
+ void     arkime_session_flush_internal(int thread);
+ uint32_t arkime_session_monitoring();
+ void     arkime_session_process_commands(int thread);
+--- a/capture/packet.c
++++ b/capture/packet.c
+@@ -108,6 +108,7 @@
+     uint32_t               fragh_hash;
+     char                   key[10];
+     uint32_t               secs;
++    uint64_t               officeFirstFile;
+     char                   haveNoFlags;
+ } ArkimeFrags_t;
+ 
+@@ -247,18 +248,22 @@
+ 
+ 
+     mProtocols[packet->mProtocol].createSessionId(sessionId, packet);
++    /* One packet thread: make lookup hash consistent with decoded session ID. */
++    packet->hash = arkime_session_hash(sessionId);
+ 
+     if ((sessionId[0] & 0x03) != 0 || sessionId[0] > ARKIME_SESSIONID_LEN) {
+         LOGEXIT("ERROR - Session ID must be aligned to 4 bytes and <= %d, protocol %s is not (%d)", ARKIME_SESSIONID_LEN, mProtocols[packet->mProtocol].name, sessionId[0]);
+     }
+ 
+     // Try at most 2 times
++    static uint64_t officeNextInstance;
+     int isNew;
+ 
+     for (int i = 0; i < 2; i++) {
+         session = arkime_session_find_or_create(packet->mProtocol, packet->hash, sessionId, &isNew);
+ 
+         if (isNew) {
++            session->officeInstance = ++officeNextInstance;
+             session->saveTime = packet->ts.tv_sec + config.tcpSaveTimeout;
+             session->firstPacket = packet->ts;
+             session->thread = thread;
+@@ -280,6 +285,21 @@
+             }
+         }
+ 
++        if (!isNew && (packet->ipProtocol == IPPROTO_TCP || packet->ipProtocol == IPPROTO_UDP)) {
++            const uint8_t *l4 = packet->pkt + packet->payloadOffset;
++            uint16_t sport; memcpy(&sport, l4, 2); sport = ntohs(sport);
++            gboolean same = ip4->ip_v == 4 ? (ARKIME_V6_TO_V4(session->addr1) == ip4->ip_src.s_addr) : (memcmp(session->addr1.s6_addr, ip6->ip6_src.s6_addr, 16) == 0);
++            int direction = (same && sport == session->port1) ? 0 : 1;
++            session->officeSeenMask |= 1 << direction;
++            double gap = packet->ts.tv_sec - session->lastPacket.tv_sec + (packet->ts.tv_usec - session->lastPacket.tv_usec) / 1000000.0;
++            double limit = packet->ipProtocol == IPPROTO_TCP ? (session->officeClosed ? 10.0 : (session->officeSeenMask == 3 ? 600.0 : 60.0)) : (session->officeSeenMask == 3 ? 300.0 : 30.0);
++            gboolean syn = packet->ipProtocol == IPPROTO_TCP && (l4[13] & TH_SYN) && !(l4[13] & TH_ACK);
++            if (gap > limit || (syn && session->officeClosed)) {
++                session->officeEndReason = gap > limit ? 1 : 2;
++                void arkime_session_save(ArkimeSession_t *session);
++                arkime_session_save(session); continue;
++            }
++        }
+         int rc = mProtocols[packet->mProtocol].preProcess(session, packet, isNew);
+ 
+         // Close out the old session and create a new one
+@@ -296,6 +316,18 @@
+         return;
+     }
+     session->lastPacket = packet->ts;
++    if (packet->ipProtocol == IPPROTO_TCP || packet->ipProtocol == IPPROTO_UDP) {
++        session->officeSeenMask |= 1 << packet->direction;
++        if (packet->ipProtocol == IPPROTO_TCP) {
++            uint8_t flags = packet->pkt[packet->payloadOffset + 13];
++            if (isNew) session->officeStartObserved = (flags & TH_SYN) && !(flags & TH_ACK);
++            if (flags & TH_RST) session->officeClosed = 1;
++            if (flags & TH_FIN) session->officeFinMask |= 1 << packet->direction;
++            if (session->officeFinMask == 3) session->officeClosed = 1;
++        } else if (isNew) session->officeStartObserved = 1;
++    }
++    if (packet->ipProtocol == IPPROTO_TCP || packet->ipProtocol == IPPROTO_UDP)
++        office_session_sweep(thread, packet->ts.tv_sec + packet->ts.tv_usec / 1000000.0);
+ 
+     if (isNew) {
+         arkime_parsers_initial_tag(session);
+@@ -561,6 +593,7 @@
+             continue;
+ 
+         if (unlikely(packet->pktlen == ARKIME_PACKET_LEN_FILE_DONE)) {
++            office_session_checkpoint(thread);
+             // Make sure no best http requests are in the queue, like the file create
+             while (arkime_http_queue_length_best(esServer) > 0) {
+                 usleep(5000);
+@@ -628,6 +661,7 @@
+         frags = ARKIME_TYPE_ALLOC0_ALIGNED(ArkimeFrags_t);
+         memcpy(frags->key, key, 10);
+         frags->secs = packet->ts.tv_sec;
++        frags->officeFirstFile = officeInputFileNum;
+         // The last fragment (MF clear) may be the first one seen
+         if ((ip_flags & IP_MF) == 0) {
+             frags->haveNoFlags = 1;
+@@ -734,8 +768,10 @@
+     return TRUE;
+ }
+ /******************************************************************************/
++uint64_t officeFragmentPackets, officeReassembled;
+ LOCAL void arkime_packet_frags4(ArkimePacketBatch_t *batch, ArkimePacket_t *const packet)
+ {
++    officeFragmentPackets++;
+     ArkimeFrags_t *frags;
+ 
+     // ALW - Should change frags_process to make the copy when needed
+@@ -754,6 +790,7 @@
+     }
+ 
+     gboolean process = arkime_packet_frags_process(packet);
++    if (process) officeReassembled++;
+     ARKIME_UNLOCK(frags);
+ 
+     if (process)
+@@ -2534,3 +2571,13 @@
+     }
+     arkime_packet_log(arkime_mprotocol_get("tcp"));
+ }
++
++uint64_t officeInputFileNum;
++uint64_t office_frag_hold_file(void) {
++    uint64_t minimum = officeInputFileNum + 1;
++    ArkimeFrags_t *entry;
++    ARKIME_LOCK(frags);
++    DLL_FOREACH(fragl_, &fragsList, entry) { if (entry->officeFirstFile < minimum) minimum = entry->officeFirstFile; }
++    ARKIME_UNLOCK(frags);
++    return minimum;
++}
+--- a/capture/session.c
++++ b/capture/session.c
+@@ -402,6 +402,9 @@
+ /******************************************************************************/
+ void arkime_session_mark_for_close(ArkimeSession_t *session)
+ {
++    /* The office lifecycle closes TCP after BOTH FIN directions/RST + idle,
++     * not the native first-FIN close queue. DPI processing is unchanged. */
++    if (session->ipProtocol == IPPROTO_TCP) return;
+     // Already closing, or already unlinked because it's being saved
+     if (session->closingQ || !session->q_next)
+         return;
+@@ -807,6 +810,11 @@
+ /******************************************************************************/
+ void arkime_session_save(ArkimeSession_t *session)
+ {
++    if (!session->officeEndReason && (session->ipProtocol == IPPROTO_TCP || session->ipProtocol == IPPROTO_UDP)) {
++        double limit = session->ipProtocol == IPPROTO_TCP ? (session->officeClosed ? 10.0 : (session->officeSeenMask == 3 ? 600.0 : 60.0)) : (session->officeSeenMask == 3 ? 300.0 : 30.0);
++        double last = session->lastPacket.tv_sec + session->lastPacket.tv_usec / 1000000.0;
++        if (officePacketClock[session->thread] - last > limit) session->officeEndReason = 1;
++    }
+     if (IN_SESSION_TABLE(session)) {
+         arkime_session_hash_remove(&sessionThreadData[session->thread].sessions[session->ses], session);
+     }
+@@ -1200,6 +1208,8 @@
+ 
+     // Sessions Idle Long Time
+     for (int mProtocol = ARKIME_MPROTOCOL_MIN; mProtocol < mProtocolCnt; mProtocol++) {
++        /* Office TCP/UDP expiry is done on the packet clock by full sweep. */
++        if (mProtocols[mProtocol].ses == SESSION_TCP || mProtocols[mProtocol].ses == SESSION_UDP) continue;
+         for (int count = 0; count < 10; count++) {
+             ArkimeSession_t *session = DLL_PEEK_HEAD(q_, &sessionThreadData[thread].sessionsQ[mProtocol]);
+ 
+@@ -1381,3 +1391,32 @@
+ 
+     arkime_session_flush();
+ }
++
++uint64_t officeFragmentSeq;
++double officePacketClock[ARKIME_MAX_PACKET_THREADS];
++void office_session_sweep(int thread, double now)
++{
++    static double lastSweep[ARKIME_MAX_PACKET_THREADS];
++    if (now > officePacketClock[thread]) officePacketClock[thread] = now;
++    if (now - lastSweep[thread] <= 10.0) return;
++    lastSweep[thread] = now;
++    for (int m = ARKIME_MPROTOCOL_MIN; m < mProtocolCnt; m++) {
++        ArkimeSession_t *session, *next;
++        DLL_FOREACH_REMOVABLE(q_, &sessionThreadData[thread].sessionsQ[m], session, next) {
++            if (session->ipProtocol != IPPROTO_TCP && session->ipProtocol != IPPROTO_UDP) continue;
++            double limit = session->ipProtocol == IPPROTO_TCP ? (session->officeClosed ? 10.0 : (session->officeSeenMask == 3 ? 600.0 : 60.0)) : (session->officeSeenMask == 3 ? 300.0 : 30.0);
++            double last = session->lastPacket.tv_sec + session->lastPacket.tv_usec / 1000000.0;
++            if (now - last > limit) { session->officeEndReason = 1; arkime_session_save(session); }
++        }
++    }
++}
++void office_session_checkpoint(int thread)
++{
++    /* Runs on owning packet thread at file-done, keeps parser/reassembly alive. */
++    for (int m = ARKIME_MPROTOCOL_MIN; m < mProtocolCnt; m++) {
++        ArkimeSession_t *session;
++        DLL_FOREACH(q_, &sessionThreadData[thread].sessionsQ[m], session) {
++            if (session->packets[0] + session->packets[1] > 0) arkime_session_mid_save(session, session->lastPacket.tv_sec);
++        }
++    }
++}
+--- a/capture/parsers/tcp.c
++++ b/capture/parsers/tcp.c
+@@ -47,14 +47,14 @@
+ /******************************************************************************/
+ LOCAL void tcp_mid_save(ArkimeSession_t *session)
+ {
+-    session->tcpData.ackTime = 0;
+-    session->tcpData.synTime = 0;
+-    session->tcpData.synAckSeq[0] = 0;
+-    session->tcpData.synAckSeq[1] = 0;
+-    session->tcpData.synSeen = 0;
+-    session->tcpData.synAckSeen = 0;
+-    session->tcpData.synValidated = 0;
+-    session->tcpData.synAckValidated = 0;
++    /* office: preserve handshake state */
++    /* office: preserve handshake state */
++    /* office: preserve handshake state */
++    /* office: preserve handshake state */
++    /* office: preserve handshake state */
++    /* office: preserve handshake state */
++    /* office: preserve handshake state */
++    /* office: preserve handshake state */
+     session->tcpData.srcISNCnt = 0;
+     memset(session->tcpData.tcpFlagCnt, 0, sizeof(session->tcpData.tcpFlagCnt));
+ }
+@@ -499,7 +499,7 @@
+     // But if the syn's seq matches the original client ISN we already know about, this is just the original
+     // SYN arriving reordered (e.g. spread across capture interfaces/reader threads) or a retransmit - keep it
+     // in the same session instead of splitting one flow into two.
+-    if (!isNewSession && (tcphdr->th_flags & TH_SYN) && ((tcphdr->th_flags & TH_ACK) == 0) &&
++    if (FALSE && !isNewSession && (tcphdr->th_flags & TH_SYN) && ((tcphdr->th_flags & TH_ACK) == 0) &&
+         ntohl(tcphdr->th_seq) != session->tcpData.synSeq[0]) {
+         if (session->tcpData.tcpFlagCnt[ARKIME_TCPFLAG_RST] || session->tcpData.tcpFlagCnt[ARKIME_TCPFLAG_FIN]) {
+             return 1;
+--- a/capture/db.c
++++ b/capture/db.c
+@@ -661,7 +661,7 @@
+         return;
+ 
+     /* No Packets */
+-    if (!config.dryRun && !session->filePosArray->len)
++    if (!config.dryRun && !session->filePosArray->len && !final)
+         return;
+ 
+     /* Not enough packets */
+@@ -857,6 +857,9 @@
+                        timediff,
+                        session->ipProtocol);
+ 
++
++    BSB_EXPORT_sprintf(jbsb, "\"office\":{\"instance\":%" PRIu64 ",\"seq\":%" PRIu64 ",\"final\":%s,\"startObserved\":%s,\"closed\":%s,\"endReason\":%u},",
++        session->officeInstance, ++officeFragmentSeq, final ? "true" : "false", session->officeStartObserved ? "true" : "false", session->officeClosed ? "true" : "false", session->officeEndReason);
+ 
+     if (session->ethertype) {
+         BSB_EXPORT_sprintf(jbsb, "\"ethertype\":%u,", session->ethertype);
+--- a/capture/command.c
++++ b/capture/command.c
+@@ -268,8 +268,8 @@
+     if (fn->isError) {
+         snprintf(msg, sizeof(msg), "file-error filename=%s\n", fn->filename);
+     } else {
+-        snprintf(msg, sizeof(msg), "file-done filename=%s packets=%" PRIu64 " bytes=%" PRIu64 "\n",
+-                 fn->filename, fn->packets, fn->bytes);
++        snprintf(msg, sizeof(msg), "file-done filename=%s packets=%" PRIu64 " bytes=%" PRIu64 " spiSeq=%" PRIu64 " processed=%" PRIu64 " fragmentPackets=%" PRIu64 " reassembled=%" PRIu64 " droppedFragments=%" PRIu64 " errors=%" PRIu64 " fileOrdinal=%" PRIu64 " holdFrom=%" PRIu64 "\n",
++                 fn->filename, fn->packets, fn->bytes, officeFragmentSeq, arkimeCounters.totalPackets, officeFragmentPackets, officeReassembled, arkime_packet_dropped_frags(), arkimeCounters.packetStats[ARKIME_PACKET_IP_DROPPED] + arkimeCounters.packetStats[ARKIME_PACKET_OVERLOAD_DROPPED] + arkimeCounters.packetStats[ARKIME_PACKET_UNKNOWN_ETHER] + arkimeCounters.packetStats[ARKIME_PACKET_UNKNOWN_IP] + arkimeCounters.packetStats[ARKIME_PACKET_IPPORT_DROPPED] + arkimeCounters.packetStats[ARKIME_PACKET_DUPLICATE_DROPPED], officeInputFileNum, office_frag_hold_file());
+     }
+ 
+     if (g_socket_send(fn->client->socket, msg, strlen(msg), NULL, &error) < 0) {
+--- a/capture/plugins/chad.c
++++ b/capture/plugins/chad.c
+@@ -127,8 +127,9 @@
+ }
+ 
+ /******************************************************************************/
+-LOCAL void chad_plugin_save(ArkimeSession_t *session, int UNUSED(final))
+-{
++LOCAL void chad_plugin_save(ArkimeSession_t *session, int final)
++{
++    if (!final) return;
+     if (session->pluginData[chad_plugin_num]) {
+         g_string_free(session->pluginData[chad_plugin_num], TRUE);
+         session->pluginData[chad_plugin_num] = 0;
+--- a/capture/reader-scheme.c
++++ b/capture/reader-scheme.c
+@@ -149,6 +149,7 @@
+     loadThreadDepth++;
+     reader_scheme_pause();
+ 
++    officeInputFileNum++;
+     LOG("Processing %s", uri);
+     ArkimeScheme_t *readerScheme = uri2scheme(uri);
+     if (!readerScheme) {

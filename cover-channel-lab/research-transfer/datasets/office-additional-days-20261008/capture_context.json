@@ -1,0 +1,56 @@
+{
+  "version": "office-capture-context-v1",
+  "capture_point": {
+    "mode": "passive office mirror/SPAN",
+    "before_or_after_nat": "unknown",
+    "before_or_after_tls_proxy": "unknown",
+    "client_os_windows_linux_share": "unknown; not inferred from TTL or TLS fingerprints",
+    "same_physical_mirror_across_days": "historical pipeline attributes both to office mirror; independent physical validation unavailable"
+  },
+  "capture_settings": {
+    "historical_documented_settings": "Full packets without BPF, promiscuous mode, GRO disabled in 2026-09-20 architecture record",
+    "selected_day_snaplen": "not independently revalidated from raw PCAP for this export",
+    "selected_day_offloads": "not independently revalidated for this export",
+    "timestamp_semantics": "timestamps are original sensor observations; no timing adaptation in this office-only release"
+  },
+  "extractors": {
+    "format": "office_sessions schema version 2; 146 columns plus 9 storage columns",
+    "published_reference_code": [
+      {
+        "path": "../../code/office_to_parquet.py",
+        "sha256": "2076d734572f255acc542339aa6232e824b11b5575f28abfccf06f58bd692e93"
+      },
+      {
+        "path": "../../code/office_session_store.py",
+        "sha256": "2957dde899a92247c8e8300ee05910b0596f2e539d9b0d4f9fa857b446990141"
+      },
+      {
+        "path": "../../code/extract_office_sessions.py",
+        "sha256": "5209e35c8b6ffd8151f4aeafdc442da7db4a5bb486d67d18ad9edf8c929ed924"
+      },
+      {
+        "path": "../../code/payload_sidecar.py",
+        "sha256": "78c7f429f88fe73bf4299e37b68037483d6e5feb167602bac37d13d0ac642ea9"
+      },
+      {
+        "path": "../../code/office_sessions.schema.json",
+        "sha256": "e37e4966bfbe8a76ea6dd288196a112ed8ca354f1cd0f5ea0db334f756399c3a"
+      }
+    ],
+    "historical_exact_extractor_version": "not established for both source snapshots; published helper hashes identify reproducibility reference, not proof of historical byte-identical binaries",
+    "suricata_or_zeek_features": "these tables are custom packet-pipeline features; do not attribute them to Suricata, Zeek, or Arkime",
+    "arkime": "no new Arkime tables for these days; existing 23 September matched release remains separate"
+  },
+  "measurement_limits": {
+    "day_02_tls_fields": "TLS numeric columns include nulls throughout the selected day_02 snapshot; see per-column null counts; do not replace null with measured zero",
+    "day_03_tls_version_nonzero_rows": 2817,
+    "ground_truth": "office background is unlabelled; historical y_presumed/label_source fields are preserved and are not verified benign labels",
+    "split_warning": "days were used in earlier diagnostics; suitable for additional day transfer evaluation, not a pristine final test set"
+  },
+  "privacy": {
+    "raw_pcap_included": false,
+    "sensitive_text": "HMAC-SHA256 pseudonyms, encrypted recovery dictionary",
+    "private_key_location": "on owner Mac only, outside repository",
+    "residual_information": "exact packet statistics, timing, dates, ports and equality relationships remain; not claimed anonymous"
+  }
+}

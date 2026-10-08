@@ -1,0 +1,1552 @@
+[
+  {
+    "column": "pkt_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "пакетов в сессии",
+    "dup_of": ""
+  },
+  {
+    "column": "up_pkt_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "пакетов от клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "down_pkt_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "пакетов от сервера",
+    "dup_of": ""
+  },
+  {
+    "column": "total_bytes",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "байт всего (на проводе)",
+    "dup_of": "up_bytes + down_bytes"
+  },
+  {
+    "column": "up_bytes",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "байт от клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "down_bytes",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "байт от сервера",
+    "dup_of": ""
+  },
+  {
+    "column": "flow_duration",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "длительность сессии, с",
+    "dup_of": ""
+  },
+  {
+    "column": "up_down_pkt_ratio",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "пакеты клиент/сервер",
+    "dup_of": ""
+  },
+  {
+    "column": "up_down_bytes_ratio",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "байты клиент/сервер",
+    "dup_of": ""
+  },
+  {
+    "column": "pkt_rate",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "пакетов в секунду",
+    "dup_of": ""
+  },
+  {
+    "column": "byte_rate",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак, производный (≈ pkt_rate × средняя длина пакета); оставлен для совместимости с лабораторной схемой",
+    "group": "объём, темп и форма потока",
+    "meaning": "байт в секунду",
+    "dup_of": "pkt_rate × средняя длина пакета"
+  },
+  {
+    "column": "pkt_len_mean",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "длина пакета: среднее",
+    "dup_of": ""
+  },
+  {
+    "column": "pkt_len_std",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "длина пакета: разброс",
+    "dup_of": ""
+  },
+  {
+    "column": "pkt_len_min",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "длина пакета: минимум",
+    "dup_of": ""
+  },
+  {
+    "column": "pkt_len_max",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "длина пакета: максимум",
+    "dup_of": ""
+  },
+  {
+    "column": "pkt_len_median",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "длина пакета: медиана (ближайший элемент ряда, без интерполяции)",
+    "dup_of": ""
+  },
+  {
+    "column": "pkt_len_p10",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "длина пакета: перцентиль 10 (ближайший элемент ряда, без интерполяции)",
+    "dup_of": ""
+  },
+  {
+    "column": "pkt_len_p90",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "длина пакета: перцентиль 90 (ближайший элемент ряда, без интерполяции)",
+    "dup_of": ""
+  },
+  {
+    "column": "pkt_len_entropy",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "длина пакета: энтропия",
+    "dup_of": ""
+  },
+  {
+    "column": "iat_mean",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "intervals",
+    "role": "признак, производный (= flow_duration / (pkt_count − 1)); оставлен для совместимости с лабораторной схемой",
+    "group": "интервалы между пакетами",
+    "meaning": "интервал между пакетами: среднее",
+    "dup_of": "flow_duration / (pkt_count − 1)"
+  },
+  {
+    "column": "iat_std",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "intervals",
+    "role": "признак",
+    "group": "интервалы между пакетами",
+    "meaning": "интервал между пакетами: разброс",
+    "dup_of": ""
+  },
+  {
+    "column": "iat_min",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "intervals",
+    "role": "признак",
+    "group": "интервалы между пакетами",
+    "meaning": "интервал между пакетами: минимум",
+    "dup_of": ""
+  },
+  {
+    "column": "iat_max",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "intervals",
+    "role": "признак",
+    "group": "интервалы между пакетами",
+    "meaning": "интервал между пакетами: максимум",
+    "dup_of": ""
+  },
+  {
+    "column": "iat_p90",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "intervals",
+    "role": "признак",
+    "group": "интервалы между пакетами",
+    "meaning": "интервал между пакетами: перцентиль 90 (ближайший элемент ряда, без интерполяции)",
+    "dup_of": ""
+  },
+  {
+    "column": "burst_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "bursts",
+    "role": "признак",
+    "group": "пачки пакетов",
+    "meaning": "пачек по времени: сколько раз подряд шли пакеты с интервалом меньше 50 мс (в любую сторону)",
+    "dup_of": ""
+  },
+  {
+    "column": "idle_ratio",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "доля времени простоя",
+    "dup_of": ""
+  },
+  {
+    "column": "direction_changes",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "смены направления",
+    "dup_of": ""
+  },
+  {
+    "column": "udp_share",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "доля UDP",
+    "dup_of": "1 − tcp_share"
+  },
+  {
+    "column": "tcp_share",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак, производный (= 1 − udp_share); оставлен для совместимости с лабораторной схемой",
+    "group": "объём, темп и форма потока",
+    "meaning": "доля TCP",
+    "dup_of": "proto"
+  },
+  {
+    "column": "syn_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tcp_flags",
+    "role": "признак",
+    "group": "TCP-флаги",
+    "meaning": "число пакетов с флагом SYN",
+    "dup_of": ""
+  },
+  {
+    "column": "fin_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tcp_flags",
+    "role": "признак",
+    "group": "TCP-флаги",
+    "meaning": "число пакетов с флагом FIN",
+    "dup_of": ""
+  },
+  {
+    "column": "rst_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tcp_flags",
+    "role": "признак",
+    "group": "TCP-флаги",
+    "meaning": "число пакетов с флагом RST",
+    "dup_of": ""
+  },
+  {
+    "column": "seq_signed_len",
+    "arrow_type": "list<element: int32>",
+    "kind": "feature",
+    "group_key": "sequence",
+    "role": "признак",
+    "group": "последовательность пакетов",
+    "meaning": "массив: длина каждого пакета, знак = направление (+ клиент, − сервер)",
+    "dup_of": ""
+  },
+  {
+    "column": "seq_iat_us",
+    "arrow_type": "list<element: int64>",
+    "kind": "feature",
+    "group_key": "sequence",
+    "role": "признак",
+    "group": "последовательность пакетов",
+    "meaning": "массив: интервал до каждого пакета, мкс",
+    "dup_of": ""
+  },
+  {
+    "column": "seq_flags",
+    "arrow_type": "list<element: int32>",
+    "kind": "feature",
+    "group_key": "sequence",
+    "role": "признак",
+    "group": "последовательность пакетов",
+    "meaning": "массив: TCP-флаги каждого пакета",
+    "dup_of": ""
+  },
+  {
+    "column": "iat_entropy",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "intervals",
+    "role": "признак",
+    "group": "интервалы между пакетами",
+    "meaning": "интервал между пакетами: энтропия",
+    "dup_of": ""
+  },
+  {
+    "column": "iat_cv",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "intervals",
+    "role": "признак",
+    "group": "интервалы между пакетами",
+    "meaning": "интервал между пакетами: коэфф. вариации",
+    "dup_of": ""
+  },
+  {
+    "column": "iat_p50",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "intervals",
+    "role": "признак",
+    "group": "интервалы между пакетами",
+    "meaning": "интервал между пакетами: перцентиль 50 (ближайший элемент ряда, без интерполяции)",
+    "dup_of": ""
+  },
+  {
+    "column": "iat_p99",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "intervals",
+    "role": "признак",
+    "group": "интервалы между пакетами",
+    "meaning": "интервал между пакетами: перцентиль 99 (ближайший элемент ряда, без интерполяции)",
+    "dup_of": ""
+  },
+  {
+    "column": "iat_regularity",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "intervals",
+    "role": "признак",
+    "group": "интервалы между пакетами",
+    "meaning": "регулярность интервалов",
+    "dup_of": ""
+  },
+  {
+    "column": "len_entropy_up",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "энтропия длин от клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "len_entropy_down",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "энтропия длин от сервера",
+    "dup_of": ""
+  },
+  {
+    "column": "len_unique_up",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "различных длин от клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "len_unique_down",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "различных длин от сервера",
+    "dup_of": ""
+  },
+  {
+    "column": "small_pkt_share",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "доля кадров короче 100 байт (включая пустые подтверждения TCP)",
+    "dup_of": ""
+  },
+  {
+    "column": "low_rate_long",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "длинная и медленная сессия",
+    "dup_of": ""
+  },
+  {
+    "column": "dir_entropy",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "энтропия направлений",
+    "dup_of": ""
+  },
+  {
+    "column": "idle_gt60_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "простоев дольше 60 с",
+    "dup_of": ""
+  },
+  {
+    "column": "up_bytes_per_pkt",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "байт на пакет от клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "down_bytes_per_pkt",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "байт на пакет от сервера",
+    "dup_of": ""
+  },
+  {
+    "column": "const_len_share_up",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "доля одинаковых длин от клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "pkt_len_p95",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "sizes",
+    "role": "признак",
+    "group": "размеры пакетов",
+    "meaning": "длина пакета: перцентиль 95 (ближайший элемент ряда, без интерполяции)",
+    "dup_of": ""
+  },
+  {
+    "column": "psh_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tcp_flags",
+    "role": "признак",
+    "group": "TCP-флаги",
+    "meaning": "число пакетов с флагом PSH",
+    "dup_of": ""
+  },
+  {
+    "column": "ack_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tcp_flags",
+    "role": "признак",
+    "group": "TCP-флаги",
+    "meaning": "число пакетов с флагом ACK",
+    "dup_of": ""
+  },
+  {
+    "column": "urg_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tcp_flags",
+    "role": "признак",
+    "group": "TCP-флаги",
+    "meaning": "число пакетов с флагом URG",
+    "dup_of": ""
+  },
+  {
+    "column": "flow_boundary_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "volume",
+    "role": "признак",
+    "group": "объём, темп и форма потока",
+    "meaning": "границ потока внутри сессии",
+    "dup_of": ""
+  },
+  {
+    "column": "burst_len_mean",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "bursts",
+    "role": "признак",
+    "group": "пачки пакетов",
+    "meaning": "средняя длина пачки по времени, пакетов (0 — пачек не было)",
+    "dup_of": ""
+  },
+  {
+    "column": "burst_len_max",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "bursts",
+    "role": "признак",
+    "group": "пачки пакетов",
+    "meaning": "самая длинная пачка по времени, пакетов",
+    "dup_of": ""
+  },
+  {
+    "column": "dir_burst_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "bursts",
+    "role": "признак",
+    "group": "пачки пакетов",
+    "meaning": "пачек по направлению: сколько раз подряд шли 2 и больше пакетов в одну сторону (время не учитывается)",
+    "dup_of": ""
+  },
+  {
+    "column": "dir_burst_len_mean",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "bursts",
+    "role": "признак",
+    "group": "пачки пакетов",
+    "meaning": "средняя длина пачки по направлению, пакетов",
+    "dup_of": ""
+  },
+  {
+    "column": "dir_burst_len_max",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "bursts",
+    "role": "признак",
+    "group": "пачки пакетов",
+    "meaning": "самая длинная пачка по направлению, пакетов",
+    "dup_of": ""
+  },
+  {
+    "column": "ra_small_up_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "remote_admin",
+    "role": "признак",
+    "group": "удалённое администрирование: похоже ли на человека, работающего в удалённой консоли",
+    "meaning": "«нажатий клавиш»: пакетов клиента с короткой порцией данных (1–128 байт); пустые подтверждения TCP не считаются",
+    "dup_of": ""
+  },
+  {
+    "column": "ra_small_up_share",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "remote_admin",
+    "role": "признак",
+    "group": "удалённое администрирование: похоже ли на человека, работающего в удалённой консоли",
+    "meaning": "доля «нажатий» среди всех пакетов клиента с данными (1 — клиент шлёт только короткие команды)",
+    "dup_of": ""
+  },
+  {
+    "column": "ra_keystroke_iat_p50",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "remote_admin",
+    "role": "признак",
+    "group": "удалённое администрирование: похоже ли на человека, работающего в удалённой консоли",
+    "meaning": "медианная пауза между соседними «нажатиями», с (у человека за терминалом — десятые доли секунды)",
+    "dup_of": ""
+  },
+  {
+    "column": "ra_echo_ratio",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "remote_admin",
+    "role": "признак",
+    "group": "удалённое администрирование: похоже ли на человека, работающего в удалённой консоли",
+    "meaning": "доля «нажатий», на которые сервер ответил данными в пределах 1 с (эхо набранного символа); пусто, если ответы сервера зеркалу не видны",
+    "dup_of": ""
+  },
+  {
+    "column": "ra_echo_latency_p50",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "remote_admin",
+    "role": "признак",
+    "group": "удалённое администрирование: похоже ли на человека, работающего в удалённой консоли",
+    "meaning": "медианная задержка ответа сервера на «нажатие», с; пусто, если ответы сервера не видны",
+    "dup_of": ""
+  },
+  {
+    "column": "ra_interactive_score",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "remote_admin",
+    "role": "признак",
+    "group": "удалённое администрирование: похоже ли на человека, работающего в удалённой консоли",
+    "meaning": "признак интерактивной работы: доля «нажатий», если их не меньше 10 и медианное эхо быстрее 0,2 с, иначе 0; пусто, если ответы сервера не видны",
+    "dup_of": ""
+  },
+  {
+    "column": "ra_burst_after_idle",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "remote_admin",
+    "role": "признак",
+    "group": "удалённое администрирование: похоже ли на человека, работающего в удалённой консоли",
+    "meaning": "сколько раз активность возобновлялась после паузы дольше минуты",
+    "dup_of": ""
+  },
+  {
+    "column": "ra_off_hours",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "remote_admin",
+    "role": "признак",
+    "group": "удалённое администрирование: похоже ли на человека, работающего в удалённой консоли",
+    "meaning": "сессия началась в нерабочее время: до 8:00, после 20:00 по Москве или в выходной",
+    "dup_of": ""
+  },
+  {
+    "column": "client_internal",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "клиент во внутренней (частной) сети",
+    "dup_of": ""
+  },
+  {
+    "column": "server_internal",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "сервер во внутренней (частной) сети",
+    "dup_of": ""
+  },
+  {
+    "column": "internal_pair",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "обе стороны внутренние — соединение внутри периметра (возможное горизонтальное перемещение)",
+    "dup_of": ""
+  },
+  {
+    "column": "admin_service_by_port",
+    "arrow_type": "string",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "сервис удалённого доступа по порту сервера: ssh/telnet/rdp/vnc/winrm/smb/rpc/radmin/teamviewer; пусто — не из списка. Только по порту, без разбора протокола",
+    "dup_of": ""
+  },
+  {
+    "column": "conn_state",
+    "arrow_type": "string",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "состояние TCP-соединения в терминах Zeek, по всей сессии: SF — закрыто обеими сторонами (FIN); S0 — SYN без ответа; S1 — установлено, не закрыто; REJ — сервер отверг (RST на SYN); RSTO/RSTR — сброшено клиентом/сервером; RSTOS0 — клиент послал SYN и сбросил, сервер молчал; RSTRH — сервер сбросил, начала от клиента не видно; SH/SHR — закрыл только клиент/сервер, другая сторона молчала; S2/S3 — закрыл только клиент/сервер; OTH — подключились с середины и конца не видно. UDP: SF — обе стороны, S0 — одна. Для части длинной сессии — состояние на конец этой части. При одностороннем зеркале SYN без увиденного ответа тоже S0 — сверяйте с down_pkt_count",
+    "dup_of": ""
+  },
+  {
+    "column": "tcp_handshake_rtt_ms",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "время от SYN клиента до SYN/ACK сервера, мс (сетевая задержка до сервера); пусто, если не видно",
+    "dup_of": ""
+  },
+  {
+    "column": "data_pkt_up",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "число пакетов клиента с данными (длина полезной нагрузки TCP/UDP > 0); чистые подтверждения не считаются",
+    "dup_of": ""
+  },
+  {
+    "column": "data_pkt_down",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "число пакетов сервера с данными (длина полезной нагрузки > 0)",
+    "dup_of": ""
+  },
+  {
+    "column": "small_data_up_bytes",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "сумма байт данных в коротких пакетах клиента (данные 1–128 байт) — объём «набранного руками»",
+    "dup_of": ""
+  },
+  {
+    "column": "start_hour_sin",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "час начала по Москве на круге суток: sin",
+    "dup_of": ""
+  },
+  {
+    "column": "start_hour_cos",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "час начала по Москве на круге суток: cos",
+    "dup_of": ""
+  },
+  {
+    "column": "start_dow_sin",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "день недели начала на круге недели: sin (пн = 0)",
+    "dup_of": ""
+  },
+  {
+    "column": "start_dow_cos",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "context",
+    "role": "признак",
+    "group": "контекст сессии: стороны, рукопожатие, сервис, время",
+    "meaning": "день недели начала на круге недели: cos",
+    "dup_of": ""
+  },
+  {
+    "column": "proto",
+    "arrow_type": "string",
+    "kind": "feature",
+    "group_key": "identity",
+    "role": "признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "протокол (tcp/udp)",
+    "dup_of": ""
+  },
+  {
+    "column": "dest_port",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "identity",
+    "role": "признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "порт сервера",
+    "dup_of": ""
+  },
+  {
+    "column": "host_key",
+    "arrow_type": "string",
+    "kind": "id",
+    "group_key": "identity",
+    "role": "идентификатор — не подавать в модель",
+    "group": "идентификация и состояние сессии",
+    "meaning": "хеш адреса клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "server_key",
+    "arrow_type": "string",
+    "kind": "id",
+    "group_key": "identity",
+    "role": "идентификатор — не подавать в модель",
+    "group": "идентификация и состояние сессии",
+    "meaning": "хеш адреса сервера",
+    "dup_of": ""
+  },
+  {
+    "column": "session_uid",
+    "arrow_type": "string",
+    "kind": "id",
+    "group_key": "identity",
+    "role": "идентификатор — не подавать в модель",
+    "group": "идентификация и состояние сессии",
+    "meaning": "идентификатор сессии",
+    "dup_of": ""
+  },
+  {
+    "column": "segment_uid",
+    "arrow_type": "string",
+    "kind": "id",
+    "group_key": "identity",
+    "role": "идентификатор — не подавать в модель",
+    "group": "идентификация и состояние сессии",
+    "meaning": "идентификатор строки (сессия + номер части)",
+    "dup_of": ""
+  },
+  {
+    "column": "segment_index",
+    "arrow_type": "int64",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "номер части длинной сессии (0 — первая)",
+    "dup_of": ""
+  },
+  {
+    "column": "session_continues",
+    "arrow_type": "int64",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "1 — у сессии есть следующая часть",
+    "dup_of": ""
+  },
+  {
+    "column": "time_bucket",
+    "arrow_type": "string",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "час начала сессии",
+    "dup_of": ""
+  },
+  {
+    "column": "session_start_epoch",
+    "arrow_type": "double",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "время начала, unix-секунды",
+    "dup_of": ""
+  },
+  {
+    "column": "start_observed",
+    "arrow_type": "int64",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "начало сессии попало в запись",
+    "dup_of": ""
+  },
+  {
+    "column": "truncated_at_capture_end",
+    "arrow_type": "int64",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "сессия ещё шла, когда запись кончилась",
+    "dup_of": ""
+  },
+  {
+    "column": "closed_cleanly",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "identity",
+    "role": "признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "закрыта FIN с обеих сторон без RST",
+    "dup_of": ""
+  },
+  {
+    "column": "out_of_scope_vpn",
+    "arrow_type": "int64",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "вне области VPN-детектора (DNS)",
+    "dup_of": ""
+  },
+  {
+    "column": "y_presumed",
+    "arrow_type": "int64",
+    "kind": "label",
+    "group_key": "label",
+    "role": "метка — не подавать в модель",
+    "group": "метка",
+    "meaning": "метка класса (0 — обычный трафик)",
+    "dup_of": ""
+  },
+  {
+    "column": "label_source",
+    "arrow_type": "string",
+    "kind": "label",
+    "group_key": "label",
+    "role": "метка — не подавать в модель",
+    "group": "метка",
+    "meaning": "откуда метка",
+    "dup_of": ""
+  },
+  {
+    "column": "label_family",
+    "arrow_type": "string",
+    "kind": "label",
+    "group_key": "label",
+    "role": "метка — не подавать в модель",
+    "group": "метка",
+    "meaning": "семейство туннеля (для обычного трафика пусто)",
+    "dup_of": ""
+  },
+  {
+    "column": "service_key",
+    "arrow_type": "string",
+    "kind": "id",
+    "group_key": "identity",
+    "role": "идентификатор — не подавать в модель",
+    "group": "идентификация и состояние сессии",
+    "meaning": "хеш имени сайта (SNI)",
+    "dup_of": ""
+  },
+  {
+    "column": "pay_entropy_up",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "payload",
+    "role": "признак",
+    "group": "содержимое (первые байты данных)",
+    "meaning": "энтропия первых байт данных от клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "pay_entropy_down",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "payload",
+    "role": "признак",
+    "group": "содержимое (первые байты данных)",
+    "meaning": "энтропия первых байт данных от сервера",
+    "dup_of": ""
+  },
+  {
+    "column": "pay_printable_up",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "payload",
+    "role": "признак",
+    "group": "содержимое (первые байты данных)",
+    "meaning": "доля печатаемых символов от клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "pay_printable_down",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "payload",
+    "role": "признак",
+    "group": "содержимое (первые байты данных)",
+    "meaning": "доля печатаемых символов от сервера",
+    "dup_of": ""
+  },
+  {
+    "column": "pay_null_share_up",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "payload",
+    "role": "признак",
+    "group": "содержимое (первые байты данных)",
+    "meaning": "доля нулевых байт от клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "pay_b64_share_up",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "payload",
+    "role": "признак",
+    "group": "содержимое (первые байты данных)",
+    "meaning": "доля символов base64 от клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "pay_bytes_sampled_up",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "payload",
+    "role": "признак",
+    "group": "содержимое (первые байты данных)",
+    "meaning": "сколько байт данных клиента разобрано",
+    "dup_of": ""
+  },
+  {
+    "column": "pay_bytes_sampled_down",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "payload",
+    "role": "признак",
+    "group": "содержимое (первые байты данных)",
+    "meaning": "сколько байт данных сервера разобрано",
+    "dup_of": ""
+  },
+  {
+    "column": "dns_qname_len_mean",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "dns",
+    "role": "признак",
+    "group": "DNS",
+    "meaning": "средняя длина DNS-имени",
+    "dup_of": ""
+  },
+  {
+    "column": "dns_qname_len_max",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "dns",
+    "role": "признак",
+    "group": "DNS",
+    "meaning": "макс. длина DNS-имени",
+    "dup_of": ""
+  },
+  {
+    "column": "dns_label_entropy",
+    "arrow_type": "double",
+    "kind": "feature",
+    "group_key": "dns",
+    "role": "признак",
+    "group": "DNS",
+    "meaning": "энтропия частей DNS-имён",
+    "dup_of": ""
+  },
+  {
+    "column": "dns_query_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "dns",
+    "role": "признак",
+    "group": "DNS",
+    "meaning": "DNS-запросов",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_sni_len",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "длина SNI",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_ja4s_present",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "есть отпечаток сервера JA4S",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_ja4_unique",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "различных JA4 в сессии",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_version",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "версия TLS",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_cipher_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "шифров предложено",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_ext_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "расширений TLS",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_group_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "групп ключевого обмена",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_sigalg_count",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "алгоритмов подписи",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_alpn_h2",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "ALPN = HTTP/2",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_alpn_h3",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "ALPN = HTTP/3",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_alpn_http11",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "ALPN = HTTP/1.1",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_alpn_other",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "другой ALPN",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_resumed",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "возобновление TLS-сессии",
+    "dup_of": ""
+  },
+  {
+    "column": "tls_early_data",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "tls",
+    "role": "признак",
+    "group": "TLS",
+    "meaning": "0-RTT",
+    "dup_of": ""
+  },
+  {
+    "column": "quic_datagrams",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "quic",
+    "role": "признак",
+    "group": "QUIC",
+    "meaning": "датаграмм QUIC",
+    "dup_of": ""
+  },
+  {
+    "column": "quic_datagram_bytes",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "quic",
+    "role": "признак",
+    "group": "QUIC",
+    "meaning": "байт QUIC",
+    "dup_of": ""
+  },
+  {
+    "column": "quic_cid_changes",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "quic",
+    "role": "признак",
+    "group": "QUIC",
+    "meaning": "смен идентификатора соединения QUIC",
+    "dup_of": ""
+  },
+  {
+    "column": "dns_qtype_a",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "dns",
+    "role": "признак",
+    "group": "DNS",
+    "meaning": "DNS-запросов A",
+    "dup_of": ""
+  },
+  {
+    "column": "dns_qtype_aaaa",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "dns",
+    "role": "признак",
+    "group": "DNS",
+    "meaning": "DNS-запросов AAAA",
+    "dup_of": ""
+  },
+  {
+    "column": "dns_qtype_txt",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "dns",
+    "role": "признак",
+    "group": "DNS",
+    "meaning": "DNS-запросов TXT",
+    "dup_of": ""
+  },
+  {
+    "column": "dns_qtype_null",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "dns",
+    "role": "признак",
+    "group": "DNS",
+    "meaning": "DNS-запросов NULL",
+    "dup_of": ""
+  },
+  {
+    "column": "dns_qtype_other",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "dns",
+    "role": "признак",
+    "group": "DNS",
+    "meaning": "DNS-запросов других типов",
+    "dup_of": ""
+  },
+  {
+    "column": "payload_schema_version",
+    "arrow_type": "int64",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "версия справки о содержимом",
+    "dup_of": ""
+  },
+  {
+    "column": "is_capwap_tunnel",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "identity",
+    "role": "признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "служебный туннель Wi-Fi (CAPWAP)",
+    "dup_of": ""
+  },
+  {
+    "column": "capwap_packets",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "capwap",
+    "role": "признак",
+    "group": "CAPWAP",
+    "meaning": "пакетов CAPWAP",
+    "dup_of": ""
+  },
+  {
+    "column": "tcp_retx_pkts_up",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "retransmissions",
+    "role": "признак",
+    "group": "повторные передачи TCP",
+    "meaning": "повторно отправленные клиентом пакеты с данными (номер TCP уже был передан; проверки keep-alive исключены); пусто для UDP",
+    "dup_of": ""
+  },
+  {
+    "column": "tcp_retx_pkts_down",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "retransmissions",
+    "role": "признак",
+    "group": "повторные передачи TCP",
+    "meaning": "повторно отправленные сервером пакеты с данными; пусто для UDP",
+    "dup_of": ""
+  },
+  {
+    "column": "tcp_retx_bytes_up",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "retransmissions",
+    "role": "признак",
+    "group": "повторные передачи TCP",
+    "meaning": "байт данных в повторах клиента",
+    "dup_of": ""
+  },
+  {
+    "column": "tcp_retx_bytes_down",
+    "arrow_type": "int64",
+    "kind": "feature",
+    "group_key": "retransmissions",
+    "role": "признак",
+    "group": "повторные передачи TCP",
+    "meaning": "байт данных в повторах сервера",
+    "dup_of": ""
+  },
+  {
+    "column": "ssh_client_software",
+    "arrow_type": "string",
+    "kind": "feature",
+    "group_key": "ssh",
+    "role": "признак",
+    "group": "SSH: программа и отпечаток",
+    "meaning": "семейство SSH-клиента по его строке идентификации (OpenSSH, PuTTY, libssh, paramiko, Go, WinSCP, Dropbear, Cisco, other); пусто — не SSH. Называет программу, а не поведение: осторожно, модель может выучить имя вместо сути",
+    "dup_of": ""
+  },
+  {
+    "column": "ssh_server_software",
+    "arrow_type": "string",
+    "kind": "feature",
+    "group_key": "ssh",
+    "role": "признак",
+    "group": "SSH: программа и отпечаток",
+    "meaning": "семейство SSH-сервера по его строке идентификации; пусто — не SSH",
+    "dup_of": ""
+  },
+  {
+    "column": "ssh_client_fp_key",
+    "arrow_type": "string",
+    "kind": "id",
+    "group_key": "ssh",
+    "role": "идентификатор — не подавать в модель",
+    "group": "SSH: программа и отпечаток",
+    "meaning": "отпечаток набора алгоритмов клиента из KEXINIT (в духе HASSH), солёный хеш; одинаковый у одной и той же программы-клиента. Для группировки и новизны, числом в модель не подавать",
+    "dup_of": ""
+  },
+  {
+    "column": "ssh_server_fp_key",
+    "arrow_type": "string",
+    "kind": "id",
+    "group_key": "ssh",
+    "role": "идентификатор — не подавать в модель",
+    "group": "SSH: программа и отпечаток",
+    "meaning": "отпечаток набора алгоритмов сервера из KEXINIT (в духе HASSHServer), солёный хеш",
+    "dup_of": ""
+  },
+  {
+    "column": "payload_matched",
+    "arrow_type": "int64",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "справка о содержимом найдена",
+    "dup_of": ""
+  },
+  {
+    "column": "run_id",
+    "arrow_type": "string",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "прогон захвата, из которого строка",
+    "dup_of": ""
+  },
+  {
+    "column": "batch_id",
+    "arrow_type": "string",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "порция внутри прогона",
+    "dup_of": ""
+  },
+  {
+    "column": "global_session_uid",
+    "arrow_type": "string",
+    "kind": "id",
+    "group_key": "identity",
+    "role": "идентификатор — не подавать в модель",
+    "group": "идентификация и состояние сессии",
+    "meaning": "сессия во всех прогонах: run_id:session_uid",
+    "dup_of": ""
+  },
+  {
+    "column": "global_segment_uid",
+    "arrow_type": "string",
+    "kind": "id",
+    "group_key": "identity",
+    "role": "идентификатор — не подавать в модель",
+    "group": "идентификация и состояние сессии",
+    "meaning": "строка во всех прогонах: run_id:segment_uid (уникальна)",
+    "dup_of": ""
+  },
+  {
+    "column": "segment_start_ts",
+    "arrow_type": "timestamp[us, tz=UTC]",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "первый пакет строки, UTC",
+    "dup_of": ""
+  },
+  {
+    "column": "segment_end_ts",
+    "arrow_type": "timestamp[us, tz=UTC]",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "последний пакет строки, UTC",
+    "dup_of": ""
+  },
+  {
+    "column": "event_date",
+    "arrow_type": "date32[day]",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "день первого пакета строки, UTC (раздел таблицы)",
+    "dup_of": ""
+  },
+  {
+    "column": "seq_first_dir",
+    "arrow_type": "int8",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "кто послал первый пакет строки: 1 клиент, −1 сервер",
+    "dup_of": ""
+  },
+  {
+    "column": "seq_last_dir",
+    "arrow_type": "int8",
+    "kind": "service",
+    "group_key": "identity",
+    "role": "служебное — для фильтров и сборки, не признак",
+    "group": "идентификация и состояние сессии",
+    "meaning": "кто послал последний пакет строки: 1 клиент, −1 сервер",
+    "dup_of": ""
+  }
+]

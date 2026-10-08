@@ -1,0 +1,19 @@
+{
+  "version": "cover-registry-v1",
+  "main_commit": "b4869a7695df464a5d3d1845f4c50719eb5dab09",
+  "stage_m_commit": "1028b4a922c9b59e841fc71d58ae1df60ded6da4",
+  "sources": [
+    {
+      "path": "main/src/coverlab/scenarios.py",
+      "sha256": "fc58f9a57bef722f2ad3777ec456825a2cce501658d5c3f79996887c9afc0e6d"
+    },
+    {
+      "path": "main/src/coverlab/scenarios_extra.py",
+      "sha256": "02257837b0a1161ba125268d49a80d109756788ae4c6d5333f5658837c0bc273"
+    },
+    {
+      "path": "stage_m/src/coverlab/stage_m.py",
+      "sha256": "a7eb63ee27d8e3439088e0e88d42390bfb63bc54754ffc1d51a3b9eb1dedb0fc"
+    }
+  ]
+}
