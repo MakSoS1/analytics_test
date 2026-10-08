@@ -820,18 +820,10 @@ jobs:
         with:
           name: natural-generated-benign-e2e-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/natural-e2e
-            ${{ runner.temp }}/natural-control-run/results.json
-            ${{ runner.temp }}/natural-control-run/runtime_manifest.json
-            ${{ runner.temp }}/natural-control-run/jobs.json
-            ${{ runner.temp }}/natural-control-run/runtime.log
-            ${{ runner.temp }}/natural-control-run/*/job.json
-            ${{ runner.temp }}/natural-control-run/*/result.json
-            ${{ runner.temp }}/natural-control-run/*/client.log
-            ${{ runner.temp }}/natural-control-run/*/tcpdump.log
-            ${{ runner.temp }}/natural-control-run/*/path_environment.json
-            ${{ runner.temp }}/natural-control-run/*/dispatch.json
-            ${{ runner.temp }}/natural-control-run/*/capture.pcap
+            ${{ runner.temp }}/natural-e2e/naturalness.json
+            ${{ runner.temp }}/natural-e2e/additional_day_control_transfer.json
+            ${{ runner.temp }}/natural-e2e/release_gate.json
+          if-no-files-found: warn
           retention-days: 30
   external-reference-audit:
     runs-on: ubuntu-latest
