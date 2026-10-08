@@ -10,6 +10,7 @@ on:
       - 'cover-channel-lab/research-transfer/code/cover_runtime/*.py'
       - 'cover-channel-lab/research-transfer/code/tests/test_natural_*.py'
       - 'cover-channel-lab/research-transfer/datasets/office-cover-20261006/**'
+      - 'cover-channel-lab/research-transfer/datasets/office-additional-days-20261008/**'
       - '.github/workflows/natural-traffic-tdd.yml'
       - '.github/workflows/natural-office-traffic-v2.yml'
   pull_request:
@@ -614,5 +615,30 @@ jobs:
         with:
           name: office-feature-baseline-report
           path: cover-channel-lab/research-transfer/office-feature-baseline-report.json
+          retention-days: 30
+  office-additional-day-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install offline diagnostics
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scipy scikit-learn
+      - name: Validate hashes and measure between-day transport shift
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.office_day_transfer \
+            --root datasets/office-additional-days-20261008 \
+            --out office-additional-day-transfer.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: office-additional-day-transfer
+          path: cover-channel-lab/research-transfer/office-additional-day-transfer.json
           retention-days: 30
 
