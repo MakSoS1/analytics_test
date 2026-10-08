@@ -1,5 +1,7 @@
 # Результаты и границы вывода
 
+> Это **исторический срез 6 октября**, цифры сохранены без ретроспективной замены. Реальные последующие проверки 8–9 октября, экспериментальный Adaptix детектор и актуальные статусы приведены в [CURRENT_PROJECT_STATUS](docs/CURRENT_PROJECT_STATUS.md) и [OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS](docs/OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS.md). `production_ready=false`.
+
 Исторические агрегаты исследования 6 октября; публикуемый код не выполняет новый сбор или обучение.
 
 | Сопоставимый срез | Строки | Колонки |

@@ -17,6 +17,7 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 from sklearn.impute import SimpleImputer
+from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.pipeline import make_pipeline
@@ -32,6 +33,7 @@ class CaptureFeatures:
     transport: str
     arm: str
     features: pd.DataFrame
+    semantically_verified: bool = False
 
 
 def _measured_capture_table(captures: Sequence[CaptureFeatures],
@@ -85,6 +87,7 @@ def evaluate_paired_detector(
     feature_columns: Sequence[str] | None = None,
     max_features: int = 3,
     office_days: dict[str, pd.DataFrame] | None = None,
+    hard_negative_captures: Sequence[CaptureFeatures] | None = None,
 ) -> dict:
     """Leave-profile/transport-out research metric with strict pair grouping."""
     captures = list(captures)
@@ -108,6 +111,12 @@ def evaluate_paired_detector(
         a, b = arms["scenario"], arms["control"]
         if a.profile_id != b.profile_id or a.transport != b.transport:
             raise ValueError("paired captures must share profile and transport")
+    hard_negatives = list(hard_negative_captures or ())
+    if any(capture.arm != "hard_negative" or capture.features.empty
+           for capture in hard_negatives):
+        raise ValueError("hard_negative captures require explicit arm and measured rows")
+    if any(capture.semantically_verified is not True for capture in hard_negatives):
+        raise ValueError("hard_negative captures must be semantically verified")
     if len({c.profile_id for c in captures}) < 3 or len({c.transport for c in captures}) < 2:
         raise ValueError("requires at least three profiles and two transports")
 
@@ -130,6 +139,7 @@ def evaluate_paired_detector(
     })
     pair_ids = [c.pair_id for c in captures]
     folds: dict[str, list[dict]] = {}
+    extra_folds: dict[str, list[dict]] = {}
     selection_frequency: Counter[str] = Counter()
     office_fractions: dict[str, list[float]] = {
         day: [] for day in (office_days or {})
@@ -137,6 +147,7 @@ def evaluate_paired_detector(
     for scheme, group_attr in (("leave_one_profile_out", "profile_id"),
                                ("leave_one_transport_out", "transport")):
         fold_reports = []
+        extra_reports = []
         for holdout in sorted({getattr(c, group_attr) for c in captures}):
             test = np.array([getattr(c, group_attr) == holdout for c in captures])
             train = ~test
@@ -149,6 +160,10 @@ def evaluate_paired_detector(
             chosen = _training_feature_rank(x.loc[train], labels[train], tr_pairs,
                                             max_features)
             ablations = {}
+            recall_at_threshold = None
+            hard_alert_fraction = None
+            hard_status = "insufficient_support"
+            threshold_source = "unavailable_no_selected_features"
             if chosen:
                 model = make_pipeline(
                     SimpleImputer(strategy="median"), RobustScaler(),
@@ -163,6 +178,17 @@ def evaluate_paired_detector(
                 training_control = model.predict_proba(
                     x.loc[train & (labels == 0), chosen])[:, 1]
                 weak_threshold = float(np.quantile(training_control, .99))
+                threshold_source = "training_control_p99_exploratory_only"
+                recall_at_threshold = float(np.mean(predictions[labels[test] == 1] > weak_threshold))
+                compatible_hard = [capture for capture in hard_negatives
+                                   if getattr(capture, group_attr) == holdout
+                                   and all(col in capture.features for col in chosen)]
+                if compatible_hard:
+                    hard_x = _measured_capture_table(compatible_hard, chosen)
+                    if not hard_x.isna().all().any():
+                        hard_scores = model.predict_proba(hard_x)[:, 1]
+                        hard_alert_fraction = float(np.mean(hard_scores > weak_threshold))
+                        hard_status = "diagnostic_only"
                 for day, office in (office_days or {}).items():
                     if office.empty or any(feature not in office for feature in chosen):
                         continue
@@ -178,10 +204,20 @@ def evaluate_paired_detector(
                     masked[feature] = float(x.loc[train, feature].median())
                     degraded = model.predict_proba(masked)[:, 1]
                     ablations[feature] = float(measured_auc - roc_auc_score(labels[test], degraded))
+                extra_model = make_pipeline(
+                    SimpleImputer(strategy="median"),
+                    ExtraTreesClassifier(
+                        n_estimators=80, min_samples_leaf=1, max_depth=6,
+                        class_weight="balanced", random_state=20261009, n_jobs=1,
+                    ),
+                )
+                extra_model.fit(x.loc[train, chosen], labels[train])
+                extra_pred = extra_model.predict_proba(x.loc[test, chosen])[:, 1]
             else:
                 # A legitimate negative result; don't fail CI or invent signal.
                 predictions = np.full(int(test.sum()), .5)
                 measured_auc = .5
+                extra_pred = predictions.copy()
             origin_encoder = OneHotEncoder(handle_unknown="ignore")
             origin_train = origin_encoder.fit_transform(provenance.loc[train])
             origin_model = LogisticRegression(C=0.1, class_weight="balanced",
@@ -190,18 +226,29 @@ def evaluate_paired_detector(
             origin_scores = origin_model.predict_proba(
                 origin_encoder.transform(provenance.loc[test]))[:, 1]
             selection_frequency.update(chosen)
+            extra_reports.append({
+                "roc_auc": float(roc_auc_score(labels[test], extra_pred)),
+                "average_precision": float(average_precision_score(labels[test], extra_pred)),
+            })
             fold_reports.append({
                 "held_out_group": holdout,
                 "train_pair_ids": sorted(set(tr_pairs)),
                 "test_pair_ids": sorted(set(te_pairs)),
                 "test_captures": int(test.sum()),
+                "positive_count": int(labels[test].sum()),
+                "control_count": int(test.sum() - labels[test].sum()),
                 "selected_features": chosen,
+                "threshold_source": threshold_source,
+                "recall_at_train_control_threshold": recall_at_threshold,
+                "hard_negative_status": hard_status,
+                "hard_negative_alert_fraction": hard_alert_fraction,
                 "roc_auc": measured_auc,
                 "average_precision": float(average_precision_score(labels[test], predictions)),
                 "origin_only_roc_auc": float(roc_auc_score(labels[test], origin_scores)),
                 "feature_ablation_auc_drop": ablations,
             })
         folds[scheme] = fold_reports
+        extra_folds[scheme] = extra_reports
     metrics = {
         scheme: {
             "mean_roc_auc": float(np.mean([r["roc_auc"] for r in reports])),
@@ -219,12 +266,24 @@ def evaluate_paired_detector(
         }
         for day, fractions in sorted(office_fractions.items())
     }
+    extra_metrics = {
+        scheme: {
+            "mean_roc_auc": float(np.mean([fold["roc_auc"] for fold in reports])),
+            "worst_roc_auc": float(min(fold["roc_auc"] for fold in reports)),
+            "mean_average_precision": float(np.mean([
+                fold["average_precision"] for fold in reports])),
+            "fold_roc_auc": [fold["roc_auc"] for fold in reports],
+        }
+        for scheme, reports in extra_folds.items()
+    }
     return {
-        "version": "adaptix-paired-detection-diagnostic-v1",
+        "version": "adaptix-paired-detection-diagnostic-v2",
         "comparison_scope": "adaptix_vs_isolated_paired_telemetry_control",
         "capture_count": len(captures),
         "measured_session_rows": sum(len(c.features) for c in captures),
         "independent_pairs": len(pairs),
+        "hard_negative_capture_count": len(hard_negatives),
+        "hard_negative_labels": "caller_attested_semantic_fixture_only",
         "independent_profiles": len({c.profile_id for c in captures}),
         "candidate_features": columns,
         "max_features_per_fold": max_features,
@@ -236,6 +295,10 @@ def evaluate_paired_detector(
         ),
         "folds": folds,
         "metrics": metrics,
+        "exploratory_model_comparison": {"extra_trees": extra_metrics},
+        "uncertainty_status": (
+            "insufficient_support" if len(pairs) < 20 else "not_estimated"
+        ),
         "office_labels": "unknown_unverified",
         "office_diagnostic": office_diagnostic,
         "selected_feature_frequency": dict(sorted(selection_frequency.items())),

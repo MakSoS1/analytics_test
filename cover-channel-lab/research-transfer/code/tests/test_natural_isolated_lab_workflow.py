@@ -134,6 +134,14 @@ class IsolatedLabWorkflowTests(unittest.TestCase):
         self.assertIn("safe-evidence", str(upload["with"]["path"]))
         self.assertNotIn("capture.pcap", str(upload["with"]["path"]))
 
+    def test_new_research_branch_runs_only_adaptix_capture_job(self):
+        raw = WORKFLOW.read_text()
+        data = yaml.safe_load(raw)
+        branch = "office-benign-adaptix-transfer-2026-10-09"
+        self.assertIn(branch, str(data.get("on", data.get(True, {}))))
+        self.assertIn("refs/heads/" + branch, data["jobs"]["isolated-research"]["if"])
+        self.assertNotIn("if", data["jobs"]["adaptix-research"])
+
 
 if __name__ == "__main__":
     unittest.main()

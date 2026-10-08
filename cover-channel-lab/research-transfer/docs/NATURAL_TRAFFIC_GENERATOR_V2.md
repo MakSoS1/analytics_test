@@ -1,5 +1,7 @@
 # Natural Traffic Generator v2
 
+> **Актуализация 2026-10-09.** Документ описывает первоначальную архитектуру v2. Последующий HTTPS workload, групповые офисные аудиторы и Adaptix paired v2 см. в [CURRENT_PROJECT_STATUS](CURRENT_PROJECT_STATUS.md), [VERIFIED_BENIGN_OFFICE_WORKLOAD](VERIFIED_BENIGN_OFFICE_WORKLOAD.md) и [OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS](OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS.md). Исторические тесты не доказывают `production_ready=true`.
+
 Этот слой предназначен для исследовательской генерации **парных control/scenario сетевых сессий через реальные клиентские стеки** и проверки, не выучивает ли модель происхождение лаборатории вместо поведения техники.
 
 `passed_candidate` означает только прохождение зафиксированных offline naturalness-gates на конкретном reference slice. Это **не** эквивалент `production_ready=true` и не доказывает перенос на любую офисную сеть. Весь сохранённый офис не считается benign.

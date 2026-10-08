@@ -1,5 +1,7 @@
 # Универсальный корпус MITRE ATT&CK для обучения защитной NDR-модели
 
+> **Актуализация 2026-10-09.** Добавлены real HTTPS benign fixture, офисный агрегирующий аудит, групповой C2ST и Adaptix paired v2. Ограничения и команды: [CURRENT_PROJECT_STATUS](CURRENT_PROJECT_STATUS.md), [OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS](OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS.md). Офисные строки остаются unverified; `production_ready=false`.
+
 ## Что работает
 
 Конвейер принимает **неизменённые** classic Ethernet PCAP или измеренные таблицы

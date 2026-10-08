@@ -29,6 +29,77 @@ def _fixture(*, rows: int = 1) -> list[CaptureFeatures]:
 
 
 class AdaptixDetectorResearchTests(unittest.TestCase):
+    def test_outer_holdout_is_not_used_for_selection(self) -> None:
+        captures = _fixture()
+        base = evaluate_paired_detector(captures)
+        for item in captures:
+            if item.profile_id == "p0":
+                item.features["flow_duration"] += 1e6
+                item.features["total_bytes"] += 1e6
+        changed = evaluate_paired_detector(captures)
+        p0_base = next(f for f in base["folds"]["leave_one_profile_out"]
+                       if f["held_out_group"] == "p0")
+        p0_changed = next(f for f in changed["folds"]["leave_one_profile_out"]
+                          if f["held_out_group"] == "p0")
+        self.assertEqual(p0_base["selected_features"], p0_changed["selected_features"])
+        self.assertEqual(p0_base["threshold_source"],
+                         "training_control_p99_exploratory_only")
+        self.assertEqual(p0_base["positive_count"], 2)
+        self.assertEqual(p0_base["control_count"], 2)
+
+    def test_explicit_hard_negatives_are_separate_and_not_office_labels(self) -> None:
+        hard = CaptureFeatures(
+            pair_id="hard-negative-1", profile_id="p0", transport="tcp",
+            arm="hard_negative", features=pd.DataFrame({
+                "pkt_count": [11], "flow_duration": [5.0], "total_bytes": [1000.0],
+            }),
+            semantically_verified=True,
+        )
+        report = evaluate_paired_detector(_fixture(),
+                                          hard_negative_captures=[hard])
+        self.assertEqual(report["independent_pairs"], 6)
+        self.assertEqual(report["capture_count"], 12)
+        self.assertEqual(report["hard_negative_capture_count"], 1)
+        self.assertEqual(report["office_labels"], "unknown_unverified")
+        self.assertEqual(report["hard_negative_labels"],
+                         "caller_attested_semantic_fixture_only")
+        p0 = next(f for f in report["folds"]["leave_one_profile_out"]
+                  if f["held_out_group"] == "p0")
+        self.assertEqual(p0["hard_negative_status"], "diagnostic_only")
+        self.assertIsInstance(p0["hard_negative_alert_fraction"], float)
+        p1 = next(f for f in report["folds"]["leave_one_profile_out"]
+                  if f["held_out_group"] == "p1")
+        self.assertEqual(p1["hard_negative_status"], "insufficient_support")
+        self.assertIsNone(p1["hard_negative_alert_fraction"])
+
+    def test_rejects_control_misrepresented_as_hard_negative(self) -> None:
+        hard = CaptureFeatures(
+            pair_id="unverified", profile_id="p0", transport="tcp", arm="control",
+            features=pd.DataFrame({"pkt_count": [2], "flow_duration": [1.0],
+                                   "total_bytes": [100.0]}),
+        )
+        with self.assertRaisesRegex(ValueError, "hard_negative"):
+            evaluate_paired_detector(_fixture(), hard_negative_captures=[hard])
+
+    def test_unverified_hard_negative_is_not_a_confirmed_benign_label(self) -> None:
+        hard = CaptureFeatures(
+            pair_id="unverified-fixture", profile_id="p0", transport="tcp",
+            arm="hard_negative", features=pd.DataFrame({
+                "pkt_count": [2], "flow_duration": [1.0], "total_bytes": [100.0],
+            }),
+        )
+        with self.assertRaisesRegex(ValueError, "semantically verified"):
+            evaluate_paired_detector(_fixture(), hard_negative_captures=[hard])
+
+    def test_small_n_disallows_confident_model_and_extra_trees_is_comparison_only(self) -> None:
+        report = evaluate_paired_detector(_fixture())
+        self.assertEqual(report["uncertainty_status"], "insufficient_support")
+        self.assertIn("extra_trees", report["exploratory_model_comparison"])
+        extra = report["exploratory_model_comparison"]["extra_trees"]
+        self.assertIn("leave_one_profile_out", extra)
+        self.assertTrue(0 <= extra["leave_one_transport_out"]["mean_roc_auc"] <= 1)
+        self.assertFalse(report["production_ready"])
+
     def test_rejects_unpaired_capture(self) -> None:
         with self.assertRaisesRegex(ValueError, "exactly one scenario and control"):
             evaluate_paired_detector(_fixture()[:-1])

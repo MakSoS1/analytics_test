@@ -6,6 +6,10 @@ TCP/mTLS), each with one bounded Adaptix scenario and one laboratory telemetry
 control. No original PCAP, receipt content, fitted model or per-session score
 is uploaded to public CI artifacts.
 
+**Current research overview:** [current status](CURRENT_PROJECT_STATUS.md),
+[protocol and historic measured results](OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS.md),
+[chronological change log](RESEARCH_CHANGELOG_2026.md).
+
 ## Reproducible command
 
 The `adaptix-research` job of
@@ -35,7 +39,9 @@ JSON under `$RUNNER_TEMP/safe-evidence/adaptix-detector-report.json`.
 3. `leave_one_profile_out` tests on the entire withheld runtime profile;
    `leave_one_transport_out` separately withholds all TCP or mTLS pairs.
    Every pair remains together inside the train or test partition.
-4. The classifier is regularized logistic regression. Within each training
+4. The primary classifier is regularized logistic regression; a predeclared
+   `extra_trees` comparison is evaluated on the exact same outer group splits.
+   Within each training
    fold it selects at most three features based on sign-consistent paired
    scenario-minus-control differences, never using held-out features or labels
    for selection. Selection frequency and outer-held-out feature ablation
@@ -43,12 +49,27 @@ JSON under `$RUNNER_TEMP/safe-evidence/adaptix-detector-report.json`.
 5. A provenance-only diagnostic using profile/transport is evaluated. Missing
    stable training signal yields a neutral 0.5-AUC report rather than an
    invented success or a green-research assertion.
-6. The JSON includes fold-level and mean/worst ROC-AUC and average precision,
+6. The v2 JSON includes fold-level and mean/worst ROC-AUC and average precision,
    feature names and support counts. Existing 22/28 September office Parquet
    is scored only after feature selection against the exploratory training-
    control 99th-percentile threshold; the report calls this an `alert_fraction`,
    never FPR. No threshold has been calibrated for a production alert budget;
    six pairs cannot establish a low false-alarm rate.
+7. Held-out scenario recall is reported at a threshold calibrated on the
+   **training controls only**, with per-fold support. Independently certified
+   semantically verified hard negatives can be evaluated separately, but the
+   current historical corpus has none. `hard_negative_alert_fraction` and
+   uncertainty bounds therefore remain `insufficient_support` when unavailable.
+
+## Confirmed historic metrics vs new comparison
+
+The [completed v1 run 37844041216](https://github.com/MakSoS1/analytics_test/actions/runs/37844041216)
+measured mean logistic LOPO ROC-AUC 1.0, mean AP 1.0, and mean LOTO ROC-AUC
+0.5556, mean AP 0.6528 (worst ROC-AUC 0.3333). The office alert fraction was
+26.095% (2026-09-22, 4000 rows) and 28.5907% (2026-09-28, 4002 rows), **not
+FPR**. No extra_trees, hard-negative, threshold-recall or newly confirmed v2
+metric is inferred from this earlier JSON; they must be read from a new,
+completed CI artifact. `production_ready=false`, `office_labels=unverified`.
 
 ## Interpretation and nonclaims
 

@@ -1,3 +1,4 @@
+> NDR / natural traffic / Adaptix (отдельный подпроект): [актуальный статус и документация](cover-channel-lab/research-transfer/docs/CURRENT_PROJECT_STATUS.md), [история исследований](cover-channel-lab/research-transfer/docs/RESEARCH_CHANGELOG_2026.md). Основное SQL-упражнение ниже сохранено без изменений.
 
 
 ## Часть I. Исправление SQL-запросов

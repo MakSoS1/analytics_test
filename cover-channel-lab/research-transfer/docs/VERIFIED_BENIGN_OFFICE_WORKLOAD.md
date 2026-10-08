@@ -37,6 +37,21 @@ The PCAP is never rewritten or re-timed after capture. The public CI artifact
 contains only the receipt and aggregated extractor diagnostics, not packet
 payloads or the TLS private key.
 
+The updated CI also runs `natural_traffic.office_profile_audit` after verified
+extraction, then `natural_traffic.benign_transfer_evaluation` using frozen
+measured transport features. It publishes two additional **safe aggregate**
+files: `office-profile-report.json` and `benign-transfer-report.json`. Three
+sessions on one Python runner are explicitly treated as **one independent
+capture group**; the generated-vs-office C2ST therefore reports
+`insufficient_support`, not a fabricated naturalness pass. The office-vs-office
+22/28 September comparison is only a previously inspected negative control,
+not a new blinded validation set.
+
+For the full module map and experiment results see
+[current project status](CURRENT_PROJECT_STATUS.md),
+[transfer results](OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS.md), and
+[research history](RESEARCH_CHANGELOG_2026.md).
+
 The GitHub Actions job `verified-benign-office-workload` captures these HTTPS
 tasks on Linux loopback with `tcpdump`. It waits for an explicit interface-ready
 acknowledgement before connecting, completes the application workload, then

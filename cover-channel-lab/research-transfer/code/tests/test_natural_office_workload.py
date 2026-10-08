@@ -27,6 +27,14 @@ def _tcp_packet(src_port: int, dst_port: int, flags: int) -> bytes:
 
 
 class BenignOfficeWorkloadTests(unittest.TestCase):
+    def test_capture_fails_on_missing_handshake(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "missing.pcap"
+            write_pcap(path, [(1.0, _tcp_packet(44001, 9090, 0x02))])
+            with self.assertRaisesRegex(RuntimeError, "incomplete"):
+                _wait_for_wire_coverage(path, server_port=9090,
+                                        expected_sessions=1, timeout_seconds=.02)
+
     def test_capture_waits_for_initialized_pcap_header(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "recording.pcap"

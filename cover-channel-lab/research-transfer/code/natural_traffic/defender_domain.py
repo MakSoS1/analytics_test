@@ -29,11 +29,7 @@ def _digest(path: Path) -> str:
 
 
 def _validate_measured_features(table: pd.DataFrame, *, minimum: int = 12) -> None:
-    """Reject raw events and sparse/non-numeric tables at the import boundary.
-
-    This cannot establish provenance: a caller must separately attest how
-    each field was measured and the authenticity of any claimed labels.
-    """
+    """Reject raw events and sparse or non-numeric feature tables at ingest."""
     if table.empty:
         raise ValueError("input generated zero feature rows")
     valid = []
@@ -68,10 +64,7 @@ def load_user_input(path: Path, work: Path, *, min_free_gib: float = 1) -> tuple
             table = pd.read_json(p, lines=True, orient="records")
         else:
             table = pd.read_csv(p, sep="\t" if file_format == "tsv" else ",")
-        source_info = {
-            "format": file_format,
-            "extractor": "already_extracted_unverified",
-        }
+        source_info = {"format": file_format, "extractor": "already_extracted_unverified"}
     elif p.suffix.lower() == ".pcap":
         from .pcap_quality import audit_pcap
         from .contracts import CaptureBundle

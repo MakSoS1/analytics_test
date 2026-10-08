@@ -1,0 +1,77 @@
+# Текущее состояние генератора офисного фона и NDR-исследований
+
+Актуализация: **2026-10-09**. Этот индекс относится к `cover-channel-lab/research-transfer`, а не к независимым упражнениям в корневом README. Исходные отчёты остаются доступными; новые эксперименты не переписывают их результаты.
+
+**Итог:** `production_ready=false`, `naturalness_status=not_passed` для исторического генератора, `office_labels=unverified`: офисные данные **неразмеченные**. Обучаемый на текущих материалах детектор — **исследовательская проверка на шести лабораторных парах**, не готовый NDR для офиса. Для нового HTTPS workload естественность пока `not_proven`, а не `passed`.
+
+## Указатель на документы
+
+| Документ | Область |
+|---|---|
+| [Новая проверка офисного фона и техники](OFFICE_BENIGN_AND_TECHNIQUE_TRANSFER_RESULTS.md) | Проверки CI, сопоставимые метрики, честные неудачи и условия для продолжения |
+| [Парное обнаружение Adaptix](ADAPTIX_PAIRED_DETECTION_RESEARCH.md) | Feature selection только на training, LOPO/LOTO, ExtraTrees, hard negatives и пороги |
+| [Подтверждённая офисная HTTPS-активность](VERIFIED_BENIGN_OFFICE_WORKLOAD.md) | Легитимные приложения, TLS, PCAP и семантический receipt |
+| [Хронология исследований](RESEARCH_CHANGELOG_2026.md) | Запуски, результаты и принятые ограничения по датам |
+| [Проверка достижимости naturalness](OFFICE_NATURALNESS_FEASIBILITY_2026-10-08.md) | 64 real-stack контроля и copula baseline; почему высокая C2ST не прошла |
+| [Паритет измерений](MEASUREMENT_PARITY_AND_NATURALNESS_2026-10-08.md) | Измерения и эффект происхождения |
+| [Benign workload research](BENIGN_USER_WORKLOAD_RESEARCH_2026-10-08.md) | Рабочие действия и отличие лаборатории от офиса |
+| [MITRE / corpus contract](DEFENDER_MITRE_CORPUS.md) | Состав экспериментального корпуса и семантика labels |
+| [Natural Traffic Generator v2](NATURAL_TRAFFIC_GENERATOR_V2.md) | Историческая архитектура real-stack генератора |
+| [Импорт техник](UNIVERSAL_IMPORT.md) | Ограничения входных PCAP, activity/evidence и целостность |
+| [Запуск](RUNNING.md) | Требования и существующие CLI |
+
+## Что работает на проверенном уровне
+
+| Компонент | Модуль / workflow | Подтверждённый уровень и предел |
+|---|---|---|
+| Офисные референсы | `datasets/office-cover-20261006/`, `datasets/office-additional-days-20261008/` | Immutable Parquet + manifest. Нет raw офисного PCAP или доверенной разметки benign |
+| Профиль офиса | `code/natural_traffic/office_profile_audit.py` | Агрегаты 22/23/28 сентября, внутридневные группы, coverage/квантили; без cross-day HMAC join |
+| Реальная легитимная активность | `code/natural_traffic/office_workload.py` | Локальный проверенный HTTPS: документы, правки, файл, сообщения; semantic receipt и PCAP quality. Это Python fixture, не браузер/Office 365 |
+| Импорт исходных данных | `code/natural_traffic/defender_domain.py` | `.pcap`, `.parquet`, `.csv`, `.tsv`, `.jsonl` с проверкой измеренных транспортных полей; не принимает произвольные Zeek events за полную схему |
+| Сравнение фона | `code/natural_traffic/benign_transfer_evaluation.py` | Групповой ExtraTrees/HGB C2ST на фиксированных numeric transport features; 22 vs 28 как контроль; мало независимых групп ⇒ `insufficient_support` |
+| Adaptix/Cover | `code/framework_runtime/adaptix/`, `code/cover_runtime/` | Изолированный реальный стек, ограниченные задания и matched scenario/control, без публикации PCAP |
+| Детектор техники | `code/natural_traffic/adaptix_detector_research.py` | Медиана признаков на **физический capture**, парные train-only features, LOPO/LOTO logistic и ExtraTrees, не FPR на офисе |
+| Проверка качества | `.github/workflows/natural-traffic-tdd.yml`, `.github/workflows/isolated-cover-adaptix-research.yml` | TLS/capture/extractor gates, group-held-out отчёт и только безопасные JSON артефакты |
+
+## Офисные выборки (локальный воспроизводимый аудит)
+
+| День | Измеренных строк | Внутридневных групп | Медиана `pkt_count` | TLS |
+|---|---:|---:|---:|---|
+| 2026-09-22 | 4 000 | 382 | 21 | не измерялся |
+| 2026-09-23 | 5 726 | 332 | 2 | отдельная historical unmatched view; не тот же scope |
+| 2026-09-28 | 4 002 | 348 | 21 | частично измерен, нули не считаются TLS |
+
+Источник: `office_profile_audit` с закреплёнными manifest; повторяйте команду ниже. Группы и HMAC между выгрузками **не соединяются**; сравнение 22/28 исторически уже использовалось при подборе диагностики и **не является свежим blind holdout**.
+
+## Повторить проверки
+
+```bash
+cd cover-channel-lab/research-transfer
+python -m pip install -r requirements-tested.txt
+export PYTHONPATH=code
+python -m unittest discover -s code/tests -v
+
+python -m natural_traffic.office_profile_audit \
+  --office-dir datasets/office-additional-days-20261008 \
+  --office-cover-dir datasets/office-cover-20261006 \
+  --out /tmp/office-profile-report.json
+
+# На Linux с openssl и разрешённым tcpdump; только localhost, без реальных сотрудников
+python -m natural_traffic.office_workload \
+  --out /tmp/verified-office-fixture --sessions 3 --capture
+```
+
+Для `benign_transfer_evaluation` следует сначала измерить реальный PCAP **штатным extractor**, затем передать DataFrame с одинаковыми колонками и правдивыми независимыми `benign_group_ids`. Рабочий пример именно этого пути встроен в job `verified-benign-office-workload`; исходный PCAP и приватные материалы не публикуются.
+
+На CI выполняются также `adaptix-research` с 12 PCAP / 6 парами и агрегированным `adaptix-detector-report.json`, но локальное выполнение реального Adaptix требует Docker, закреплённых исходников Go и достаточных ресурсов. Все фичи и результаты подлежат внешней валидации.
+
+## Как трактовать цифры
+
+- **Detection ROC-AUC / PR-AUC**: способность ранжировать подтверждённый *лабораторный* Adaptix против его *лабораторного парного контроля*. Не гарантия детектирования произвольной техники или офисных атак.
+- **LOPO / LOTO**: вынос целого сетевого профиля / TCP или mTLS транспорта за пределы обучения; полезнее случайного разбиения тех же сессий.
+- **C2ST AUC**: различимость происхождения двух наборов; высокое число свидетельствует о domain shift, но само по себе не показывает, какие признаки являются сигналом техники.
+- **Unlabeled office alert fraction**: доля сессий выше экспериментального порога, **не FPR**, поскольку нельзя считать все офисные строки benign.
+- **Threshold recall**: доля подтверждённых сценариев выше порога, выбранного на *training controls*. При малой выборке широкая неопределённость.
+- **`insufficient_support`**: недостаточно независимых захватов или достоверных меток; не заменять нейтральной AUC 0.5.
+
+До переключения `production_ready` требуется: новые независимые реальные benign-контроли разных клиентов/приложений с семантикой, внешняя размеченная и ранее не использованная офисная выборка, независимые confirmed attack/control пары и hard negatives, проверки sensor/vantage parity, интервалы неопределённости и заранее фиксированные метрики FPR/recall. Сохранение оригинальных PCAP и запрет сетевой мимикрии атак принципиальны.
