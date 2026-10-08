@@ -8,8 +8,8 @@
     },
     {
       "path": ".gitignore",
-      "bytes": 344,
-      "sha256": "32519c5b6ba8fd5d4cb38e464482fa521719836cbe7203f48ea192e7ef519b5a"
+      "bytes": 439,
+      "sha256": "9fc466e75613d11f9ff67cae1169df95fdda0d8991054d798f178ee7cefbc104"
     },
     {
       "path": "PRIVACY_REVIEW.md",
@@ -18,18 +18,18 @@
     },
     {
       "path": "PUBLICATION_SCOPE.json",
-      "bytes": 1321,
-      "sha256": "7faf67e4a74bf5563f5cd729d540fab74a2be9bd3d86b75e09fd376b9f42c2f8"
+      "bytes": 1545,
+      "sha256": "479ee9bac638259e3d039b9c04f4a003dc568688bddbd02bf92303043fe21b42"
     },
     {
       "path": "PUBLICATION_VERIFICATION.json",
-      "bytes": 975,
-      "sha256": "64f6ff84adf10ab778b3f35be958e98ef0a3e03052eaa14f63e7fc2e86c86b5a"
+      "bytes": 1618,
+      "sha256": "a4ab455749833c4f8919db80f29f788852eac6d32e8d2bf04c4f90c213c7f6d8"
     },
     {
       "path": "README.md",
-      "bytes": 5191,
-      "sha256": "9f60c8f893682d73e74bbb55d1cbb839dc36a1b45e45bf44d71749447094545e"
+      "bytes": 6051,
+      "sha256": "b2c4476f775d47123e900ca4d0b8967210a24811ec2c7b326568cc62d7fd8ddc"
     },
     {
       "path": "RESULTS.md",
@@ -40,11 +40,6 @@
       "path": "code/EXTERNAL_ASSETS.json",
       "bytes": 667,
       "sha256": "50b1d5a2b006e7b88fb7ccc4e95b600aebdd846931930104bb7fc7010823da06"
-    },
-    {
-      "path": "code/__pycache__/pseudonymize_tables.cpython-312.pyc",
-      "bytes": 12181,
-      "sha256": "2a688877a7f00c306b9c9178c4c678064fde95cb5afc7dd09aaa2f3a0bed9808"
     },
     {
       "path": "code/add_pipeline_five_tuple.py",
@@ -2087,6 +2082,11 @@
       "sha256": "993487261425ccd56a98c2a33678654d4730d4ae2952bfc07bb91e7fb4f3c155"
     },
     {
+      "path": "code/sample_office_days.py",
+      "bytes": 4114,
+      "sha256": "3eef6cd051f1ed4d62e14847bd2b47e5e69df1ba2f66e858842db3c25fd041c3"
+    },
+    {
       "path": "code/tests/fixtures/cover_channels_source_inventory_2026-10-02.json",
       "bytes": 123626,
       "sha256": "773d21ce981db9b0ee6567bee67ba223ec87d0c0ee957673acdbb5197f3d8e5a"
@@ -2147,9 +2147,59 @@
       "sha256": "0d6cc87fde06cc90791d52ace027eeab29f0bddefe441ad3fa0a3d0e16ad63b0"
     },
     {
+      "path": "code/tests/test_sample_office_days.py",
+      "bytes": 1202,
+      "sha256": "78401290ec764ac685c5edae3fb82949d9705ddf103e7087f8e8b4f03e4718c6"
+    },
+    {
       "path": "code/validate_against_tshark_zeek.py",
       "bytes": 27172,
       "sha256": "951f881f2af7ef450680a25719ccf5e6e477536d2e040c4071b592253af8c495"
+    },
+    {
+      "path": "datasets/office-additional-days-20261008/DATA_MANIFEST.json",
+      "bytes": 42369,
+      "sha256": "6ed3ca2683e12f09bfe61a614b12cbdb0571713d1ed4b3fc20e486a1de6ba217"
+    },
+    {
+      "path": "datasets/office-additional-days-20261008/PUBLIC_VERIFICATION.json",
+      "bytes": 571,
+      "sha256": "51fdf34632bf051dea41d60ad74e7fba688e25a436223a25571cf07f15303a55"
+    },
+    {
+      "path": "datasets/office-additional-days-20261008/README.md",
+      "bytes": 11657,
+      "sha256": "6066ab2742c4730030e08baeea8985b9d2b17f0bc56f6afc51fa3d30738bbad3"
+    },
+    {
+      "path": "datasets/office-additional-days-20261008/SELECTION_REPORT.json",
+      "bytes": 12026,
+      "sha256": "5b4a2100b5f4a1f6cf5e2e0a1a1c1683a94a2e4d8f6fb140670f33c1fb5937f7"
+    },
+    {
+      "path": "datasets/office-additional-days-20261008/capture_context.json",
+      "bytes": 3115,
+      "sha256": "c6df3c97164b91128ec089d17f8e8d4e1c186246674fd79ee7a5f635e5caa8bf"
+    },
+    {
+      "path": "datasets/office-additional-days-20261008/dictionary.json.gpg",
+      "bytes": 2001716,
+      "sha256": "bf6f9064e13edfb0a5030cd21cc6baac11416a076ce42a32929b8c1174135c17"
+    },
+    {
+      "path": "datasets/office-additional-days-20261008/office_day_02.parquet",
+      "bytes": 3281215,
+      "sha256": "26104ea3156436739d5c23b021abce23af876bcbbe62277baf4106b0c092be4a"
+    },
+    {
+      "path": "datasets/office-additional-days-20261008/office_day_03.parquet",
+      "bytes": 3948617,
+      "sha256": "afedb45892a0e1169294e5f8daf690587e52c47fd5a50c8df751e965ed5a2b41"
+    },
+    {
+      "path": "datasets/office-additional-days-20261008/recipient-public-key.asc",
+      "bytes": 1343,
+      "sha256": "652acd798e02e286427281e8400f9c6dbc41dc39ff3f7db726ba9b2356aa83be"
     },
     {
       "path": "datasets/office-cover-20261006/DATA_MANIFEST.json",
@@ -2281,5 +2331,6 @@
       "bytes": 167,
       "sha256": "83e38061f33ca2e9d6033e213246737577b9e2fe1eff09d474e7ec567d53a506"
     }
-  ]
+  ],
+  "additional_release_date": "2026-10-08"
 }

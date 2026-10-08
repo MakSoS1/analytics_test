@@ -25,5 +25,23 @@
     "private_key_backup_decryption": "OK",
     "raw_pcaps": 0,
     "private_key_in_checkout": false
+  },
+  "additional_office_days_20261008": {
+    "date": "2026-10-08",
+    "tables": 2,
+    "rows": 8002,
+    "source_sessions": 8000,
+    "public_text_leaves_verified": 132916,
+    "sensitive_text_policy_passed": true,
+    "all_numeric_column_hashes_verified": true,
+    "session_groups_equal_source_uid": true,
+    "source_metadata_removed": true,
+    "encrypted_dictionary_roundtrip": true,
+    "full_source_schema_and_cells_restored": true,
+    "same_first_155_names_and_types_as_existing_office": true,
+    "standalone_tests": 83,
+    "new_capture": false,
+    "naturalness_established": false,
+    "public_key_only_decryption": "refused"
   }
 }

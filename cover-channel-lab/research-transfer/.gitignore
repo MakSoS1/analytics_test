@@ -22,3 +22,6 @@ runs/
 **/hmac-key.bin
 **/dictionary.json
 **/dictionary.roundtrip.json
+
+# Additional reviewed office day samples.
+!datasets/office-additional-days-20261008/*.parquet
