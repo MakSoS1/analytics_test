@@ -9,7 +9,7 @@ import unittest
 
 from natural_traffic.isolated_lab_evidence import (
     COVER_MATRIX, ADAPTIX_SOURCE_COMMIT, audit_adaptix, audit_cover,
-    select_cover_registry,
+    diagnose_cover_failure, select_cover_registry,
 )
 from office_injection.cover_registry import digest
 
@@ -78,6 +78,35 @@ class CoverLabEvidenceTests(unittest.TestCase):
                                                         "cover_runtime" / "registry.json").read_text()))
             with self.assertRaisesRegex(ValueError, "missing.*capture"):
                 audit_cover(root, selected)
+
+    def test_failure_diagnostics_report_counts_and_comparisons_not_raw_receipts(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            job_id = "a" * 64
+            (root / "jobs.json").write_text(json.dumps({"jobs": [
+                {"job_id": job_id, "entry_id": "M-HTTPS-BEACON",
+                 "profile_id": "m-https-beacon-python_httpx-hypercorn", "arm": "scenario"}
+            ]}))
+            (root / "results.json").write_text(json.dumps([{
+                "job_id": job_id, "status": "failed", "reason": "missing_or_mismatched_application_decode",
+                "observed_packets": 15,
+            }]))
+            job = root / job_id
+            job.mkdir()
+            (job / "expected_receipts.json").write_text(json.dumps([
+                {"complete_required": True, "path": "/bounded/beacon", "sha256": "secret-expected"}
+            ]))
+            (job / "application_receipts.jsonl").write_text(json.dumps({
+                "complete": True, "path": "/bounded/beacon", "sha256": "secret-other",
+                "campaign_id": "SECRET-CAMPAIGN"}) + "\n")
+            summary = diagnose_cover_failure(root)
+            self.assertEqual(summary["job_diagnostics"][0]["expected_complete_count"], 1)
+            self.assertEqual(summary["job_diagnostics"][0]["observed_complete_count"], 1)
+            self.assertFalse(summary["job_diagnostics"][0]["hashes_match"])
+            self.assertTrue(summary["job_diagnostics"][0]["paths_match"])
+            self.assertNotIn("SECRET", json.dumps(summary))
+            self.assertNotIn("secret-", json.dumps(summary))
+            self.assertNotIn(str(root), json.dumps(summary))
 
 
 class AdaptixLabEvidenceTests(unittest.TestCase):

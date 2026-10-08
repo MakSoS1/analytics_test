@@ -1,17 +1,30 @@
 """CI may run real research traffic only inside an ephemeral isolated VM."""
 
 from pathlib import Path
+import ast
 import unittest
 
 import yaml
 
 from framework_runtime.adaptix.capture import runtime_command
+from cover_runtime.entrypoint import bounded_server_response_patch
 
 
 WORKFLOW = Path(__file__).parents[4] / ".github/workflows/isolated-cover-adaptix-research.yml"
 
 
 class IsolatedLabWorkflowTests(unittest.TestCase):
+    def test_bounded_control_decoding_is_dispatched_before_benign_filler(self):
+        """Both pair arms must produce verifiable bounded response receipts."""
+        snippet = bounded_server_response_patch()
+        syntax = ast.parse("async def handle(path, suspicious, st, req_body, request):\n" +
+                           snippet + "\n")
+        first_branch = syntax.body[0].body[0]
+        self.assertIsInstance(first_branch, ast.If)
+        self.assertEqual(ast.unparse(first_branch.test), "path.startswith('bounded/')")
+        self.assertIsInstance(first_branch.orelse[0], ast.If)
+        self.assertIn("not suspicious", ast.unparse(first_branch.orelse[0].test))
+
     def test_workflow_has_bounded_gh_actions_experiment_and_no_public_capture_uploads(self):
         body = WORKFLOW.read_text()
         data = yaml.safe_load(body)

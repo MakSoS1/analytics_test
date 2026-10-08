@@ -118,6 +118,66 @@ def audit_cover(run_root: Path, selected_registry: dict) -> dict:
     }
 
 
+def diagnose_cover_failure(run_root: Path) -> dict:
+    """Summarize failed isolated runs without exporting wire or fixture contents.
+
+    This is diagnostic evidence only, never a substitute for ``audit_cover``.
+    Fields derived from the application journal are restricted to counts and
+    booleans; neither request bodies nor their hashes leave the runner.
+    """
+    root = Path(run_root)
+    jobs_path, results_path = root / "jobs.json", root / "results.json"
+    jobs = json.loads(jobs_path.read_text()).get("jobs", []) if jobs_path.is_file() else []
+    results = json.loads(results_path.read_text()) if results_path.is_file() else []
+    if not isinstance(jobs, list) or not isinstance(results, list):
+        raise ValueError("invalid isolated runtime diagnostics")
+    indexed = {row["job_id"]: row for row in results if isinstance(row, dict)
+               and isinstance(row.get("job_id"), str)}
+    summary = []
+    for job in jobs:
+        entry, profile, arm = (job.get("entry_id"), job.get("profile_id"), job.get("arm"))
+        if (entry, profile) not in COVER_MATRIX or arm not in ("scenario", "control"):
+            raise ValueError("unexpected isolated diagnostic profile")
+        identifier = job["job_id"]
+        if not isinstance(identifier, str) or len(identifier) != 64 or any(
+            c not in "0123456789abcdef" for c in identifier
+        ):
+            raise ValueError("unexpected isolated job identifier")
+        directory = root / identifier
+        expected_file = directory / "expected_receipts.json"
+        observed_file = directory / "application_receipts.jsonl"
+        expected = json.loads(expected_file.read_text()) if expected_file.is_file() else []
+        observed = [json.loads(line) for line in observed_file.read_text().splitlines()
+                    if line.strip()] if observed_file.is_file() else []
+        needed = [receipt for receipt in expected if receipt.get("complete_required")]
+        completed = [receipt for receipt in observed if receipt.get("complete")]
+        record = indexed.get(identifier, {})
+        reason = record.get("reason")
+        if reason not in {None, "missing_or_mismatched_application_decode", "empty_capture",
+                          "missing_fixed_local_forwarding_evidence"}:
+            reason = "other_failure"
+        summary.append({
+            "entry_id": entry, "profile_id": profile, "arm": arm,
+            "result_present": bool(record),
+            "status": "captured" if record.get("status") == "captured" else "not_verified",
+            "reason": reason,
+            "recorded_packets": max(0, int(record.get("observed_packets", 0))),
+            "expected_complete_count": len(needed),
+            "observed_receipt_count": len(observed),
+            "observed_complete_count": len(completed),
+            "paths_match": len(needed) == len(completed) and all(
+                a.get("path") == b.get("path") for a, b in zip(needed, completed)),
+            "hashes_match": len(needed) == len(completed) and all(
+                a.get("sha256") == b.get("sha256") for a, b in zip(needed, completed)),
+        })
+    return {
+        "version": "isolated-cover-failure-diagnostic-v1",
+        "status": "not_verified", "job_diagnostics": summary,
+        "raw_traffic_exported": False, "raw_receipts_exported": False,
+        "office_naturalness_proven": False, "production_ready": False,
+    }
+
+
 def audit_adaptix(run_root: Path) -> dict:
     """Check six TCP/mTLS Gopher pairs without exporting receipt contents."""
     root = Path(run_root)
@@ -179,6 +239,9 @@ def main() -> None:
     cover_audit.add_argument("--run", type=Path, required=True)
     cover_audit.add_argument("--registry", type=Path, required=True)
     cover_audit.add_argument("--out", type=Path, required=True)
+    cover_diagnostic = sub.add_parser("diagnose-cover")
+    cover_diagnostic.add_argument("--run", type=Path, required=True)
+    cover_diagnostic.add_argument("--out", type=Path, required=True)
     adaptix = sub.add_parser("audit-adaptix")
     adaptix.add_argument("--run", type=Path, required=True)
     adaptix.add_argument("--out", type=Path, required=True)
@@ -189,6 +252,8 @@ def main() -> None:
         result = select_cover_registry(json.loads(args.registry.read_text()))
     elif args.action == "audit-cover":
         result = audit_cover(args.run, json.loads(args.registry.read_text()))
+    elif args.action == "diagnose-cover":
+        result = diagnose_cover_failure(args.run)
     else:
         result = audit_adaptix(args.run)
     args.out.parent.mkdir(parents=True, exist_ok=True)

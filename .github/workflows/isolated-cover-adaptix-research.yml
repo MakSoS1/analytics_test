@@ -9,6 +9,7 @@ on:
       - '.github/workflows/isolated-cover-adaptix-research.yml'
       - 'cover-channel-lab/research-transfer/code/natural_traffic/isolated_lab_evidence.py'
       - 'cover-channel-lab/research-transfer/code/tests/test_natural_isolated_lab_*.py'
+      - 'cover-channel-lab/research-transfer/code/cover_runtime/**'
       - 'cover-channel-lab/research-transfer/code/framework_runtime/adaptix/**'
 
 permissions:
@@ -76,6 +77,16 @@ jobs:
             --all --arm both --timing native --mechanics \
             --seed 20261008 \
             --out "$RUNNER_TEMP/isolated-cover-captures"
+      - name: Capture non-sensitive diagnostics if Cover execution was rejected
+        if: failure()
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          mkdir -p "$RUNNER_TEMP/safe-evidence"
+          python -m natural_traffic.isolated_lab_evidence diagnose-cover \
+            --run "$RUNNER_TEMP/isolated-cover-captures" \
+            --out "$RUNNER_TEMP/safe-evidence/cover-failure-report.json"
       - name: Independently verify all eight physical Cover PCAPs
         working-directory: cover-channel-lab/research-transfer
         env:
