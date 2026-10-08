@@ -197,7 +197,7 @@ jobs:
             -czf "$context/tools/go1.25.4.linux-amd64.tar.gz" .
           cache="$PWD/$context/tools/gomodcache"
           source="$PWD/$context/sources/adaptix/AdaptixServer"
-          for module in . extenders/gopher_listener_tcp extenders/gopher_agent; do
+          for module in . extenders/gopher_listener_tcp extenders/gopher_agent extenders/gopher_agent/src_gopher; do
             ( cd "$source/$module" && GOWORK=off GOMODCACHE="$cache" go mod download all )
             ( cd "$source/$module" && GOPROXY=off GOWORK=off GOMODCACHE="$cache" go mod download all )
           done
