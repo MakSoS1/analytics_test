@@ -41,9 +41,12 @@ def audit_workload_evidence(
     }
     os_mix = _known(capture.get("client_os_windows_linux_share"))
     tls_rows = []
+    nonzero_tls_rows = []
     support = []
     for frame in days:
-        tls_rows.append(int(pd.to_numeric(frame["tls_version"], errors="coerce").notna().sum()))
+        versions = pd.to_numeric(frame["tls_version"], errors="coerce")
+        tls_rows.append(int(versions.notna().sum()))
+        nonzero_tls_rows.append(int(versions.notna().mul(versions.ne(0)).sum()))
         support.append(int(len(frame)))
     tls_usable_across_days = all(0 < n <= total for n, total in zip(tls_rows, support))
     missing = []
@@ -60,7 +63,8 @@ def audit_workload_evidence(
         "version": "office-user-workload-evidence-v1",
         "source": "released_pseudonymized_office_reference_only",
         "rows_by_day": support,
-        "measured_tls_version_rows_by_day": tls_rows,
+        "non_null_tls_version_field_rows_by_day": tls_rows,
+        "nonzero_tls_version_rows_by_day": nonzero_tls_rows,
         "verified_application_action_labels": verified_app_categories,
         "capture_position_documented": all(topography.values()),
         "endpoint_os_population_documented": os_mix,
