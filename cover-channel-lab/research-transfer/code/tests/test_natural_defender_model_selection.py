@@ -31,12 +31,6 @@ def table(count, group_prefix, seed):
 
 def prepared(root: Path, *, holdout_seed=2, user_seed=3):
     digest = hashlib.sha256(b"read only source").hexdigest()
-    tr, ho, user, manifest = prepare_frames(
-        table(360, "office-train", 1),
-        table(360, "office-train", 1),
-        table(360, "office-holdout", holdout_seed),
-        source_sha256=digest,
-    )
     # Prepare a genuine user_input group without changing office train.
     user_source = table(40, "upload", user_seed)
     train, ho, user, manifest = prepare_frames(
@@ -97,6 +91,19 @@ class DefenderModelSelectionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "checksum"):
                 fit_until_validated(root)
             self.assertFalse((root / "defender_model.joblib").exists())
+
+    def test_failed_strict_validation_remains_not_passed(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared(root)
+            report = fit_until_validated(
+                root, max_attempts=1, validation_tolerance=1e-12,
+            )
+            self.assertEqual(report["attempts_executed"], 1)
+            self.assertFalse(report["selected_validation_passed"])
+            self.assertEqual(report["status"], "train_day_validation_not_passed")
+            self.assertFalse(report["production_ready"])
+            self.assertFalse(report["office_naturalness_proven"])
 
     def test_invalid_optimization_budget_rejected(self):
         with TemporaryDirectory() as tmp:
