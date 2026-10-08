@@ -139,6 +139,15 @@ class NaturalRunBatchArmTests(unittest.TestCase):
         }]
         self.assertIn("mqtt", run_batch.required_runtime_services(jobs))
 
+    def test_stage_m_profile_selects_mqtt_broker_readiness_even_for_cross_carrier_family(self):
+        jobs = [{
+            "entry": {"namespace": "stage_m", "family": "M-TIMING-XCARRIER",
+                      "carrier": "implementation_specific"},
+            "profile": {"profile_id": "timing-mqtt-paho",
+                        "client": "paho_mqtt_websockets", "server": "mosquitto_websockets"},
+        }]
+        self.assertIn("mqtt", run_batch.required_runtime_services(jobs))
+
     def test_entrypoint_skips_only_unrequired_service_probes(self):
         sample = "\n".join([
             "required_probe h3-request /tmp/h3 cmd",

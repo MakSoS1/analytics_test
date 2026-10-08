@@ -66,11 +66,18 @@ def required_runtime_services(jobs):
     services = {"core"}
     for job in jobs:
         entry = dict(job.get("entry") or {})
+        profile = dict(job.get("profile") or {})
         namespace = str(entry.get("namespace", "")).lower()
         transport = str(entry.get("transport", "")).lower()
         family = str(entry.get("family", "")).lower()
         carrier = str(entry.get("carrier", "")).lower()
-        protocol_hints = " ".join((transport, family, carrier))
+        # Cross-carrier families choose their actual stack per profile.  The
+        # broker readiness probe must follow that selection, not the broad
+        # family metadata, or MQTT client failures go undiagnosed.
+        protocol_hints = " ".join((transport, family, carrier, *(
+            str(profile.get(key, "")).lower()
+            for key in ("client", "server", "topology")
+        )))
         if namespace and namespace != "catalog":
             services.add("stage_m")
         if transport in {"h3", "http3", "quic"} or "quic" in transport:
