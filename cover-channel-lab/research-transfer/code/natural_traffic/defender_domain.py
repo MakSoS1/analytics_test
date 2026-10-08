@@ -44,32 +44,42 @@ def load_user_input(path: Path, work: Path, *, min_free_gib: float = 1) -> tuple
         quality = audit_pcap(p)
         if not quality.accepted:
             raise ValueError(f"invalid PCAP: {quality.reasons}")
-        meta = work / "neutral_input_metadata.json"
-        meta.write_text(json.dumps({
-            "role_semantics": "extractor_internal_only_not_a_training_label",
-            "uploaded_pcap_sha256": source_hash, "version": "neutral-pcap-extraction-v1",
-        }) + "\n")
-        bundle = CaptureBundle(
-            pair_id="input-" + source_hash[:20],
-            role="control",  # Legacy extractor contract, never a benign label.
-            profile_id="external-unverified",
-            fidelity="untouched-upload",
-            pcap_path=p, pcap_sha256=source_hash,
-            evidence=(),
-            runtime_metadata_path=meta,
-            runtime_metadata_sha256=_digest(meta),
-        )
-        extraction = extract_pipeline_capture(
-            bundle, work / "extracted", run_id="defender-input-" + source_hash[:12],
-            min_free_gib=min_free_gib,
-        )
-        table = pd.read_parquet(extraction.parquet_path)
+        # The production extractor temporarily writes raw packet/payload
+        # sidecars. Destroy those intermediates after deriving safe features.
+        # Nothing in this tool needs to retain their cleartext contents.
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory(prefix="neutral-extract-", dir=work) as scratch:
+            scratch = Path(scratch)
+            meta = scratch / "neutral_input_metadata.json"
+            meta.write_text(json.dumps({
+                "role_semantics": "extractor_internal_only_not_a_training_label",
+                "uploaded_pcap_sha256": source_hash,
+                "version": "neutral-pcap-extraction-v1",
+            }) + "\n")
+            bundle = CaptureBundle(
+                pair_id="input-" + source_hash[:20],
+                role="control",  # Extractor contract only; not a benign label.
+                profile_id="external-unverified",
+                fidelity="untouched-upload",
+                pcap_path=p, pcap_sha256=source_hash,
+                evidence=(),
+                runtime_metadata_path=meta,
+                runtime_metadata_sha256=_digest(meta),
+            )
+            extraction = extract_pipeline_capture(
+                bundle, scratch / "extracted",
+                run_id="defender-input-" + source_hash[:12],
+                min_free_gib=min_free_gib,
+            )
+            table = pd.read_parquet(extraction.parquet_path)
+            extracted_rows = extraction.rows
         source_info = {
             "format": "pcap",
             "extractor": "production_office_sessions_pipeline",
             "physical_frames": quality.packet_count,
-            "extraction_rows": extraction.rows,
+            "extraction_rows": extracted_rows,
             "raw_capture_rewritten": False,
+            "raw_intermediates_retained": False,
         }
     else:
         raise ValueError("supported inputs: .pcap and .parquet; unsupported formats fail closed")
@@ -186,7 +196,8 @@ def prepare(
     out = Path(out)
     if out.exists():
         raise FileExistsError(out)
-    out.mkdir(parents=True)
+    out.mkdir(mode=0o700, parents=True)
+    out.chmod(0o700)
     source, source_info = load_user_input(
         input_path, out, min_free_gib=min_free_gib,
     )
