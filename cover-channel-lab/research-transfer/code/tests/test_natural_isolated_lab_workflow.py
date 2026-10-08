@@ -29,6 +29,15 @@ class IsolatedLabWorkflowTests(unittest.TestCase):
         body = WORKFLOW.read_text()
         data = yaml.safe_load(body)
         self.assertEqual(data["permissions"], {"contents": "read"})
+        self.assertEqual(set(data["jobs"]), {"isolated-research", "adaptix-research"})
+        self.assertNotIn("needs", data["jobs"]["adaptix-research"])
+        cover_steps = [step.get("name", "") for step in data["jobs"]["isolated-research"]["steps"]]
+        adaptix_steps = [step.get("name", "") for step in data["jobs"]["adaptix-research"]["steps"]]
+        self.assertTrue(any("Cover PCAPs" in step for step in cover_steps))
+        self.assertFalse(any("Adaptix" in step for step in cover_steps))
+        self.assertTrue(any("Adaptix" in step for step in adaptix_steps))
+        self.assertFalse(any("Cover PCAPs" in step for step in adaptix_steps))
+        self.assertNotIn("cover-report.json", str(data["jobs"]["adaptix-research"]))
         self.assertIn("workflow_dispatch:", body)
         self.assertIn("natural-traffic-generator-v2-2026-10-06", body)
         self.assertIn("ubuntu-24.04", body)

@@ -99,6 +99,10 @@ class CoverLabEvidenceTests(unittest.TestCase):
             (job / "application_receipts.jsonl").write_text(json.dumps({
                 "complete": True, "path": "/bounded/beacon", "sha256": "secret-other",
                 "campaign_id": "SECRET-CAMPAIGN"}) + "\n")
+            (root / "runtime.log").write_text(
+                "required service probe failed: mqtt-wss\n"
+                "Error: Websockets support not available SECRET-CONFIG=/tmp/key.pem\n"
+            )
             summary = diagnose_cover_failure(root)
             self.assertEqual(summary["job_diagnostics"][0]["expected_complete_count"], 1)
             self.assertEqual(summary["job_diagnostics"][0]["observed_complete_count"], 1)
@@ -106,6 +110,9 @@ class CoverLabEvidenceTests(unittest.TestCase):
             self.assertTrue(summary["job_diagnostics"][0]["paths_match"])
             self.assertNotIn("SECRET", json.dumps(summary))
             self.assertNotIn("secret-", json.dumps(summary))
+            self.assertEqual(summary["setup_failure_signals"],
+                             ["mqtt_probe_failed", "mqtt_websockets_unavailable"])
+            self.assertNotIn("SECRET-CONFIG", json.dumps(summary))
             self.assertNotIn(str(root), json.dumps(summary))
 
 

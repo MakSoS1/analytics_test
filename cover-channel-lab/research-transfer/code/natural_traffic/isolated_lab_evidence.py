@@ -133,6 +133,19 @@ def diagnose_cover_failure(run_root: Path) -> dict:
         raise ValueError("invalid isolated runtime diagnostics")
     indexed = {row["job_id"]: row for row in results if isinstance(row, dict)
                and isinstance(row.get("job_id"), str)}
+    # Only fixed, non-sensitive error categories are publishable.  In
+    # particular, do not copy any server log line or path to the report.
+    setup_log = (root / "runtime.log").read_text(errors="replace").lower() if (
+        root / "runtime.log").is_file() else ""
+    fixed_signals = {
+        "mqtt_probe_failed": "required service probe failed: mqtt-wss",
+        "mqtt_websockets_unavailable": "websockets support not available",
+        "mqtt_listener_error": "unable to start listener",
+        "mqtt_key_error": "unable to load server key file",
+        "mqtt_config_error": "unknown configuration variable",
+        "mqtt_permission_denied": "permission denied",
+        "mqtt_address_in_use": "address already in use",
+    }
     summary = []
     for job in jobs:
         entry, profile, arm = (job.get("entry_id"), job.get("profile_id"), job.get("arm"))
@@ -173,6 +186,8 @@ def diagnose_cover_failure(run_root: Path) -> dict:
     return {
         "version": "isolated-cover-failure-diagnostic-v1",
         "status": "not_verified", "job_diagnostics": summary,
+        "setup_failure_signals": sorted(k for k, marker in fixed_signals.items()
+                                        if marker in setup_log),
         "raw_traffic_exported": False, "raw_receipts_exported": False,
         "office_naturalness_proven": False, "production_ready": False,
     }
