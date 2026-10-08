@@ -648,6 +648,20 @@ jobs:
           if [[ -f "$RUNNER_TEMP/natural-e2e/naturalness.json" ]]; then
             cat "$RUNNER_TEMP/natural-e2e/naturalness.json"
           fi
+      - name: Fail closed unless independent office naturalness is established
+        if: always()
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          NATURAL_OUT: ${{ runner.temp }}/natural-e2e
+        run: |
+          if [[ ! -f "$NATURAL_OUT/naturalness.json" ]]; then
+            echo "::error::Naturalness evidence is absent; release is blocked"
+            exit 1
+          fi
+          python -m natural_traffic.naturalness_release_gate \
+            --naturalness "$NATURAL_OUT/naturalness.json" \
+            --out "$NATURAL_OUT/release_gate.json"
       - name: Upload generated benign E2E evidence
         if: always()
         uses: actions/upload-artifact@v4
