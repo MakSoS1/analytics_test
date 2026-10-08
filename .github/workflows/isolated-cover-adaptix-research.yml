@@ -5,9 +5,11 @@ on:
   push:
     branches:
       - natural-traffic-generator-v2-2026-10-06
+      - adaptix-detector-evaluation-2026-10-08
     paths:
       - '.github/workflows/isolated-cover-adaptix-research.yml'
       - 'cover-channel-lab/research-transfer/code/natural_traffic/isolated_lab_evidence.py'
+      - 'cover-channel-lab/research-transfer/code/natural_traffic/adaptix_detector_research.py'
       - 'cover-channel-lab/research-transfer/code/tests/test_natural_isolated_lab_*.py'
       - 'cover-channel-lab/research-transfer/code/cover_runtime/**'
       - 'cover-channel-lab/research-transfer/code/framework_runtime/adaptix/**'
@@ -21,6 +23,7 @@ concurrency:
 
 jobs:
   isolated-research:
+    if: github.ref != 'refs/heads/adaptix-detector-evaluation-2026-10-08'
     runs-on: ubuntu-24.04
     timeout-minutes: 165
     steps:
@@ -153,7 +156,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install read-only capture audit dependencies
-        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy pyyaml
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy pyyaml scikit-learn
       - name: Prepare isolated Adaptix VM and its safe output directory
         env:
           PYTHONPATH: cover-channel-lab/research-transfer/code
@@ -285,6 +288,15 @@ jobs:
               json.dumps(report, sort_keys=True) + '\n')
           print('ADAPTIX_EXTRACTOR_AGGREGATE', json.dumps(report, sort_keys=True))
           PY
+      - name: Train and evaluate group-held-out Adaptix detector on measured pairs
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.adaptix_detector_research \
+            --extraction-root "$RUNNER_TEMP/adaptix-extract" \
+            --office-dir datasets/office-additional-days-20261008 \
+            --out "$RUNNER_TEMP/safe-evidence/adaptix-detector-report.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
