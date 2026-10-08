@@ -118,6 +118,22 @@ class IsolatedLabWorkflowTests(unittest.TestCase):
         self.assertNotIn("--network=host", command)
         self.assertNotIn("--command", command)
 
+    def test_adaptix_detector_runs_after_extraction_and_uploads_aggregates_only(self):
+        data = yaml.safe_load(WORKFLOW.read_text())
+        adaptix = data["jobs"]["adaptix-research"]["steps"]
+        extraction = next(i for i, step in enumerate(adaptix)
+                          if "Extract every Adaptix PCAP" in step.get("name", ""))
+        detection = next(i for i, step in enumerate(adaptix)
+                         if "group-held-out Adaptix detector" in step.get("name", ""))
+        self.assertLess(extraction, detection)
+        self.assertIn("natural_traffic.adaptix_detector_research", adaptix[detection]["run"])
+        self.assertIn("adaptix-detector-report.json", adaptix[detection]["run"])
+        self.assertIn("scikit-learn", adaptix[2]["run"] if "run" in adaptix[2] else
+                      " ".join(str(step.get("run", "")) for step in adaptix))
+        upload = next(step for step in adaptix if step.get("uses", "").startswith("actions/upload-artifact"))
+        self.assertIn("safe-evidence", str(upload["with"]["path"]))
+        self.assertNotIn("capture.pcap", str(upload["with"]["path"]))
+
 
 if __name__ == "__main__":
     unittest.main()
