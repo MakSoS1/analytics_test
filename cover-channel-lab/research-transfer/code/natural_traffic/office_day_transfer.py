@@ -108,13 +108,28 @@ def _audit_sequences(frame: pd.DataFrame) -> dict[str, int]:
         return {"rows": len(frame), "missing_sequence_columns": len(columns)}
     inconsistent = 0
     empty = 0
-    for lengths, iats, flags in zip(*(frame[c] for c in columns)):
+    count_mismatch = 0
+    invalid_counts = 0
+    counts = pd.to_numeric(frame["pkt_count"], errors="coerce") if "pkt_count" in frame else None
+    for i, (lengths, iats, flags) in enumerate(zip(*(frame[c] for c in columns))):
         sizes = [len(v) if v is not None else 0 for v in (lengths, iats, flags)]
         if len(set(sizes)) != 1:
             inconsistent += 1
         if max(sizes) == 0:
             empty += 1
-    return {"rows": int(len(frame)), "sequence_length_mismatches": inconsistent, "empty_sequences": empty}
+        if counts is not None:
+            raw = counts.iloc[i]
+            if not np.isfinite(raw) or raw < 0 or raw != int(raw):
+                invalid_counts += 1
+            elif any(size != int(raw) for size in sizes):
+                count_mismatch += 1
+    return {
+        "rows": int(len(frame)),
+        "sequence_length_mismatches": inconsistent,
+        "sequence_vs_pkt_count_mismatches": count_mismatch,
+        "invalid_pkt_counts": invalid_counts,
+        "empty_sequences": empty,
+    }
 
 
 def _consistency(frame: pd.DataFrame) -> dict[str, dict[str, int]]:
