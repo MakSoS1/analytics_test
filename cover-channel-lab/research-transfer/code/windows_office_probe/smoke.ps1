@@ -36,10 +36,10 @@ try {
     $captureStarted = $true
 
     $handler = [System.Net.Http.HttpClientHandler]::new()
-    $handler.ServerCertificateCustomValidationCallback = {
-        param($request, $cert, $chain, $errors)
-        return $true
-    }
+    # Use the .NET static delegate: a PowerShell scriptblock callback can fail
+    # on a background TLS validation thread without an attached runspace.
+    $handler.UseProxy = $false
+    $handler.ServerCertificateCustomValidationCallback = [System.Net.Http.HttpClientHandler]::DangerousAcceptAnyServerCertificateValidator
     $client = [System.Net.Http.HttpClient]::new($handler)
     try {
         for ($i = 0; $i -lt 4; $i++) {
