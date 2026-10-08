@@ -4,7 +4,7 @@ RUN mkdir -p /opt/framework && tar -xzf /tmp/framework-go.tar.gz -C /opt/framewo
 ENV GOROOT=/opt/framework/go PATH=/opt/framework/go/bin:$PATH GOEXPERIMENT=jsonv2,greenteagc GOMAXPROCS=2 GOTOOLCHAIN=local
 COPY sources/adaptix/AdaptixServer /src/AdaptixServer
 COPY tools/gomodcache /opt/framework/gomodcache
-ENV GOMODCACHE=/opt/framework/gomodcache GOPROXY=off
+ENV GOMODCACHE=/opt/framework/gomodcache GOPROXY=off GOWORK=off
 WORKDIR /src/AdaptixServer
 RUN mkdir -p /framework/extenders && go build -buildvcs=false -ldflags="-s -w" -o /framework/adaptixserver
 RUN cd extenders/gopher_listener_tcp && mkdir -p /framework/extenders/gopher_listener_tcp && go build -buildmode=plugin -ldflags="-s -w" -o /framework/extenders/gopher_listener_tcp/listener_gopher_tcp.so pl_main.go pl_transport.go map.go && cp config.yaml ax_config.axs /framework/extenders/gopher_listener_tcp/

@@ -18,8 +18,8 @@ PCAPs, per-host office records, tokens or task output enter public artifacts.
 
 - Cover source: pinned `cover_runtime/registry.json`, reproducible `run_batch`
   with `--arm both`, native timing and `--mechanics`; network-none Docker
-  namespaces. Initial matrix: one bounded HTTPS implementation, one DNS and
-  one WebSocket implementation from pre-existing source profiles. No features
+  namespaces. Initial matrix: one bounded HTTPS implementation and DNS,
+  WebSocket and MQTT transports from pre-existing source profiles. No features
   are tuned on labels or an office-origin discriminator.
 - Adaptix source: official `Adaptix-Framework/AdaptixC2` commit
   `e99535c9ef4642190f7ea125c2983d1611f1a3f3`, an existing pinned
@@ -56,8 +56,10 @@ merely because the pipeline and capture jobs succeed.
 ## Verification
 
 Local unit tests exercise report fail-closed validation and the exact
-profile/role contract. A new CI workflow performs the real capture on Ubuntu;
-each job emits both pass/fail diagnostics and an uploadable safe summary.
+profile/role contract. A new CI workflow performs the real capture on two
+independent ephemeral Ubuntu jobs, so an unrelated runtime failure does not
+conceal another experiment; each job emits fail-closed diagnostics and an
+uploadable safe summary when available.
 The agent independently checks its GitHub Actions job conclusions and the
 resulting audit artifact; a green setup step or Docker build alone is not
 proof of generated capture. `naturalness_status=not_passed` remains fixed.

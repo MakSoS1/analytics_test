@@ -119,6 +119,22 @@ def bounded_server_response_patch():
     )
 
 
+def patch_lab_services(services):
+    """Keep the synthetic WebSocket broker behind a loopback MQTT listener.
+
+    Some Mosquitto/libwebsockets builds cannot start with a WebSocket-only
+    listener. The auxiliary plain MQTT port is bound exclusively to the
+    server namespace's loopback, not to the veth or any host interface.
+    """
+    marker='listener 9443 10.20.0.20\nprotocol websockets'
+    if marker not in services:
+        raise RuntimeError('isolated Mosquitto listener patch target changed')
+    return (services
+        .replace(marker,'listener 1883 127.0.0.1\nprotocol mqtt\n'+marker)
+        .replace('listen 10.20.0.22:8443 ssl;','listen 10.20.0.22:8443 ssl http2;')
+        .replace('allow_anonymous true\npersistence false','allow_anonymous true\nuser root\npersistence false'))
+
+
 def setup(required_services=None):
     # Docker mounts /etc/hosts as an individual file: upstream sed -i cannot
     # rename it. Derive a logged patch that changes only write mechanics.
@@ -155,7 +171,7 @@ def setup(required_services=None):
     # Upstream runs Mosquitto as a non-root GitHub runner. Container setup
     # starts as root: its implicit drop to mosquitto cannot read a 0600 root
     # TLS key. The isolated broker stays root inside its network namespace.
-    service_patch=services.replace('listen 10.20.0.22:8443 ssl;','listen 10.20.0.22:8443 ssl http2;').replace('allow_anonymous true\npersistence false','allow_anonymous true\nuser root\npersistence false')
+    service_patch=patch_lab_services(services)
     service_patch=filter_required_service_probes(service_patch, required_services or {"all"})
     script=Path('/lab/scripts/start_services.container.sh');script.write_text(service_patch)
     Path('/out/services_patch.json').write_text(json.dumps({'original_sha256':hashlib.sha256(services.encode()).hexdigest(),

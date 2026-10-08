@@ -7,13 +7,23 @@ import unittest
 import yaml
 
 from framework_runtime.adaptix.capture import runtime_command
-from cover_runtime.entrypoint import bounded_server_response_patch
+from cover_runtime.entrypoint import bounded_server_response_patch, patch_lab_services
 
 
 WORKFLOW = Path(__file__).parents[4] / ".github/workflows/isolated-cover-adaptix-research.yml"
 
 
 class IsolatedLabWorkflowTests(unittest.TestCase):
+    def test_broker_uses_loopback_mqtt_socket_before_namespaced_websocket_listener(self):
+        original = "listener 9443 10.20.0.20\nprotocol websockets\nallow_anonymous true\npersistence false\n"
+        patched = patch_lab_services(original)
+        self.assertIn("listener 1883 127.0.0.1\nprotocol mqtt\nlistener 9443 10.20.0.20\nprotocol websockets", patched)
+        self.assertIn("user root", patched)
+
+    def test_adaptix_offline_build_disables_unneeded_upstream_workspace_modules(self):
+        dockerfile = (Path(__file__).parents[1] / "framework_runtime" / "adaptix" / "Dockerfile").read_text()
+        self.assertIn("GOWORK=off", dockerfile)
+
     def test_bounded_control_decoding_is_dispatched_before_benign_filler(self):
         """Both pair arms must produce verifiable bounded response receipts."""
         snippet = bounded_server_response_patch()
