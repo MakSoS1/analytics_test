@@ -588,3 +588,31 @@ jobs:
           name: attack-replay-external-reference
           path: cover-channel-lab/research-transfer/external-reference.json
           retention-days: 30
+
+  office-feature-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install numerical evaluation dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scipy scikit-learn
+      - name: Evaluate held-out office numeric feature model
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python -m natural_traffic.office_feature_baseline \
+            --reference datasets/office-cover-20261006 \
+            --out office-feature-baseline-report.json \
+            --seed 20261008
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: office-feature-baseline-report
+          path: cover-channel-lab/research-transfer/office-feature-baseline-report.json
+          retention-days: 30
+
