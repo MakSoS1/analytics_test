@@ -29,8 +29,10 @@ Each independent client session completes these four application tasks:
 
 All eight underlying requests run over real, certificate-verified TLS, using
 Python's standard HTTPS client. Requests are not replayed packet templates.
-The result is an immutable PCAP plus `workload_receipt.json` with semantic
-completion checks, source type, count evidence, and a capture quality status.
+With `--capture`, the result is an immutable PCAP plus
+`workload_receipt.json` with semantic completion checks, source type, count
+evidence, and a capture quality status. Without `--capture`, the receipt records
+application completion only.
 The PCAP is never rewritten or re-timed after capture. The public CI artifact
 contains only the receipt and aggregated extractor diagnostics, not packet
 payloads or the TLS private key.
@@ -38,7 +40,10 @@ payloads or the TLS private key.
 The GitHub Actions job `verified-benign-office-workload` captures these HTTPS
 tasks on Linux loopback with `tcpdump`, checks PCAP quality, and runs the
 existing *production* office-session extractor. It refuses empty extraction,
-changed capture hashes, and failed semantic tasks.
+changed capture hashes, incomplete observed TCP handshake coverage, a mismatch
+between extracted sessions and the independently counted wire handshakes,
+and failed semantic tasks. This compares session *starts* with extractor rows;
+it is not a proof of every TLS application record being preserved.
 
 ## Input contract for downstream defender experiments
 
@@ -53,7 +58,10 @@ changed capture hashes, and failed semantic tasks.
 | `.jsonl` | Previously extracted one-feature-record-per-line JSON table |
 
 Zeek/Suricata raw events are **not** silently equated to the full measured
-office feature schema; they require an explicit, validated extractor. An
+office feature schema: the input must contain at least 12 recognized transport
+columns with finite numeric values in 80% or more rows **per column**.
+Passing this structural check alone does not authenticate feature provenance
+or any claimed labels. Raw security events require an explicit, validated extractor. An
 unknown format fails closed. The original source SHA-256 is checked before
 and after ingestion, and source/group/label metadata never becomes model-X.
 Original uploaded captures are not edited in order to resemble an office.

@@ -28,6 +28,34 @@ MAX_BODY = 128 * 1024
 MAX_SESSIONS = 1000
 
 
+def audit_client_handshakes(pcap: Path, *, server_port: int) -> dict[str, int]:
+    """Count independent TCP handshakes from bytes, not action receipts.
+
+    This checks session start coverage, not completeness of every TLS record
+    or office-domain representativeness. Only aggregate counts are exported.
+    """
+    from office_injection.source import read_pcap, transport
+
+    syn: set[tuple] = set()
+    synack: set[tuple] = set()
+    for _, frame in read_pcap(pcap, max_regression=0.00005):
+        packet = transport(frame)
+        if packet is None or packet["proto"] != 6:
+            continue
+        if all(endpoint[1] != server_port for endpoint in packet["key"][:2]):
+            continue
+        flags = packet["flags"]
+        if flags & 0x12 == 0x02:  # Client SYN without ACK.
+            syn.add(packet["key"])
+        elif flags & 0x12 == 0x12:  # Server SYN-ACK.
+            synack.add(packet["key"])
+    return {
+        "client_syn_flows": len(syn),
+        "server_synack_flows": len(synack),
+        "completed_tcp_handshakes": len(syn & synack),
+    }
+
+
 class _OfficeState:
     def __init__(self, sessions: int):
         self.lock = Lock()
@@ -249,6 +277,8 @@ def _capture(port: int, path: Path, enabled: bool) -> Iterator[None]:
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait(timeout=5)
+        if proc.returncode not in (0, 130, -signal.SIGINT):
+            raise RuntimeError(f"native capture terminated abnormally: rc={proc.returncode}")
 
 
 def run_benign_office_workload(
@@ -272,6 +302,15 @@ def run_benign_office_workload(
                     port, cert, sessions=sessions, seed=seed,
                     action_pause_seconds=action_pause_seconds,
                 )
+            if capture:
+                handshakes = audit_client_handshakes(pcap_path, server_port=port)
+                if any(handshakes[k] != sessions for k in (
+                    "client_syn_flows", "server_synack_flows", "completed_tcp_handshakes",
+                )):
+                    raise RuntimeError(
+                        f"captured TCP handshake coverage incomplete: "
+                        f"expected {sessions}, observed {handshakes}"
+                    )
     capture_info: dict[str, object] = {"capture_status": "not_requested"}
     if capture:
         from .pcap_quality import audit_pcap
@@ -282,6 +321,8 @@ def run_benign_office_workload(
             "capture_status": "quality_accepted",
             "pcap_sha256": hashlib.sha256(pcap_path.read_bytes()).hexdigest(),
             "physical_frames": quality.packet_count,
+            "handshake_coverage_validated": True,
+            **handshakes,
         }
     report: dict[str, object] = {
         "version": "verified-benign-application-workload-v1",

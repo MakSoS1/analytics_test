@@ -113,6 +113,36 @@ class OfficeDomainPreparationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "measured transport features"):
                 load_user_input(p, root)
 
+    def test_flat_input_requires_twelve_numeric_well_observed_features(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for extension in ("csv", "tsv", "jsonl"):
+                with self.subTest(extension=extension):
+                    path = root / ("invalid." + extension)
+                    fake = pd.DataFrame({
+                        "event_type": ["alert"] * 10,
+                        "pkt_count": ["unknown"] * 10,
+                    })
+                    if extension == "jsonl":
+                        fake.to_json(path, orient="records", lines=True)
+                    else:
+                        fake.to_csv(path, index=False, sep="\t" if extension == "tsv" else ",")
+                    with self.assertRaisesRegex(ValueError, "measured transport features"):
+                        load_user_input(path, root)
+
+            path = root / "sparse.csv"
+            sparse = self.source[list(TRANSPORT_FEATURES[:11])].copy()
+            sparse.to_csv(path, index=False)
+            with self.assertRaisesRegex(ValueError, "measured transport features"):
+                load_user_input(path, root)
+
+            path = root / "missing.csv"
+            incomplete = self.source.copy()
+            incomplete.loc[:12, TRANSPORT_FEATURES[:18]] = np.nan
+            incomplete.to_csv(path, index=False)
+            with self.assertRaisesRegex(ValueError, "measured transport features"):
+                load_user_input(path, root)
+
     def test_malformed_jsonl_is_rejected(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

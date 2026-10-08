@@ -66,6 +66,8 @@ jobs:
           assert receipt['tasks_completed'] == 12
           assert receipt['tls_peer_verified']
           assert receipt['capture_status'] == 'quality_accepted'
+          assert receipt['handshake_coverage_validated']
+          assert receipt['client_syn_flows'] == receipt['completed_tcp_handshakes'] == 3
           assert not receipt['production_ready']
           # This is exclusively a disposable local fixture: diagnostic
           # extractor stderr may be printed without exposing office content.
@@ -91,8 +93,23 @@ jobs:
           assert source['source_sha256'] == receipt['pcap_sha256']
           assert source['raw_capture_rewritten'] is False
           assert source['raw_intermediates_retained'] is False
+          stats_file = extracted_root/'work'/'session_stats.json'
+          if stats_file.exists():
+            stats = json.loads(stats_file.read_text())
+            print('BENIGN_SESSION_PARSER_COUNTS', json.dumps({
+              key: value for key, value in stats.items()
+              if isinstance(value, int)
+            }, sort_keys=True))
+          if len(measured) != receipt['completed_tcp_handshakes']:
+            raise AssertionError(
+              f"production extractor coverage incomplete: "
+              f"{len(measured)} extracted vs "
+              f"{receipt['completed_tcp_handshakes']} captured TCP handshakes"
+            )
           summary = {
             'sessions_observed': int(len(measured)),
+            'wire_handshakes': receipt['completed_tcp_handshakes'],
+            'extractor_session_coverage_verified': True,
             'tls_tasks': receipt['tasks_completed'],
             'source_sha256': source['source_sha256'],
             'office_naturalness_proven': False,

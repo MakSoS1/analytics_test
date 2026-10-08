@@ -28,6 +28,31 @@ def _digest(path: Path) -> str:
     return h.hexdigest()
 
 
+def _validate_measured_features(table: pd.DataFrame, *, minimum: int = 12) -> None:
+    """Reject raw events and sparse/non-numeric tables at the import boundary.
+
+    This cannot establish provenance: a caller must separately attest how
+    each field was measured and the authenticity of any claimed labels.
+    """
+    if table.empty:
+        raise ValueError("input generated zero feature rows")
+    valid = []
+    for column in TRANSPORT_FEATURES:
+        if column not in table:
+            continue
+        numeric = pd.to_numeric(table[column], errors="coerce")
+        finite = numeric.replace([np.inf, -np.inf], np.nan).notna()
+        if float(finite.mean()) >= 0.8:
+            valid.append(column)
+    if len(valid) < minimum:
+        raise ValueError(
+            f"input contains only {len(valid)} well-observed measured transport "
+            f"features; at least {minimum} numeric columns with 80% finite "
+            "values are required. Raw Zeek/Suricata events require their own "
+            "provenance-aware feature extractor"
+        )
+
+
 def load_user_input(path: Path, work: Path, *, min_free_gib: float = 1) -> tuple[pd.DataFrame, dict]:
     """Load immutable measured features or a classic Ethernet PCAP."""
     p = Path(path)
@@ -47,11 +72,6 @@ def load_user_input(path: Path, work: Path, *, min_free_gib: float = 1) -> tuple
             "format": file_format,
             "extractor": "already_extracted_unverified",
         }
-        if not set(table.columns).intersection(TRANSPORT_FEATURES):
-            raise ValueError(
-                "input contains no measured transport features; raw Zeek/Suricata "
-                "events require their own provenance-aware feature extractor"
-            )
     elif p.suffix.lower() == ".pcap":
         from .pcap_quality import audit_pcap
         from .contracts import CaptureBundle
@@ -103,8 +123,7 @@ def load_user_input(path: Path, work: Path, *, min_free_gib: float = 1) -> tuple
         )
     if _digest(p) != source_hash:
         raise RuntimeError("source changed during reading")
-    if table.empty:
-        raise ValueError("input generated zero feature rows")
+    _validate_measured_features(table)
     source_info["source_sha256"] = source_hash
     source_info["rows"] = int(len(table))
     return table, source_info
