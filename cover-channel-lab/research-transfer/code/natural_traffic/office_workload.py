@@ -97,6 +97,33 @@ def _wait_for_capture_ready(proc: subprocess.Popen, path: Path,
         time.sleep(0.05)
 
 
+def _wait_for_wire_coverage(pcap: Path, *, server_port: int,
+                            expected_sessions: int,
+                            timeout_seconds: float = 8.0) -> dict[str, int]:
+    """Wait for libpcap to flush every observed handshake before shutdown.
+
+    A live PCAP may end mid-record while tcpdump is still writing it. Retry
+    that transient read, and fail closed if a session start never arrives.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    observed: dict[str, int] = {}
+    while True:
+        try:
+            observed = audit_client_handshakes(pcap, server_port=server_port)
+        except (OSError, ValueError):
+            pass
+        if observed and all(observed[field] == expected_sessions for field in (
+            "client_syn_flows", "server_synack_flows", "completed_tcp_handshakes",
+        )):
+            return observed
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                "captured TCP handshake coverage incomplete while capture live: "
+                f"expected {expected_sessions}, observed {observed}"
+            )
+        time.sleep(0.05)
+
+
 class _OfficeState:
     def __init__(self, sessions: int):
         self.lock = Lock()
@@ -293,7 +320,8 @@ def _tasks(port: int, cert: Path, *, sessions: int, seed: int,
 
 
 @contextmanager
-def _capture(port: int, path: Path, enabled: bool) -> Iterator[None]:
+def _capture(port: int, path: Path, enabled: bool,
+             *, expected_sessions: int = 0) -> Iterator[None]:
     if not enabled:
         yield
         return
@@ -308,6 +336,13 @@ def _capture(port: int, path: Path, enabled: bool) -> Iterator[None]:
     try:
         _wait_for_capture_ready(proc, path)
         yield
+        if expected_sessions:
+            _wait_for_wire_coverage(
+                path, server_port=port, expected_sessions=expected_sessions,
+            )
+            # Drain packets already queued after the final client request;
+            # the handshake count alone does not attest every TLS record.
+            time.sleep(0.5)
     finally:
         if proc.poll() is None:
             proc.send_signal(signal.SIGINT)
@@ -338,7 +373,7 @@ def run_benign_office_workload(
     pcap_path = out / "benign_workload.pcap"
     with tempfile.TemporaryDirectory(prefix="disposable-office-fixture-") as tmp:
         with _fixture_server(sessions, Path(tmp)) as (port, cert):
-            with _capture(port, pcap_path, capture):
+            with _capture(port, pcap_path, capture, expected_sessions=sessions):
                 result = _tasks(
                     port, cert, sessions=sessions, seed=seed,
                     action_pause_seconds=action_pause_seconds,

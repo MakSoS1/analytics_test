@@ -38,9 +38,11 @@ contains only the receipt and aggregated extractor diagnostics, not packet
 payloads or the TLS private key.
 
 The GitHub Actions job `verified-benign-office-workload` captures these HTTPS
-tasks on Linux loopback with `tcpdump`, waits for an explicit interface-ready
-acknowledgement before connecting, checks PCAP quality, and runs the
-existing *production* office-session extractor. It refuses empty extraction,
+tasks on Linux loopback with `tcpdump`. It waits for an explicit interface-ready
+acknowledgement before connecting, completes the application workload, then
+waits for all expected TCP handshakes to be written to the live capture. Only
+then does it stop `tcpdump`, check PCAP quality, and run the existing
+*production* office-session extractor. It refuses empty extraction,
 changed capture hashes, incomplete observed TCP handshake coverage, a mismatch
 between extracted sessions and the independently counted wire handshakes,
 and failed semantic tasks. This compares session *starts* with extractor rows;

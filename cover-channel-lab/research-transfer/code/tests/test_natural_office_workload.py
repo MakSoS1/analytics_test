@@ -10,6 +10,7 @@ import unittest
 
 from natural_traffic.office_workload import (
     _wait_for_capture_ready,
+    _wait_for_wire_coverage,
     audit_client_handshakes,
     run_benign_office_workload,
 )
@@ -79,6 +80,14 @@ class BenignOfficeWorkloadTests(unittest.TestCase):
             partial = audit_client_handshakes(path, server_port=9090)
             self.assertEqual(partial["client_syn_flows"], 2)
             self.assertEqual(partial["completed_tcp_handshakes"], 2)
+            with self.assertRaisesRegex(RuntimeError, "incomplete"):
+                _wait_for_wire_coverage(path, server_port=9090,
+                                        expected_sessions=3, timeout_seconds=.02)
+            write_pcap(path, frames)
+            counted = _wait_for_wire_coverage(
+                path, server_port=9090, expected_sessions=3, timeout_seconds=.1,
+            )
+            self.assertEqual(counted["completed_tcp_handshakes"], 3)
 
     def test_real_tls_tasks_preserve_application_causality(self):
         with TemporaryDirectory() as tmp:
