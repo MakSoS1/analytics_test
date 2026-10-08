@@ -99,6 +99,19 @@ class AdditionalDaysTests(unittest.TestCase):
             "missing_control_ancestry",
         )
 
+    def test_office_packet_sequence_and_count_mismatch_are_separately_reported(self):
+        frame = pd.DataFrame({
+            "pkt_count": [3, 4, 0],
+            "seq_signed_len": [[70, -100, 80], [1, 2, 3], []],
+            "seq_iat_us": [[0, 50, 60], [0, 40, 60], []],
+            "seq_flags": [[2, 18, 16], [2, 16, 16], []],
+        })
+        report = _audit_sequences(frame)
+        self.assertEqual(report["sequence_length_mismatches"], 0)
+        self.assertEqual(report["sequence_vs_pkt_count_mismatches"], 1)
+        self.assertEqual(report["invalid_pkt_counts"], 0)
+        self.assertEqual(report["empty_sequences"], 1)
+
     def test_transport_measurement_insufficient_is_fail_closed(self):
         d2 = fixture(2, null_tls=True)
         d3 = fixture(3, null_tls=False)
