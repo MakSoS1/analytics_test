@@ -613,6 +613,82 @@ jobs:
           path: cover-channel-lab/research-transfer/external-reference.json
           retention-days: 30
 
+  frozen-control-day-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install offline diagnostics
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scipy scikit-learn
+      - name: Read-only download of previously frozen benign controls
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37755015492
+          name: natural-generated-benign-e2e-37755015492
+          path: pinned-controls
+      - name: Compare frozen controls with both office days
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+          CONTROLS_ROOT: ${{ github.workspace }}/pinned-controls
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+          from natural_traffic.office_day_transfer import (
+              load_additional_days, compare_generated_controls_to_office_days
+          )
+          root=Path(os.environ['CONTROLS_ROOT'])
+          files=list(root.rglob('controls.parquet'))
+          frozen=list(root.rglob('frozen_confirmation_selection.json'))
+          if len(files)!=1 or len(frozen)!=1:
+              raise SystemExit(f'expected one control table + one frozen selection: {len(files)} / {len(frozen)}')
+          selection=json.loads(frozen[0].read_text())
+          ids=set(selection['selected_capture_groups'])
+          controls=pd.read_parquet(files[0])
+          controls=controls[controls['capture_group'].astype(str).isin(ids)].copy()
+          if controls['capture_group'].nunique() != 30:
+              raise SystemExit('expected exactly 30 frozen controls')
+          day02,day03=load_additional_days(Path('datasets/office-additional-days-20261008'))
+          report=compare_generated_controls_to_office_days(
+              day02,day03,controls,seed=20261008,bootstrap_reps=35
+          )
+          report['pinned_capture_source_run']=37755015492
+          report['pinned_capture_source_sha']='b377f6f21a9361c0d045d89928f2e4e31b0991cf'
+          Path('frozen-control-day-diagnostic.json').write_text(
+              json.dumps(report,sort_keys=True,indent=2)+'\n'
+          )
+          print('FROZEN_DAY_TRANSFER',json.dumps({
+              'status':report['status'],
+              'support': report.get('independent_control_groups',0),
+              'daily_auc':{
+                  day: r['max_auc'] for day,r in report.get('evaluations',{}).items()
+              },
+              'top_gaps':{
+                  day: r['largest_measured_differences'][:5]
+                  for day,r in report.get('evaluations',{}).items()
+              },
+          },sort_keys=True))
+          if report['status']!='diagnostic_only':
+              raise SystemExit('inadequate observational comparison support: '+report['status'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frozen-control-day-diagnostic
+          path: cover-channel-lab/research-transfer/frozen-control-day-diagnostic.json
+          retention-days: 30
+
   office-feature-baseline:
     runs-on: ubuntu-latest
     timeout-minutes: 12

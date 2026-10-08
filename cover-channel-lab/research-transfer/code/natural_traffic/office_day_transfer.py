@@ -228,6 +228,37 @@ def analyze_additional_days(
     return result
 
 
+def _rank_transport_differences(
+    office: pd.DataFrame, controls: pd.DataFrame, names: list[str]
+) -> list[dict[str, object]]:
+    """Univariate KS/missingness diagnostics, not a parameter optimizer."""
+    from scipy.stats import ks_2samp
+
+    rows = []
+    for name in names:
+        a = pd.to_numeric(office[name], errors="coerce")
+        b = pd.to_numeric(controls[name], errors="coerce")
+        a = a.replace([np.inf, -np.inf], np.nan)
+        b = b.replace([np.inf, -np.inf], np.nan)
+        x, y = a.dropna(), b.dropna()
+        rows.append({
+            "feature": name,
+            "office_missing": round(float(a.isna().mean()), 6),
+            "control_missing": round(float(b.isna().mean()), 6),
+            "ks": float(ks_2samp(x, y).statistic) if len(x) and len(y) else None,
+            "office_p50": float(x.median()) if len(x) else None,
+            "control_p50": float(y.median()) if len(y) else None,
+        })
+    rows.sort(key=lambda row: (
+        -max(
+            row["ks"] if row["ks"] is not None else 1.,
+            abs(row["office_missing"]-row["control_missing"]),
+        ),
+        row["feature"],
+    ))
+    return rows[:15]
+
+
 def _comparable_tcp443_scope(frame: pd.DataFrame) -> pd.DataFrame:
     """Same predeclared 443 and >=6-packet row support for both domains.
 
@@ -305,6 +336,9 @@ def compare_generated_controls_to_office_days(
             "control_rows": int(len(scoped_control)),
             "classifiers": c2st["classifiers"],
             "max_auc": max((float(v["auc"]) for v in c2st["classifiers"].values()), default=None),
+            "largest_measured_differences": _rank_transport_differences(
+                sample, scoped_control, names,
+            ),
         }
     return {
         "version": "additional-day-benign-control-transfer-v1",
