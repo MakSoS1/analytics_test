@@ -64,6 +64,9 @@ class OfficeFeatureBaselineTests(unittest.TestCase):
         )
         self.assertEqual(report["status"],"evaluated")
         self.assertEqual(report["numeric_features"],2)
+        self.assertIn("office_to_office_grouped_negative_control", report)
+        self.assertIn("max_auc", report["office_to_office_grouped_negative_control"])
+
         self.assertFalse(report["policy"]["packet_level_fidelity"])
         self.assertFalse(report["policy"]["training_eligible"])
         self.assertFalse(report["policy"]["production_ready"])

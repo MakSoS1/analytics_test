@@ -198,6 +198,25 @@ def office_feature_baseline(
     )
     metrics = c2st.get("classifiers", {})
     max_auc = max((float(v["auc"]) for v in metrics.values()), default=None)
+    # Negative control: two real, group-disjoint office cohorts. This measures
+    # how separable office hosts are even before any synthetic baseline exists.
+    # The holdout is used ONLY for evaluation, never parameter fitting.
+    real_control = evaluate_c2st(
+        tr.loc[:, cols],
+        te.loc[:, cols],
+        {
+            "office": tr["host_key"].astype(str).tolist(),
+            "controls": te["host_key"].astype(str).tolist(),
+        },
+        feature_columns=cols,
+        min_groups=30,
+        bootstrap_reps=bootstrap_reps,
+        random_state=seed + 1,
+    )
+    real_metrics = real_control.get("classifiers", {})
+    real_max_auc = max(
+        (float(v["auc"]) for v in real_metrics.values()), default=None
+    )
     return {
         "version": "office-feature-baseline-v1",
         "status": "evaluated" if c2st["status"] == "ok" else "insufficient_data",
@@ -212,6 +231,12 @@ def office_feature_baseline(
         "split_policy": "disjoint_sorted_host_key_even_odd",
         "max_origin_auc_numeric_only": max_auc,
         "classifiers": metrics,
+        "office_to_office_grouped_negative_control": {
+            "status": real_control["status"],
+            "max_auc": real_max_auc,
+            "classifiers": real_metrics,
+            "interpretation": "independent office train groups vs office holdout groups, not a synthetic naturalness pass",
+        },
         "exact_numeric_training_row_fraction": _numeric_exact_match_fraction(
             simulation, tr, cols
         ),
