@@ -390,9 +390,30 @@ def main() -> None:
         "transport_max_auc": report["transport_day_02_vs_day_03"]["max_auc"] if report["status"] == "ok" else None,
         "transport_features": len(report.get("transport_features", [])),
         "tls": report.get("tls_comparison"),
+        "packet_sequence_integrity": {
+            day: {
+                key: stats["sequences"].get(key, -1)
+                for key in (
+                    "sequence_length_mismatches",
+                    "sequence_vs_pkt_count_mismatches",
+                    "invalid_pkt_counts",
+                    "empty_sequences",
+                )
+            }
+            for day, stats in report.get("days", {}).items()
+        },
     }, sort_keys=True))
     if report["status"] != "ok":
         raise SystemExit("insufficient comparable office reference data")
+    for day, stats in report.get("days", {}).items():
+        seq = stats["sequences"]
+        if any(seq.get(key, 1) for key in (
+            "sequence_length_mismatches",
+            "sequence_vs_pkt_count_mismatches",
+            "invalid_pkt_counts",
+            "empty_sequences",
+        )):
+            raise SystemExit(f"{day}: packet-sequence integrity failure")
 
 
 if __name__ == "__main__":
