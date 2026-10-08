@@ -102,6 +102,7 @@ class CoverLabEvidenceTests(unittest.TestCase):
             (root / "runtime.log").write_text(
                 "required service probe failed: mqtt-wss\n"
                 "Error: Websockets support not available SECRET-CONFIG=/tmp/key.pem\n"
+                "Error: MQTT error: Failed to create listener at 10.20.0.20:9443\n"
             )
             summary = diagnose_cover_failure(root)
             self.assertEqual(summary["job_diagnostics"][0]["expected_complete_count"], 1)
@@ -113,6 +114,10 @@ class CoverLabEvidenceTests(unittest.TestCase):
             self.assertEqual(summary["setup_failure_signals"],
                              ["mqtt_probe_failed", "mqtt_websockets_unavailable"])
             self.assertNotIn("SECRET-CONFIG", json.dumps(summary))
+            self.assertTrue(any("websockets" in line.lower()
+                                for line in summary["mqtt_setup_error_excerpts"]))
+            self.assertNotIn("/tmp/key.pem", json.dumps(summary))
+            self.assertNotIn("10.20.0.20", json.dumps(summary))
             self.assertNotIn(str(root), json.dumps(summary))
 
 

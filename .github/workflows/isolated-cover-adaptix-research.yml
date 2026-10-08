@@ -198,7 +198,8 @@ jobs:
           cache="$PWD/$context/tools/gomodcache"
           source="$PWD/$context/sources/adaptix/AdaptixServer"
           for module in . extenders/gopher_listener_tcp extenders/gopher_agent; do
-            ( cd "$source/$module" && GOWORK=off GOMODCACHE="$cache" go mod download )
+            ( cd "$source/$module" && GOWORK=off GOMODCACHE="$cache" go mod download all )
+            ( cd "$source/$module" && GOPROXY=off GOWORK=off GOMODCACHE="$cache" go mod download all )
           done
           test -s "$context/tools/go1.25.4.linux-amd64.tar.gz"
           test -d "$context/tools/gomodcache/cache/download"

@@ -11,6 +11,7 @@ from copy import deepcopy
 from hashlib import sha256
 import json
 from pathlib import Path
+import re
 
 from office_injection.cover_registry import digest
 
@@ -135,8 +136,9 @@ def diagnose_cover_failure(run_root: Path) -> dict:
                and isinstance(row.get("job_id"), str)}
     # Only fixed, non-sensitive error categories are publishable.  In
     # particular, do not copy any server log line or path to the report.
-    setup_log = (root / "runtime.log").read_text(errors="replace").lower() if (
+    setup_log_raw = (root / "runtime.log").read_text(errors="replace") if (
         root / "runtime.log").is_file() else ""
+    setup_log = setup_log_raw.lower()
     fixed_signals = {
         "mqtt_probe_failed": "required service probe failed: mqtt-wss",
         "mqtt_websockets_unavailable": "websockets support not available",
@@ -146,6 +148,26 @@ def diagnose_cover_failure(run_root: Path) -> dict:
         "mqtt_permission_denied": "permission denied",
         "mqtt_address_in_use": "address already in use",
     }
+    excerpts = []
+    if "required service probe failed: mqtt-wss" in setup_log:
+        # The service probe prints only the synthetic broker's startup log.
+        # Keep at most eight redacted error lines after that known boundary;
+        # never include complete runtime logs, task content or PCAP data.
+        tail = setup_log_raw[setup_log.index("required service probe failed: mqtt-wss"):]
+        for line in tail.splitlines()[1:100]:
+            position = line.lower().find("error:")
+            if position < 0:
+                continue
+            safe = line[position:].strip()
+            safe = re.sub(r"\b\S*(?:secret|password|token|private|key)\S*", "[redacted]", safe, flags=re.I)
+            safe = re.sub(r"/[^\s,;]+", "[path]", safe)
+            safe = re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "[address]", safe)
+            safe = re.sub(r"\b[0-9a-f]{32,}\b", "[digest]", safe, flags=re.I)
+            safe = "".join(ch for ch in safe if 32 <= ord(ch) < 127)[:160]
+            if safe:
+                excerpts.append(safe)
+            if len(excerpts) == 8:
+                break
     summary = []
     for job in jobs:
         entry, profile, arm = (job.get("entry_id"), job.get("profile_id"), job.get("arm"))
@@ -188,6 +210,7 @@ def diagnose_cover_failure(run_root: Path) -> dict:
         "status": "not_verified", "job_diagnostics": summary,
         "setup_failure_signals": sorted(k for k, marker in fixed_signals.items()
                                         if marker in setup_log),
+        "mqtt_setup_error_excerpts": excerpts,
         "raw_traffic_exported": False, "raw_receipts_exported": False,
         "office_naturalness_proven": False, "production_ready": False,
     }

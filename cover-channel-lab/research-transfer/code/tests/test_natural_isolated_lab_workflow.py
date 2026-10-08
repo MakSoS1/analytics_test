@@ -50,6 +50,8 @@ class IsolatedLabWorkflowTests(unittest.TestCase):
         self.assertIn("--mechanics", body)
         self.assertIn("e99535c9ef4642190f7ea125c2983d1611f1a3f3", body)
         self.assertIn("go1.25.4", body)
+        self.assertIn("go mod download all", body)
+        self.assertIn("GOPROXY=off GOWORK=off GOMODCACHE=", body)
         self.assertNotIn("--network host", body)
         self.assertNotIn("--publish", body)
         self.assertNotIn("docker run --privileged", body)
