@@ -69,6 +69,70 @@ jobs:
           PYTHONPATH: code
         run: python -m unittest discover -s code/tests -v
 
+  defender-office-domain-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install defender data diagnostics
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy scipy scikit-learn
+      - name: Test immutable features and train-day-only anomaly diagnostic
+        working-directory: cover-channel-lab/research-transfer
+        env:
+          PYTHONPATH: code
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          original = Path('datasets/office-additional-days-20261008/office_day_02.parquet')
+          fixture = pd.read_parquet(original).head(40)
+          Path('test-benign-office-input.parquet').unlink(missing_ok=True)
+          fixture.to_parquet('test-benign-office-input.parquet', index=False)
+          PY
+          python -m natural_traffic.defender_domain prepare \
+            --input test-benign-office-input.parquet \
+            --office-dir datasets/office-additional-days-20261008 \
+            --source-label unlabeled \
+            --out defender-domain-smoke
+          python -m natural_traffic.defender_domain baseline \
+            --prepared defender-domain-smoke --alert-budget 0.01
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('defender-domain-smoke')
+          manifest=json.loads((p/'manifest.json').read_text())
+          scores=json.loads((p/'baseline_report.json').read_text())
+          assert manifest['office_train_rows'] == 4000
+          assert manifest['office_holdout_rows'] == 4002
+          assert manifest['source_rows'] == 40
+          assert manifest['source_label'] == 'unlabeled'
+          assert manifest['office_labels'] == 'unverified_and_unlabeled'
+          assert len(manifest['feature_columns']) >= 12
+          assert scores['threshold_fit'] == 'office_train_only'
+          assert scores['statistics_are_not_fpr_or_recall']
+          assert not scores['production_ready']
+          print('DEFENDER_DOMAIN_SMOKE', json.dumps({
+            'train_rows':manifest['office_train_rows'],
+            'holdout_rows':manifest['office_holdout_rows'],
+            'features':len(manifest['feature_columns']),
+            'holdout_alert_fraction':scores['office_holdout_alert_fraction'],
+            'source_alert_fraction':scores['uploaded_input_alert_fraction'],
+          },sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: defender-office-domain-diagnostic
+          path: |
+            cover-channel-lab/research-transfer/defender-domain-smoke/manifest.json
+            cover-channel-lab/research-transfer/defender-domain-smoke/baseline_report.json
+          if-no-files-found: warn
+          retention-days: 14
+
   office-behavior-profile:
     runs-on: ubuntu-latest
     timeout-minutes: 20
