@@ -36,3 +36,7 @@ export PYTHONPATH="$PWD/code"
 ## Natural Traffic Generator v2
 
 Новый пакет `code/natural_traffic/` отделяет real-stack generation, benign-only calibration, freeze/confirmation и technique-signal evaluation от исторического PCAP replay. Сценарии не используются для подбора naturalness-профиля; `passed_candidate` остаётся исследовательским статусом, `production_ready=false` до независимого production transfer.
+
+## Дополнительные дни — 8 октября
+
+[Два дополнительных офисных Parquet](datasets/office-additional-days-20261008/README.md): 8 000 отдельных TCP/web-сессий за 22 и 28 сентября, 8 002 строки, полный контракт 155 колонок и три идентификатора групп. Прилагаются контекст зеркала, отчёт о пропусках и зашифрованный словарь для прежнего ключа получателя. TLS-поля 22 сентября отсутствуют в сохранённом источнике; новые native Arkime-данные не включены. Дни ранее использовались в диагностике и не объявляются финальным holdout.

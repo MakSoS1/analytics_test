@@ -32,5 +32,8 @@
   "external_source_archives_included": false,
   "office_data_form": "pseudonymized Parquet only; exact numbers, masked sensitive text; encrypted recovery dictionary",
   "private_key_published": false,
-  "dataset_release": "datasets/office-cover-20261006"
+  "dataset_release": "datasets/office-cover-20261006",
+  "additional_dataset_release": "datasets/office-additional-days-20261008",
+  "additional_saved_days_read_on_research_host": true,
+  "additional_vm_operations": "saved-table selection only; no GitHub/keys, no live capture"
 }
