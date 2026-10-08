@@ -277,8 +277,12 @@ def extract_pipeline_capture(
 ) -> PipelineExtractionResult:
     if shards != 1:
         raise ValueError("standalone capture wrapper currently requires shards=1")
-    assert_extraction_input(bundle, bundle.pcap_path)
-    out = Path(out_dir)
+    # Every child extractor runs with cwd=CODE_ROOT. Resolve caller paths at
+    # this boundary so relative inputs and scratch files remain referentially
+    # stable across that working-directory change.
+    source_pcap = Path(bundle.pcap_path).resolve()
+    assert_extraction_input(bundle, source_pcap)
+    out = Path(out_dir).resolve()
     if out.exists():
         raise FileExistsError(f"extract output already exists: {out}")
     out.mkdir(parents=True)
@@ -299,7 +303,7 @@ def extract_pipeline_capture(
     payload_rows = rows / "capture.pay"
     _run([
         sys.executable, ROOT / "export_full_packets.py",
-        "--pcap", bundle.pcap_path,
+        "--pcap", source_pcap,
         "--out", packet_rows,
         "--payload-out", payload_rows,
         "--salt-file", salt,
@@ -352,7 +356,7 @@ def extract_pipeline_capture(
     target = parquet / "office_sessions.parquet"
     if not target.is_file():
         raise RuntimeError("production extractor did not produce office_sessions.parquet")
-    if _sha(bundle.pcap_path) != source_hash:
+    if _sha(source_pcap) != source_hash:
         raise CompositionIntegrityError("source PCAP changed during extraction")
     manifest = parquet / "manifest.json"
     result = PipelineExtractionResult(

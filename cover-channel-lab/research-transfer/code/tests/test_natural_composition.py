@@ -32,6 +32,30 @@ def sha(path: Path) -> str:
 
 
 class PublicFeatureCompositionTests(unittest.TestCase):
+    def test_relative_extraction_output_survives_extractor_working_directory(self):
+        # The production extractor runs child commands from code/, not from
+        # the caller's cwd; the salt/PCAP paths must therefore be absolute.
+        from test_generator_contract import flow
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as d:
+            root = Path(d)
+            capture = root / "input.pcap"
+            write_pcap(capture, flow())
+            meta = root / "runtime.json"
+            meta.write_text('{"source":"disposable_test"}\n')
+            bundle = CaptureBundle(
+                pair_id="relative-cwd-regression", role="control",
+                profile_id="linux-curl", fidelity="wire-real",
+                pcap_path=capture, pcap_sha256=sha(capture), evidence=(),
+                runtime_metadata_path=meta, runtime_metadata_sha256=sha(meta),
+            )
+            output = root.relative_to(Path.cwd()) / "extracted"
+            result = extract_pipeline_capture(
+                bundle, output, run_id="relative-path", min_free_gib=0,
+            )
+            self.assertGreater(result.rows, 0)
+            self.assertTrue(result.parquet_path.is_file())
+            self.assertEqual(sha(capture), bundle.pcap_sha256)
+
     def test_feature_alternatives_preserve_sources_and_leave_office_unlabelled(self):
         office_path = ROOT / "pipeline_office_full.parquet"
         added = pd.read_parquet(ROOT / "pipeline_added_full.parquet")
