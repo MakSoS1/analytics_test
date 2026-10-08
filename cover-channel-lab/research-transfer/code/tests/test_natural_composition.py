@@ -45,7 +45,8 @@ class PublicFeatureCompositionTests(unittest.TestCase):
             bundle = CaptureBundle(
                 pair_id="relative-cwd-regression", role="control",
                 profile_id="linux-curl", fidelity="wire-real",
-                pcap_path=capture, pcap_sha256=sha(capture), evidence=(),
+                pcap_path=capture.relative_to(Path.cwd()),
+                pcap_sha256=sha(capture), evidence=(),
                 runtime_metadata_path=meta, runtime_metadata_sha256=sha(meta),
             )
             output = root.relative_to(Path.cwd()) / "extracted"

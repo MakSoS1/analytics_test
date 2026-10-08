@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import random
+import select
 import shutil
 import signal
 import ssl
@@ -54,6 +55,46 @@ def audit_client_handshakes(pcap: Path, *, server_port: int) -> dict[str, int]:
         "server_synack_flows": len(synack),
         "completed_tcp_handshakes": len(syn & synack),
     }
+
+
+def _wait_for_capture_ready(proc: subprocess.Popen, path: Path,
+                            *, timeout_seconds: float = 5.0) -> None:
+    """Wait for tcpdump to attach its interface/filter before connecting.
+
+    A header alone may remain buffered by the dumper until its first packet,
+    so prefer tcpdump's immediate 'listening on' startup acknowledgement.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    stderr = getattr(proc, "stderr", None)
+    startup_message = bytearray()
+    while True:
+        if proc.poll() is not None:
+            raise RuntimeError("native capture exited before workload execution")
+        if stderr is not None:
+            ready, _, _ = select.select([stderr], [], [], 0)
+            if ready:
+                chunk = os.read(stderr.fileno(), 4096)
+                startup_message.extend(chunk)
+                if b"listening on " in startup_message.lower():
+                    return
+                if len(startup_message) > 8192:
+                    raise RuntimeError("native capture produced excessive startup diagnostics")
+        else:
+            # Injected/alternate capture processes without stderr can expose
+            # an initialized global header as their readiness signal.
+            try:
+                with path.open("rb") as stream:
+                    header = stream.read(24)
+                if len(header) == 24 and header[:4] in (
+                    b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4",
+                    b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d",
+                ):
+                    return
+            except FileNotFoundError:
+                pass
+        if time.monotonic() >= deadline:
+            raise RuntimeError("native capture not ready before timeout")
+        time.sleep(0.05)
 
 
 class _OfficeState:
@@ -263,11 +304,9 @@ def _capture(port: int, path: Path, enabled: bool) -> Iterator[None]:
         "tcp", "port", str(port),
     ]
     proc = subprocess.Popen(command, stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL)
+                            stderr=subprocess.PIPE)
     try:
-        time.sleep(0.5)
-        if proc.poll() is not None:
-            raise RuntimeError("native capture exited before workload execution")
+        _wait_for_capture_ready(proc, path)
         yield
     finally:
         if proc.poll() is None:
@@ -277,6 +316,8 @@ def _capture(port: int, path: Path, enabled: bool) -> Iterator[None]:
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait(timeout=5)
+        if proc.stderr is not None:
+            proc.stderr.close()
         if proc.returncode not in (0, 130, -signal.SIGINT):
             raise RuntimeError(f"native capture terminated abnormally: rc={proc.returncode}")
 

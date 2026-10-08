@@ -1,13 +1,18 @@
 """Black-box checks for authorized, fixture-only office actions."""
 
 import json
+import os
 from pathlib import Path
 import socket
 import struct
 from tempfile import TemporaryDirectory
 import unittest
 
-from natural_traffic.office_workload import audit_client_handshakes, run_benign_office_workload
+from natural_traffic.office_workload import (
+    _wait_for_capture_ready,
+    audit_client_handshakes,
+    run_benign_office_workload,
+)
 from office_injection.source import write_pcap
 
 
@@ -21,6 +26,38 @@ def _tcp_packet(src_port: int, dst_port: int, flags: int) -> bytes:
 
 
 class BenignOfficeWorkloadTests(unittest.TestCase):
+    def test_capture_waits_for_initialized_pcap_header(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "recording.pcap"
+
+            class Process:
+                def __init__(self, code=None):
+                    self.code = code
+
+                def poll(self):
+                    return self.code
+
+            path.write_bytes(b"\xd4\xc3\xb2\xa1" + b"\0" * 20)
+            _wait_for_capture_ready(Process(), path, timeout_seconds=.1)
+            path.write_bytes(b"\xd4\xc3")
+            with self.assertRaisesRegex(RuntimeError, "not ready"):
+                _wait_for_capture_ready(Process(), path, timeout_seconds=.02)
+            with self.assertRaisesRegex(RuntimeError, "exited before"):
+                _wait_for_capture_ready(Process(1), path, timeout_seconds=.02)
+
+            read_fd, write_fd = os.pipe()
+            try:
+                class ReadyProcess(Process):
+                    stderr = None
+
+                with os.fdopen(read_fd, "rb", buffering=0) as reader:
+                    proc = ReadyProcess()
+                    proc.stderr = reader
+                    os.write(write_fd, b"listening on lo, link-type EN10MB\n")
+                    _wait_for_capture_ready(proc, path, timeout_seconds=.1)
+            finally:
+                os.close(write_fd)
+
     def test_tcp_handshakes_are_accounted_for_independently_of_actions(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "sample.pcap"
