@@ -128,7 +128,7 @@ jobs:
             > /tmp/sber-pinggy.log 2>&1 &
           PINGGY_URL=''
           for i in $(seq 1 25); do
-            PINGGY_URL="$(grep -Eo 'https://[a-zA-Z0-9-]+\.(a\.)?pinggy\.(link|io)|https://[a-zA-Z0-9-]+\.pinggy-free\.link' /tmp/sber-pinggy.log | head -1 || true)"
+            PINGGY_URL="$(grep -Eo 'https://[a-zA-Z0-9-]+\.a\.pinggy\.link|https://[a-zA-Z0-9-]+\.pinggy-free\.link' /tmp/sber-pinggy.log | head -1 || true)"
             if [ -n "$PINGGY_URL" ]; then break; fi
             sleep 2
           done
@@ -145,6 +145,14 @@ jobs:
           name: sberbank-temporary-vnc-connection
           path: /tmp/sber-desktop-access.txt
           retention-days: 1
+      - name: Upload public tunnel startup diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sberbank-pinggy-startup-log
+          path: /tmp/sber-pinggy.log
+          retention-days: 1
+          if-no-files-found: ignore
       - name: Keep graphical desktop running for interactive use
         shell: bash
         run: sleep 840
