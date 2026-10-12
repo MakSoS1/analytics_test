@@ -1,0 +1,65 @@
+name: Temporary public Russian egress check for Sberbank-AST
+on:
+  push:
+    branches:
+      - sberbank-ast-link-probe-20261013
+    paths:
+      - .github/workflows/sberbank-ast-ru-egress-20261013.yml
+permissions: {}
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Discover Russian public OpenVPN exit nodes without supplying credentials
+        shell: bash
+        run: |
+          curl -fsSL --retry 2 --connect-timeout 10 --max-time 60 \
+            'https://www.vpngate.net/api/iphone/' -o /tmp/sber-vpngate.csv
+          python3 - <<'PY'
+          import base64, csv, pathlib
+          src = pathlib.Path('/tmp/sber-vpngate.csv').read_text(encoding='utf-8-sig', errors='replace')
+          print('API_BYTES:', len(src))
+          print('API_HEAD:', repr(src[:100]))
+          rows = [r for r in csv.reader(src.splitlines()) if len(r) >= 15 and r[6].upper() == 'RU']
+          nodes = sorted([r for r in rows if r[14].strip()], key=lambda x:int(x[4]) if x[4].isdigit() else 0, reverse=True)
+          print('RU_NODES_WITH_OPENVPN:', len(nodes))
+          for item in nodes[:5]:
+              print('NODE', item[1], 'PING', item[3], 'SPEED', item[4], 'SESSIONS', item[7])
+          if nodes:
+              config=base64.b64decode(nodes[0][14], validate=True)
+              if len(config)>40000 or b'<ca>' not in config or b'\x00' in config:
+                  raise ValueError('VPN config is unexpected; refusing it')
+              pathlib.Path('/tmp/sber-ru.ovpn').write_bytes(config)
+          PY
+      - name: Test an isolated route to the public tender website if RU nodes exist
+        if: success()
+        shell: bash
+        run: |
+          if [ ! -s /tmp/sber-ru.ovpn ]; then echo 'No public Russian VPN nodes available'; exit 0; fi
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openvpn
+          sudo openvpn --config /tmp/sber-ru.ovpn --route-nopull --script-security 0 \
+            --daemon sberpublic --log /tmp/sber-vpngate-openvpn.log
+          for i in $(seq 1 22); do
+            if ip addr show tun0 2>/dev/null | grep -q 'inet '; then break; fi
+            sleep 2
+          done
+          if ! ip addr show tun0 2>/dev/null | grep -q 'inet '; then
+            echo 'VPN connection unavailable'; tail -n 30 /tmp/sber-vpngate-openvpn.log; exit 0
+          fi
+          sudo ip route add 193.104.207.65/32 dev tun0 || true
+          echo 'PUBLIC_HTTP_TEST_VIA_RU_NODE'
+          curl -v --noproxy '*' --connect-timeout 15 --max-time 40 \
+            --resolve 'www.sberbank-ast.ru:443:193.104.207.65' \
+            'https://www.sberbank-ast.ru/' -o /tmp/sber-public-home.html \
+            -w 'HTTP=%{http_code} CONNECT=%{time_connect} TLS=%{time_appconnect} SIZE=%{size_download}\n' || true
+          echo 'VPN_PUBLIC_ROUTE_DONE'
+      - name: Upload read-only public website retrieval result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sberbank-public-home-via-ru-node
+          path: /tmp/sber-public-home.html
+          if-no-files-found: ignore
+          retention-days: 1
