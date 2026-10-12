@@ -1,0 +1,77 @@
+name: Temporary Sberbank-AST procurement lookup
+on:
+  push:
+    branches:
+      - sberbank-ast-link-probe-20261013
+    paths:
+      - .github/workflows/sberbank-ast-link-probe.yml
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Run Chrome browser from GitHub Actions VM
+        shell: bash
+        run: |
+          npm install --no-save playwright-core
+          node <<'NODE'
+          const {chromium}=require('playwright-core');
+          const reg='0809500000326003971';
+          async function inspect(page,label){
+            const title=await page.title().catch(e=>'TITLE_ERROR '+e.message);
+            console.log('==== '+label+' ====');
+            console.log('PAGE_URL:',page.url());
+            console.log('TITLE:',title);
+            const body=await page.locator('body').innerText({timeout:12000}).catch(e=>'BODY_ERROR '+e.message);
+            console.log('BODY:',body.slice(0,7500));
+            const anchors=await page.locator('a[href]').evaluateAll(els=>els.map(e=>({label:(e.innerText||e.textContent||'').trim().slice(0,120),href:e.href}))).catch(()=>[]);
+            console.log('RELEVANT_LINKS:',JSON.stringify(anchors.filter(x=>/сбербанк|sberbank|44-фз|процедур|закупк|поиск|реестр|площадк/i.test(x.label+' '+x.href)).slice(0,60)));
+            console.log('SEARCH_INPUTS:',JSON.stringify(await page.locator('input').evaluateAll(els=>els.map(e=>({type:e.type,placeholder:e.placeholder,name:e.name,id:e.id}))).catch(()=>[])));
+            const hits=anchors.filter(x=>/sberbank-ast\.ru/i.test(x.href));
+            if(hits.length)console.log('SBER_LINKS:',JSON.stringify(hits.slice(0,30)));
+            return anchors;
+          }
+          (async()=>{
+            const browser=await chromium.launch({headless:true,executablePath:'/usr/bin/google-chrome',args:['--no-sandbox','--disable-dev-shm-usage']});
+            for(const [label,url] of [
+              ['SBER', 'https://www.sberbank-ast.ru/'],
+              ['EIS', 'https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber='+reg]
+            ]){
+              const page=await browser.newPage({viewport:{width:1440,height:1000}});
+              page.setDefaultTimeout(14000);
+              try{
+                const resp=await page.goto(url,{waitUntil:'domcontentloaded',timeout:50000});
+                console.log('HTTP_STATUS '+label+':',resp&&resp.status());
+                const anchors=await inspect(page,label);
+                await page.screenshot({path:'/tmp/'+label.toLowerCase()+'-probe.png',fullPage:false}).catch(e=>console.log('SCREENSHOT_ERROR:',e.message));
+                if(label==='SBER'){
+                  const candidate=anchors.find(x=>/44-фз|государственн|реестр процедур/i.test(x.label)&&/sberbank-ast\.ru/i.test(x.href));
+                  if(candidate){console.log('SBER_CANDIDATE:',candidate.href);await page.goto(candidate.href,{waitUntil:'domcontentloaded',timeout:50000});await inspect(page,'SBER_SECTION');}
+                  const inputs=page.locator('input');
+                  const count=await inputs.count();
+                  for(let i=0;i<Math.min(count,15);i++){
+                    const inp=inputs.nth(i);
+                    const meta=await inp.evaluate(e=>({type:e.type,p:e.placeholder,n:e.name}));
+                    if(/поиск|номер|извещ|search|number|закуп|процедур/i.test(meta.p+' '+meta.n)){
+                      console.log('SEARCHING_VIA_INPUT:',JSON.stringify(meta));
+                      await inp.fill(reg);await inp.press('Enter');
+                      await page.waitForLoadState('domcontentloaded',{timeout:15000}).catch(()=>{});
+                      await inspect(page,'SBER_SEARCH_RESULT');
+                      break;
+                    }
+                  }
+                }
+              }catch(e){console.log('LOOKUP_ERROR '+label+':',String(e&&e.stack||e));}
+              await page.close();
+            }
+            await browser.close();
+          })().catch(e=>{console.error('FATAL:',e);process.exitCode=1;});
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sberbank-ast-browser-screenshots
+          path: /tmp/*-probe.png
+          if-no-files-found: ignore
