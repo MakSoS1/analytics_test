@@ -9,7 +9,7 @@ permissions: {}
 jobs:
   discover:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
       - name: Discover Russian public OpenVPN exit nodes without supplying credentials
         shell: bash
@@ -24,36 +24,48 @@ jobs:
           rows = [r for r in csv.reader(src.splitlines()) if len(r) >= 15 and r[6].upper() == 'RU']
           nodes = sorted([r for r in rows if r[14].strip()], key=lambda x:int(x[4]) if x[4].isdigit() else 0, reverse=True)
           print('RU_NODES_WITH_OPENVPN:', len(nodes))
-          for item in nodes[:5]:
-              print('NODE', item[1], 'PING', item[3], 'SPEED', item[4], 'SESSIONS', item[7])
-          if nodes:
-              config=base64.b64decode(nodes[0][14], validate=True)
+          for i, item in enumerate(nodes[:9]):
+              config=base64.b64decode(item[14], validate=True)
               if len(config)>40000 or b'<ca>' not in config or b'\x00' in config:
-                  raise ValueError('VPN config is unexpected; refusing it')
-              pathlib.Path('/tmp/sber-ru.ovpn').write_bytes(config)
+                  print('SKIP unexpected config', item[1])
+                  continue
+              lines=config.decode('utf-8', errors='replace').splitlines()
+              selection=[x.strip() for x in lines if x.lower().startswith(('proto ', 'remote '))]
+              print('NODE', i, item[1], 'PING', item[3], 'SPEED', item[4], 'SESSIONS', item[7], 'CONFIG', selection[:4])
+              pathlib.Path(f'/tmp/sber-ru-{i:02d}.ovpn').write_bytes(config)
           PY
       - name: Test an isolated route to the public tender website if RU nodes exist
         if: success()
         shell: bash
         run: |
-          if [ ! -s /tmp/sber-ru.ovpn ]; then echo 'No public Russian VPN nodes available'; exit 0; fi
+          if ! compgen -G '/tmp/sber-ru-*.ovpn' > /dev/null; then echo 'No public Russian VPN nodes available'; exit 0; fi
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openvpn
-          sudo openvpn --config /tmp/sber-ru.ovpn --route-nopull --script-security 0 \
-            --daemon sberpublic --log /tmp/sber-vpngate-openvpn.log
-          for i in $(seq 1 22); do
-            if ip addr show tun0 2>/dev/null | grep -q 'inet '; then break; fi
+          for config in /tmp/sber-ru-*.ovpn; do
+            number="$(basename "$config" .ovpn)"
+            echo "TRY_RU_NODE $number"
+            sudo openvpn --config "$config" --route-nopull --script-security 0 \
+              --daemon sberpublic --writepid "/tmp/${number}.pid" --log "/tmp/${number}.log" || true
+            for i in $(seq 1 9); do
+              if ip addr show tun0 2>/dev/null | grep -q 'inet '; then break; fi
+              sleep 2
+            done
+            if ip addr show tun0 2>/dev/null | grep -q 'inet '; then
+              echo "RU_TUNNEL_UP $number"
+              sudo ip route replace 193.104.207.65/32 dev tun0 || true
+              curl -v --noproxy '*' --connect-timeout 13 --max-time 28 \
+                --resolve 'www.sberbank-ast.ru:443:193.104.207.65' \
+                'https://www.sberbank-ast.ru/' -o /tmp/sber-public-home.html \
+                -w 'HTTP=%{http_code} CONNECT=%{time_connect} TLS=%{time_appconnect} SIZE=%{size_download}\n' || true
+              sudo ip route del 193.104.207.65/32 dev tun0 || true
+              if [ -s /tmp/sber-public-home.html ]; then echo 'PAGE_RETRIEVED_SUCCESSFULLY'; break; fi
+            else
+              echo "RU_NODE_DID_NOT_CONNECT $number"
+            fi
+            sudo tail -n 12 "/tmp/${number}.log" || true
+            if [ -s "/tmp/${number}.pid" ]; then sudo kill "$(sudo cat "/tmp/${number}.pid")" || true; fi
             sleep 2
           done
-          if ! ip addr show tun0 2>/dev/null | grep -q 'inet '; then
-            echo 'VPN connection unavailable'; tail -n 30 /tmp/sber-vpngate-openvpn.log; exit 0
-          fi
-          sudo ip route add 193.104.207.65/32 dev tun0 || true
-          echo 'PUBLIC_HTTP_TEST_VIA_RU_NODE'
-          curl -v --noproxy '*' --connect-timeout 15 --max-time 40 \
-            --resolve 'www.sberbank-ast.ru:443:193.104.207.65' \
-            'https://www.sberbank-ast.ru/' -o /tmp/sber-public-home.html \
-            -w 'HTTP=%{http_code} CONNECT=%{time_connect} TLS=%{time_appconnect} SIZE=%{size_download}\n' || true
           echo 'VPN_PUBLIC_ROUTE_DONE'
       - name: Upload read-only public website retrieval result
         if: always()
