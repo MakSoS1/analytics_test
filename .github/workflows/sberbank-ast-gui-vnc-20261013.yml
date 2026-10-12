@@ -71,6 +71,7 @@ jobs:
           name: sberbank-main-graphical-desktop
           path: /tmp/sberbank-main-gui.png
           if-no-files-found: ignore
+          retention-days: 1
       - name: Start password-protected VNC and short-lived HTTPS tunnel
         shell: bash
         env:
@@ -118,4 +119,14 @@ jobs:
           echo 'VNC password is RSA-encrypted. Private key is not in this repository or runner.'
           echo 'Desktop is temporary; it will shut down at the end of this job.'
           curl -fsSL --max-time 20 -o /dev/null -w 'NOVNC_HTTP=%{http_code}\n' "${TUNNEL_URL}/vnc.html" || true
-          sleep 840
+          printf 'DESKTOP_URL=%s/vnc.html?autoconnect=1&resize=remote\n' "$TUNNEL_URL" > /tmp/sber-desktop-access.txt
+          printf 'RSA_ENCRYPTED_VNC_PASSWORD_BASE64=%s\n' "$(base64 -w0 /tmp/sber-vnc-encrypted.bin)" >> /tmp/sber-desktop-access.txt
+      - name: Upload protected temporary connection info
+        uses: actions/upload-artifact@v4
+        with:
+          name: sberbank-temporary-vnc-connection
+          path: /tmp/sber-desktop-access.txt
+          retention-days: 1
+      - name: Keep graphical desktop running for interactive use
+        shell: bash
+        run: sleep 840
