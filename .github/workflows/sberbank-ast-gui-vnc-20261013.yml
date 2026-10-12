@@ -1,0 +1,121 @@
+name: Temporary graphical browser for Sberbank-AST
+on:
+  push:
+    branches:
+      - sberbank-ast-link-probe-20261013
+    paths:
+      - .github/workflows/sberbank-ast-gui-vnc-20261013.yml
+permissions: {}
+
+jobs:
+  network-probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 9
+    steps:
+      - name: Test DNS and HTTPS from this runner
+        shell: bash
+        run: |
+          nslookup www.sberbank-ast.ru || true
+          nslookup sberbank-ast.ru || true
+          nslookup utp.sberbank-ast.ru || true
+          for url in \
+            'https://www.sberbank-ast.ru/' \
+            'https://sberbank-ast.ru/' \
+            'http://www.sberbank-ast.ru/' \
+            'https://utp.sberbank-ast.ru/' \
+            'https://zakupki.gov.ru/' \
+            'https://world.sberbank-ast.ru/'; do
+            echo "CHECK $url"
+            curl --noproxy '*' --ipv4 -L -sS -o /dev/null --connect-timeout 8 --max-time 17 \
+              -w 'RESULT http=%{http_code} ip=%{remote_ip} connect=%{time_connect} tls=%{time_appconnect} total=%{time_total}\n' "$url" || true
+          done
+
+  gui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 19
+    steps:
+      - name: Install real graphical browser environment
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb openbox x11vnc novnc websockify imagemagick
+          curl -fsSL --retry 3 --connect-timeout 12 --max-time 90 \
+            'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64' \
+            -o /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+          google-chrome --version
+          /tmp/cloudflared --version
+      - name: Start visible Google Chrome, take diagnostic desktop image
+        shell: bash
+        env:
+          DISPLAY: ':99'
+        run: |
+          Xvfb :99 -screen 0 1440x900x24 -ac > /tmp/sber-xvfb.log 2>&1 &
+          sleep 2
+          openbox-session > /tmp/sber-openbox.log 2>&1 &
+          sleep 2
+          google-chrome --no-sandbox --disable-dev-shm-usage \
+            --user-data-dir=/tmp/sber-chrome-profile --no-first-run \
+            --no-default-browser-check --new-window 'https://www.sberbank-ast.ru/' \
+            > /tmp/sber-chrome.log 2>&1 &
+          sleep 28
+          import -display :99 -window root /tmp/sberbank-main-gui.png || true
+          echo 'Graphical Chrome remains running in virtual desktop :99'
+      - name: Upload real Chrome desktop screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: sberbank-main-graphical-desktop
+          path: /tmp/sberbank-main-gui.png
+          if-no-files-found: ignore
+      - name: Start password-protected VNC and short-lived HTTPS tunnel
+        shell: bash
+        env:
+          DISPLAY: ':99'
+        run: |
+          openssl rand -base64 18 > /tmp/sber-vnc-random.txt
+          VNC_PASS="$(head -c 8 /tmp/sber-vnc-random.txt)"
+          printf '%s' "$VNC_PASS" > /tmp/sber-vnc-password-plaintext
+          x11vnc -storepasswd "$VNC_PASS" /tmp/sber-vnc.pass >/dev/null 2>&1
+          unset VNC_PASS
+          printf '%s\n' \
+            '-----BEGIN PUBLIC KEY-----' \
+            'MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAw66sdXq3G6EP7aNLuiya' \
+            'CkmHJk34cNEJ9WWT0uhAaXk+PTMktiCoAz4WMeJ0irQaBJsCo2ZlC0rSwDqmCwq/' \
+            'RduiITiZ/NbCYDCcijBdSDVC5w4dlW/cbBUTxNnj+fCi446vrU9b5L6XEbQSdbZ1' \
+            'cu4C44LLCh8awgRlTq+yjsoENrWj+fJDsk4aj9zjmwj8H7Bs1aygx0unhZ2sUeWz' \
+            '7PsaRl3aARLuwxjm/V+M4Tcy3rxtED8vWqd1Ix4NZcul/6+zk91FldSPCWuT5ScS' \
+            'IIeDLQvGUNgQSgeThaHjeEYU+AXE2R1LQg9t+xsjfu9i9B/Tf3fYw8qnk3GcyC8n' \
+            'YUY2SsihDi7QyuHJU5r6tpcEs/GSRbjOBur009qAcupOkK4R8+VXpjxsQVrSi4PZ' \
+            '3xNb9PuAsGM0ZsgliftPYqayRP1eI4sIWEiWtlbEevSQi1i8zgpUsUgeUtA+cBEx' \
+            '5VZeEoBGgPcrZr6D0LNOlz6LTCUE7rfscdqX856urIGNAgMBAAE=' \
+            '-----END PUBLIC KEY-----' > /tmp/sber-vnc-public.pem
+          openssl pkeyutl -encrypt -pubin -inkey /tmp/sber-vnc-public.pem \
+            -in /tmp/sber-vnc-password-plaintext -out /tmp/sber-vnc-encrypted.bin
+          shred -u /tmp/sber-vnc-password-plaintext /tmp/sber-vnc-random.txt
+          x11vnc -display :99 -rfbauth /tmp/sber-vnc.pass -localhost \
+            -forever -shared -rfbport 5900 -bg -o /tmp/sber-x11vnc.log
+          websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900 \
+            > /tmp/sber-websockify.log 2>&1 &
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 \
+            > /tmp/sber-cloudflared.log 2>&1 &
+          TUNNEL_URL=''
+          for i in $(seq 1 35); do
+            TUNNEL_URL="$(grep -Eo 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' /tmp/sber-cloudflared.log | head -1 || true)"
+            if [ -n "$TUNNEL_URL" ]; then break; fi
+            sleep 2
+          done
+          if [ -z "$TUNNEL_URL" ]; then
+            echo 'Tunnel not available; showing startup diagnostics:'
+            tail -n 30 /tmp/sber-cloudflared.log
+            exit 1
+          fi
+          echo "DESKTOP_URL=${TUNNEL_URL}/vnc.html?autoconnect=1&resize=remote"
+          echo "RSA_ENCRYPTED_VNC_PASSWORD_BASE64=$(base64 -w0 /tmp/sber-vnc-encrypted.bin)"
+          echo 'VNC password is RSA-encrypted. Private key is not in this repository or runner.'
+          echo 'Desktop is temporary; it will shut down at the end of this job.'
+          curl -fsSL --max-time 20 -o /dev/null -w 'NOVNC_HTTP=%{http_code}\n' "${TUNNEL_URL}/vnc.html" || true
+          sleep 840
