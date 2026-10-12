@@ -121,6 +121,24 @@ jobs:
           curl -fsSL --max-time 20 -o /dev/null -w 'NOVNC_HTTP=%{http_code}\n' "${TUNNEL_URL}/vnc.html" || true
           printf 'DESKTOP_URL=%s/vnc.html?autoconnect=1&resize=remote\n' "$TUNNEL_URL" > /tmp/sber-desktop-access.txt
           printf 'RSA_ENCRYPTED_VNC_PASSWORD_BASE64=%s\n' "$(base64 -w0 /tmp/sber-vnc-encrypted.bin)" >> /tmp/sber-desktop-access.txt
+          # Independent SSH-based HTTPS tunnel, in case the browser blocks trycloudflare.com.
+          ssh -n -tt -p 443 -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=15 -o ServerAliveInterval=30 \
+            -R0:127.0.0.1:6080 free.pinggy.io \
+            > /tmp/sber-pinggy.log 2>&1 &
+          PINGGY_URL=''
+          for i in $(seq 1 25); do
+            PINGGY_URL="$(grep -Eo 'https://[a-zA-Z0-9-]+\.(a\.)?pinggy\.(link|io)|https://[a-zA-Z0-9-]+\.pinggy-free\.link' /tmp/sber-pinggy.log | head -1 || true)"
+            if [ -n "$PINGGY_URL" ]; then break; fi
+            sleep 2
+          done
+          if [ -n "$PINGGY_URL" ]; then
+            echo "ALTERNATE_DESKTOP_URL=${PINGGY_URL}/vnc.html?autoconnect=1&resize=remote"
+            printf 'ALTERNATE_DESKTOP_URL=%s/vnc.html?autoconnect=1&resize=remote\n' "$PINGGY_URL" >> /tmp/sber-desktop-access.txt
+          else
+            echo 'Alternate SSH HTTPS tunnel unavailable; first diagnostic lines follow:'
+            head -n 8 /tmp/sber-pinggy.log || true
+          fi
       - name: Upload protected temporary connection info
         uses: actions/upload-artifact@v4
         with:
