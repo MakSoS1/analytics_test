@@ -18,11 +18,11 @@ root.innerHTML=`
     <div class="file-note" id="file-note">Файл пока не выбран</div>
     <div class="settings">
       <label>Распознавание речи<select id="language"><option value="auto">Авто (RU / EN)</option><option value="ru">Русский</option><option value="en">English</option></select></label>
-      <label>Объём для распознавания<select id="asr-limit"><option value="300">Первые 5 минут — проверка</option><option value="900">Первые 15 минут</option><option value="all">Вся лекция</option></select></label>
+      <label>Объём для распознавания<select id="asr-limit"><option value="all" selected>Вся лекция — полный анализ микротем</option><option value="300">Первые 5 минут — быстрая проба</option><option value="900">Первые 15 минут — проба</option></select></label>
       <button class="primary" id="transcribe" disabled>✧ Распознать локально</button>
       <button id="import-srt" disabled>Импорт SRT (без AI)</button>
       <input type="file" accept=".srt,text/plain" id="srt-file" hidden>
-      <p class="hint">Модель Whisper скачивается с Hugging Face при первом запуске. Содержимое лекции не передаётся.</p>
+      <p class="hint">При первом запуске Whisper скачиваются веса модели. Полная обработка часовой лекции может быть долгой на слабом ПК; для проверки выберите первые 5 минут. Видеоданные не загружаются в облако.</p>
     </div>
     <div class="settings">
   <label>Длина учебной микротемы<select id="topic-preset">
