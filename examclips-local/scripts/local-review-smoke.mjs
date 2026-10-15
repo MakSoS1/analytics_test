@@ -40,7 +40,7 @@ try{
  assert.equal(bad.status,403);
  const response=await fetch(origin+'/api/local-review',{method:'POST',headers:{
    'Content-Type':'application/json','Origin':origin},body:JSON.stringify(payload)});
- assert.equal(response.status,200,await response.text().catch(()=>'')); 
+ assert.equal(response.status,200);
  const result=await response.json();
  assert.equal(result.verdict,'complete');assert.equal(result.evidenceVerified,true);
  assert.equal(seen,1);
