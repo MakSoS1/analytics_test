@@ -60,7 +60,15 @@ root.innerHTML=`
 <option value="high">Качественно — 1080×1920, 30 FPS</option>
 </select></label>
 <div class="buttons"><button id="play-clip" disabled>▶ Просмотреть клип</button><button class="primary" id="export" disabled>↓ Экспорт MP4</button></div>
-        <div class="buttons"><button id="add" disabled>+ Добавить клип</button><button id="remove" disabled>Удалить</button></div>
+        <div class="buttons">
+  <button id="extend-start" disabled>← Ещё 15 сек в начале</button>
+  <button id="extend-end" disabled>Ещё 15 сек в конце →</button>
+</div>
+<div class="buttons">
+  <button id="listen-context" disabled>▶ Прослушать с контекстом</button>
+  <button id="add" disabled>+ Добавить клип</button>
+</div>
+<button id="remove" disabled>Удалить микротему</button>
         <div class="divider"></div>
         <div class="panel-title"><b>Транскрипт и субтитры</b><button class="plain" id="save-srt" disabled>Скачать SRT</button></div>
         <textarea id="transcript" rows="7" placeholder="Здесь появятся субтитры с таймкодами. Можно импортировать готовый SRT." disabled></textarea>
@@ -82,7 +90,7 @@ function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
   $('suggest-topics').disabled=!has||busy||!chunks.length;
-  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme'])$(id).disabled=!clip||busy;
+  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context'])$(id).disabled=!clip||busy;
   for(const id of ['save-srt','save-project','add'])$(id).disabled=!has||busy;
   $('transcript').disabled=!has||busy;$('cancel').disabled=!busy;
 }
@@ -199,6 +207,21 @@ $('transcript').addEventListener('change',()=>{
   else status('Неверный SRT, прежняя разметка сохранена');
 });
 $('play-clip').onclick=()=>{const c=current();if(!c)return;$('player').currentTime=c.start;$('player').play()};
+$('listen-context').onclick=()=>{
+ const c=current();if(!c)return;
+ $('player').currentTime=Math.max(0,c.start-15);
+ $('player').play();
+ status('Воспроизводятся 15 секунд перед началом, чтобы проверить контекст.');
+};
+for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
+ $(key).onclick=()=>{
+  const c=current();if(!c||!media)return;
+  if(side==='start')c.start=Math.max(0,c.start-15);
+  else c.end=Math.min(media.duration,c.end+15);
+  c.reviewReasons=['Граница изменена вручную. Проверьте её смысловую завершённость.'];
+  sync();status('Временная граница изменена. Повторите предпросмотр.');
+ };
+}
 $('player').addEventListener('timeupdate',()=>{const c=current();if(c&&!$('player').paused&&$('player').currentTime>=c.end)$('player').pause()});
 $('add').onclick=()=>{
   if(!media)return;const last=current();
