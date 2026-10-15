@@ -132,7 +132,6 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
  const theme=scene?.theme||spec.theme||'warm';
  const p=paletteFor(theme),g=editorialGeometry(width,height,{speaker:!spec.hideSpeaker});
  const s=width/720;
- ctx.save();
  ctx.clearRect(0,0,width,height);
  ctx.fillStyle=p.background;ctx.fillRect(0,0,width,height);
  // Quiet, magazine-style typography: no redundant screenshot of the original slide title.
