@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install front-end dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --ignore-scripts --no-audit --no-fund
       - name: Validate first-use Whisper tiny ONNX in headless Chrome
         run: |
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-asr-vite.log 2>&1 &
