@@ -1,4 +1,5 @@
 import {mono16k} from './media.js';
+import {isSilent} from './audio-utils.js';
 // First use of this module downloads the Whisper model from Hugging Face.
 // Media/audio remains local: the ASR pipeline receives only Float32Arrays.
 let transcriber=null,deviceName=null;
@@ -28,6 +29,7 @@ export async function transcribe(media,{limit=Infinity,language='auto',onProgres
     const end=Math.min(until,start+30);
     onProgress(`Whisper: ${Math.round(start)}/${Math.round(until)} с`);
     const pcm=await mono16k(media.audioSink,start,end);
+    if(isSilent(pcm)){onProgress(`Пропущена тишина: ${Math.round(start)}–${Math.round(end)} с`);continue}
     const opts={return_timestamps:true,task:'transcribe'};
     if(language!=='auto')opts.language=language;
     const result=await t(pcm,opts);
