@@ -21,7 +21,7 @@ export async function exportClip(media,clip,chunks,{fps=15,onProgress=()=>{},sig
       if(signal?.aborted)throw new DOMException('Stopped','AbortError');
       if(!sample)throw Error('Не удалось декодировать видеокадр '+i);
       try{
-        paintFrame(canvas,sample,sample.displayWidth,sample.displayHeight,clip.layout,clip.focusX,textAt(chunks,times[i]));
+        paintFrame(canvas,sample,sample.displayWidth,sample.displayHeight,clip.layout,clip.focusX,textAt(chunks,times[i]),clip.scene||null,times[i]-clip.start);
         await videoSource.add(i/fps,Math.min(1/fps,(clip.end-clip.start)-i/fps));
       }finally{sample.close()}
       i++;if(i%30===0||i===frames)onProgress(`Видео ${i}/${frames} кадров`);
