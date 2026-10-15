@@ -9,6 +9,7 @@ import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {captionCueAt} from './editorial-motion.js';
 import {buildReviewPayload} from './completion-review.js';
+import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
 const root=document.querySelector('#app');
 root.innerHTML=`
 <header class="top"><div class="brand"><span class="brand-icon">✦</span> ExamClips <span class="pill">LOCAL MVP</span></div><div class="privacy">◈ Исходники остаются на устройстве</div></header>
@@ -20,7 +21,8 @@ root.innerHTML=`
     <div class="settings">
       <label>Распознавание речи<select id="language"><option value="auto">Авто (RU / EN)</option><option value="ru">Русский</option><option value="en">English</option></select></label>
       <label>Объём для распознавания<select id="asr-limit"><option value="all" selected>Вся лекция — полный анализ микротем</option><option value="300">Первые 5 минут — быстрая проба</option><option value="900">Первые 15 минут — проба</option></select></label>
-      <button class="primary" id="transcribe" disabled>✧ Распознать локально</button>
+      <button class="primary" id="transcribe" disabled>✧ Распознать / продолжить локально</button>
+      <button id="forget-asr" disabled>Удалить сохранённую расшифровку из кэша</button>
       <button id="import-srt" disabled>Импорт SRT (без AI)</button>
       <input type="file" accept=".srt,text/plain" id="srt-file" hidden>
       <p class="hint">При первом запуске Whisper скачиваются веса модели. Полная обработка часовой лекции может быть долгой на слабом ПК; для проверки выберите первые 5 минут. Видеоданные не загружаются в облако.</p>
@@ -89,12 +91,13 @@ root.innerHTML=`
 </main>
 <footer>ExamClips Local MVP · Никаких облачных видеозагрузок · Проверяйте границы, формулы и субтитры вручную</footer>`;
 const $=id=>document.getElementById(id);
-let media=null,originalUrl=null,clips=[],chunks=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
+let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
 function status(msg){$('progress').textContent=msg;$('status').textContent=msg.slice(0,48)}
 function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)))}
 function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
+  $('forget-asr').disabled=!has||busy;
   $('suggest-topics').disabled=!has||busy||!chunks.length;
   $('verify-topic').disabled=!clip||busy||!chunks.length||current()?.id==='draft-1';
   $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
@@ -148,6 +151,7 @@ async function selectFile(file){
     if(media)await media.input.dispose();
     if(originalUrl)URL.revokeObjectURL(originalUrl);
     media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
+    sourceFile=file;
     $('file-note').textContent=`${file.name} · ${timecode(media.duration)} · ${media.width}×${media.height} · ${(file.size/1e6).toFixed(1)} МБ`;
     // A draft is NOT an AI-generated completed lesson; only ASR/SRT can produce topic proposals.
     clips=[{id:'draft-1',start:0,end:Math.min(media.duration,180),title:'Черновик — сначала распознайте лекцию',
@@ -180,14 +184,36 @@ $('srt-file').onchange=async e=>{
 };
 $('transcribe').onclick=async()=>{
   abort=new AbortController();setBusy(true);
+  let key=null;
   try{
     const limit=$('asr-limit').value==='all'?Infinity:Number($('asr-limit').value);
-    chunks=await transcribe(media,{limit,language:$('language').value,onProgress:status,signal:abort.signal});
-    if(!chunks.length)throw Error('Распознавание не вернуло слов. Попробуйте импортировать SRT.');
+    key=await checkpointKey(sourceFile,$('language').value);
+    const previous=await loadCheckpoint(key,media.duration).catch(()=>null);
+    if(previous?.completedWindows.length)status('Продолжаю распознавание: сохранено '+previous.completedWindows.length+' окон по 30 секунд.');
+    chunks=await transcribe(media,{limit,language:$('language').value,
+      onProgress:status,signal:abort.signal,resume:previous,
+      onCheckpoint:async checkpoint=>saveCheckpoint(key,checkpoint)});
+    if(!chunks.length)throw Error('Распознавание не вернуло речи. Попробуйте SRT или проверьте звук.');
     proposeTopics();$('transcript').value=toSrt(chunks);sync();
-    status(`Распознано ${chunks.length} реплик. Предложено ${clips.length} микротем. Проверьте содержание и границы.`);
-  }catch(e){if(e.name==='AbortError')status('Распознавание остановлено');else error(e)}finally{abort=null;setBusy(false)}
+    status('Распознано '+chunks.length+' реплик. Кэш сохранён локально. Проверьте каждый предложенный микроурок.');
+  }catch(e){
+    if(key){
+      const preserved=await loadCheckpoint(key,media.duration).catch(()=>null);
+      if(preserved?.chunks?.length){chunks=preserved.chunks;proposeTopics();$('transcript').value=toSrt(chunks);sync()}
+    }
+    if(e.name==='AbortError')status('Остановлено: локальный прогресс сохранён, следующий запуск продолжит с контрольной точки.');
+    else error(e);
+  }finally{abort=null;setBusy(false)}
 };
+$('forget-asr').onclick=async()=>{
+  if(!sourceFile)return;
+  try{
+    const key=await checkpointKey(sourceFile,$('language').value);
+    await deleteCheckpoint(key);
+    status('Локальный кэш Whisper удалён. Уже импортированные/отредактированные субтитры не изменены.');
+  }catch(e){error(e)}
+};
+
 function proposeTopics(){
   if(!media||!chunks.length)return;
   const cfg=$('topic-preset').value==='compact'
