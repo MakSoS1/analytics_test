@@ -97,9 +97,9 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
   c.fillStyle='#40526e';c.font='600 19px system-ui';
   c.fillText('EXAMCLIPS  ·  '+(active+1)+' / '+spec.panels.length,34,975);
   // Speaker is a separate animated video layer, independent of the active slide region.
-  c.save();roundRect(c,40,988,w-80,177,22);c.clip();
+  if(!spec.hideSpeaker){c.save();roundRect(c,40,988,w-80,177,22);c.clip();
   c.fillStyle='#e6edf5';c.fillRect(40,988,w-80,177);
-  drawSourceRegion(c,src,spec.speaker,48,992,w-96,168,sw,sh);c.restore();
+  drawSourceRegion(c,src,spec.speaker,48,992,w-96,168,sw,sh);c.restore();}
   if(subtitle.trim()){
     c.font='bold 28px system-ui';c.textAlign='center';
     const words=subtitle.split(/\s+/),lines=[];let current='';
