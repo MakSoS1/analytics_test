@@ -19,7 +19,7 @@ Open http://localhost:5173. A first-time install downloads application dependenc
 
 1. Choose local MP4. The preview starts in **AI-композиция**.
 2. Optionally import SRT or run local Whisper ASR.
-3. Choose a clip; click **Распознать доску (локальный OCR)**. Tesseract recognizes an early frame in the clip and organizes source diagram/text regions into a vertical story, matching words from the transcript where possible.
+3. Choose a clip; click **Распознать доску (локальный OCR)**. Tesseract recognizes representative frames after locally detecting slide changes (at 8-second sampling intervals) and organizes source diagram/text regions into a vertical story, matching words from the transcript where possible.
 4. The lecturer is located by temporal movement across locally decoded frames; if misdetected, change the webcam position in the editor.
 5. Review each clip's content and the active region over time, adjust start/end and export an H.264+AAC MP4 locally.
 6. Re-open a saved JSON project without repeating OCR if the same original video is selected.
@@ -28,7 +28,7 @@ Open http://localhost:5173. A first-time install downloads application dependenc
 
 **Implemented:** OCR-assisted region discovery, original diagram crops, selected high-confidence OCR text as reflowable native text, timed panel attention, independent presenter layer, editable presets, browser render with audio, saves. CI includes synthetic slide OCR and browser MP4 tests.
 
-**Not yet implemented or proven:** semantic understanding of all diagrams, restoring arbitrary math into correct LaTeX, unsupervised understanding of full three-hour lectures, slide transition tracking, person background removal, guaranteed readable output without review, 1080×1920/30fps cross-platform performance, local small model training. OCR mistakes can alter reflowed words; verify before publishing.
+**Not yet implemented or proven:** guaranteed detection of all fast slide transitions, semantic understanding of all diagrams, restoring arbitrary math into correct LaTeX, unsupervised understanding of full three-hour lectures, slide transition tracking, person background removal, guaranteed readable output without review, 1080×1920/30fps cross-platform performance, local small model training. OCR mistakes can alter reflowed words; verify before publishing.
 
 A sample Docker lecture was inspected in conversation only, not uploaded to public GitHub or Actions. Project output stays local, although initial model downloads and JavaScript package installation access vendor hosts.
 
