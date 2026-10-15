@@ -45,7 +45,11 @@ root.innerHTML=`
 <option value="top-right">Справа вверху</option><option value="top-left">Слева вверху</option>
 <option value="none">Без вебки</option></select></label>
 <label>Горизонтальный фокус <span id="focus-value">50%</span><input id="focus" type="range" min="0" max="100" value="50" disabled></label>
-        <div class="buttons"><button id="play-clip" disabled>▶ Просмотреть клип</button><button class="primary" id="export" disabled>↓ Экспорт MP4</button></div>
+        <label>Качество экспорта<select id="output-quality">
+<option value="standard">Быстро — 720×1280, 15 FPS</option>
+<option value="high">Качественно — 1080×1920, 30 FPS</option>
+</select></label>
+<div class="buttons"><button id="play-clip" disabled>▶ Просмотреть клип</button><button class="primary" id="export" disabled>↓ Экспорт MP4</button></div>
         <div class="buttons"><button id="add" disabled>+ Добавить клип</button><button id="remove" disabled>Удалить</button></div>
         <div class="divider"></div>
         <div class="panel-title"><b>Транскрипт и субтитры</b><button class="plain" id="save-srt" disabled>Скачать SRT</button></div>
@@ -224,7 +228,7 @@ $('export').onclick=async()=>{
   abort=new AbortController();setBusy(true);
   try{
     status('Кодирование MP4 со звуком. В зависимости от ПК может занять несколько минут...');
-    const blob=await exportClip(media,c,chunks,{onProgress:status,signal:abort.signal});
+    const blob=await exportClip(media,c,chunks,{quality:$('output-quality').value,onProgress:status,signal:abort.signal});
     download(blob,safeName(c.title)+'.mp4');
     status('Экспорт завершён: '+(blob.size/1e6).toFixed(1)+' МБ');
   }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e)}finally{abort=null;setBusy(false)}
