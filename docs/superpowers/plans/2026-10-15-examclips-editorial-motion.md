@@ -18,3 +18,6 @@ Chosen: our Canvas/WebCodecs renderer, using published Remotion/motion-agent des
 
 ## QA and privacy
 Public GitHub Actions uses generated fixtures only; never upload private lecture frames or ASR text. Deliver explicit warnings for uncertain OCR and formulas. Quality and speed of real 59m Docker lecture remains unverified until real acceptance.
+
+## Final latest-code integration evidence
+GitHub Actions https://github.com/MakSoS1/analytics_test/actions/runs/38805605554 passed 27/27 unit tests, clean Vite production build, Chromium 720x1280/15 and 1080x1920/30 H264+AAC exported MP4, complete ffmpeg decode of HD output, and three real compositor screenshots with a 7.8% changed-pixel fraction between educational beats. This establishes reproducible encoding and visual motion on synthetic assets; it does not establish faithful full-course semantic directing on a user lecture.
