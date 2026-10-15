@@ -30,7 +30,7 @@ async function readJsonRequest(req){
  try{return JSON.parse(data)}catch{throw Error('Некорректный JSON')}
 }
 function localOllamaBridge(){
- return {name:'examclips-local-ollama-bridge',configureServer(server){
+ const register=(server)=>{
   server.middlewares.use(async(req,res,next)=>{
     if(!req.url?.startsWith('/api/local-review'))return next();
     if(!allowedAddress(req.socket.remoteAddress))return fail(res,403,'Доступ только с текущего компьютера');
@@ -68,9 +68,11 @@ function localOllamaBridge(){
       return fail(res,timeout?504:503,timeout?'Локальная LLM не ответила вовремя':String(error.message).slice(0,190));
     }
   });
- }};
+ };
+ return {name:'examclips-local-ollama-bridge',configureServer:register,configurePreviewServer:register};
 }
 export default defineConfig({
  server:{host:'127.0.0.1',strictPort:false},
+ preview:{host:'127.0.0.1'},
  plugins:[localOllamaBridge()]
 });
