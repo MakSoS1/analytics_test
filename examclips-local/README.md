@@ -9,7 +9,7 @@ Install Node.js 22+ from https://nodejs.org, clone branch `feat/examclips-hybrid
 ```powershell
 git clone --branch feat/examclips-hybrid-composer-20261015 https://github.com/MakSoS1/analytics_test.git
 cd analytics_test\examclips-local
-npm install --no-audit --no-fund
+npm install --ignore-scripts --no-audit --no-fund
 npm run dev
 ```
 
@@ -43,7 +43,7 @@ Use Node.js >= 22 and npm:
 
 ```bash
 cd examclips-local
-npm install
+npm install --ignore-scripts
 npm run dev
 ```
 
