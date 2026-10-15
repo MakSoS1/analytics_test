@@ -25,11 +25,23 @@ export function layoutFromOcr(lines=[],width=1600,height=900){
   const left=body.filter(l=>((l.box.x0+l.box.x1)/2)<width*.59);
   const right=body.filter(l=>((l.box.x0+l.box.x1)/2)>=width*.59);
   const anyLeft=left.length>0,anyRight=right.length>0;
+  const paddedRect=(items,fallback)=>{
+    if(items.length<3)return fallback;
+    const x0=Math.min(...items.map(l=>l.box.x0)),x1=Math.max(...items.map(l=>l.box.x1));
+    const y0=Math.min(...items.map(l=>l.box.y0)),y1=Math.max(...items.map(l=>l.box.y1));
+    const padX=width*.035,padY=height*.06;
+    const leftX=clamp(x0-padX,0,width-1),upperY=clamp(y0-padY,0,height-1);
+    return rect(leftX/width,upperY/height,
+      Math.min(width-leftX,x1-x0+2*padX)/width,
+      Math.min(height-upperY,y1-y0+2*padY)/height);
+  };
   // Never assume OCR captured non-text graphics. First version ALWAYS retains source image crops.
   // Real slides may have large images even when OCR sees no text.
   const panels=[
-    {id:'left',label:'Основная часть',rect:rect(.035,.165,.555,.685),text:left.map(l=>l.text).join(' ').slice(0,900)},
-    {id:'right',label:'Пояснения',rect:rect(.59,.165,.375,.685),text:right.map(l=>l.text).join(' ').slice(0,900)}
+    {id:'left',label:'Основная часть',rect:paddedRect(left,rect(.035,.165,.555,.685)),
+       text:left.map(l=>l.text).join(' ').slice(0,900),lines:left.filter(l=>l.confidence>=75).map(l=>l.text).slice(0,24)},
+    {id:'right',label:'Пояснения',rect:paddedRect(right,rect(.59,.165,.375,.685)),
+       text:right.map(l=>l.text).join(' ').slice(0,900),lines:right.filter(l=>l.confidence>=75).map(l=>l.text).slice(0,24)}
   ];
   if(!anyLeft&&!anyRight)return {title:'',panels,hasOcr:false};
   return {title,panels,hasOcr:true};
