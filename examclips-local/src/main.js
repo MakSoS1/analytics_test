@@ -198,9 +198,9 @@ $('analyze-scene').onclick=async()=>{
   abort=new AbortController();setBusy(true);
   try{
     const lang=$('language').value==='ru'?'ru':'en';
-    const {scene,recognizedLines,note}=await analyzeScene(media,c,chunks,{language:lang,onProgress:status,signal:abort.signal});
+    const {scene,recognizedLines,note,sceneCount}=await analyzeScene(media,c,chunks,{language:lang,onProgress:status,signal:abort.signal});
     c.scene=scene;c.layout='hybrid';c.speakerPreset='auto';$('speaker-preset').value='auto';$('layout').value='hybrid';
-    $('scene-hint').textContent='Областей: '+scene.panels.length+', OCR строк: '+recognizedLines+
+    $('scene-hint').textContent='Сцен: '+sceneCount+', областей: '+scene.panels.length+', OCR строк: '+recognizedLines+
       '. Метод: '+scene.method+'. '+note;
     status('Композиция построена на устройстве. Проверьте схему, формулы и вебку.');
   }catch(e){if(e.name==='AbortError')status('Анализ отменён');else error(e)}
