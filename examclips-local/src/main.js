@@ -6,6 +6,7 @@ import {paintFrame,WIDTH,HEIGHT} from './composition.js';
 import {exportClip} from './render.js';
 import {analyzeScene} from './scene-analysis.js';
 import {makeStoryboard} from './scene-model.js';
+import {captionCueAt} from './editorial-motion.js';
 const root=document.querySelector('#app');
 root.innerHTML=`
 <header class="top"><div class="brand"><span class="brand-icon">✦</span> ExamClips <span class="pill">LOCAL MVP</span></div><div class="privacy">◈ Исходники остаются на устройстве</div></header>
@@ -34,7 +35,11 @@ root.innerHTML=`
         <label>Заголовок<input id="clip-title" disabled maxlength="90"></label>
         <div class="two"><label>Начало, сек<input type="number" id="clip-start" min="0" step=".1" disabled></label><label>Конец, сек<input type="number" id="clip-end" min="0" step=".1" disabled></label></div>
         <label>Композиция<select id="layout" disabled><option value="hybrid">AI-композиция: объекты + вебка</option><option value="fit">Исходный слайд целиком</option><option value="focus">Акцент на выбранной области</option><option value="crop">Заполнить вертикальный кадр</option></select></label>
-        <button id="analyze-scene" disabled>✧ Распознать доску (локальный OCR)</button><p class="hint" id="scene-hint">AI-композиция использует оригинальные области слайда. OCR включается по кнопке, первый раз скачивает языковую модель.</p><label>Расположение вебки<select id="speaker-preset" disabled>
+        <button id="analyze-scene" disabled>✧ Распознать доску (локальный OCR)</button><p class="hint" id="scene-hint">AI-композиция использует оригинальные области слайда. OCR включается по кнопке, первый раз скачивает языковую модель.</p><label>Визуальный стиль<select id="style-theme" disabled>
+<option value="warm">Warm Classroom — светлый</option>
+<option value="midnight">Midnight Notes — тёмный</option>
+</select></label>
+<label>Расположение вебки<select id="speaker-preset" disabled>
 <option value="auto">Авто: по движению / справа внизу</option>
 <option value="right">Справа внизу</option><option value="left">Слева внизу</option>
 <option value="top-right">Справа вверху</option><option value="top-left">Слева вверху</option>
@@ -62,7 +67,7 @@ function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)
 function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
-  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset'])$(id).disabled=!clip||busy;
+  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme'])$(id).disabled=!clip||busy;
   for(const id of ['save-srt','save-project','add'])$(id).disabled=!has||busy;
   $('transcript').disabled=!has||busy;$('cancel').disabled=!busy;
 }
@@ -87,7 +92,7 @@ function sync(){
   renderClips();const c=current();if(!c)return;
   $('selected-title').textContent='Ролик '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
-  $('layout').value=c.layout;$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
+  $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
   $('player').currentTime=c.start;
 }
 function setBusy(v){busy=v;enable()}
@@ -130,7 +135,7 @@ $('transcribe').onclick=async()=>{
     const limit=$('asr-limit').value==='all'?Infinity:Number($('asr-limit').value);
     chunks=await transcribe(media,{limit,language:$('language').value,onProgress:status,signal:abort.signal});
     if(!chunks.length)throw Error('Распознавание не вернуло слов. Попробуйте импортировать SRT.');
-    clips=buildClips(chunks,media.duration);selected=0;$('transcript').value=toSrt(chunks);sync();
+    clips=buildClips(chunks,media.duration).map(c=>({...c,layout:'hybrid'}));selected=0;$('transcript').value=toSrt(chunks);sync();
     status(`Готово: ${chunks.length} реплик и ${clips.length} клипов. Проверьте границы вручную.`);
   }catch(e){if(e.name==='AbortError')status('Распознавание остановлено');else error(e)}finally{abort=null;setBusy(false)}
 };
@@ -184,6 +189,12 @@ const speakerPresets={
  'top-right':{x:.80,y:0,w:.20,h:.18},
  'top-left':{x:0,y:0,w:.20,h:.18}
 };
+$('style-theme').onchange=()=>{
+ const c=current();if(!c||!media)return;
+ if(!c.scene)c.scene=makeStoryboard({width:media.width,height:media.height,duration:c.end-c.start});
+ c.scene.theme=$('style-theme').value==='midnight'?'midnight':'warm';
+ status('Визуальный стиль изменён, экспорт останется локальным');
+};
 $('speaker-preset').onchange=()=>{
  const c=current();if(!c||!media)return;
  c.speakerPreset=$('speaker-preset').value;
@@ -201,7 +212,7 @@ $('analyze-scene').onclick=async()=>{
   try{
     const lang=$('language').value==='ru'?'ru':'en';
     const {scene,recognizedLines,note,sceneCount}=await analyzeScene(media,c,chunks,{language:lang,onProgress:status,signal:abort.signal});
-    c.scene=scene;c.layout='hybrid';c.speakerPreset='auto';$('speaker-preset').value='auto';$('layout').value='hybrid';
+    scene.theme=c.scene?.theme||'warm';c.scene=scene;c.layout='hybrid';c.speakerPreset='auto';$('speaker-preset').value='auto';$('layout').value='hybrid';
     $('scene-hint').textContent='Сцен: '+sceneCount+', областей: '+scene.panels.length+', OCR строк: '+recognizedLines+
       '. Метод: '+scene.method+'. '+note;
     status('Композиция построена на устройстве. Проверьте схему, формулы и вебку.');
@@ -221,7 +232,7 @@ $('export').onclick=async()=>{
 function loop(){
   const video=$('player'),c=current();
   if(media&&c&&video.readyState>=2){
-    const caption=textAt(chunks,video.currentTime);
+    const caption=captionCueAt(chunks,video.currentTime);
     try{paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,c.scene||null,Math.max(0,video.currentTime-c.start))}catch{}
   }
   previewRaf=requestAnimationFrame(loop);
