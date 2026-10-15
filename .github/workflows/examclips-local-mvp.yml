@@ -28,7 +28,7 @@ jobs:
       - name: Generate deterministic AV fixture
         run: |
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=15 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 4 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac test-fixture.mp4
-          printf '%s\\n' '1' '00:00:00,000 --> 00:00:02,000' 'Docker example' '' '2' '00:00:02,000 --> 00:00:04,000' 'Next step' > test-fixture.srt
+          printf '%s\n' '1' '00:00:00,000 --> 00:00:02,000' 'Docker example' '' '2' '00:00:02,000 --> 00:00:04,000' 'Next step' > test-fixture.srt
       - name: Generate video with a moving teacher window on a static board
         run: |
           ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=white:s=640x360:r=15 -f lavfi -i testsrc2=s=128x72:r=15 -f lavfi -i sine=frequency=442:sample_rate=48000 -filter_complex '[0:v][1:v]overlay=x=510:y=278:shortest=1:format=auto,format=yuv420p[v]' -map '[v]' -map 2:a -t 4 -c:v libx264 -preset ultrafast -c:a aac presenter-motion-fixture.mp4
