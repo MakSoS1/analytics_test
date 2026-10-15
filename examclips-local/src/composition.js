@@ -44,8 +44,10 @@ function drawSourceRegion(ctx,src,region,dx,dy,dw,dh,sw,sh){
 function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.closePath()}
 export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
   const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
-  const spec=assertScene(scene)?scene:makeStoryboard({width:sw,height:sh,duration:60});
-  const active=sceneAt(spec,Math.max(0,elapsed)).focus;
+  const chapter=scene?.chapters?.findLast(item=>item.start<=elapsed) || null;
+  const spec=assertScene(chapter?.scene)?chapter.scene:
+    (assertScene(scene)?scene:makeStoryboard({width:sw,height:sh,duration:60}));
+  const active=sceneAt(spec,Math.max(0,elapsed-(chapter?.start||0))).focus;
   const panel=spec.panels[active]||spec.panels[0];
   c.fillStyle='#f7f9fd';c.fillRect(0,0,w,h);
   c.fillStyle='#e9edf5';c.fillRect(0,0,w,10);
