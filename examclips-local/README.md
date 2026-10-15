@@ -80,3 +80,17 @@ Open DevTools → Network. After the model is cached, disable networking, reload
 ## Next steps
 
 See `docs/superpowers/specs/2026-10-15-examclips-browser-mvp-design.md` and `docs/superpowers/plans/2026-10-15-examclips-browser-mvp.md`.
+
+
+## Editorial polish (2026-10-15, experimental)
+Default is a source-faithful 9:16 learning video with an OCR title, single education hero panel, eased attention transitions, compact presenter PiP, and a caption safety area. Choose Warm Classroom or Midnight Notes in the visual style selector.
+
+- No third-party Remotion/HyperFrames runtime: the frame-based principles from their public Agent Skills are adapted to Canvas/WebCodecs. Source frames never leave the user's device.
+- Text is fit by measuring rendered line widths and available height; never duplicate the original slide header screenshot above a retyped header.
+- Longer SRT/ASR captions display as timed, shorter visual cues while preserving the original SRT in exported data. Their intermediate boundaries are approximate, not actual word timestamps.
+- Formula and diagram authenticity takes precedence over good-looking but erroneous vector redraw.
+- Tests: 27 unit tests and Chrome screenshots at two distinct content beats plus dark theme; browser H264+AAC video validation in dedicated CI.
+- Browser screenshots and synthetic-test MP4 available from GitHub Actions run artifacts; full lecture artistic quality still requires manual acceptance.
+
+Agent-specific reusable editorial instructions: [.agents/skills/examclips-editorial/SKILL.md](../../.agents/skills/examclips-editorial/SKILL.md). No external arbitrary installer scripts are run.
+References: https://github.com/remotion-dev/skills ; https://github.com/Liamrjohnston/remotion-motion-graphics-skill ; https://github.com/gitethanwoo/video-editing
