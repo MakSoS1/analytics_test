@@ -66,7 +66,7 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
       c.fillStyle='#20304b';c.font='bold 26px system-ui';c.textAlign='left';
       let yy=702;
       for(const line of reflow.lines.slice(0,6)){
-        const words=line.trim().split(/\\s+/);let accum='';
+        const words=line.trim().split(/\s+/);let accum='';
         for(const word of words){const joined=(accum?accum+' ':'')+word;
           if(c.measureText(joined).width>w-130&&accum){c.fillText(accum,61,yy);yy+=36;accum=word}else accum=joined}
         if(accum){c.fillText(accum,61,yy);yy+=38}
@@ -77,7 +77,7 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
       c.fillStyle='#17263c';c.font='bold 33px system-ui';c.textAlign='left';
       let yy=260;
       for(const line of reflow.lines.slice(0,10)){
-        const words=line.trim().split(/\\s+/);let accum='';
+        const words=line.trim().split(/\s+/);let accum='';
         for(const word of words){const joined=(accum?accum+' ':'')+word;
           if(c.measureText(joined).width>w-125&&accum){c.fillText(accum,55,yy);yy+=45;accum=word}else accum=joined}
         if(accum){c.fillText(accum,55,yy);yy+=49}
