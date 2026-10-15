@@ -1,7 +1,7 @@
 name: ExamClips Local MVP CI
 on:
   push:
-    branches: [feat/examclips-local-mvp-20261015]
+    branches: [feat/examclips-local-mvp-20261015, feat/examclips-hybrid-composer-20261015]
     paths: ['examclips-local/**', 'docs/superpowers/**', '.github/workflows/examclips-local-mvp.yml']
   pull_request:
     paths: ['examclips-local/**', 'docs/superpowers/**', '.github/workflows/examclips-local-mvp.yml']
