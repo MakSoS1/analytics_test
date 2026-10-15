@@ -16,7 +16,18 @@ try{
   await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:30000});
   const fileNote=await page.locator('#file-note').innerText();assert.match(fileNote,/test-fixture\.mp4/);
   await page.locator('#srt-file').setInputFiles(srt);
-  await page.waitForFunction(()=>!document.querySelector('#export').disabled,{timeout:30000});
+  try{await page.waitForFunction(()=>!document.querySelector('#export').disabled,{timeout:12000})}
+  catch(error){
+    const snapshot=await page.evaluate(()=>({
+      progress:document.querySelector('#progress')?.textContent,
+      status:document.querySelector('#status')?.textContent,
+      clips:document.querySelector('#clip-count')?.textContent,
+      srt:document.querySelector('#transcript')?.value?.slice(0,180),
+      disabled:document.querySelector('#export')?.disabled,
+      coverage:document.querySelector('#topic-coverage')?.textContent
+    }));
+    throw new Error('Export remains disabled after SRT import: '+JSON.stringify(snapshot)+'; errors='+errors.join(' | '));
+  }
   const count=await page.locator('#clip-count').innerText();assert.equal(count,'1');
   const title=await page.locator('#clip-title').inputValue();assert.ok(title.length>0);
   await page.locator('#layout').selectOption('hybrid');
