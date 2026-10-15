@@ -2,12 +2,14 @@ import {Output,Mp4OutputFormat,BufferTarget,CanvasSource,AudioSampleSink,AudioSa
 import {paintFrame,WIDTH,HEIGHT} from './composition.js';
 import {validRange} from './segments.js';
 import {captionCueAt} from './editorial-motion.js';
-export async function exportClip(media,clip,chunks,{fps=15,onProgress=()=>{},signal}={}){
+export async function exportClip(media,clip,chunks,{quality='standard',onProgress=()=>{},signal}={}){
+  const high=quality==='high',fps=high?30:15;
+  const outWidth=high?1080:WIDTH,outHeight=high?1920:HEIGHT;
   if(!validRange(clip.start,clip.end,media.duration))throw Error('Неверные границы клипа');
   if(typeof VideoEncoder==='undefined')throw Error('WebCodecs VideoEncoder недоступен. Нужен современный браузер.');
   if(media.audioTrack&&!(await canEncodeAudio('aac'))){const {registerAacEncoder}=await import('@mediabunny/aac-encoder');registerAacEncoder()}
 
-  const canvas=document.createElement('canvas');canvas.width=WIDTH;canvas.height=HEIGHT;
+  const canvas=document.createElement('canvas');canvas.width=outWidth;canvas.height=outHeight;
   const target=new BufferTarget(),output=new Output({format:new Mp4OutputFormat(),target});
   const videoSource=new CanvasSource(canvas,{codec:'avc',quality:new Quality('high')});
   output.addVideoTrack(videoSource);
