@@ -1,7 +1,7 @@
 name: ExamClips On-device Whisper Smoke
 on:
   push:
-    branches: [feat/examclips-local-mvp-20261015]
+    branches: [feat/examclips-local-mvp-20261015, feat/examclips-microtopics-live-presenter-20261016]
     paths: ['.github/workflows/examclips-whisper-smoke.yml', 'examclips-local/src/asr.js', 'examclips-local/scripts/whisper-smoke.mjs']
   workflow_dispatch:
 permissions:
