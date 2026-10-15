@@ -37,7 +37,7 @@ export async function sampleSlideCuts(media,clip,{signal,onProgress=()=>{},sampl
       samples.push({time:t,width:w,height:h,rgba:ctx.getImageData(0,0,w,h).data.slice()});
    }finally{sample.close()}
  }
- const cuts=detectSceneCuts(samples);
+ const cuts=detectSceneCuts(samples,{maxScenes:Math.min(120,Math.max(6,Math.ceil(duration/30)))});
  onProgress('Смены слайдов: '+Math.max(0,cuts.length-1));
  return cuts;
 }
