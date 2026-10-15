@@ -30,12 +30,12 @@
 
 ### 2. Scene extraction
 - [x] Add `src/scene-analysis.js` with optional local Tesseract.js and lazy language download.
-- [ ] Upgrade frame analysis to detect slide transitions and vector diagram semantics, after independent accuracy evaluation.
+- [x] Detect coarse slide transitions by frame difference and produce per-slide OCR chapters.\n- [ ] Improve temporal localization and understand vector diagrams after independent accuracy evaluation.
 
 ### 3. Vertical compositor
 - [x] Replace default horizontal fit composition with per-beat original-pixel crop recomposition.
 - [x] Add independent webcam pixel layer, safe subtitle handling and source title crop.
-- [ ] Add manual speaker detection ROI controls and improved layout solver.
+- [x] Add basic camera corner presets and hide control.\n- [ ] Add drag-to-select freeform camera region and richer layout solver.
 
 ### 4. Integrate browser editor and export
 - [x] Per-clip `scene` schema, selector for hybrid, Analyze Board action.
