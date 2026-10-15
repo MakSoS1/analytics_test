@@ -18,11 +18,19 @@ function distance(left,right){
  return clamp(1-overlap/(a.size+b.size-overlap),0,1);
 }
 function extractTitle(rows,index){
- // Only words found in the transcript, no generated claims or synthetic text.
- const picked=rows.slice(index,index+4).map(c=>c.text).join(' ').replace(/\s+/g,' ').trim()
-    .replace(/^(?:ну|вот|значит|so|well|okay|ладно)[,.\s]+/iu,'');
- const firstSentence=picked.split(/(?<=[.!?…])\s+/u)[0]||picked;
- return titleFromText(firstSentence.slice(0,140))||'Микротема: требуется заголовок';
+ // Prefer a content-bearing sentence over "now let's move to another topic".
+ // Strictly extract text from the transcript, never generate imaginary explanations.
+ const picked=rows.slice(index,index+7).map(c=>c.text).join(' ').replace(/\s+/g,' ').trim();
+ const sentences=picked.split(/(?<=[.!?…])\s+/u).map(x=>x.trim()).filter(Boolean);
+ const generic=/^(?:теперь|далее|давайте|перейд[её]м|следующ|ну|вот|и вот|как вы видите|so now|moving on|let us|let's)/iu;
+ const ranked=sentences.map((sentence,k)=>{
+   const words=tokens(sentence);
+   const specific=new Set(words.filter(word=>word.length>=5));
+   const score=specific.size*1.5+(words.length>=4?2:0)-(generic.test(sentence)?3.8:0)-k*.32;
+   return {sentence,score};
+ }).sort((x,y)=>y.score-x.score);
+ const candidate=ranked[0]?.sentence||picked;
+ return titleFromText(candidate.slice(0,145))||'Микротема: требуется заголовок';
 }
 export function boundaryQuality(rows,index){
  if(index<0||index>=rows.length-1)return 0;
