@@ -44,5 +44,6 @@ jobs:
             examclips-local/dist/
             examclips-local/smoke-ui.png
             examclips-local/smoke-output.mp4
+            examclips-local/smoke-output-high.mp4
             examclips-local/editorial-*.png
           if-no-files-found: error
