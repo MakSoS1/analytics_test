@@ -34,7 +34,12 @@ root.innerHTML=`
         <label>Заголовок<input id="clip-title" disabled maxlength="90"></label>
         <div class="two"><label>Начало, сек<input type="number" id="clip-start" min="0" step=".1" disabled></label><label>Конец, сек<input type="number" id="clip-end" min="0" step=".1" disabled></label></div>
         <label>Композиция<select id="layout" disabled><option value="hybrid">AI-композиция: объекты + вебка</option><option value="fit">Исходный слайд целиком</option><option value="focus">Акцент на выбранной области</option><option value="crop">Заполнить вертикальный кадр</option></select></label>
-        <button id="analyze-scene" disabled>✧ Распознать доску (локальный OCR)</button><p class="hint" id="scene-hint">AI-композиция использует оригинальные области слайда. OCR включается по кнопке, первый раз скачивает языковую модель.</p><label>Горизонтальный фокус <span id="focus-value">50%</span><input id="focus" type="range" min="0" max="100" value="50" disabled></label>
+        <button id="analyze-scene" disabled>✧ Распознать доску (локальный OCR)</button><p class="hint" id="scene-hint">AI-композиция использует оригинальные области слайда. OCR включается по кнопке, первый раз скачивает языковую модель.</p><label>Расположение вебки<select id="speaker-preset" disabled>
+<option value="auto">Авто: по движению / справа внизу</option>
+<option value="right">Справа внизу</option><option value="left">Слева внизу</option>
+<option value="top-right">Справа вверху</option><option value="top-left">Слева вверху</option>
+<option value="none">Без вебки</option></select></label>
+<label>Горизонтальный фокус <span id="focus-value">50%</span><input id="focus" type="range" min="0" max="100" value="50" disabled></label>
         <div class="buttons"><button id="play-clip" disabled>▶ Просмотреть клип</button><button class="primary" id="export" disabled>↓ Экспорт MP4</button></div>
         <div class="buttons"><button id="add" disabled>+ Добавить клип</button><button id="remove" disabled>Удалить</button></div>
         <div class="divider"></div>
@@ -57,7 +62,7 @@ function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)
 function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
-  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene'])$(id).disabled=!clip||busy;
+  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset'])$(id).disabled=!clip||busy;
   for(const id of ['save-srt','save-project','add'])$(id).disabled=!has||busy;
   $('transcript').disabled=!has||busy;$('cancel').disabled=!busy;
 }
@@ -82,7 +87,7 @@ function sync(){
   renderClips();const c=current();if(!c)return;
   $('selected-title').textContent='Ролик '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
-  $('layout').value=c.layout;$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
+  $('layout').value=c.layout;$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
   $('player').currentTime=c.start;
 }
 function setBusy(v){busy=v;enable()}
@@ -173,13 +178,28 @@ $('project-file').onchange=async e=>{
     $('video-file').click();
   }catch(err){error(err)}
 };
+
+const speakerPresets={
+ right:{x:.80,y:.82,w:.20,h:.18},left:{x:0,y:.82,w:.20,h:.18},
+ 'top-right':{x:.80,y:0,w:.20,h:.18},
+ 'top-left':{x:0,y:0,w:.20,h:.18}
+};
+$('speaker-preset').onchange=()=>{
+ const c=current();if(!c||!media)return;
+ c.speakerPreset=$('speaker-preset').value;
+ if(!c.scene)c.scene=makeStoryboard({width:media.width,height:media.height,duration:c.end-c.start});
+ if(speakerPresets[c.speakerPreset])c.scene.speaker={...speakerPresets[c.speakerPreset]};
+ if(c.speakerPreset==='none')c.scene.hideSpeaker=true;
+ else {c.scene.hideSpeaker=false;if(c.speakerPreset==='auto')c.scene.speaker={x:.815,y:.854,w:.18,h:.14}}
+ status('Область вебки обновлена локально');
+};
 $('analyze-scene').onclick=async()=>{
   const c=current();if(!media||!c)return;
   abort=new AbortController();setBusy(true);
   try{
     const lang=$('language').value==='ru'?'ru':'en';
     const {scene,recognizedLines,note}=await analyzeScene(media,c,chunks,{language:lang,onProgress:status,signal:abort.signal});
-    c.scene=scene;c.layout='hybrid';$('layout').value='hybrid';
+    c.scene=scene;c.layout='hybrid';c.speakerPreset='auto';$('speaker-preset').value='auto';$('layout').value='hybrid';
     $('scene-hint').textContent='Областей: '+scene.panels.length+', OCR строк: '+recognizedLines+
       '. Метод: '+scene.method+'. '+note;
     status('Композиция построена на устройстве. Проверьте схему, формулы и вебку.');
