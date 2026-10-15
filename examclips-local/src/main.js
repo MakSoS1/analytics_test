@@ -75,6 +75,7 @@ root.innerHTML=`
 <option value="high">Качественно — 1080×1920, 30 FPS</option>
 </select></label>
 <div class="buttons"><button id="play-clip" disabled>▶ Просмотреть клип</button><button class="primary" id="export" disabled>↓ Экспорт MP4</button></div>
+<button id="export-all" disabled>↓ Экспортировать все микротемы в папку</button>
         <div class="buttons">
   <button id="extend-start" disabled>← Ещё 15 сек в начале</button>
   <button id="extend-end" disabled>Ещё 15 сек в конце →</button>
@@ -107,6 +108,7 @@ function enable(){
   $('scan-chapters').disabled=!has||busy;
   $('forget-asr').disabled=!has||busy;
   $('suggest-topics').disabled=!has||busy||!chunks.length;
+  $('export-all').disabled=!has||busy||!chunks.length||clips.every(c=>c.id==='draft-1');
   $('verify-topic').disabled=!clip||busy||!chunks.length||current()?.id==='draft-1';
   $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
     !((current()?.llmReview?.suggestedStartDelta||0)||(current()?.llmReview?.suggestedEndDelta||0));
@@ -400,6 +402,39 @@ $('analyze-scene').onclick=async()=>{
     status('Композиция построена на устройстве. Проверьте схему, формулы и вебку.');
   }catch(e){if(e.name==='AbortError')status('Анализ отменён');else error(e)}
   finally{abort=null;setBusy(false)}
+};
+$('export-all').onclick=async()=>{
+ if(!media||!clips.length||!chunks.length)return;
+ if(typeof window.showDirectoryPicker!=='function'){
+   status('Для пакетного экспорта выберите Chrome или Edge, поддерживающий выбор папки. Один MP4 можно сохранить отдельно.');
+   return;
+ }
+ let dir;
+ try{dir=await window.showDirectoryPicker({mode:'readwrite'})}
+ catch(e){if(e.name!=='AbortError')error(e);return}
+ const work=clips.filter(c=>c.id!=='draft-1').map(c=>structuredClone(c));
+ if(!work.length)return;
+ abort=new AbortController();setBusy(true);
+ let exported=0;
+ try{
+   for(const clip of work){
+     if(abort.signal.aborted)throw new DOMException('Stopped','AbortError');
+     status('Экспорт '+(exported+1)+'/'+work.length+': '+clip.title);
+     const blob=await exportClip(media,clip,chunks,{quality:$('output-quality').value,signal:abort.signal,
+       onProgress:m=>status((exported+1)+'/'+work.length+' · '+m)});
+     const name=String(exported+1).padStart(2,'0')+'_'+safeName(clip.title)+
+       (clip.status==='approved'?'':'_DRAFT')+'.mp4';
+     const handle=await dir.getFileHandle(name,{create:true});
+     const writable=await handle.createWritable();
+     try{await writable.write(blob);await writable.close()}
+     catch(e){try{await writable.abort()}catch{}throw e}
+     exported++;
+   }
+   status('Экспортировано '+exported+' микротем локально в выбранную папку.');
+ }catch(e){
+   if(e.name==='AbortError')status('Экспорт прерван; записано '+exported+' из '+work.length+' файлов.');
+   else error(e);
+ }finally{abort=null;setBusy(false)}
 };
 $('export').onclick=async()=>{
   const c=current();if(!media||!c)return;
