@@ -51,6 +51,11 @@ jobs:
       - name: Editorial visual QA — three real rendered scenes
         run: |
           node scripts/editorial-visual-smoke.mjs
+      - name: Production preview and optional local Ollama bridge
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 5182 > /tmp/examclips-preview.log 2>&1 &
+          sleep 3
+          EXAMCLIPS_ORIGIN=http://127.0.0.1:5182 node scripts/local-review-smoke.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: examclips-local-dist
