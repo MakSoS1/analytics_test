@@ -14,7 +14,8 @@
   "dependencies": {
     "@huggingface/transformers": "4.3.1",
     "mediabunny": "1.61.4",
-    "@mediabunny/aac-encoder": "1.61.4"
+    "@mediabunny/aac-encoder": "1.61.4",
+    "tesseract.js": "6.0.1"
   },
   "devDependencies": {
     "vite": "8.3.4",
