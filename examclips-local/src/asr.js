@@ -3,9 +3,13 @@ import {isSilent} from './audio-utils.js';
 import {normalizeCheckpoint,remainingWindows} from './asr-checkpoint.js';
 // First use of this module downloads the Whisper model from Hugging Face.
 // Media/audio remains local: the ASR pipeline receives only Float32Arrays.
-let transcriber=null,deviceName=null;
-export async function getTranscriber(onProgress=()=>{}){
-  if(transcriber)return {transcriber,deviceName};
+let transcriber=null,deviceName=null,activeModel=null;
+const MODEL_IDS={tiny:'onnx-community/whisper-tiny',base:'onnx-community/whisper-base'};
+export async function getTranscriber(onProgress=()=>{},model='tiny'){
+  const modelId=MODEL_IDS[model];
+  if(!modelId)throw Error('Неизвестная модель распознавания речи');
+  if(transcriber&&activeModel===modelId)return {transcriber,deviceName};
+  if(transcriber){try{await transcriber.dispose?.()}catch{}transcriber=null;deviceName=null}
   const {pipeline,env}=await import('@huggingface/transformers');
   env.allowRemoteModels=true;
   // navigator.gpu can exist in software/headless browsers with no usable adapter.
@@ -13,17 +17,17 @@ export async function getTranscriber(onProgress=()=>{}){
   let last;
   for(const device of webgpu?['webgpu','wasm']:['wasm']){
     try{
-      onProgress('Загрузка Whisper tiny ('+device+'). При первом запуске скачиваются веса модели.');
-      transcriber=await pipeline('automatic-speech-recognition','onnx-community/whisper-tiny',{
+      onProgress('Загрузка '+modelId+' ('+device+'). При первом запуске скачиваются веса модели.');
+      transcriber=await pipeline('automatic-speech-recognition',modelId,{
         device,progress_callback:e=>{if(e.status==='progress'&&e.progress!==undefined)onProgress(`Модель: ${Math.round(e.progress)}%`)}
       });
-      deviceName=device;return {transcriber,deviceName}
+      deviceName=device;activeModel=modelId;return {transcriber,deviceName}
     }catch(e){last=e;onProgress('Режим '+device+' недоступен: '+e.message)}
   }
   throw last||Error('ASR unavailable');
 }
 export async function transcribe(media,{
- limit=Infinity,language='auto',onProgress=()=>{},signal,
+ limit=Infinity,language='auto',model='tiny',onProgress=()=>{},signal,
  resume=null,onCheckpoint=async()=>{}
 }={}){
  const until=Math.min(media.duration,limit);
@@ -35,7 +39,7 @@ export async function transcribe(media,{
   onProgress('Все запрошенные аудиоокна уже распознаны из локального кэша.');
   return chunks.sort((a,b)=>a.start-b.start);
  }
- const {transcriber:t}=await getTranscriber(onProgress);
+ const {transcriber:t}=await getTranscriber(onProgress,model);
  for(const start of pending){
    if(signal?.aborted)throw new DOMException('Stopped','AbortError');
    const end=Math.min(until,start+30);
