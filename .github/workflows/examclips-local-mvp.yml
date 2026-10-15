@@ -45,6 +45,9 @@ jobs:
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-vite.log 2>&1 &
           sleep 4
           npm run smoke
+      - name: Batch export whole series to local folder
+        run: |
+          node scripts/batch-export-smoke.mjs
       - name: Presenter must move in exported MP4
         run: |
           node scripts/presenter-motion-smoke.mjs
