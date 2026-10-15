@@ -19,7 +19,7 @@ try{
   await page.waitForFunction(()=>!document.querySelector('#export').disabled,{timeout:30000});
   const count=await page.locator('#clip-count').innerText();assert.equal(count,'1');
   const title=await page.locator('#clip-title').inputValue();assert.ok(title.length>0);
-  await page.locator('#layout').selectOption('fit');
+  await page.locator('#layout').selectOption('hybrid');
   await page.screenshot({path:resolve(cwd,'smoke-ui.png'),fullPage:true});
   const support=await page.evaluate(()=>typeof VideoEncoder!=='undefined');
   if(support){
@@ -32,6 +32,22 @@ try{
       assert.ok(info.streams.some(s=>s.codec_type==='video'&&s.width===720&&s.height===1280));
       assert.ok(info.streams.some(s=>s.codec_type==='audio'));
       console.log('MP4_SMOKE_SUCCESS',info.format.duration,info.format.size);
+      await page.locator('#output-quality').selectOption('high');
+      const [hdDownload]=await Promise.all([
+        page.waitForEvent('download',{timeout:120000}),
+        page.locator('#export').click()
+      ]);
+      const hdDestination=resolve(cwd,'smoke-output-high.mp4');
+      await hdDownload.saveAs(hdDestination);
+      const hdInfo=JSON.parse(execFileSync('ffprobe',[
+        '-v','error','-show_entries','format=duration:stream=codec_type,codec_name,width,height,r_frame_rate',
+        '-of','json',hdDestination],{encoding:'utf-8'}));
+      assert.ok(hdInfo.format.duration>2&&hdInfo.format.duration<5);
+      assert.ok(hdInfo.streams.some(s=>s.codec_type==='video'&&s.width===1080&&s.height===1920));
+      assert.ok(hdInfo.streams.some(s=>s.codec_type==='audio'));
+      execFileSync('ffmpeg',['-v','error','-i',hdDestination,'-f','null','-']);
+      console.log('FULLHD_MP4_SMOKE_SUCCESS',hdInfo.format.duration);
+
     }catch(err){
       console.error('MP4_SMOKE_FAILURE',err.message,await page.locator('#progress').innerText());
       throw err;

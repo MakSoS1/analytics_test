@@ -1,12 +1,15 @@
 import {Output,Mp4OutputFormat,BufferTarget,CanvasSource,AudioSampleSink,AudioSampleSource,Quality,canEncodeAudio} from 'mediabunny';
 import {paintFrame,WIDTH,HEIGHT} from './composition.js';
-import {textAt,validRange} from './segments.js';
-export async function exportClip(media,clip,chunks,{fps=15,onProgress=()=>{},signal}={}){
+import {validRange} from './segments.js';
+import {captionCueAt} from './editorial-motion.js';
+export async function exportClip(media,clip,chunks,{quality='standard',onProgress=()=>{},signal}={}){
+  const high=quality==='high',fps=high?30:15;
+  const outWidth=high?1080:WIDTH,outHeight=high?1920:HEIGHT;
   if(!validRange(clip.start,clip.end,media.duration))throw Error('Неверные границы клипа');
   if(typeof VideoEncoder==='undefined')throw Error('WebCodecs VideoEncoder недоступен. Нужен современный браузер.');
   if(media.audioTrack&&!(await canEncodeAudio('aac'))){const {registerAacEncoder}=await import('@mediabunny/aac-encoder');registerAacEncoder()}
 
-  const canvas=document.createElement('canvas');canvas.width=WIDTH;canvas.height=HEIGHT;
+  const canvas=document.createElement('canvas');canvas.width=outWidth;canvas.height=outHeight;
   const target=new BufferTarget(),output=new Output({format:new Mp4OutputFormat(),target});
   const videoSource=new CanvasSource(canvas,{codec:'avc',quality:new Quality('high')});
   output.addVideoTrack(videoSource);
@@ -21,7 +24,7 @@ export async function exportClip(media,clip,chunks,{fps=15,onProgress=()=>{},sig
       if(signal?.aborted)throw new DOMException('Stopped','AbortError');
       if(!sample)throw Error('Не удалось декодировать видеокадр '+i);
       try{
-        paintFrame(canvas,sample,sample.displayWidth,sample.displayHeight,clip.layout,clip.focusX,textAt(chunks,times[i]));
+        paintFrame(canvas,sample,sample.displayWidth,sample.displayHeight,clip.layout,clip.focusX,captionCueAt(chunks,times[i]),clip.scene||null,times[i]-clip.start);
         await videoSource.add(i/fps,Math.min(1/fps,(clip.end-clip.start)-i/fps));
       }finally{sample.close()}
       i++;if(i%30===0||i===frames)onProgress(`Видео ${i}/${frames} кадров`);

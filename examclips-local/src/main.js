@@ -4,6 +4,9 @@ import {transcribe} from './asr.js';
 import {buildClips,parseSrt,toSrt,validRange,timecode,textAt} from './segments.js';
 import {paintFrame,WIDTH,HEIGHT} from './composition.js';
 import {exportClip} from './render.js';
+import {analyzeScene} from './scene-analysis.js';
+import {makeStoryboard} from './scene-model.js';
+import {captionCueAt} from './editorial-motion.js';
 const root=document.querySelector('#app');
 root.innerHTML=`
 <header class="top"><div class="brand"><span class="brand-icon">✦</span> ExamClips <span class="pill">LOCAL MVP</span></div><div class="privacy">◈ Исходники остаются на устройстве</div></header>
@@ -31,9 +34,22 @@ root.innerHTML=`
         <div class="panel-title"><b id="selected-title">Настройки ролика</b><span class="muted" id="selected-time"></span></div>
         <label>Заголовок<input id="clip-title" disabled maxlength="90"></label>
         <div class="two"><label>Начало, сек<input type="number" id="clip-start" min="0" step=".1" disabled></label><label>Конец, сек<input type="number" id="clip-end" min="0" step=".1" disabled></label></div>
-        <label>Композиция<select id="layout" disabled><option value="fit">Сохранить весь слайд</option><option value="focus">Акцент на выбранной области</option><option value="crop">Заполнить вертикальный кадр</option></select></label>
-        <label>Горизонтальный фокус <span id="focus-value">50%</span><input id="focus" type="range" min="0" max="100" value="50" disabled></label>
-        <div class="buttons"><button id="play-clip" disabled>▶ Просмотреть клип</button><button class="primary" id="export" disabled>↓ Экспорт MP4</button></div>
+        <label>Композиция<select id="layout" disabled><option value="hybrid">AI-композиция: объекты + вебка</option><option value="fit">Исходный слайд целиком</option><option value="focus">Акцент на выбранной области</option><option value="crop">Заполнить вертикальный кадр</option></select></label>
+        <button id="analyze-scene" disabled>✧ Распознать доску (локальный OCR)</button><p class="hint" id="scene-hint">AI-композиция использует оригинальные области слайда. OCR включается по кнопке, первый раз скачивает языковую модель.</p><label>Визуальный стиль<select id="style-theme" disabled>
+<option value="warm">Warm Classroom — светлый</option>
+<option value="midnight">Midnight Notes — тёмный</option>
+</select></label>
+<label>Расположение вебки<select id="speaker-preset" disabled>
+<option value="auto">Авто: по движению / справа внизу</option>
+<option value="right">Справа внизу</option><option value="left">Слева внизу</option>
+<option value="top-right">Справа вверху</option><option value="top-left">Слева вверху</option>
+<option value="none">Без вебки</option></select></label>
+<label>Горизонтальный фокус <span id="focus-value">50%</span><input id="focus" type="range" min="0" max="100" value="50" disabled></label>
+        <label>Качество экспорта<select id="output-quality">
+<option value="standard">Быстро — 720×1280, 15 FPS</option>
+<option value="high">Качественно — 1080×1920, 30 FPS</option>
+</select></label>
+<div class="buttons"><button id="play-clip" disabled>▶ Просмотреть клип</button><button class="primary" id="export" disabled>↓ Экспорт MP4</button></div>
         <div class="buttons"><button id="add" disabled>+ Добавить клип</button><button id="remove" disabled>Удалить</button></div>
         <div class="divider"></div>
         <div class="panel-title"><b>Транскрипт и субтитры</b><button class="plain" id="save-srt" disabled>Скачать SRT</button></div>
@@ -55,7 +71,7 @@ function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)
 function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
-  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove'])$(id).disabled=!clip||busy;
+  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme'])$(id).disabled=!clip||busy;
   for(const id of ['save-srt','save-project','add'])$(id).disabled=!has||busy;
   $('transcript').disabled=!has||busy;$('cancel').disabled=!busy;
 }
@@ -80,7 +96,7 @@ function sync(){
   renderClips();const c=current();if(!c)return;
   $('selected-title').textContent='Ролик '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
-  $('layout').value=c.layout;$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
+  $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
   $('player').currentTime=c.start;
 }
 function setBusy(v){busy=v;enable()}
@@ -93,7 +109,7 @@ async function selectFile(file){
     if(originalUrl)URL.revokeObjectURL(originalUrl);
     media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
     $('file-note').textContent=`${file.name} · ${timecode(media.duration)} · ${media.width}×${media.height} · ${(file.size/1e6).toFixed(1)} МБ`;
-    clips=buildClips([],media.duration);chunks=[];selected=0;$('transcript').value='';
+    clips=buildClips([],media.duration).map(c=>({...c,layout:'hybrid'}));chunks=[];selected=0;$('transcript').value='';
     if(projectToRestore){
       const p=projectToRestore;projectToRestore=null;
       if(Math.abs(p.duration-media.duration)>2){status('Длительность видео не совпадает с проектом. Данные не импортированы.')}
@@ -114,7 +130,7 @@ $('srt-file').onchange=async e=>{
   if(!media)return;try{
     chunks=parseSrt(await e.target.files[0].text(),media.duration);
     if(!chunks.length)throw Error('Не найдены валидные интервалы SRT');
-    clips=buildClips(chunks,media.duration);selected=0;$('transcript').value=toSrt(chunks);sync();status('Импорт SRT завершён, ничего не отправлено на сервер');
+    clips=buildClips(chunks,media.duration).map(c=>({...c,layout:'hybrid'}));selected=0;$('transcript').value=toSrt(chunks);sync();status('Импорт SRT завершён, ничего не отправлено на сервер');
   }catch(err){error(err)}
 };
 $('transcribe').onclick=async()=>{
@@ -123,7 +139,7 @@ $('transcribe').onclick=async()=>{
     const limit=$('asr-limit').value==='all'?Infinity:Number($('asr-limit').value);
     chunks=await transcribe(media,{limit,language:$('language').value,onProgress:status,signal:abort.signal});
     if(!chunks.length)throw Error('Распознавание не вернуло слов. Попробуйте импортировать SRT.');
-    clips=buildClips(chunks,media.duration);selected=0;$('transcript').value=toSrt(chunks);sync();
+    clips=buildClips(chunks,media.duration).map(c=>({...c,layout:'hybrid'}));selected=0;$('transcript').value=toSrt(chunks);sync();
     status(`Готово: ${chunks.length} реплик и ${clips.length} клипов. Проверьте границы вручную.`);
   }catch(e){if(e.name==='AbortError')status('Распознавание остановлено');else error(e)}finally{abort=null;setBusy(false)}
 };
@@ -152,7 +168,7 @@ $('add').onclick=()=>{
   if(!media)return;const last=current();
   const start=last?Math.min(media.duration-1,Math.max(0,last.end)):0;
   const end=Math.min(media.duration,start+60);
-  clips.push({id:'clip-'+(clips.length+1),start,end,title:'Новый фрагмент',layout:'fit',focusX:50});
+  clips.push({id:'clip-'+(clips.length+1),start,end,title:'Новый фрагмент',layout:'hybrid',focusX:50});
   selected=clips.length-1;sync()
 };
 $('remove').onclick=()=>{if(!clips.length)return;clips.splice(selected,1);selected=Math.max(0,Math.min(selected,clips.length-1));sync()};
@@ -171,12 +187,48 @@ $('project-file').onchange=async e=>{
     $('video-file').click();
   }catch(err){error(err)}
 };
+
+const speakerPresets={
+ right:{x:.80,y:.82,w:.20,h:.18},left:{x:0,y:.82,w:.20,h:.18},
+ 'top-right':{x:.80,y:0,w:.20,h:.18},
+ 'top-left':{x:0,y:0,w:.20,h:.18}
+};
+$('style-theme').onchange=()=>{
+ const c=current();if(!c||!media)return;
+ if(!c.scene)c.scene=makeStoryboard({width:media.width,height:media.height,duration:c.end-c.start});
+ c.scene.theme=$('style-theme').value==='midnight'?'midnight':'warm';
+ status('Визуальный стиль изменён, экспорт останется локальным');
+};
+$('speaker-preset').onchange=()=>{
+ const c=current();if(!c||!media)return;
+ c.speakerPreset=$('speaker-preset').value;
+ if(!c.scene)c.scene=makeStoryboard({width:media.width,height:media.height,duration:c.end-c.start});
+ const scenes=[c.scene,...(c.scene.chapters||[]).map(ch=>ch.scene)];
+ for(const spec of scenes){
+   if(speakerPresets[c.speakerPreset])spec.speaker={...speakerPresets[c.speakerPreset]};
+   spec.hideSpeaker=c.speakerPreset==='none';
+ }
+ status('Область вебки обновлена локально');
+};
+$('analyze-scene').onclick=async()=>{
+  const c=current();if(!media||!c)return;
+  abort=new AbortController();setBusy(true);
+  try{
+    const lang=$('language').value==='ru'?'ru':'en';
+    const {scene,recognizedLines,note,sceneCount}=await analyzeScene(media,c,chunks,{language:lang,onProgress:status,signal:abort.signal});
+    scene.theme=c.scene?.theme||'warm';c.scene=scene;c.layout='hybrid';c.speakerPreset='auto';$('speaker-preset').value='auto';$('layout').value='hybrid';
+    $('scene-hint').textContent='Сцен: '+sceneCount+', областей: '+scene.panels.length+', OCR строк: '+recognizedLines+
+      '. Метод: '+scene.method+'. '+note;
+    status('Композиция построена на устройстве. Проверьте схему, формулы и вебку.');
+  }catch(e){if(e.name==='AbortError')status('Анализ отменён');else error(e)}
+  finally{abort=null;setBusy(false)}
+};
 $('export').onclick=async()=>{
   const c=current();if(!media||!c)return;
   abort=new AbortController();setBusy(true);
   try{
     status('Кодирование MP4 со звуком. В зависимости от ПК может занять несколько минут...');
-    const blob=await exportClip(media,c,chunks,{onProgress:status,signal:abort.signal});
+    const blob=await exportClip(media,c,chunks,{quality:$('output-quality').value,onProgress:status,signal:abort.signal});
     download(blob,safeName(c.title)+'.mp4');
     status('Экспорт завершён: '+(blob.size/1e6).toFixed(1)+' МБ');
   }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e)}finally{abort=null;setBusy(false)}
@@ -184,8 +236,8 @@ $('export').onclick=async()=>{
 function loop(){
   const video=$('player'),c=current();
   if(media&&c&&video.readyState>=2){
-    const caption=textAt(chunks,video.currentTime);
-    try{paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption)}catch{}
+    const caption=captionCueAt(chunks,video.currentTime);
+    try{paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,c.scene||null,Math.max(0,video.currentTime-c.start))}catch{}
   }
   previewRaf=requestAnimationFrame(loop);
 }

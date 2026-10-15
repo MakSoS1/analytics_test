@@ -1,0 +1,26 @@
+name: ExamClips Hybrid OCR Browser Acceptance
+on:
+  push:
+    branches: [feat/examclips-hybrid-composer-20261015]
+    paths: ['examclips-local/src/scene-analysis.js', 'examclips-local/src/scene-model.js', 'examclips-local/scripts/ocr-browser-smoke.mjs', '.github/workflows/examclips-hybrid-ocr.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chrome-ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: examclips-local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Browser-local Tesseract.js OCR and lecture panel boundaries
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/ocr-vite.log 2>&1 &
+          sleep 4
+          node scripts/ocr-browser-smoke.mjs
