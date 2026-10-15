@@ -6,7 +6,8 @@ export async function getTranscriber(onProgress=()=>{}){
   if(transcriber)return {transcriber,deviceName};
   const {pipeline,env}=await import('@huggingface/transformers');
   env.allowRemoteModels=true;
-  const webgpu=!!navigator.gpu;
+  // navigator.gpu can exist in software/headless browsers with no usable adapter.
+  const webgpu=!!(await navigator.gpu?.requestAdapter().catch(()=>null));
   let last;
   for(const device of webgpu?['webgpu','wasm']:['wasm']){
     try{
