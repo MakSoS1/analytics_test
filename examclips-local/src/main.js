@@ -91,6 +91,8 @@ function enable(){
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
   $('suggest-topics').disabled=!has||busy||!chunks.length;
   for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context'])$(id).disabled=!clip||busy;
+  // Never accidentally export the arbitrary, untranscribed loading placeholder as a finished micro-lesson.
+  $('export').disabled=!clip||busy||current()?.id==='draft-1';
   for(const id of ['save-srt','save-project','add'])$(id).disabled=!has||busy;
   $('transcript').disabled=!has||busy;$('cancel').disabled=!busy;
 }
