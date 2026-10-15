@@ -44,3 +44,11 @@ test('full lecture not invented when ASR only covered first minutes',()=>{
 test('invalid segmentation configuration rejected',()=>{
  assert.throws(()=>buildMicrotopics(lecture(),960,{min:60,target:200,max:180}));
 });
+
+test('title favors actual lesson subject, not an empty transition',()=>{
+ const c=buildMicrotopics([
+  {start:0,end:30,text:'Теперь рассмотрим следующую тему. Docker позволяет изолировать приложения в контейнерах.'},
+  {start:30,end:60,text:'У каждого контейнера собственная среда исполнения и зависимостей.'},
+  {start:60,end:95,text:'Для работы нужно подготовить образ Docker и запустить контейнер.'}],95);
+ assert.ok(c[0].title.toLowerCase().includes('docker'),c[0].title)
+});
