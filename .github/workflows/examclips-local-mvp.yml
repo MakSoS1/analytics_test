@@ -37,6 +37,9 @@ jobs:
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-local-review-vite.log 2>&1 &
           sleep 4
           node scripts/local-review-smoke.mjs
+      - name: Browser persistent ASR checkpoint save resume and purge
+        run: |
+          node scripts/asr-checkpoint-smoke.mjs
       - name: Browser integration test
         run: |
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-vite.log 2>&1 &
