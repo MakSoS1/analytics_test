@@ -20,12 +20,16 @@ root.innerHTML=`
     <div class="file-note" id="file-note">Файл пока не выбран</div>
     <div class="settings">
       <label>Распознавание речи<select id="language"><option value="auto">Авто (RU / EN)</option><option value="ru">Русский</option><option value="en">English</option></select></label>
+      <label>Размер локальной модели<select id="asr-model">
+        <option value="tiny">Whisper Tiny — быстрый режим</option>
+        <option value="base">Whisper Base — качественнее, требует больше ресурсов</option>
+      </select></label>
       <label>Объём для распознавания<select id="asr-limit"><option value="all" selected>Вся лекция — полный анализ микротем</option><option value="300">Первые 5 минут — быстрая проба</option><option value="900">Первые 15 минут — проба</option></select></label>
       <button class="primary" id="transcribe" disabled>✧ Распознать / продолжить локально</button>
       <button id="forget-asr" disabled>Удалить сохранённую расшифровку из кэша</button>
       <button id="import-srt" disabled>Импорт SRT (без AI)</button>
       <input type="file" accept=".srt,text/plain" id="srt-file" hidden>
-      <p class="hint">При первом запуске Whisper скачиваются веса модели. Полная обработка часовой лекции может быть долгой на слабом ПК; для проверки выберите первые 5 минут. Видеоданные не загружаются в облако.</p>
+      <p class="hint">При первом запуске выбранной Whisper скачиваются веса модели (Tiny или Base). Полная обработка часовой лекции может быть долгой на слабом ПК; для проверки выберите первые 5 минут. Видеоданные не загружаются в облако.</p>
     </div>
     <div class="settings">
   <label>Длина учебной микротемы<select id="topic-preset">
@@ -191,11 +195,11 @@ $('transcribe').onclick=async()=>{
   let key=null;
   try{
     const limit=$('asr-limit').value==='all'?Infinity:Number($('asr-limit').value);
-    key=await checkpointKey(sourceFile,$('language').value);
+    key=await checkpointKey(sourceFile,$('language').value+':'+$('asr-model').value);
     const previous=await loadCheckpoint(key,media.duration).catch(()=>null);
     if(previous?.completedWindows.length)status('Продолжаю распознавание: сохранено '+previous.completedWindows.length+' окон по 30 секунд.');
     chunks=await transcribe(media,{limit,language:$('language').value,
-      onProgress:status,signal:abort.signal,resume:previous,
+      onProgress:status,signal:abort.signal,model:$('asr-model').value,resume:previous,
       onCheckpoint:async checkpoint=>saveCheckpoint(key,checkpoint)});
     if(!chunks.length)throw Error('Распознавание не вернуло речи. Попробуйте SRT или проверьте звук.');
     proposeTopics();$('transcript').value=toSrt(chunks);sync();
