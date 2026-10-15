@@ -94,3 +94,8 @@ Default is a source-faithful 9:16 learning video with an OCR title, single educa
 
 Agent-specific reusable editorial instructions: [.agents/skills/examclips-editorial/SKILL.md](../../.agents/skills/examclips-editorial/SKILL.md). No external arbitrary installer scripts are run.
 References: https://github.com/remotion-dev/skills ; https://github.com/Liamrjohnston/remotion-motion-graphics-skill ; https://github.com/gitethanwoo/video-editing
+
+## Export quality
+- Quick: 720×1280 / 15 FPS — browser default for lower-powered laptops.
+- High: 1080×1920 / 30 FPS — optional full-HD quality for educational Shorts, verified with H264/AAC encoding and full ffmpeg decode on GitHub-hosted Chromium (2026-10-15, workflow run 38805605554).
+- UI quality dropdown controls the final MP4 while preview remains lightweight. Higher resolution is more CPU/GPU intensive, so use a short preview before exporting lengthy clips.
