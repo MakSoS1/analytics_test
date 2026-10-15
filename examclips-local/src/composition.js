@@ -56,7 +56,37 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
   c.restore();
   c.save();roundRect(c,24,178,w-48,762,26);c.clip();
   c.fillStyle='#fff';c.fillRect(24,178,w-48,762);
-  drawSourceRegion(c,src,panel.rect,37,200,w-74,710,sw,sh);c.restore();
+  const reflow=spec.panels.find(p=>p.id==='right'&&Array.isArray(p.lines)&&p.lines.length>=2&&p.lines.join(' ').length>35);
+  if(reflow){
+    const diagram=spec.panels.find(p=>p.id==='left')||panel;
+    if(panel.id==='left'){
+      // Reconstructed educational composition: source-faithful diagram + OCR text, not 16:9 letterbox.
+      drawSourceRegion(c,src,diagram.rect,39,193,w-78,440,sw,sh);
+      c.fillStyle='#f2f6ff';roundRect(c,40,657,w-80,253,16);c.fill();
+      c.fillStyle='#20304b';c.font='bold 26px system-ui';c.textAlign='left';
+      let yy=702;
+      for(const line of reflow.lines.slice(0,6)){
+        const words=line.trim().split(/\\s+/);let accum='';
+        for(const word of words){const joined=(accum?accum+' ':'')+word;
+          if(c.measureText(joined).width>w-130&&accum){c.fillText(accum,61,yy);yy+=36;accum=word}else accum=joined}
+        if(accum){c.fillText(accum,61,yy);yy+=38}
+        if(yy>895)break;
+      }
+    }else{
+      c.fillStyle='#eff4ff';roundRect(c,35,197,w-70,485,18);c.fill();
+      c.fillStyle='#17263c';c.font='bold 33px system-ui';c.textAlign='left';
+      let yy=260;
+      for(const line of reflow.lines.slice(0,10)){
+        const words=line.trim().split(/\\s+/);let accum='';
+        for(const word of words){const joined=(accum?accum+' ':'')+word;
+          if(c.measureText(joined).width>w-125&&accum){c.fillText(accum,55,yy);yy+=45;accum=word}else accum=joined}
+        if(accum){c.fillText(accum,55,yy);yy+=49}
+        if(yy>640)break;
+      }
+      drawSourceRegion(c,src,diagram.rect,55,697,w-110,210,sw,sh);
+    }
+  }else drawSourceRegion(c,src,panel.rect,37,200,w-74,710,sw,sh);
+  c.restore();
   c.strokeStyle='#e5eaf3';c.lineWidth=2;roundRect(c,24,178,w-48,762,26);c.stroke();
   if(spec.panels.length>1){
     const secondary=spec.panels[(active+1)%spec.panels.length];
