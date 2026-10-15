@@ -188,9 +188,11 @@ $('speaker-preset').onchange=()=>{
  const c=current();if(!c||!media)return;
  c.speakerPreset=$('speaker-preset').value;
  if(!c.scene)c.scene=makeStoryboard({width:media.width,height:media.height,duration:c.end-c.start});
- if(speakerPresets[c.speakerPreset])c.scene.speaker={...speakerPresets[c.speakerPreset]};
- if(c.speakerPreset==='none')c.scene.hideSpeaker=true;
- else {c.scene.hideSpeaker=false;if(c.speakerPreset==='auto')c.scene.speaker={x:.815,y:.854,w:.18,h:.14}}
+ const scenes=[c.scene,...(c.scene.chapters||[]).map(ch=>ch.scene)];
+ for(const spec of scenes){
+   if(speakerPresets[c.speakerPreset])spec.speaker={...speakerPresets[c.speakerPreset]};
+   spec.hideSpeaker=c.speakerPreset==='none';
+ }
  status('Область вебки обновлена локально');
 };
 $('analyze-scene').onclick=async()=>{
