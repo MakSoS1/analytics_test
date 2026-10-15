@@ -19,7 +19,7 @@ try{
   await page.waitForFunction(()=>!document.querySelector('#export').disabled,{timeout:30000});
   const count=await page.locator('#clip-count').innerText();assert.equal(count,'1');
   const title=await page.locator('#clip-title').inputValue();assert.ok(title.length>0);
-  await page.locator('#layout').selectOption('fit');
+  await page.locator('#layout').selectOption('hybrid');
   await page.screenshot({path:resolve(cwd,'smoke-ui.png'),fullPage:true});
   const support=await page.evaluate(()=>typeof VideoEncoder!=='undefined');
   if(support){
