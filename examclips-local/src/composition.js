@@ -1,3 +1,4 @@
+import {makeStoryboard,sourceRect,sceneAt,assertScene} from './scene-model.js';
 export const WIDTH=720,HEIGHT=1280;
 function lineWrap(ctx,text,maxWidth){
   const words=text.trim().split(/\s+/),lines=[],current={v:''};
@@ -5,7 +6,8 @@ function lineWrap(ctx,text,maxWidth){
     if(ctx.measureText(next).width>maxWidth&&current.v){lines.push(current.v);current.v=w}else current.v=next}
   if(current.v)lines.push(current.v);return lines.slice(0,4);
 }
-export function paintFrame(canvas,source,width,height,layout,focusX,subtitle=''){
+export function paintFrame(canvas,source,width,height,layout,focusX,subtitle='',scene=null,elapsed=0){
+  if(layout==='hybrid')return paintHybrid(canvas,source,width,height,subtitle,scene,elapsed);
   const ctx=canvas.getContext('2d'),cw=canvas.width,ch=canvas.height;
   ctx.fillStyle='#09111f';ctx.fillRect(0,0,cw,ch);
   const draw=(sx,sy,sw,sh,dx,dy,dw,dh)=>{
@@ -30,5 +32,54 @@ export function paintFrame(canvas,source,width,height,layout,focusX,subtitle='')
     const lines=lineWrap(ctx,subtitle,cw-80);
     const y=ch-100-(lines.length-1)*46;
     lines.forEach((line,i)=>{ctx.lineWidth=8;ctx.strokeStyle='#050a14';ctx.strokeText(line,cw/2,y+i*46);ctx.fillStyle='#fff';ctx.fillText(line,cw/2,y+i*46)});
+  }
+}
+
+function drawSourceRegion(ctx,src,region,dx,dy,dw,dh,sw,sh){
+  const s=sourceRect(region,sw,sh),scale=Math.min(dw/s.w,dh/s.h);
+  const rw=s.w*scale,rh=s.h*scale,rx=dx+(dw-rw)/2,ry=dy+(dh-rh)/2;
+  if(typeof src.draw==='function')src.draw(ctx,s.x,s.y,s.w,s.h,rx,ry,rw,rh);
+  else ctx.drawImage(src,s.x,s.y,s.w,s.h,rx,ry,rw,rh);
+}
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.closePath()}
+export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
+  const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
+  const spec=assertScene(scene)?scene:makeStoryboard({width:sw,height:sh,duration:60});
+  const active=sceneAt(spec,Math.max(0,elapsed)).focus;
+  const panel=spec.panels[active]||spec.panels[0];
+  c.fillStyle='#f7f9fd';c.fillRect(0,0,w,h);
+  c.fillStyle='#e9edf5';c.fillRect(0,0,w,10);
+  // Preserve actual slide header as pixels, rather than trusting potentially inaccurate OCR.
+  c.save();roundRect(c,26,28,w-52,130,20);c.clip();
+  c.fillStyle='#fff';c.fillRect(26,28,w-52,130);
+  drawSourceRegion(c,src,{x:0,y:0,w:.79,h:.17},36,41,w-72,96,sw,sh);
+  c.restore();
+  c.save();roundRect(c,24,178,w-48,762,26);c.clip();
+  c.fillStyle='#fff';c.fillRect(24,178,w-48,762);
+  drawSourceRegion(c,src,panel.rect,37,200,w-74,710,sw,sh);c.restore();
+  c.strokeStyle='#e5eaf3';c.lineWidth=2;roundRect(c,24,178,w-48,762,26);c.stroke();
+  if(spec.panels.length>1){
+    const secondary=spec.panels[(active+1)%spec.panels.length];
+    c.save();roundRect(c,w-206,794,175,122,15);c.clip();
+    c.fillStyle='#e7eff8';c.fillRect(w-206,794,175,122);
+    drawSourceRegion(c,src,secondary.rect,w-199,799,161,112,sw,sh);c.restore();
+  }
+  c.fillStyle='#40526e';c.font='600 19px system-ui';
+  c.fillText('EXAMCLIPS  ·  '+(active+1)+' / '+spec.panels.length,34,975);
+  // Speaker is a separate animated video layer, independent of the active slide region.
+  c.save();roundRect(c,40,988,w-80,177,22);c.clip();
+  c.fillStyle='#e6edf5';c.fillRect(40,988,w-80,177);
+  drawSourceRegion(c,src,spec.speaker,48,992,w-96,168,sw,sh);c.restore();
+  if(subtitle.trim()){
+    c.font='bold 28px system-ui';c.textAlign='center';
+    const words=subtitle.split(/\s+/),lines=[];let current='';
+    for(const word of words){
+      const next=(current?current+' ':'')+word;
+      if(c.measureText(next).width>w-64&&current){lines.push(current);current=word}else current=next;
+    }if(current)lines.push(current);
+    lines.slice(0,2).forEach((line,i)=>{
+      c.strokeStyle='#fff';c.lineWidth=7;c.strokeText(line,w/2,1190+i*34);
+      c.fillStyle='#101b30';c.fillText(line,w/2,1190+i*34);
+    });
   }
 }
