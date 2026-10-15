@@ -1,0 +1,26 @@
+name: ExamClips Whisper Base Browser Acceptance
+on:
+  push:
+    branches: [feat/examclips-completion-20261016]
+    paths: ['.github/workflows/examclips-whisper-base.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  whisper-base:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: examclips-local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Real first-use Whisper Base ONNX WebAssembly in Chrome
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/examclips-whisper-base.log 2>&1 &
+          sleep 4
+          node scripts/whisper-base-smoke.mjs
