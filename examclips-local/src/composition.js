@@ -119,7 +119,11 @@ function renderEditorialPanel(ctx,src,sw,sh,panel,stage,palette,{opacity=1,rise=
  ctx.restore();
 }
 export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
- const ctx=canvas.getContext('2d'),width=canvas.width,height=canvas.height;
+ const ctx=canvas.getContext('2d'),actualWidth=canvas.width,actualHeight=canvas.height;
+ // Compose in logical 720x1280 coordinates; vector text draws sharply at any export resolution.
+ const width=720,height=1280;
+ ctx.save();
+ ctx.setTransform(actualWidth/width,0,0,actualHeight/height,0,0);
  const chapter=scene?.chapters?.findLast(item=>item.start<=elapsed)||null;
  const spec=assertScene(chapter?.scene)?chapter.scene:
    (assertScene(scene)?scene:makeStoryboard({width:sw,height:sh,duration:90}));
