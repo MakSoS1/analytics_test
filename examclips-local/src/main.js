@@ -197,6 +197,10 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
       c.start=start;c.end=end;
     }
     c.title=$('clip-title').value;c.layout=$('layout').value;c.focusX=Number($('focus').value);
+    if(key==='clip-title'&&c.scene){
+      c.scene.title=c.title;
+      for(const chapter of c.scene.chapters||[])chapter.scene.title=c.title;
+    }
     $('focus-value').textContent=c.focusX+'%';$('selected-time').textContent=timecode(c.end-c.start);
     renderClips();
   });
