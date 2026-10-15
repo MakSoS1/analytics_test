@@ -1,7 +1,7 @@
 name: ExamClips Hybrid OCR Browser Acceptance
 on:
   push:
-    branches: [feat/examclips-hybrid-composer-20261015]
+    branches: [feat/examclips-hybrid-composer-20261015, feat/examclips-microtopics-live-presenter-20261016]
     paths: ['examclips-local/src/scene-analysis.js', 'examclips-local/src/scene-model.js', 'examclips-local/scripts/ocr-browser-smoke.mjs', '.github/workflows/examclips-hybrid-ocr.yml']
   workflow_dispatch:
 permissions:
