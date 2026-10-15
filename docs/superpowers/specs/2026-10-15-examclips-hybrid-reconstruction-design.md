@@ -7,13 +7,13 @@ Create independent educational shorts from lecture videos by **recomposing board
 ## Chosen architecture (v2)
 1. Browser File/Blob video decode (Mediabunny).
 2. On-device Tesseract.js OCR on representative video samples. OCR produces text and source-space rectangles, not rewritten mathematical truth.
-3. Local director: map OCR terms to ASR transcript windows; select source crop panel for 9s beats; fallback to left/right source panels on OCR failure. All content uses ORIGINAL source pixels.
+3. Local scene-transition detector: sample thumbnail frames every 8 seconds, ignore the webcam strip, compare pixel differences and create separate scene chapters (max six per clip). OCR runs once per detected chapter. Local director maps OCR terms to ASR transcript windows and selects source regions for approximately 9-second beats; left/right split fallback when OCR is unavailable. All content uses ORIGINAL source pixels.
 4. Independent lecturer video layer from a user-adjustable source crop (first preset assumes small webcam lower right). Experimental, not proven automatic face detection.
 5. Canvas vertical video composer (720×1280), original audio via WebCodecs+WASM AAC. Default is hybrid. Legacy fit/crop supported only as explicit user choice.
 6. Project JSON stores detected scene and timeline. No video/transcript uploaded to GitHub or servers.
 
 ## Semantics of automatic vs not automatic
-Implemented: optional OCR + split-layout extraction + keyword correspondence to transcript and temporal focus; no need to send video to the cloud. Limitations: single representative frame per clip, hard-coded first-pass speaker region, limited diagram understanding, no guarantee no notation cropped. DO NOT represent this as validated multimodal understanding, frame-accurate AI director or correct full reconstruction.
+Implemented: optional OCR + split-layout extraction + keyword correspondence to transcript and temporal focus; no need to send video to the cloud. Limitations: discrete 8-second scene-change sampling may miss rapid slide changes; lecturer region is only motion-estimated from several frames with a corner fallback; limited diagram understanding; no guarantee that every diagram/notation remains uncropped or OCR-reflowed correctly. DO NOT represent this as validated multimodal understanding, frame-accurate AI director or correct full reconstruction.
 
 ## Data contract
 `clip.scene={version:2,title:string,panels:[{id,label,rect:{x,y,w,h},text}],beats:[{time,focus}],speaker:{x,y,w,h},method,source:{width,height}}`
@@ -23,7 +23,7 @@ Normalized source rectangles between 0 and 1. Beats use seconds from clip start;
 User video and OCR input never transferred to server by application. First OCR/Whisper use downloads language/model assets from third parties; a hosted mutable page still needs a trust model. To deliver audited enterprise strict offline, bundle model assets with signed distributable/Tauri and audit outgoing requests.
 
 ## UX
-New `AI-композиция` is default. `Распознать доску` button runs OCR. In V1 when OCR fails the player still shows left/right educational panels alternately. Speaker crop remains explicit and adjustable in normalized coordinates in future release. User can always switch to conservative legacy fit if detection is poor.
+New `AI-композиция` is default. `Распознать доску` button runs OCR. In V1 when OCR fails the player still shows left/right educational panels alternately. Speaker crop has automatic motion-based location at five preset regions and user-selectable corner presets; fine-grained freehand ROI adjustment remains for a later release. User can always switch to conservative legacy fit if detection is poor.
 
 ## Acceptance
 - Node tests on OCR geometry, text matching, time beats, fallback, bad rect.
