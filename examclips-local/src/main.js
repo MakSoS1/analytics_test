@@ -45,6 +45,7 @@ root.innerHTML=`
       <div class="controls">
         <div class="panel-title"><b id="selected-title">Настройки микротемы</b><span class="muted" id="selected-time"></span></div>
   <div id="topic-review" class="topic-review">Проверьте, что ролик понятен без просмотра предыдущих частей лекции.</div>
+  <button id="approve-topic" disabled>✓ Проверил вступление, объяснение и вывод</button>
   <div class="settings" style="margin:0;padding-bottom:8px">
     <button id="verify-topic" disabled>✧ Проверить завершённость через локальную LLM</button>
     <p class="hint" id="review-state">Необязательно: проверка в установленной Ollama на этом компьютере, без отправки речи и видео в интернет. Она предлагает исправления, но не меняет границы автоматически.</p>
@@ -102,7 +103,7 @@ function enable(){
   $('verify-topic').disabled=!clip||busy||!chunks.length||current()?.id==='draft-1';
   $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
     !((current()?.llmReview?.suggestedStartDelta||0)||(current()?.llmReview?.suggestedEndDelta||0));
-  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context'])$(id).disabled=!clip||busy;
+  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context','approve-topic'])$(id).disabled=!clip||busy;
   // Never accidentally export the arbitrary, untranscribed loading placeholder as a finished micro-lesson.
   $('export').disabled=!clip||busy||current()?.id==='draft-1';
   for(const id of ['save-srt','save-project','add'])$(id).disabled=!has||busy;
@@ -129,6 +130,9 @@ function renderClips(){
 function sync(){
   renderClips();const c=current();if(!c)return;
   $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
+  $('approve-topic').textContent=c.status==='approved'
+    ? '✓ Микротема проверена вручную · снять отметку'
+    : '✓ Проверил вступление, объяснение и вывод';
   $('topic-review').textContent=c.reviewReasons?.length
     ? 'Проверить: '+c.reviewReasons.join(' · ')
     : 'Границы выбраны вручную. Проверьте вступление, объяснение и вывод.';
@@ -254,6 +258,7 @@ $('apply-review').onclick=()=>{
   const b=Math.min(media.duration,c.end+(v.suggestedEndDelta||0));
   if(b<=a||b-a>300){status('Изменение отвергнуто: ролик должен длиться не более 5 минут.');return}
   c.start=a;c.end=b;
+  c.status='needs-review';delete c.approvedAt;
   c.reviewReasons=['Границы скорректированы по рекомендации LLM; требуется окончательная проверка.'];
   delete c.llmReview;sync();
   status('Границы изменены по вашему подтверждению. Проверьте получившийся урок.');
@@ -269,7 +274,11 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
     }
     c.title=$('clip-title').value;c.layout=$('layout').value;c.focusX=Number($('focus').value);
     // Any manual boundary edit invalidates prior LLM evidence for that interval.
-    if(key==='clip-start'||key==='clip-end'){delete c.llmReview;enable()}
+    if(key==='clip-start'||key==='clip-end'||key==='clip-title'){
+      delete c.llmReview;
+      if(c.status==='approved'){c.status='needs-review';delete c.approvedAt;c.reviewReasons=['Содержимое изменилось: проверьте микротему заново.']}
+      enable();
+    }
     if(key==='clip-title'&&c.scene){
       c.scene.title=c.title;
       for(const chapter of c.scene.chapters||[])chapter.scene.title=c.title;
@@ -284,6 +293,18 @@ $('transcript').addEventListener('change',()=>{
   else status('Неверный SRT, прежняя разметка сохранена');
 });
 $('play-clip').onclick=()=>{const c=current();if(!c)return;$('player').currentTime=c.start;$('player').play()};
+$('approve-topic').onclick=()=>{
+ const c=current();if(!c||!media)return;
+ if(c.status==='approved'){
+   c.status='needs-review';
+   c.reviewReasons=['Подтверждение снято.'];
+ }else{
+   c.status='approved';
+   c.reviewReasons=[];
+   c.approvedAt=new Date().toISOString();
+ }
+ sync();status(c.status==='approved'?'Микротема отмечена как проверенная автором.':'Отметка проверки снята.');
+};
 $('listen-context').onclick=()=>{
  const c=current();if(!c)return;
  $('player').currentTime=Math.max(0,c.start-15);
@@ -296,6 +317,7 @@ for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
   if(side==='start')c.start=Math.max(0,c.start-15);
   else c.end=Math.min(media.duration,c.end+15);
   c.reviewReasons=['Граница изменена вручную. Проверьте её смысловую завершённость.'];
+  c.status='needs-review';delete c.approvedAt;delete c.llmReview;
   sync();status('Временная граница изменена. Повторите предпросмотр.');
  };
 }
@@ -365,7 +387,7 @@ $('export').onclick=async()=>{
   try{
     status('Кодирование MP4 со звуком. В зависимости от ПК может занять несколько минут...');
     const blob=await exportClip(media,c,chunks,{quality:$('output-quality').value,onProgress:status,signal:abort.signal});
-    download(blob,safeName(c.title)+'.mp4');
+    download(blob,safeName(c.title)+(c.status==='approved'?'':'_DRAFT')+'.mp4');
     status('Экспорт завершён: '+(blob.size/1e6).toFixed(1)+' МБ');
   }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e)}finally{abort=null;setBusy(false)}
 };
