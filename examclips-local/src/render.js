@@ -1,9 +1,11 @@
-import {Output,Mp4OutputFormat,BufferTarget,CanvasSource,AudioSampleSink,AudioSampleSource,Quality} from 'mediabunny';
+import {Output,Mp4OutputFormat,BufferTarget,CanvasSource,AudioSampleSink,AudioSampleSource,Quality,canEncodeAudio} from 'mediabunny';
 import {paintFrame,WIDTH,HEIGHT} from './composition.js';
 import {textAt,validRange} from './segments.js';
 export async function exportClip(media,clip,chunks,{fps=15,onProgress=()=>{},signal}={}){
   if(!validRange(clip.start,clip.end,media.duration))throw Error('Неверные границы клипа');
-  if(typeof VideoEncoder==='undefined'||typeof AudioEncoder==='undefined')throw Error('WebCodecs Encoder недоступен. Нужен современный браузер.');
+  if(typeof VideoEncoder==='undefined')throw Error('WebCodecs VideoEncoder недоступен. Нужен современный браузер.');
+  if(media.audioTrack&&!(await canEncodeAudio('aac'))){const {registerAacEncoder}=await import('@mediabunny/aac-encoder');registerAacEncoder()}
+
   const canvas=document.createElement('canvas');canvas.width=WIDTH;canvas.height=HEIGHT;
   const target=new BufferTarget(),output=new Output({format:new Mp4OutputFormat(),target});
   const videoSource=new CanvasSource(canvas,{codec:'avc',quality:new Quality('high')});
