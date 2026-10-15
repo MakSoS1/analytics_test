@@ -9,7 +9,7 @@ if errorlevel 1 (
 )
 if not exist "node_modules\vite" (
   echo Installing ExamClips app dependencies, not uploading any video...
-  call npm install --no-audit --no-fund
+  call npm install --ignore-scripts --no-audit --no-fund
   if errorlevel 1 (
     echo npm install failed
     pause

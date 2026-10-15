@@ -41,7 +41,8 @@ export async function analyzeScene(media,clip,chunks,{language='en',onProgress=(
     const scoped=chunks.filter(c=>c.end>clip.start+offset&&c.start<clip.start+until)
       .map(c=>({...c,start:Math.max(0,c.start-clip.start-offset),end:Math.min(until-offset,c.end-clip.start-offset)}));
     const entry=makeStoryboard({width:media.width,height:media.height,speaker:camera.box,lines,
-      duration:Math.max(.1,until-offset),chunks:scoped});
+      duration:Math.max(.1,until-offset),chunks:scoped,
+      titleOverride:lines.length===0?clip.title:''});
     chapters.push({start:offset,end:until,scene:entry});
   }
   const root={...chapters[0].scene,chapters};

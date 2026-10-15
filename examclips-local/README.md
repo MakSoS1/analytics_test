@@ -9,7 +9,7 @@ Install Node.js 22+ from https://nodejs.org, clone branch `feat/examclips-hybrid
 ```powershell
 git clone --branch feat/examclips-hybrid-composer-20261015 https://github.com/MakSoS1/analytics_test.git
 cd analytics_test\examclips-local
-npm install --no-audit --no-fund
+npm install --ignore-scripts --no-audit --no-fund
 npm run dev
 ```
 
@@ -43,7 +43,7 @@ Use Node.js >= 22 and npm:
 
 ```bash
 cd examclips-local
-npm install
+npm install --ignore-scripts
 npm run dev
 ```
 
@@ -99,3 +99,13 @@ References: https://github.com/remotion-dev/skills ; https://github.com/Liamrjoh
 - Quick: 720×1280 / 15 FPS — browser default for lower-powered laptops.
 - High: 1080×1920 / 30 FPS — optional full-HD quality for educational Shorts, verified with H264/AAC encoding and full ffmpeg decode on GitHub-hosted Chromium (2026-10-15, workflow run 38805605554).
 - UI quality dropdown controls the final MP4 while preview remains lightweight. Higher resolution is more CPU/GPU intensive, so use a short preview before exporting lengthy clips.
+
+## Topic-first learning videos (2026-10-16)
+
+The editor now proposes **standalone 1-3 minute explanations** from local transcripts; it can extend to **5 minutes** when needed. A 3-minute limit is also available. The algorithm selects breaks from ASR/SRT pause, topic-transition, sentence and lexical-novelty signals using dynamic programming, not arbitrary fixed-length 15-second cuts. Suggestions are **not automatically verified complete** and require user review. Only transcript-covered video may receive proposed microtopics. Full-lecture ASR is the default; first-5-minute analysis is labeled as an exploratory sample, not whole-lecture coverage.
+
+Before export, use **Прослушать с контекстом** to listen to 15 seconds preceding a proposed clip, or expand start/end by 15 seconds. Editing a lesson title changes the on-video heading. Initial untranscribed draft export is deliberately blocked.
+
+The earlier Python demo could show a frozen webcam because incomplete FFmpeg pipe reads triggered static frame fallback. A corrected local-only demonstration uses exact-length reads and confirms webcam motion. Browser CI now creates a static educational slide with a *moving synthetic instructor* and numerically checks the exported MP4 webcam ROI changes over time while preserving audio. This does not claim the entire Docker lecture has passed quality assessment.
+
+Specification: `docs/superpowers/specs/2026-10-16-examclips-microtopic-completeness.md`. Human-verified coherent topics and a dedicated local semantic completeness ranker are still future acceptance steps.

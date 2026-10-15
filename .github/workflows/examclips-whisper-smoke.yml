@@ -1,7 +1,7 @@
 name: ExamClips On-device Whisper Smoke
 on:
   push:
-    branches: [feat/examclips-local-mvp-20261015]
+    branches: [feat/examclips-local-mvp-20261015, feat/examclips-microtopics-live-presenter-20261016]
     paths: ['.github/workflows/examclips-whisper-smoke.yml', 'examclips-local/src/asr.js', 'examclips-local/scripts/whisper-smoke.mjs']
   workflow_dispatch:
 permissions:
@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install front-end dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --ignore-scripts --no-audit --no-fund
       - name: Validate first-use Whisper tiny ONNX in headless Chrome
         run: |
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-asr-vite.log 2>&1 &

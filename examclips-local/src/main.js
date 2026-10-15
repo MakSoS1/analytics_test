@@ -6,6 +6,7 @@ import {paintFrame,WIDTH,HEIGHT} from './composition.js';
 import {exportClip} from './render.js';
 import {analyzeScene} from './scene-analysis.js';
 import {makeStoryboard} from './scene-model.js';
+import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {captionCueAt} from './editorial-motion.js';
 const root=document.querySelector('#app');
 root.innerHTML=`
@@ -17,21 +18,30 @@ root.innerHTML=`
     <div class="file-note" id="file-note">Файл пока не выбран</div>
     <div class="settings">
       <label>Распознавание речи<select id="language"><option value="auto">Авто (RU / EN)</option><option value="ru">Русский</option><option value="en">English</option></select></label>
-      <label>Объём для распознавания<select id="asr-limit"><option value="300">Первые 5 минут — проверка</option><option value="900">Первые 15 минут</option><option value="all">Вся лекция</option></select></label>
+      <label>Объём для распознавания<select id="asr-limit"><option value="all" selected>Вся лекция — полный анализ микротем</option><option value="300">Первые 5 минут — быстрая проба</option><option value="900">Первые 15 минут — проба</option></select></label>
       <button class="primary" id="transcribe" disabled>✧ Распознать локально</button>
       <button id="import-srt" disabled>Импорт SRT (без AI)</button>
       <input type="file" accept=".srt,text/plain" id="srt-file" hidden>
-      <p class="hint">Модель Whisper скачивается с Hugging Face при первом запуске. Содержимое лекции не передаётся.</p>
+      <p class="hint">При первом запуске Whisper скачиваются веса модели. Полная обработка часовой лекции может быть долгой на слабом ПК; для проверки выберите первые 5 минут. Видеоданные не загружаются в облако.</p>
     </div>
-    <div class="section-title">Клипы <span id="clip-count">0</span></div>
+    <div class="settings">
+  <label>Длина учебной микротемы<select id="topic-preset">
+    <option value="full">Полная мысль · обычно 1–3 мин, максимум 5 мин</option>
+    <option value="compact">Короткие объяснения · обычно 1–2 мин, максимум 3 мин</option>
+  </select></label>
+  <button id="suggest-topics" disabled>✧ Предложить законченные микротемы</button>
+  <p class="hint" id="topic-coverage">Для смысловой нарезки нужна расшифровка речи. Рекомендации по границам предварительные: проверьте начало и вывод каждой микротемы.</p>
+</div>
+<div class="section-title">Микротемы <span id="clip-count">0</span></div>
     <div id="clips" class="clips"><p class="empty">После загрузки предложим фрагменты. Начальную и конечную границу можно изменять.</p></div>
   </aside>
   <section class="workspace">
-    <div class="workspace-top"><div><div class="eyebrow">РЕДАКТОР</div><h1>Из лекции — в серию вертикальных видео</h1><p class="lead">Локальная обработка, редактируемые границы, сохранение исходного звука.</p></div><span class="status" id="status">Ожидание видео</span></div>
+    <div class="workspace-top"><div><div class="eyebrow">РЕДАКТОР МИКРОУРОКОВ</div><h1>Одна законченная тема — один ролик</h1><p class="lead">От 1 до 5 минут: понятный вход в тему, объяснение и итог. Графика синхронизируется с живым видео лектора.</p></div><span class="status" id="status">Ожидание видео</span></div>
     <div class="editor">
       <div class="stage"><canvas id="preview" width="${WIDTH}" height="${HEIGHT}"></canvas><video id="player" controls playsinline preload="metadata"></video><p class="stage-note">Предпросмотр композиции 9:16</p></div>
       <div class="controls">
-        <div class="panel-title"><b id="selected-title">Настройки ролика</b><span class="muted" id="selected-time"></span></div>
+        <div class="panel-title"><b id="selected-title">Настройки микротемы</b><span class="muted" id="selected-time"></span></div>
+  <div id="topic-review" class="topic-review">Проверьте, что ролик понятен без просмотра предыдущих частей лекции.</div>
         <label>Заголовок<input id="clip-title" disabled maxlength="90"></label>
         <div class="two"><label>Начало, сек<input type="number" id="clip-start" min="0" step=".1" disabled></label><label>Конец, сек<input type="number" id="clip-end" min="0" step=".1" disabled></label></div>
         <label>Композиция<select id="layout" disabled><option value="hybrid">AI-композиция: объекты + вебка</option><option value="fit">Исходный слайд целиком</option><option value="focus">Акцент на выбранной области</option><option value="crop">Заполнить вертикальный кадр</option></select></label>
@@ -50,7 +60,15 @@ root.innerHTML=`
 <option value="high">Качественно — 1080×1920, 30 FPS</option>
 </select></label>
 <div class="buttons"><button id="play-clip" disabled>▶ Просмотреть клип</button><button class="primary" id="export" disabled>↓ Экспорт MP4</button></div>
-        <div class="buttons"><button id="add" disabled>+ Добавить клип</button><button id="remove" disabled>Удалить</button></div>
+        <div class="buttons">
+  <button id="extend-start" disabled>← Ещё 15 сек в начале</button>
+  <button id="extend-end" disabled>Ещё 15 сек в конце →</button>
+</div>
+<div class="buttons">
+  <button id="listen-context" disabled>▶ Прослушать с контекстом</button>
+  <button id="add" disabled>+ Добавить клип</button>
+</div>
+<button id="remove" disabled>Удалить микротему</button>
         <div class="divider"></div>
         <div class="panel-title"><b>Транскрипт и субтитры</b><button class="plain" id="save-srt" disabled>Скачать SRT</button></div>
         <textarea id="transcript" rows="7" placeholder="Здесь появятся субтитры с таймкодами. Можно импортировать готовый SRT." disabled></textarea>
@@ -71,7 +89,10 @@ function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)
 function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
-  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme'])$(id).disabled=!clip||busy;
+  $('suggest-topics').disabled=!has||busy||!chunks.length;
+  for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context'])$(id).disabled=!clip||busy;
+  // Never accidentally export the arbitrary, untranscribed loading placeholder as a finished micro-lesson.
+  $('export').disabled=!clip||busy||current()?.id==='draft-1';
   for(const id of ['save-srt','save-project','add'])$(id).disabled=!has||busy;
   $('transcript').disabled=!has||busy;$('cancel').disabled=!busy;
 }
@@ -89,12 +110,17 @@ function renderClips(){
     const n=document.createElement('span');n.className='clip-num';n.textContent=String(i+1).padStart(2,'0');
     const title=document.createElement('span');title.className='clip-name';title.textContent=clip.title;
     const duration=document.createElement('small');duration.textContent=timecode(clip.end-clip.start);
+    btn.title=(clip.reviewReasons||[]).join('; ');
     btn.append(n,title,duration);btn.addEventListener('click',()=>{selected=i;sync()});holder.append(btn);
   });$('clip-count').textContent=String(clips.length);enable();
 }
 function sync(){
   renderClips();const c=current();if(!c)return;
-  $('selected-title').textContent='Ролик '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
+  $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
+  $('topic-review').textContent=c.reviewReasons?.length
+    ? 'Проверить: '+c.reviewReasons.join(' · ')
+    : 'Границы выбраны вручную. Проверьте вступление, объяснение и вывод.';
+
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
   $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
   $('player').currentTime=c.start;
@@ -109,7 +135,11 @@ async function selectFile(file){
     if(originalUrl)URL.revokeObjectURL(originalUrl);
     media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
     $('file-note').textContent=`${file.name} · ${timecode(media.duration)} · ${media.width}×${media.height} · ${(file.size/1e6).toFixed(1)} МБ`;
-    clips=buildClips([],media.duration).map(c=>({...c,layout:'hybrid'}));chunks=[];selected=0;$('transcript').value='';
+    // A draft is NOT an AI-generated completed lesson; only ASR/SRT can produce topic proposals.
+    clips=[{id:'draft-1',start:0,end:Math.min(media.duration,180),title:'Черновик — сначала распознайте лекцию',
+      layout:'hybrid',focusX:50,status:'needs-review',
+      reviewReasons:['Нет транскрипта; это произвольный участок, а не законченная микротема']}];
+    chunks=[];selected=0;$('transcript').value='';
     if(projectToRestore){
       const p=projectToRestore;projectToRestore=null;
       if(Math.abs(p.duration-media.duration)>2){status('Длительность видео не совпадает с проектом. Данные не импортированы.')}
@@ -130,7 +160,8 @@ $('srt-file').onchange=async e=>{
   if(!media)return;try{
     chunks=parseSrt(await e.target.files[0].text(),media.duration);
     if(!chunks.length)throw Error('Не найдены валидные интервалы SRT');
-    clips=buildClips(chunks,media.duration).map(c=>({...c,layout:'hybrid'}));selected=0;$('transcript').value=toSrt(chunks);sync();status('Импорт SRT завершён, ничего не отправлено на сервер');
+    proposeTopics();$('transcript').value=toSrt(chunks);sync();
+    status('SRT импортирован. Найдены кандидаты на законченные микротемы; проверьте их границы.');
   }catch(err){error(err)}
 };
 $('transcribe').onclick=async()=>{
@@ -139,10 +170,25 @@ $('transcribe').onclick=async()=>{
     const limit=$('asr-limit').value==='all'?Infinity:Number($('asr-limit').value);
     chunks=await transcribe(media,{limit,language:$('language').value,onProgress:status,signal:abort.signal});
     if(!chunks.length)throw Error('Распознавание не вернуло слов. Попробуйте импортировать SRT.');
-    clips=buildClips(chunks,media.duration).map(c=>({...c,layout:'hybrid'}));selected=0;$('transcript').value=toSrt(chunks);sync();
-    status(`Готово: ${chunks.length} реплик и ${clips.length} клипов. Проверьте границы вручную.`);
+    proposeTopics();$('transcript').value=toSrt(chunks);sync();
+    status(`Распознано ${chunks.length} реплик. Предложено ${clips.length} микротем. Проверьте содержание и границы.`);
   }catch(e){if(e.name==='AbortError')status('Распознавание остановлено');else error(e)}finally{abort=null;setBusy(false)}
 };
+function proposeTopics(){
+  if(!media||!chunks.length)return;
+  const cfg=$('topic-preset').value==='compact'
+    ? {min:60,target:105,max:180}
+    : {min:60,target:165,max:300};
+  const ideas=buildMicrotopics(chunks,media.duration,cfg);
+  if(ideas.length)clips=ideas;
+  selected=0;
+  const report=coverageReport(chunks,media.duration);
+  $('topic-coverage').textContent='Расшифровано примерно '+report.percent+'% длительности лекции. '+
+   (report.partial?'Остальная часть НЕ проанализирована. Для всего видео выберите «Вся лекция». ':'')+
+   'Это предварительные кандидаты: убедитесь, что каждый ролик понятен самостоятельно.';
+  sync();
+}
+$('suggest-topics').onclick=()=>{proposeTopics();status('Микротемы пересчитаны по локальному транскрипту.')};
 $('cancel').onclick=()=>abort?.abort();
 for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
   $(key).addEventListener('input',()=>{
@@ -153,22 +199,41 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
       c.start=start;c.end=end;
     }
     c.title=$('clip-title').value;c.layout=$('layout').value;c.focusX=Number($('focus').value);
+    if(key==='clip-title'&&c.scene){
+      c.scene.title=c.title;
+      for(const chapter of c.scene.chapters||[])chapter.scene.title=c.title;
+    }
     $('focus-value').textContent=c.focusX+'%';$('selected-time').textContent=timecode(c.end-c.start);
     renderClips();
   });
 }
 $('transcript').addEventListener('change',()=>{
   if(!media)return;const parsed=parseSrt($('transcript').value,media.duration);
-  if(parsed.length){chunks=parsed;status('Субтитры обновлены')}
+  if(parsed.length){chunks=parsed;enable();status('Субтитры обновлены. Для новой нарезки нажмите «Предложить микротемы».')}
   else status('Неверный SRT, прежняя разметка сохранена');
 });
 $('play-clip').onclick=()=>{const c=current();if(!c)return;$('player').currentTime=c.start;$('player').play()};
+$('listen-context').onclick=()=>{
+ const c=current();if(!c)return;
+ $('player').currentTime=Math.max(0,c.start-15);
+ $('player').play();
+ status('Воспроизводятся 15 секунд перед началом, чтобы проверить контекст.');
+};
+for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
+ $(key).onclick=()=>{
+  const c=current();if(!c||!media)return;
+  if(side==='start')c.start=Math.max(0,c.start-15);
+  else c.end=Math.min(media.duration,c.end+15);
+  c.reviewReasons=['Граница изменена вручную. Проверьте её смысловую завершённость.'];
+  sync();status('Временная граница изменена. Повторите предпросмотр.');
+ };
+}
 $('player').addEventListener('timeupdate',()=>{const c=current();if(c&&!$('player').paused&&$('player').currentTime>=c.end)$('player').pause()});
 $('add').onclick=()=>{
   if(!media)return;const last=current();
   const start=last?Math.min(media.duration-1,Math.max(0,last.end)):0;
   const end=Math.min(media.duration,start+60);
-  clips.push({id:'clip-'+(clips.length+1),start,end,title:'Новый фрагмент',layout:'hybrid',focusX:50});
+  clips.push({id:'microtopic-'+(clips.length+1),start,end,title:'Новая микротема (нужна проверка)',layout:'hybrid',focusX:50,reviewReasons:['Границы выбраны вручную']});
   selected=clips.length-1;sync()
 };
 $('remove').onclick=()=>{if(!clips.length)return;clips.splice(selected,1);selected=Math.max(0,Math.min(selected,clips.length-1));sync()};
