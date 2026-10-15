@@ -1,4 +1,5 @@
 import {flattenOcr,makeStoryboard} from './scene-model.js';
+import {motionFromMedia} from './speaker-motion.js';
 const createCanvas=(w,h)=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;return canvas};
 let worker=null,language='';
 async function ocr(canvas,lang,onProgress){
@@ -28,7 +29,9 @@ export async function analyzeScene(media,clip,chunks,{language='en',onProgress=(
   try{lines=await ocr(canvas,language,onProgress)}
   catch(error){note='OCR недоступен: '+error.message+'. Используется разбивка исходного слайда без интерпретации текста.'}
   if(signal?.aborted)throw new DOMException('Stopped','AbortError');
-  const scene=makeStoryboard({width:media.width,height:media.height,lines,duration:clip.end-clip.start,
+  let camera;try{camera=await motionFromMedia(media,clip,{signal})}
+  catch(e){if(e.name==='AbortError')throw e;camera={found:false,box:{x:.815,y:.854,w:.18,h:.14},confidence:0}}
+  const scene=makeStoryboard({width:media.width,height:media.height,speaker:camera.box,lines,duration:clip.end-clip.start,
     chunks:chunks.filter(c=>c.start<clip.end&&c.end>clip.start).map(c=>({...c,start:c.start-clip.start,end:c.end-clip.start}))});
-  return {scene,recognizedLines:lines.length,note};
+  return {scene,recognizedLines:lines.length,camera,note};
 }
