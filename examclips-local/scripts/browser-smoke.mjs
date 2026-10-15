@@ -21,10 +21,10 @@ try{
   const title=await page.locator('#clip-title').inputValue();assert.ok(title.length>0);
   await page.locator('#layout').selectOption('fit');
   await page.screenshot({path:resolve(cwd,'smoke-ui.png'),fullPage:true});
-  const support=await page.evaluate(()=>typeof VideoEncoder!=='undefined'&&typeof AudioEncoder!=='undefined');
+  const support=await page.evaluate(()=>typeof VideoEncoder!=='undefined');
   if(support){
     try{
-      const [download]=await Promise.all([page.waitForEvent('download',{timeout:120000}),page.locator('#export').click()]);
+      const [download]=await Promise.all([page.waitForEvent('download',{timeout:45000}),page.locator('#export').click()]);
       const destination=resolve(cwd,'smoke-output.mp4');
       await download.saveAs(destination);
       const info=JSON.parse(execFileSync('ffprobe',['-v','error','-show_entries','format=duration,size:stream=codec_type,codec_name,width,height','-of','json',destination],{encoding:'utf-8'}));
@@ -40,7 +40,7 @@ try{
     console.log('ENCODERS_NOT_SUPPORTED: verified graceful error path');
     await page.locator('#export').click();
     await page.waitForTimeout(1000);
-    assert.match(await page.locator('#progress').innerText(),/WebCodecs Encoder недоступен/);
+    assert.match(await page.locator('#progress').innerText(),/WebCodecs VideoEncoder недоступен/);
   }
   assert.deepEqual(errors,[]);
   console.log('BROWSER_SMOKE_SUCCESS');
