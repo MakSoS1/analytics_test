@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --no-audit --no-fund
+      - run: npm install --ignore-scripts --no-audit --no-fund
       - name: Browser-local Tesseract.js OCR and lecture panel boundaries
         run: |
           npm run dev -- --host 127.0.0.1 > /tmp/ocr-vite.log 2>&1 &
