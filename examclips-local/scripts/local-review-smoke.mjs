@@ -1,6 +1,6 @@
 import {createServer} from 'node:http';
 import assert from 'node:assert/strict';
-const model='qwen-local-test:0.1',origin='http://127.0.0.1:5173';
+const model='qwen-local-test:0.1',origin=process.env.EXAMCLIPS_ORIGIN||'http://127.0.0.1:5173';
 let seen=0;
 const server=createServer(async(req,res)=>{
  let body='';for await(const p of req)body+=p.toString('utf8');
