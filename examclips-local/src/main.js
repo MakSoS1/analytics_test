@@ -8,6 +8,7 @@ import {analyzeScene} from './scene-analysis.js';
 import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {captionCueAt} from './editorial-motion.js';
+import {buildReviewPayload} from './completion-review.js';
 const root=document.querySelector('#app');
 root.innerHTML=`
 <header class="top"><div class="brand"><span class="brand-icon">✦</span> ExamClips <span class="pill">LOCAL MVP</span></div><div class="privacy">◈ Исходники остаются на устройстве</div></header>
@@ -42,6 +43,11 @@ root.innerHTML=`
       <div class="controls">
         <div class="panel-title"><b id="selected-title">Настройки микротемы</b><span class="muted" id="selected-time"></span></div>
   <div id="topic-review" class="topic-review">Проверьте, что ролик понятен без просмотра предыдущих частей лекции.</div>
+  <div class="settings" style="margin:0;padding-bottom:8px">
+    <button id="verify-topic" disabled>✧ Проверить завершённость через локальную LLM</button>
+    <p class="hint" id="review-state">Необязательно: проверка в установленной Ollama на этом компьютере, без отправки речи и видео в интернет. Она предлагает исправления, но не меняет границы автоматически.</p>
+    <button id="apply-review" disabled>Применить предложенные границы</button>
+  </div>
         <label>Заголовок<input id="clip-title" disabled maxlength="90"></label>
         <div class="two"><label>Начало, сек<input type="number" id="clip-start" min="0" step=".1" disabled></label><label>Конец, сек<input type="number" id="clip-end" min="0" step=".1" disabled></label></div>
         <label>Композиция<select id="layout" disabled><option value="hybrid">AI-композиция: объекты + вебка</option><option value="fit">Исходный слайд целиком</option><option value="focus">Акцент на выбранной области</option><option value="crop">Заполнить вертикальный кадр</option></select></label>
@@ -90,6 +96,9 @@ function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
   $('suggest-topics').disabled=!has||busy||!chunks.length;
+  $('verify-topic').disabled=!clip||busy||!chunks.length||current()?.id==='draft-1';
+  $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
+    !((current()?.llmReview?.suggestedStartDelta||0)||(current()?.llmReview?.suggestedEndDelta||0));
   for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context'])$(id).disabled=!clip||busy;
   // Never accidentally export the arbitrary, untranscribed loading placeholder as a finished micro-lesson.
   $('export').disabled=!clip||busy||current()?.id==='draft-1';
@@ -121,6 +130,11 @@ function sync(){
     ? 'Проверить: '+c.reviewReasons.join(' · ')
     : 'Границы выбраны вручную. Проверьте вступление, объяснение и вывод.';
 
+  $('review-state').textContent=c.llmReview
+    ? 'Локальная модель: '+c.llmReview.verdict+' · '+c.llmReview.explanation+
+      ' · Доказательства: '+(c.llmReview.evidence||[]).join(' | ')+
+      ' · Это не гарантия качества — проверьте самостоятельно.'
+    : 'Проверка завершённости через Ollama необязательна и выполняется только на этом компьютере.';
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
   $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
   $('player').currentTime=c.start;
@@ -189,6 +203,35 @@ function proposeTopics(){
   sync();
 }
 $('suggest-topics').onclick=()=>{proposeTopics();status('Микротемы пересчитаны по локальному транскрипту.')};
+$('verify-topic').onclick=async()=>{
+  const c=current();if(!media||!c||!chunks.length)return;
+  setBusy(true);status('Локальная LLM изучает выбранную микротему и соседний контекст...');
+  try{
+    const payload=buildReviewPayload(c,chunks,media.duration);
+    const response=await fetch('/api/local-review',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)});
+    const result=await response.json();
+    if(!response.ok)throw Error(result.error||'Локальная модель недоступна');
+    c.llmReview=result;
+    sync();
+    status('LLM дала предварительную оценку: '+result.verdict+'. Проверьте цитаты и окончания.');
+  }catch(e){
+    $('review-state').textContent='Проверка недоступна: '+e.message+
+      '. Для работы нужна локально запущенная Ollama; обычная нарезка продолжит работать.';
+    status('Локальная проверка не выполнена; ручная оценка остаётся доступной');
+  }finally{setBusy(false)}
+};
+$('apply-review').onclick=()=>{
+  const c=current(),v=c?.llmReview;
+  if(!c||!v?.evidenceVerified||!media)return;
+  const a=Math.max(0,c.start+(v.suggestedStartDelta||0));
+  const b=Math.min(media.duration,c.end+(v.suggestedEndDelta||0));
+  if(b<=a||b-a>300){status('Изменение отвергнуто: ролик должен длиться не более 5 минут.');return}
+  c.start=a;c.end=b;
+  c.reviewReasons=['Границы скорректированы по рекомендации LLM; требуется окончательная проверка.'];
+  delete c.llmReview;sync();
+  status('Границы изменены по вашему подтверждению. Проверьте получившийся урок.');
+};
 $('cancel').onclick=()=>abort?.abort();
 for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
   $(key).addEventListener('input',()=>{
@@ -199,6 +242,8 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
       c.start=start;c.end=end;
     }
     c.title=$('clip-title').value;c.layout=$('layout').value;c.focusX=Number($('focus').value);
+    // Any manual boundary edit invalidates prior LLM evidence for that interval.
+    if(key==='clip-start'||key==='clip-end'){delete c.llmReview;enable()}
     if(key==='clip-title'&&c.scene){
       c.scene.title=c.title;
       for(const chapter of c.scene.chapters||[])chapter.scene.title=c.title;
