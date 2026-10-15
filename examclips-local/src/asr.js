@@ -1,5 +1,6 @@
 import {mono16k} from './media.js';
 import {isSilent} from './audio-utils.js';
+import {normalizeCheckpoint,remainingWindows} from './asr-checkpoint.js';
 // First use of this module downloads the Whisper model from Hugging Face.
 // Media/audio remains local: the ASR pipeline receives only Float32Arrays.
 let transcriber=null,deviceName=null;
@@ -21,28 +22,45 @@ export async function getTranscriber(onProgress=()=>{}){
   }
   throw last||Error('ASR unavailable');
 }
-export async function transcribe(media,{limit=Infinity,language='auto',onProgress=()=>{},signal}={}){
-  const {transcriber:t}=await getTranscriber(onProgress);
-  const until=Math.min(media.duration,limit),chunks=[];
-  for(let start=0;start<until;start+=30){
-    if(signal?.aborted)throw new DOMException('Stopped','AbortError');
-    const end=Math.min(until,start+30);
-    onProgress(`Whisper: ${Math.round(start)}/${Math.round(until)} с`);
-    const pcm=await mono16k(media.audioSink,start,end);
-    if(isSilent(pcm)){onProgress(`Пропущена тишина: ${Math.round(start)}–${Math.round(end)} с`);continue}
-    const opts={return_timestamps:true,task:'transcribe'};
-    if(language!=='auto')opts.language=language;
-    const result=await t(pcm,opts);
-    if(result?.chunks?.length){
-      for(const item of result.chunks){
-        if(!item.text?.trim())continue;
-        const a=Array.isArray(item.timestamp)?item.timestamp:[0,end-start];
-        chunks.push({start:start+Math.max(0,a[0]||0),end:Math.min(end,start+(a[1]??end-start)),text:item.text.trim()});
-      }
-    }else if(result?.text?.trim()){
-      // Coarse timestamps are explicitly approximate if the model did not return chunks.
-      chunks.push({start,end,text:result.text.trim()});
-    }
-  }
-  return chunks.filter(c=>c.end>c.start);
+export async function transcribe(media,{
+ limit=Infinity,language='auto',onProgress=()=>{},signal,
+ resume=null,onCheckpoint=async()=>{}
+}={}){
+ const until=Math.min(media.duration,limit);
+ const state=normalizeCheckpoint(resume,media.duration);
+ let chunks=state.chunks.filter(c=>c.start<until);
+ const done=new Set(state.completedWindows);
+ const pending=remainingWindows(media.duration,limit,state.completedWindows);
+ if(!pending.length){
+  onProgress('Все запрошенные аудиоокна уже распознаны из локального кэша.');
+  return chunks.sort((a,b)=>a.start-b.start);
+ }
+ const {transcriber:t}=await getTranscriber(onProgress);
+ for(const start of pending){
+   if(signal?.aborted)throw new DOMException('Stopped','AbortError');
+   const end=Math.min(until,start+30);
+   onProgress('Whisper: '+Math.round(start)+'/'+Math.round(until)+' с (из кэша: '+done.size+' блоков)');
+   const pcm=await mono16k(media.audioSink,start,end);
+   if(!isSilent(pcm)){
+     const opts={return_timestamps:true,task:'transcribe'};
+     if(language!=='auto')opts.language=language;
+     const result=await t(pcm,opts);
+     if(result?.chunks?.length){
+       for(const item of result.chunks){
+         if(!item.text?.trim())continue;
+         const a=Array.isArray(item.timestamp)?item.timestamp:[0,end-start];
+         const from=Math.min(end,start+Math.max(0,a[0]||0));
+         const to=Math.min(end,start+(a[1]??end-start));
+         if(to>from)chunks.push({start:from,end:to,text:item.text.trim()});
+       }
+     }else if(result?.text?.trim()){
+       chunks.push({start,end,text:result.text.trim()});
+     }
+   }else onProgress('Тишина '+Math.round(start)+'–'+Math.round(end)+' с');
+   done.add(start);
+   chunks=chunks.sort((a,b)=>a.start-b.start);
+   try{await onCheckpoint({chunks:[...chunks],completedWindows:[...done].sort((a,b)=>a-b)})}
+   catch(e){onProgress('Не удалось сохранить локальную контрольную точку: '+e.message)}
+ }
+ return chunks;
 }
