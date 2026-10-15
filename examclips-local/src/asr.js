@@ -1,10 +1,15 @@
 import {mono16k} from './media.js';
 import {isSilent} from './audio-utils.js';
+import {normalizeCheckpoint,remainingWindows} from './asr-checkpoint.js';
 // First use of this module downloads the Whisper model from Hugging Face.
 // Media/audio remains local: the ASR pipeline receives only Float32Arrays.
-let transcriber=null,deviceName=null;
-export async function getTranscriber(onProgress=()=>{}){
-  if(transcriber)return {transcriber,deviceName};
+let transcriber=null,deviceName=null,activeModel=null;
+const MODEL_IDS={tiny:'onnx-community/whisper-tiny',base:'onnx-community/whisper-base'};
+export async function getTranscriber(onProgress=()=>{},model='tiny'){
+  const modelId=MODEL_IDS[model];
+  if(!modelId)throw Error('Неизвестная модель распознавания речи');
+  if(transcriber&&activeModel===modelId)return {transcriber,deviceName};
+  if(transcriber){try{await transcriber.dispose?.()}catch{}transcriber=null;deviceName=null}
   const {pipeline,env}=await import('@huggingface/transformers');
   env.allowRemoteModels=true;
   // navigator.gpu can exist in software/headless browsers with no usable adapter.
@@ -12,37 +17,54 @@ export async function getTranscriber(onProgress=()=>{}){
   let last;
   for(const device of webgpu?['webgpu','wasm']:['wasm']){
     try{
-      onProgress('Загрузка Whisper tiny ('+device+'). При первом запуске скачиваются веса модели.');
-      transcriber=await pipeline('automatic-speech-recognition','onnx-community/whisper-tiny',{
+      onProgress('Загрузка '+modelId+' ('+device+'). При первом запуске скачиваются веса модели.');
+      transcriber=await pipeline('automatic-speech-recognition',modelId,{
         device,progress_callback:e=>{if(e.status==='progress'&&e.progress!==undefined)onProgress(`Модель: ${Math.round(e.progress)}%`)}
       });
-      deviceName=device;return {transcriber,deviceName}
+      deviceName=device;activeModel=modelId;return {transcriber,deviceName}
     }catch(e){last=e;onProgress('Режим '+device+' недоступен: '+e.message)}
   }
   throw last||Error('ASR unavailable');
 }
-export async function transcribe(media,{limit=Infinity,language='auto',onProgress=()=>{},signal}={}){
-  const {transcriber:t}=await getTranscriber(onProgress);
-  const until=Math.min(media.duration,limit),chunks=[];
-  for(let start=0;start<until;start+=30){
-    if(signal?.aborted)throw new DOMException('Stopped','AbortError');
-    const end=Math.min(until,start+30);
-    onProgress(`Whisper: ${Math.round(start)}/${Math.round(until)} с`);
-    const pcm=await mono16k(media.audioSink,start,end);
-    if(isSilent(pcm)){onProgress(`Пропущена тишина: ${Math.round(start)}–${Math.round(end)} с`);continue}
-    const opts={return_timestamps:true,task:'transcribe'};
-    if(language!=='auto')opts.language=language;
-    const result=await t(pcm,opts);
-    if(result?.chunks?.length){
-      for(const item of result.chunks){
-        if(!item.text?.trim())continue;
-        const a=Array.isArray(item.timestamp)?item.timestamp:[0,end-start];
-        chunks.push({start:start+Math.max(0,a[0]||0),end:Math.min(end,start+(a[1]??end-start)),text:item.text.trim()});
-      }
-    }else if(result?.text?.trim()){
-      // Coarse timestamps are explicitly approximate if the model did not return chunks.
-      chunks.push({start,end,text:result.text.trim()});
-    }
-  }
-  return chunks.filter(c=>c.end>c.start);
+export async function transcribe(media,{
+ limit=Infinity,language='auto',model='tiny',onProgress=()=>{},signal,
+ resume=null,onCheckpoint=async()=>{}
+}={}){
+ const until=Math.min(media.duration,limit);
+ const state=normalizeCheckpoint(resume,media.duration);
+ let chunks=state.chunks.filter(c=>c.start<until);
+ const done=new Set(state.completedWindows);
+ const pending=remainingWindows(media.duration,limit,state.completedWindows);
+ if(!pending.length){
+  onProgress('Все запрошенные аудиоокна уже распознаны из локального кэша.');
+  return chunks.sort((a,b)=>a.start-b.start);
+ }
+ const {transcriber:t}=await getTranscriber(onProgress,model);
+ for(const start of pending){
+   if(signal?.aborted)throw new DOMException('Stopped','AbortError');
+   const end=Math.min(until,start+30);
+   onProgress('Whisper: '+Math.round(start)+'/'+Math.round(until)+' с (из кэша: '+done.size+' блоков)');
+   const pcm=await mono16k(media.audioSink,start,end);
+   if(!isSilent(pcm)){
+     const opts={return_timestamps:true,task:'transcribe'};
+     if(language!=='auto')opts.language=language;
+     const result=await t(pcm,opts);
+     if(result?.chunks?.length){
+       for(const item of result.chunks){
+         if(!item.text?.trim())continue;
+         const a=Array.isArray(item.timestamp)?item.timestamp:[0,end-start];
+         const from=Math.min(end,start+Math.max(0,a[0]||0));
+         const to=Math.min(end,start+(a[1]??end-start));
+         if(to>from)chunks.push({start:from,end:to,text:item.text.trim()});
+       }
+     }else if(result?.text?.trim()){
+       chunks.push({start,end,text:result.text.trim()});
+     }
+   }else onProgress('Тишина '+Math.round(start)+'–'+Math.round(end)+' с');
+   done.add(start);
+   chunks=chunks.sort((a,b)=>a.start-b.start);
+   try{await onCheckpoint({chunks:[...chunks],completedWindows:[...done].sort((a,b)=>a-b)})}
+   catch(e){onProgress('Не удалось сохранить локальную контрольную точку: '+e.message)}
+ }
+ return chunks;
 }

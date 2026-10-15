@@ -46,6 +46,13 @@ export function boundaryQuality(rows,index){
  if(/^(?:и|но|а|потому что|который|которая|то есть|and|but|because)\b/iu.test(next.text.trim()))score-=2;
  return score;
 }
+export function visualBoundaryBonus(at,cuts=[]){
+  if(!Array.isArray(cuts)||!cuts.length)return 0;
+  const distances=cuts.filter(Number.isFinite).map(x=>Math.abs(x-at));
+  if(!distances.length)return 0;
+  const nearest=Math.min(...distances);
+  return nearest<=4?1.45:nearest<=12?.75:0;
+}
 function scoreDuration(seconds,{min,target,max}){
  if(seconds<min)return -4-7*(min-seconds)/min;
  if(seconds>max)return -Infinity;
@@ -65,7 +72,7 @@ function reasonFor(rows,i,j,quality,forced=false){
  if(words<30)reasons.push('Слишком мало распознанной речи');
  return reasons;
 }
-export function buildMicrotopics(chunks,duration,{min=60,target=160,max=300}={}){
+export function buildMicrotopics(chunks,duration,{min=60,target=160,max=300,sceneCuts=[]}={}){
  if(!Number.isFinite(duration)||duration<=0) return [];
  if(!(min>=30&&target>=min&&max>=target&&max<=600))throw Error('Invalid microtopic length parameters');
  const rows=normalizeChunks(chunks,duration).filter(c=>c.text.length>1);
@@ -77,7 +84,7 @@ export function buildMicrotopics(chunks,duration,{min=60,target=160,max=300}={})
       confidence:'low',reviewReasons:reasons,status:'needs-review',method:'extractive',transcriptRange:[0,rows.length-1]}];
  }
  // Candidate cuts are sentence/pause boundaries only; never insert a cut *inside* an ASR chunk.
- const n=rows.length,candidateTimes=[start,...rows.map(r=>r.end)],quality=rows.map((r,i)=>boundaryQuality(rows,i));
+ const n=rows.length,candidateTimes=[start,...rows.map(r=>r.end)],quality=rows.map((r,i)=>boundaryQuality(rows,i)+visualBoundaryBonus(r.end,sceneCuts));
  const best=new Array(n+1).fill(-Infinity),parent=new Array(n+1).fill(-1);
  best[0]=0;
  for(let j=1;j<=n;j++){

@@ -16,7 +16,14 @@ if not exist "node_modules\vite" (
     exit /b 1
   )
 )
+echo Building offline-capable local frontend...
+call npm run build
+if errorlevel 1 (
+  echo Build failed. See details above.
+  pause
+  exit /b 1
+)
 echo Starting ExamClips on http://localhost:5173
 start "" cmd /c "timeout /t 4 >nul && start http://localhost:5173"
-call npm run dev -- --host 127.0.0.1
+call npm run preview -- --host 127.0.0.1 --port 5173
 pause

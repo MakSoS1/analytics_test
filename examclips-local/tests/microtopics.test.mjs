@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {buildMicrotopics,boundaryQuality,coverageReport} from '../src/microtopics.js';
+import {buildMicrotopics,boundaryQuality,coverageReport,visualBoundaryBonus} from '../src/microtopics.js';
 function lecture(seconds=960,{step=15,topicEvery=180}={}){
  return Array.from({length:Math.ceil(seconds/step)},(_,i)=>{
   const t=i*step,topic=Math.floor(t/topicEvery);
@@ -51,4 +51,11 @@ test('title favors actual lesson subject, not an empty transition',()=>{
   {start:30,end:60,text:'У каждого контейнера собственная среда исполнения и зависимостей.'},
   {start:60,end:95,text:'Для работы нужно подготовить образ Docker и запустить контейнер.'}],95);
  assert.ok(c[0].title.toLowerCase().includes('docker'),c[0].title)
+});
+
+test('visual chapter change contributes soft boundary prior but is not proof of a new topic',()=>{
+ assert.equal(visualBoundaryBonus(180,[180]),1.45);
+ assert.equal(visualBoundaryBonus(187,[180]),.75);
+ assert.equal(visualBoundaryBonus(220,[180]),0);
+ assert.equal(visualBoundaryBonus(180,[]),0);
 });
