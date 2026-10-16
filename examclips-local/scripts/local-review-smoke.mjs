@@ -14,6 +14,14 @@ const server=createServer(async(req,res)=>{
    assert.equal(request.model,model);
    assert.equal(request.stream,false);
    assert.match(request.prompt,/Docker позволяет изолировать приложения/);
+   if(request.prompt.includes('SELECT_HIGHLIGHTS')){
+     res.end(JSON.stringify({response:JSON.stringify({
+       stories:[{ids:['candidate-1','candidate-2'],
+         evidence:['Docker позволяет изолировать приложения в контейнерах',
+           'Контейнеры используют образы и запускаются'],
+         reason:'Объяснение контейнеров'}]
+     })}));return
+   }
    assert.ok(!request.prompt.includes('data:video'));
    res.end(JSON.stringify({response:JSON.stringify({
      verdict:'complete',confidence:.8,
@@ -43,6 +51,18 @@ try{
  assert.equal(response.status,200);
  const result=await response.json();
  assert.equal(result.verdict,'complete');assert.equal(result.evidenceVerified,true);
- assert.equal(seen,1);
+ const storyPayload={duration:480,keepFraction:.3,sections:[
+   {id:'candidate-1',start:10,end:42,text:'Docker позволяет изолировать приложения в контейнерах.'},
+   {id:'candidate-2',start:230,end:271,text:'Контейнеры используют образы и запускаются в повторяемом окружении.'}
+ ]};
+ const storyResponse=await fetch(origin+'/api/local-story-plan',{method:'POST',headers:{
+   'Content-Type':'application/json','Origin':origin},body:JSON.stringify(storyPayload)});
+ assert.equal(storyResponse.status,200);
+ const selected=await storyResponse.json();
+ assert.equal(selected.clips.length,1);
+ assert.equal(selected.clips[0].segments.length,2);
+ assert.equal(selected.clips[0].status,'needs-review');
+ assert.equal(seen,2);
+ console.log('LOCAL_LLM_STORY_SELECTOR_SUCCESS',selected.summary.keptPercent,'two verified nonadjacent evidence excerpts');
  console.log('LOCAL_LLM_VERIFIER_SUCCESS',result.verdict,result.confidence,'no remote model or lecture upload');
 }finally{await new Promise(resolve=>server.close(resolve))}
