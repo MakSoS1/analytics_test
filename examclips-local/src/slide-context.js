@@ -10,6 +10,17 @@ const overlapRatio=(a,b)=>{
   const h=Math.max(0,Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0));
   return w*h/Math.max(1,(a.x1-a.x0)*(a.y1-a.y0));
 };
+// Conservative OCR script harmonization for HEADINGS only. Source evidence is unchanged.
+// Example: PP-OCRv5 may return "Кaк" with Latin 'a' inside an otherwise Cyrillic token.
+export function normalizeMixedCyrillicHeading(text){
+ const replacements={a:'а',A:'А',e:'е',E:'Е',o:'о',O:'О',p:'р',P:'Р',c:'с',C:'С',x:'х',X:'Х',y:'у',B:'В',H:'Н',K:'К',M:'М',T:'Т'};
+ return String(text).replace(/[\p{L}]+/gu,token=>{
+   const cyr=[...token].filter(ch=>/\p{Script=Cyrillic}/u.test(ch)).length;
+   const latin=[...token].filter(ch=>/[A-Za-z]/.test(ch));
+   if(cyr<2||latin.length===0||latin.some(ch=>!(ch in replacements)))return token;
+   return [...token].map(ch=>replacements[ch]||ch).join('');
+ });
+}
 export function sourceEvidence(lines,width,height,{speaker=null}={}){
  const sp=speaker?{x0:speaker.x*width,y0:speaker.y*height,
    x1:(speaker.x+speaker.w)*width,y1:(speaker.y+speaker.h)*height}:null;
@@ -53,9 +64,19 @@ export function analyzeSlideContext(lines,width,height,{speaker=null,sampleRgb=n
  const valid=sourceEvidence(lines,width,height,{speaker});
  const brand=valid.filter(l=>l.box.y0<height*.18&&l.box.x0>width*.74&&l.text.length<=24);
  const slideLines=valid.filter(l=>!brand.includes(l));
- const headings=slideLines.filter(l=>l.box.y0<height*.19&&l.box.x0<width*.72&&l.text.length>=2&&(l.text.length>=4||l.confidence>=65))
-  .sort((a,b)=>a.box.y0-b.box.y0||a.box.x0-b.box.x0);
- const title=headings.slice(0,2).map(l=>l.text).join(' ').slice(0,150);
+ const topCandidates=slideLines.filter(l=>l.box.y0<height*.19&&l.box.x0<width*.72&&l.text.length>=2);
+ // A weaker short OCR token is accepted only when it is aligned with a high-confidence neighbor.
+ const headings=topCandidates.filter(l=>l.confidence>=65||topCandidates.some(other=>
+   other!==l&&other.confidence>=90&&
+   Math.abs(center(other.box).y-center(l.box).y)<Math.max(23,height*.044)&&
+   Math.abs(other.box.x0-l.box.x1)<width*.065))
+   .sort((a,b)=>a.box.y0-b.box.y0||a.box.x0-b.box.x0);
+ const firstHeading=headings[0];
+ const firstY=firstHeading?center(firstHeading.box).y:-100;
+ // Merge ALL OCR tokens on one visual title line, not just the first two tokens.
+ const title=headings.filter(l=>Math.abs(center(l.box).y-firstY)<Math.max(24,height*.055))
+   .sort((a,b)=>a.box.x0-b.box.x0)
+   .map(l=>normalizeMixedCyrillicHeading(l.text)).join(' ').slice(0,150);
  const candidate=slideLines.filter(l=>{
    const b=l.box,c=center(b);return c.y>=height*.14&&c.y<=height*.52&&
     b.x1-b.x0<width*.35&&l.text.length>=3&&l.text.length<=38&&
