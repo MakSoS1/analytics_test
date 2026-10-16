@@ -38,6 +38,21 @@ export function informationScore(text,{seconds=30,pauseAfter=0}={}){
  return clamp(.45+density*1.5+signal+Math.min(.85,speed*.24)+
    Math.min(1.2,Math.max(0,pauseAfter)*.25)-penalty,0,7);
 }
+/**
+ * Cut long ASR-observed gaps within a chosen candidate, but retain natural
+ * breathing pauses <=1.15 seconds. Does not pretend SRT gives audio-exact VAD.
+ */
+export function tightSpeechPieces(rows,{gap=1.15,padding=.12}={}){
+ if(!rows.length)return [];
+ const ranges=[];
+ for(const c of rows){
+   const a=Math.max(0,c.start-padding),b=c.end+padding;
+   if(ranges.length&&a-ranges.at(-1).end<=gap)
+     ranges.at(-1).end=Math.max(ranges.at(-1).end,b);
+   else ranges.push({start:a,end:b});
+ }
+ return ranges;
+}
 export function findLectureCandidates(chunks,duration,{window=42,minSpeechWords=12}={}){
  const rows=normalizeChunks(chunks,duration);
  if(!rows.length)return [];
@@ -49,7 +64,11 @@ export function findLectureCandidates(chunks,duration,{window=42,minSpeechWords=
   if(signalWords>=minSpeechWords&&end>start){
    const pause=Math.max(0,(rows.find(r=>r.start>=end+.01)?.start??end)-end);
    const score=informationScore(text,{seconds:end-start,pauseAfter:pause});
+   const sourcePieces=tightSpeechPieces(group).map(piece=>({
+     start:Math.max(start,piece.start),end:Math.min(end,piece.end)
+   }));
    result.push({id:'candidate-'+(result.length+1),start,end,seconds:end-start,
+    sourcePieces,
     text,score,keywordSet:[...new Set(words(text))].slice(0,120),
     sourceChunkCount:group.length,
     reason:LOW_VALUE.test(text)?'Организационная речь: пониженный приоритет':
@@ -138,7 +157,7 @@ export function planSelectiveStories(chunks,duration,{
   const start=Math.min(...spans.map(x=>x.start)),end=Math.max(...spans.map(x=>x.end));
   const diversity=group.length>1;
   clips.push({id:'story-'+(clips.length+1),start,end,
-   segments:spans.map(x=>({start:x.start,end:x.end})),
+   segments:spans.flatMap(x=>x.sourcePieces||[{start:x.start,end:x.end}]),
    title:titleFromText(spans.sort((a,b)=>b.score-a.score)[0].text),
    layout:'hybrid',focusX:50,confidence:'low',status:'needs-review',method:'selective-extractive',
    storyScore:+(group.reduce((n,c)=>n+c.score,0)/group.length).toFixed(2),
@@ -148,7 +167,7 @@ export function planSelectiveStories(chunks,duration,{
      ...(total<min?['Короткая микротема: можно расширить вручную']:[])
    ],
    evidence:spans.map(x=>({time:x.start,reason:x.reason,score:+x.score.toFixed(2)})),
-   outputSeconds:+total.toFixed(2)});
+   outputSeconds:+spans.flatMap(x=>x.sourcePieces||[{start:x.start,end:x.end}]).reduce((n,p)=>n+p.end-p.start,0).toFixed(2)});
  }
  clips.sort((a,b)=>b.storyScore-a.storyScore||a.start-b.start);
  const summary=summarizeStoryPlan(clips,duration,candidates);
