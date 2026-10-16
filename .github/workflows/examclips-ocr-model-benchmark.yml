@@ -29,6 +29,21 @@ jobs:
         env:
           PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
         run: python scripts/ocr_model_benchmark.py
+      - name: Probe and validate private RapidOCR child process on both languages
+        run: |
+          python scripts/rapidocr_local.py --probe
+          python - <<'PY'
+          import subprocess, base64, json, sys, pathlib
+          for key,lang in [('lecture_ui_en','en'),('lecture_board_ru','ru')]:
+              png=pathlib.Path('ocr_benchmark_results')/(key+'.png')
+              payload=json.dumps({'language':lang,'png_base64':base64.b64encode(png.read_bytes()).decode('ascii')})
+              p=subprocess.run([sys.executable,'scripts/rapidocr_local.py'],input=payload,text=True,capture_output=True,timeout=100)
+              assert p.returncode==0,(p.stderr[-600:],p.stdout[-200:])
+              out=json.loads(p.stdout)
+              assert len(out['lines'])>=3,(key,out)
+              assert out['engine'].startswith('PP-OCR'),out
+              print('LOCAL_PADDLE_WORKER_SUCCESS',lang,len(out['lines']),out['elapsed_ms'])
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
