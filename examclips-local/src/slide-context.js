@@ -53,7 +53,7 @@ export function analyzeSlideContext(lines,width,height,{speaker=null,sampleRgb=n
  const valid=sourceEvidence(lines,width,height,{speaker});
  const brand=valid.filter(l=>l.box.y0<height*.18&&l.box.x0>width*.74&&l.text.length<=24);
  const slideLines=valid.filter(l=>!brand.includes(l));
- const headings=slideLines.filter(l=>l.box.y0<height*.19&&l.box.x0<width*.72&&l.text.length>=4)
+ const headings=slideLines.filter(l=>l.box.y0<height*.19&&l.box.x0<width*.72&&l.text.length>=2&&(l.text.length>=4||l.confidence>=65))
   .sort((a,b)=>a.box.y0-b.box.y0||a.box.x0-b.box.x0);
  const title=headings.slice(0,2).map(l=>l.text).join(' ').slice(0,150);
  const candidate=slideLines.filter(l=>{
