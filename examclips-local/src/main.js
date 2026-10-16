@@ -60,7 +60,12 @@ root.innerHTML=`
         <label>Заголовок<input id="clip-title" disabled maxlength="90"></label>
         <div class="two"><label>Начало, сек<input type="number" id="clip-start" min="0" step=".1" disabled></label><label>Конец, сек<input type="number" id="clip-end" min="0" step=".1" disabled></label></div>
         <label>Композиция<select id="layout" disabled><option value="hybrid">AI-композиция: объекты + вебка</option><option value="fit">Исходный слайд целиком</option><option value="focus">Акцент на выбранной области</option><option value="crop">Заполнить вертикальный кадр</option></select></label>
-        <button id="analyze-scene" disabled>✧ Распознать доску (локальный OCR)</button><p class="hint" id="scene-hint">AI-композиция использует оригинальные области слайда. OCR включается по кнопке, первый раз скачивает языковую модель.</p><label>Визуальный стиль<select id="style-theme" disabled>
+        <label>Движок распознавания слайдов<select id="ocr-engine">
+<option value="auto">Авто — RapidOCR, если установлен; иначе Tesseract.js</option>
+<option value="tesseract">Tesseract.js — полностью в браузере</option>
+<option value="rapid">RapidOCR — PP-OCRv6 (EN) / PP-OCRv5 (RU)</option>
+</select></label>
+<button id="analyze-scene" disabled>✧ Распознать доску (локальный OCR)</button><p class="hint" id="scene-hint">AI-композиция использует оригинальные области слайда. OCR включается по кнопке, первый раз скачивает языковую модель.</p><label>Визуальный стиль<select id="style-theme" disabled>
 <option value="warm">Warm Classroom — светлый</option>
 <option value="midnight">Midnight Notes — тёмный</option>
 </select></label>
@@ -395,10 +400,11 @@ $('analyze-scene').onclick=async()=>{
   abort=new AbortController();setBusy(true);
   try{
     const lang=$('language').value==='ru'?'ru':'en';
-    const {scene,recognizedLines,note,sceneCount}=await analyzeScene(media,c,chunks,{language:lang,onProgress:status,signal:abort.signal});
+    const {scene,recognizedLines,note,sceneCount,ocrBackend,context}=await analyzeScene(media,c,chunks,{language:lang,ocrEngine:$('ocr-engine').value,onProgress:status,signal:abort.signal});
     scene.theme=c.scene?.theme||'warm';c.scene=scene;c.layout='hybrid';c.speakerPreset='auto';$('speaker-preset').value='auto';$('layout').value='hybrid';
     $('scene-hint').textContent='Сцен: '+sceneCount+', областей: '+scene.panels.length+', OCR строк: '+recognizedLines+
-      '. Метод: '+scene.method+'. '+note;
+      '. Движок OCR: '+ocrBackend+'. Содержание: '+(context?.kind||'unknown')+
+      (context?.activeTab?' · активная вкладка: '+context.activeTab:'')+'. '+note;
     status('Композиция построена на устройстве. Проверьте схему, формулы и вебку.');
   }catch(e){if(e.name==='AbortError')status('Анализ отменён');else error(e)}
   finally{abort=null;setBusy(false)}

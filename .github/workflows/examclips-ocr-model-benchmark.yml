@@ -1,0 +1,65 @@
+name: ExamClips OCR Models Comparison
+on:
+  push:
+    branches: [feat/examclips-ocr-context-20261016]
+    paths:
+      - 'examclips-local/scripts/ocr_model_benchmark.py'
+      - '.github/workflows/examclips-ocr-model-benchmark.yml'
+      - 'examclips-local/src/slide-context.js'
+      - 'examclips-local/tests/slide-context.test.mjs'
+      - 'examclips-local/scripts/local-ocr-browser-smoke.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: examclips-local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated CPU benchmark packages and Tesseract languages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus
+          python -m pip install -q 'rapidocr>=3.8,<4' 'onnxruntime>=1.20,<2' pillow pytesseract
+      - name: Run OCR comparison on synthetic English and Russian lecture slides
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+        run: python scripts/ocr_model_benchmark.py
+      - name: Probe and validate private RapidOCR child process on both languages
+        run: |
+          python scripts/rapidocr_local.py --probe
+          python - <<'PY'
+          import subprocess, base64, json, sys, pathlib
+          for key,lang in [('lecture_ui_en','en'),('lecture_board_ru','ru')]:
+              png=pathlib.Path('ocr_benchmark_results')/(key+'.png')
+              payload=json.dumps({'language':lang,'png_base64':base64.b64encode(png.read_bytes()).decode('ascii')})
+              p=subprocess.run([sys.executable,'scripts/rapidocr_local.py'],input=payload,text=True,capture_output=True,timeout=100)
+              assert p.returncode==0,(p.stderr[-600:],p.stdout[-200:])
+              out=json.loads(p.stdout)
+              assert len(out['lines'])>=3,(key,out)
+              assert out['engine'].startswith('PP-OCR'),out
+              print('LOCAL_PADDLE_WORKER_SUCCESS',lang,len(out['lines']),out['elapsed_ms'])
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser app packages without native postinstall
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Browser-to-local PP-OCR roundtrip and UI context
+        run: |
+          EXAMCLIPS_OCR_PYTHON="$(which python)" npm run dev -- --host 127.0.0.1 > /tmp/ocr-browser.log 2>&1 &
+          sleep 5
+          node scripts/local-ocr-browser-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: examclips-ocr-synthetic-comparison
+          path: examclips-local/ocr_benchmark_results/
+          if-no-files-found: warn
