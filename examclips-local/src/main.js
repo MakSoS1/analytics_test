@@ -33,6 +33,7 @@ root.innerHTML=`
     <div class="heading">Новая обработка <span class="muted">Приватно</span></div>
     <label class="drop" id="drop"><span class="drop-icon">⬆</span><b>Выберите видео</b><small>MP4, MOV, WebM · до 180 мин / 2 ГБ</small><input type="file" id="video-file" accept="video/mp4,video/quicktime,video/webm,video/*" hidden></label>
     <div class="file-note" id="file-note">Файл пока не выбран. Ничего не загружается на сервер.</div>
+ <button id="settings-toggle" class="settings-toggle" type="button">Настройки анализа <span>▾</span></button>
  <div class="onboarding">1. Выбери запись лекции. 2. Распознай речь или импортируй SRT. 3. Проверь фрагменты и получи вертикальные видео.</div>
     <div class="settings config-group">
       <div class="heading">1. Расшифровка</div>
@@ -249,7 +250,11 @@ async function probeLocalReview(){
  }catch{/* Static or offline browser fallback without local Ollama */}
 }
 function initMvpEvents(){
- $('workflow-start').onclick=()=>$('transcribe').click();
+ $('settings-toggle').onclick=()=>{
+   const open=$('settings-toggle').closest('.sidebar').classList.toggle('show-settings');
+   $('settings-toggle').textContent=open?'Скрыть настройки анализа ▴':'Настройки анализа ▾';
+ };
+  $('workflow-start').onclick=()=>$('transcribe').click();
  $('workflow-srt').onclick=()=>$('import-srt').click();
  $('processing-cancel').onclick=()=>abort?.abort();
  $('timeline-source').onclick=e=>{
