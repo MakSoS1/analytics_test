@@ -198,6 +198,90 @@ root.innerHTML=`
 </main>
 <footer>ExamClips · Локальная обработка · Без загрузки исходных видео · Проверяйте формулы, субтитры и границы тем перед публикацией</footer>`;
 const $=id=>document.getElementById(id);
+/** Full-width timeline editor, with the other tools moved to separate tabs.
+ * Moving DOM nodes preserves all existing listeners and export/transcription logic.
+ */
+function setupPrimaryTimeline(){
+ const sidebar=document.querySelector('.sidebar');
+ const duration=$('topic-preset'),oldLabel=duration.closest('label');
+ $('initial-duration').querySelector('label').append(duration);oldLabel.remove();
+ const startButtons=document.querySelector('.workflow-config-actions');
+ sidebar.insertBefore(startButtons,document.querySelector('.topic-settings'));
+ startButtons.classList.add('upload-start-actions');
+ const workspace=document.querySelector('.workspace');
+ const switcher=document.createElement('nav');switcher.className='workspace-tab-switcher';
+ switcher.setAttribute('aria-label','Вкладки редактора');
+ switcher.innerHTML=[
+  '<button type="button" data-editor-tab="timeline" class="active">Таймлайн</button>',
+  '<button type="button" data-editor-tab="clip">Монтаж</button>',
+  '<button type="button" data-editor-tab="captions">Субтитры</button>',
+  '<button type="button" data-editor-tab="quiz">Тесты</button>',
+  '<button type="button" data-editor-tab="export">Экспорт</button>'
+ ].join('');
+ const workbench=document.createElement('section');workbench.id='workbench';workbench.className='workbench';
+ workbench.innerHTML=[
+  '<section id="pane-timeline" class="workbench-pane" data-pane="timeline">',
+    '<div class="workbench-heading"><div><span class="eyebrow">МОНТАЖНЫЙ СТОЛ</span>',
+    '<h1>Таймлайн лекции</h1><p>Исходная запись и готовые ролики на общей шкале времени.</p></div>',
+    '<button id="open-clip-settings" type="button">Настроить клип →</button></div>',
+    '<div id="timeline-monitors" class="timeline-monitors">',
+      '<div class="timeline-monitor source-monitor"><div class="monitor-label"><b>Исходная лекция</b><span>16:9 · оригинал</span></div>',
+      '<div class="source-monitor-content"></div></div>',
+      '<div class="timeline-monitor vertical-monitor"><div class="monitor-label"><b>Вертикальный ролик</b><span>9:16 · предпросмотр</span></div>',
+      '<div class="vertical-monitor-content"></div></div>',
+    '</div>',
+  '</section>',
+  '<section id="pane-clip" class="workbench-pane" data-pane="clip" hidden>',
+    '<div class="pane-heading"><span class="eyebrow">МОНТАЖ</span><h2>Настройки клипа</h2>',
+    '<p>Выбирайте композицию, корректируйте границы и размер преподавателя.</p></div></section>',
+  '<section id="pane-captions" class="workbench-pane" data-pane="captions" hidden>',
+    '<div class="pane-heading"><span class="eyebrow">ТЕКСТ</span><h2>Субтитры и расшифровка</h2>',
+    '<p>Исправляйте текст с таймкодами. Субтитры появляются последовательно поверх видео.</p></div></section>',
+  '<section id="pane-quiz" class="workbench-pane" data-pane="quiz" hidden>',
+    '<div class="pane-heading"><span class="eyebrow">ПРОВЕРКА ЗНАНИЙ</span><h2>Мини-тесты</h2></div></section>',
+  '<section id="pane-export" class="workbench-pane" data-pane="export" hidden>',
+    '<div class="pane-heading"><span class="eyebrow">РЕЗУЛЬТАТ</span><h2>Экспорт видео и проекта</h2>',
+    '<p>Файлы сохраняются на устройстве без загрузки исходной лекции.</p></div>',
+    '<div class="export-panel"><div class="export-status"><b>Экспорт выполняется локально</b>',
+    '<p>Перед сохранением проверьте начало, объяснение и окончание микротем.</p></div></div></section>'
+ ].join('');
+ workspace.insertBefore(switcher,workspace.querySelector('.journey'));
+ workspace.insertBefore(workbench,workspace.querySelector('.journey'));
+ const pane=key=>workbench.querySelector('[data-pane="'+key+'"]');
+ const source=workbench.querySelector('.source-monitor-content');
+ const vertical=workbench.querySelector('.vertical-monitor-content');
+ source.append($('player'));vertical.append($('preview'));
+ document.querySelector('.stage').remove();
+ pane('timeline').append($('timeline-section'));
+ pane('timeline').append(document.querySelector('.kpis'));
+ const editor=$('editor');editor.querySelector('.controls').classList.add('clip-controls');pane('clip').append(editor);
+ const subtitleHeading=$('save-srt').closest('.panel-title'),transcript=$('transcript'),hint=transcript.nextElementSibling;
+ pane('captions').append(subtitleHeading,transcript);
+ if(hint?.classList.contains('hint'))pane('captions').append(hint);
+ pane('quiz').append($('quiz-panel'));
+ const exportBox=pane('export').querySelector('.export-panel');
+ exportBox.append($('output-quality').closest('label'),$('export'),$('export-all'));
+ exportBox.append($('save-project').closest('.panel-title'));
+ const projectHint=$('load-project').previousElementSibling;
+ if(projectHint?.classList.contains('hint'))exportBox.append(projectHint);
+ exportBox.append($('load-project'),$('project-file'));
+ pane('timeline').append(document.querySelector('.progress-row'));
+ $('open-clip-settings').onclick=()=>setEditorTab('clip');
+}
+let activeEditorTab='timeline';
+function setEditorTab(name){
+ if(!['timeline','clip','captions','quiz','export'].includes(name))return;
+ activeEditorTab=name;
+ for(const pane of document.querySelectorAll('.workbench-pane'))
+   pane.hidden=pane.dataset.pane!==name;
+ for(const control of document.querySelectorAll('[data-editor-tab]')){
+   const selected=control.dataset.editorTab===name;
+   control.classList.toggle('active',selected);
+   control.setAttribute('aria-selected',String(selected));
+ }
+ root.dataset.editorTab=name;
+}
+
 
 const generatedQuizzes=new Map(),quizSelections=new Map();
 function quizKey(c){return c?[c.id,c.start,c.end,c.title].join('|'):''}
@@ -298,15 +382,10 @@ function initMvpEvents(){
    status('Фрагмент добавлен из исходной лекции. Можно поменять его границы на дорожке.');
  };
 
- document.querySelectorAll('[data-scroll]').forEach(button=>{
-   button.addEventListener('click',()=>{
-     const anchor=document.getElementById(button.dataset.scroll);
-     if(!anchor)return;
-     anchor.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});
-     document.querySelectorAll('[data-scroll]').forEach(x=>x.classList.toggle('active',x===button));
-   });
+ document.querySelectorAll('[data-editor-tab]').forEach(button=>{
+   button.addEventListener('click',()=>setEditorTab(button.dataset.editorTab));
  });
- if(!isLocalDesktop){
+  if(!isLocalDesktop){
    const opt=$('ocr-engine').querySelector('option[value="rapid"]');if(opt)opt.disabled=true;
    $('ocr-engine').value='tesseract';
  }
@@ -336,8 +415,9 @@ function initMvpEvents(){
 let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
 function setPhase(value){
  if(!['upload','configure','processing','results'].includes(value))return;
- root.dataset.phase=value;
+ const old=root.dataset.phase;root.dataset.phase=value;
  $('processing-panel').hidden=value!=='processing';
+ if(value==='results'&&old!=='results')setEditorTab('timeline');
 }
 function showOperation(stage,percent,message,{standalone=false}={}){
  const stages=['prepare','asr','topics','composition'];
@@ -839,4 +919,4 @@ function loop(){
   }
   previewRaf=requestAnimationFrame(loop);
 }
-initMvpEvents();loop();enable();updateDashboard();renderQuiz();probeLocalReview();
+setupPrimaryTimeline();setEditorTab('timeline');initMvpEvents();loop();enable();updateDashboard();renderQuiz();probeLocalReview();
