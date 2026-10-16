@@ -21,20 +21,27 @@ root.dataset.phase='upload';
 root.innerHTML=`
 <header class="top">
  <div class="brand"><span class="brand-icon">▶</span> ExamClips <span class="pill">BETA</span></div>
- <nav class="top-navigation" aria-label="Разделы">
-  <button data-scroll="overview" class="active" type="button">Обзор</button>
-  <button data-scroll="editor" type="button">Микротемы</button>
-  <button data-scroll="quiz-panel" type="button">Тесты</button>
+ <nav class="top-navigation" aria-label="Вкладки редактора">
+  <button data-editor-tab="timeline" class="active" type="button">Таймлайн</button>
+  <button data-editor-tab="clip" type="button">Монтаж</button>
+  <button data-editor-tab="captions" type="button">Субтитры</button>
+  <button data-editor-tab="quiz" type="button">Тесты</button>
+  <button data-editor-tab="export" type="button">Экспорт</button>
  </nav>
  <div class="privacy">● Видео остаётся на устройстве</div>
 </header>
 <main class="shell">
   <aside class="sidebar">
-    <div class="heading">Новая обработка <span class="muted">Приватно</span></div>
+    <div class="heading">Подготовка лекции <span class="muted">Приватно</span></div>
+    <h1 class="upload-heading">Превратите лекцию в вертикальные видео</h1>
+    <p class="upload-subtitle">Загрузите запись и задайте параметры один раз. Далее вы перейдёте в полноэкранный таймлайн.</p>
     <label class="drop" id="drop"><span class="drop-icon">⬆</span><b>Выберите видео</b><small>MP4, MOV, WebM · до 180 мин / 2 ГБ</small><input type="file" id="video-file" accept="video/mp4,video/quicktime,video/webm,video/*" hidden></label>
     <div class="file-note" id="file-note">Файл пока не выбран. Ничего не загружается на сервер.</div>
+ <div id="initial-duration" class="initial-duration">
+   <label for="topic-preset">Длина будущих роликов</label>
+ </div>
  <button id="settings-toggle" class="settings-toggle" type="button">Настройки анализа <span>▾</span></button>
- <div class="onboarding">1. Выбери запись лекции. 2. Распознай речь или импортируй SRT. 3. Проверь фрагменты и получи вертикальные видео.</div>
+ <div class="onboarding">Обработка проходит на вашем устройстве. Вы сможете изменить выбранные фрагменты на таймлайне в любой момент.</div>
     <div class="settings config-group">
       <div class="heading">1. Расшифровка</div>
       <details class="detail-settings"><summary>Язык и параметры Whisper</summary><div class="detail-body">
@@ -54,8 +61,9 @@ root.innerHTML=`
     <div class="settings topic-settings">
   <div class="heading">2. Найти микротемы</div>
   <label>Длительность<select id="topic-preset">
-    <option value="full">Полная мысль · обычно 1–3 мин, максимум 5 мин</option>
-    <option value="compact">Короткие объяснения · обычно 1–2 мин, максимум 3 мин</option>
+    <option value="full">Полная микротема · 1–3 минуты (до 5)</option>
+    <option value="compact">Короткое объяснение · 1–2 минуты</option>
+    <option value="short">Короткий момент · 15–45 секунд</option>
   </select></label>
   <button id="scan-chapters" disabled>◫ Найти смены слайдов локально</button>
   <button id="suggest-topics" disabled>✧ Предложить законченные микротемы</button>
@@ -71,8 +79,8 @@ root.innerHTML=`
       <h2>Лекция загружена. Как будем обрабатывать?</h2>
       <p>Выберите язык и режим в левой панели. Расшифровка, определение микротем и подготовка монтажа запускаются последовательно.</p>
       <div class="workflow-config-actions">
-        <button class="primary" id="workflow-start" disabled>Начать анализ лекции →</button>
-        <button id="workflow-srt" disabled>У меня уже есть SRT</button>
+        <button class="primary" id="workflow-start" disabled>Обработать лекцию →</button>
+        <button id="workflow-srt" disabled>Использовать готовые субтитры (SRT)</button>
       </div>
       <p class="hint">Видео останется на этом устройстве. Модели Whisper могут скачиваться при первом запуске.</p>
     </div>
@@ -526,7 +534,7 @@ async function selectFile(file){
         $('transcript').value=toSrt(chunks);status('Проект восстановлен; проверьте ролики');
       }
     }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
-    setPhase(chunks.length?'results':'configure');
+    setPhase(chunks.length?'results':'upload');
     sync();
     buildPrivateFilmstrip(media).catch(()=>{});
   }catch(e){media=null;clips=[];updateDashboard();renderQuiz();setPhase('upload');error(e)}finally{setBusy(false)}
@@ -572,7 +580,7 @@ $('transcribe').onclick=async()=>{
     }
     if(e.name==='AbortError')status('Остановлено: локальный прогресс сохранён, следующий запуск продолжит с контрольной точки.');
     else error(e);
-    setPhase(chunks.length?'results':'configure');
+    setPhase(chunks.length?'results':'upload');
   }finally{abort=null;setBusy(false)}
 };
 $('forget-asr').onclick=async()=>{
@@ -586,9 +594,11 @@ $('forget-asr').onclick=async()=>{
 
 function proposeTopics(){
   if(!media||!chunks.length)return;
-  const cfg=$('topic-preset').value==='compact'
-    ? {min:60,target:105,max:180}
-    : {min:60,target:165,max:300};
+  const cfg=$('topic-preset').value==='short'
+    ? {min:15,target:35,max:55}
+    : $('topic-preset').value==='compact'
+      ? {min:60,target:105,max:180}
+      : {min:60,target:165,max:300};
   const ideas=buildMicrotopics(chunks,media.duration,{...cfg,sceneCuts});
   if(ideas.length)clips=ideas;
   setPhase('results');
