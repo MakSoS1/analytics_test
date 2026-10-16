@@ -17,6 +17,7 @@ import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './as
 const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
 let localReviewAvailable=false;
 const root=document.querySelector('#app');
+root.dataset.phase='upload';
 root.innerHTML=`
 <header class="top">
  <div class="brand"><span class="brand-icon">▶</span> ExamClips <span class="pill">BETA</span></div>
@@ -284,11 +285,106 @@ function initMvpEvents(){
 }
 
 let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
-function status(msg){$('progress').textContent=msg;$('status').textContent=msg.slice(0,48)}
+function setPhase(value){
+ if(!['upload','configure','processing','results'].includes(value))return;
+ root.dataset.phase=value;
+ $('processing-panel').hidden=value!=='processing';
+}
+function showOperation(stage,percent,message,{standalone=false}={}){
+ const stages=['prepare','asr','topics','composition'];
+ const i=Math.max(0,stages.indexOf(stage));
+ $('processing-panel').hidden=false;
+ $('processing-title').textContent=['Подготовка','Распознаём речь','Формируем микротемы','Создаём видео'][i];
+ $('processing-step-label').textContent='ЭТАП '+(i+1)+' ИЗ 4';
+ $('processing-detail').textContent=message;
+ const bar=$('processing-panel').querySelector('.processing-meter');
+ const pct=Number.isFinite(percent)?Math.round(Math.max(0,Math.min(100,percent))):null;
+ $('processing-meter-fill').style.width=(pct??7)+'%';
+ bar.classList.toggle('indeterminate',pct===null);
+ if(pct===null)bar.removeAttribute('aria-valuenow');else bar.setAttribute('aria-valuenow',String(pct));
+ $('processing-percent').textContent=pct===null?'Выполняется':pct+'% этапа';
+ document.querySelectorAll('[data-process]').forEach((el,j)=>{
+  el.classList.toggle('current',j===i);el.classList.toggle('done',j<i);
+ });
+ if(standalone&&root.dataset.phase!=='results')setPhase('processing');
+}
+function renderTimeline(){
+ const track=$('timeline-track'),ruler=$('timeline-ruler');
+ track.replaceChildren();ruler.replaceChildren();
+ if(!media){$('timeline-current').textContent='00:00:00 / 00:00:00';return}
+ const duration=media.duration,spans=timelinePieces(clips,duration),stat=timelineStats(clips,duration);
+ $('timeline-coverage').textContent=stat.percent+'% лекции выбрано · '+stat.clips+' фрагментов';
+ const tickCount=Math.max(2,Math.min(12,Math.floor(duration/60)||2));
+ for(let i=0;i<=tickCount;i++){
+   const tick=document.createElement('span');tick.className='timeline-tick';
+   tick.style.left=(i/tickCount*100)+'%';
+   tick.textContent=timecode(duration*i/tickCount).slice(duration>=3600?0:3,8);
+   ruler.append(tick);
+ }
+ const active=current();
+ for(const span of spans){
+   const el=document.createElement('div');el.className='timeline-part '+span.kind;
+   el.style.left=(span.start/duration*100)+'%';
+   el.style.width=((span.end-span.start)/duration*100)+'%';
+   if(span.kind==='clip'){
+      el.classList.toggle('active',span.id===active?.id);
+      const idx=clips.findIndex(c=>c.id===span.id);
+      el.title=(span.title||'Микротема')+' · '+timecode(span.start)+' — '+timecode(span.end);
+      el.setAttribute('role','button');el.tabIndex=0;
+      el.setAttribute('aria-label','Перейти к '+(span.title||'микротеме'));
+      const label=document.createElement('span');label.className='timeline-part-text';
+      label.textContent=String(idx+1).padStart(2,'0')+' · '+(span.title||'Фрагмент');
+      el.append(label);
+      el.onclick=()=>{if(busy)return;selected=idx;sync();$('player').currentTime=span.start};
+      el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click()}};
+      for(const edge of ['start','end']){
+        const handle=document.createElement('button');handle.type='button';
+        handle.className='timeline-handle '+edge;
+        handle.title=edge==='start'?'Изменить начало':'Изменить конец';
+        handle.setAttribute('aria-label',handle.title);
+        handle.addEventListener('pointerdown',e=>{
+          if(busy)return;
+          e.preventDefault();e.stopPropagation();
+          const initial=clips[idx];const rect=track.getBoundingClientRect();
+          const move=event=>{
+            const t=timelineTimeAtFraction((event.clientX-rect.left)/rect.width,duration);
+            handle.dataset.preview=timecode(t);
+            el.title='Новая граница: '+timecode(t);
+          };
+          const release=event=>{
+            document.removeEventListener('pointermove',move);
+            document.removeEventListener('pointerup',release);
+            const t=timelineTimeAtFraction((event.clientX-rect.left)/rect.width,duration);
+            try{clips[idx]=amendClipBoundary(initial,edge,t,duration);selected=idx;sync();
+              status('Граница сохранена. Проверьте микротему и заново создайте композицию.')}
+            catch(err){status('Не удалось изменить границу: '+err.message);renderTimeline()}
+          };
+          document.addEventListener('pointermove',move);document.addEventListener('pointerup',release,{once:true});
+        });
+        el.append(handle);
+      }
+   }else{el.title='Пропущено: '+timecode(span.start)+' — '+timecode(span.end)}
+   track.append(el);
+ }
+ $('timeline-add').disabled=busy||!media;
+ $('timeline-regenerate').disabled=busy||!chunks.length;
+ $('timeline-recompose').disabled=busy||!current()||current()?.id==='draft-1';
+ updateTimelinePlayhead();
+}
+function updateTimelinePlayhead(){
+ if(!media)return;
+ const now=$('player').currentTime||0;
+ const percent=Math.max(0,Math.min(100,now/media.duration*100));
+ $('timeline-playhead').style.left=percent+'%';
+ $('timeline-current').textContent=timecode(now).slice(0,8)+' / '+timecode(media.duration).slice(0,8);
+}
+function status(msg){$('progress').textContent=msg;$('status').textContent=msg.slice(0,48);if(!$('processing-panel').hidden)$('processing-detail').textContent=msg}
 function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)))}
 function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
+  $('workflow-start').disabled=!has||busy;
+  $('workflow-srt').disabled=!has||busy;
   $('scan-chapters').disabled=!has||busy;
   $('forget-asr').disabled=!has||busy;
   $('suggest-topics').disabled=!has||busy||!chunks.length;
@@ -322,7 +418,7 @@ function renderClips(){
   });$('clip-count').textContent=String(clips.length);enable();
 }
 function sync(){
-  renderClips();updateDashboard();renderQuiz();const c=current();if(!c)return;
+  renderClips();updateDashboard();renderQuiz();renderTimeline();const c=current();if(!c)return;
   $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
   $('approve-topic').textContent=c.status==='approved'
     ? '✓ Микротема проверена вручную · снять отметку'
@@ -341,6 +437,7 @@ function sync(){
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
   $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
   $('player').currentTime=c.start;
+  updateTimelinePlayhead();
 }
 function setBusy(v){busy=v;enable()}
 async function selectFile(file){
@@ -366,8 +463,9 @@ async function selectFile(file){
         $('transcript').value=toSrt(chunks);status('Проект восстановлен; проверьте ролики');
       }
     }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
+    setPhase(chunks.length?'results':'configure');
     sync();
-  }catch(e){media=null;clips=[];updateDashboard();renderQuiz();error(e)}finally{setBusy(false)}
+  }catch(e){media=null;clips=[];updateDashboard();renderQuiz();setPhase('upload');error(e)}finally{setBusy(false)}
 }
 $('video-file').addEventListener('change',e=>selectFile(e.target.files?.[0]));
 $('drop').addEventListener('dragover',e=>{e.preventDefault();$('drop').classList.add('over')});
@@ -378,12 +476,13 @@ $('srt-file').onchange=async e=>{
   if(!media)return;try{
     chunks=parseSrt(await e.target.files[0].text(),media.duration);
     if(!chunks.length)throw Error('Не найдены валидные интервалы SRT');
-    proposeTopics();$('transcript').value=toSrt(chunks);sync();
+    proposeTopics();$('transcript').value=toSrt(chunks);setPhase('results');sync();
     status('SRT импортирован. Найдены кандидаты на законченные микротемы; проверьте их границы.');
   }catch(err){error(err)}
 };
 $('transcribe').onclick=async()=>{
   abort=new AbortController();setBusy(true);
+  setPhase('processing');showOperation('prepare',null,'Подготавливаем Whisper…',{standalone:true});
   let key=null;
   try{
     const limit=$('asr-limit').value==='all'?Infinity:Number($('asr-limit').value);
@@ -391,10 +490,16 @@ $('transcribe').onclick=async()=>{
     const previous=await loadCheckpoint(key,media.duration).catch(()=>null);
     if(previous?.completedWindows.length)status('Продолжаю распознавание: сохранено '+previous.completedWindows.length+' окон по 30 секунд.');
     chunks=await transcribe(media,{limit,language:$('language').value,
-      onProgress:status,signal:abort.signal,model:$('asr-model').value,resume:previous,
+      onProgress:msg=>{
+        status(msg);
+        const m=String(msg).match(/Whisper:\s*(\d+)\s*\/\s*(\d+)\s*с/);
+        if(m)showOperation('asr',100*Number(m[1])/Math.max(1,Number(m[2])),msg);
+        else showOperation('prepare',null,msg);
+      },signal:abort.signal,model:$('asr-model').value,resume:previous,
       onCheckpoint:async checkpoint=>saveCheckpoint(key,checkpoint)});
     if(!chunks.length)throw Error('Распознавание не вернуло речи. Попробуйте SRT или проверьте звук.');
-    proposeTopics();$('transcript').value=toSrt(chunks);sync();
+    showOperation('topics',null,'Ищем законченные мысли в транскрипте…');
+    proposeTopics();$('transcript').value=toSrt(chunks);setPhase('results');sync();
     status('Распознано '+chunks.length+' реплик. Кэш сохранён локально. Проверьте каждый предложенный микроурок.');
   }catch(e){
     if(key){
@@ -403,6 +508,7 @@ $('transcribe').onclick=async()=>{
     }
     if(e.name==='AbortError')status('Остановлено: локальный прогресс сохранён, следующий запуск продолжит с контрольной точки.');
     else error(e);
+    setPhase(chunks.length?'results':'configure');
   }finally{abort=null;setBusy(false)}
 };
 $('forget-asr').onclick=async()=>{
@@ -421,6 +527,7 @@ function proposeTopics(){
     : {min:60,target:165,max:300};
   const ideas=buildMicrotopics(chunks,media.duration,{...cfg,sceneCuts});
   if(ideas.length)clips=ideas;
+  setPhase('results');
   selected=0;
   const report=coverageReport(chunks,media.duration);
   $('topic-coverage').textContent='Транскрипт до ~'+report.percent+'% длительности лекции. Найдено смен слайдов: '+sceneCuts.length+'. '+
@@ -485,6 +592,7 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
     // Any manual boundary edit invalidates prior LLM evidence for that interval.
     if(key==='clip-start'||key==='clip-end'||key==='clip-title'){
       delete c.llmReview;
+      if(key==='clip-start'||key==='clip-end')delete c.scene;
       if(c.status==='approved'){c.status='needs-review';delete c.approvedAt;c.reviewReasons=['Содержимое изменилось: проверьте микротему заново.']}
       enable();
     }
@@ -493,7 +601,7 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
       for(const chapter of c.scene.chapters||[])chapter.scene.title=c.title;
     }
     $('focus-value').textContent=c.focusX+'%';$('selected-time').textContent=timecode(c.end-c.start);
-    renderClips();
+    renderClips();renderTimeline();
   });
 }
 $('transcript').addEventListener('change',()=>{
