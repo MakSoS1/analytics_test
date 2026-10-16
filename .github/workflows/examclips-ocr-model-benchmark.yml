@@ -5,6 +5,9 @@ on:
     paths:
       - 'examclips-local/scripts/ocr_model_benchmark.py'
       - '.github/workflows/examclips-ocr-model-benchmark.yml'
+      - 'examclips-local/src/slide-context.js'
+      - 'examclips-local/tests/slide-context.test.mjs'
+      - 'examclips-local/scripts/local-ocr-browser-smoke.mjs'
   workflow_dispatch:
 permissions:
   contents: read
