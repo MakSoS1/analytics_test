@@ -16,6 +16,7 @@ try{
  page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});
  assert.equal(await page.locator('#app').getAttribute('data-phase'),'upload');
+ await page.screenshot({path:'mvp-upload-desktop.png',fullPage:true});
  assert.ok(await page.locator('#drop').isVisible());
  assert.ok(await page.locator('#topic-preset').isVisible(),'Duration options must be on upload screen');
  assert.equal(await page.locator('#topic-preset option').count(),3);
@@ -97,6 +98,18 @@ try{
  }));
  assert.ok(dimensions.scrollWidth<=dimensions.clientWidth+2,'Mobile horizontal overflow: '+JSON.stringify(dimensions));
  await mobile.screenshot({path:'mvp-mobile.png',fullPage:true});
+ await mobile.locator('#video-file').setInputFiles('test-fixture.mp4');
+ await mobile.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:30000});
+ await mobile.locator('#srt-file').setInputFiles({name:'lecture.srt',mimeType:'text/plain',buffer:Buffer.from(subtitle)});
+ await mobile.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results',{timeout:30000});
+ assert.ok(await mobile.locator('#pane-timeline').isVisible());
+ assert.ok(!(await mobile.locator('#topic-preset').isVisible()));
+ const mobileTimeline=await mobile.evaluate(()=>({
+  clientWidth:document.documentElement.clientWidth,
+  scrollWidth:document.documentElement.scrollWidth
+ }));
+ assert.ok(mobileTimeline.scrollWidth<=mobileTimeline.clientWidth+2,'Mobile timeline overflow: '+JSON.stringify(mobileTimeline));
+ await mobile.screenshot({path:'mvp-mobile-timeline.png',fullPage:true});
  assert.deepEqual(errors,[]);
  console.log('MVP_PRODUCT_SMOKE_SUCCESS',JSON.stringify({steps:overview.steps,clips:overview.renderedClips,
    quizQuestions:questions,mobileWidth:dimensions.clientWidth,overflow:dimensions.scrollWidth-dimensions.clientWidth}));
