@@ -51,6 +51,9 @@ jobs:
       - name: Presenter must move in exported MP4
         run: |
           node scripts/presenter-motion-smoke.mjs
+      - name: Browser-only Tesseract.js fallback with no Python OCR installed
+        run: |
+          node scripts/ocr-browser-smoke.mjs
       - name: Editorial visual QA — three real rendered scenes
         run: |
           node scripts/editorial-visual-smoke.mjs
