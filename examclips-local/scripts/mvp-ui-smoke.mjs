@@ -17,35 +17,53 @@ try{
  await page.goto('http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});
  assert.equal(await page.locator('#app').getAttribute('data-phase'),'upload');
  assert.ok(await page.locator('#drop').isVisible());
+ assert.ok(await page.locator('#topic-preset').isVisible(),'Duration options must be on upload screen');
+ assert.equal(await page.locator('#topic-preset option').count(),3);
+ assert.ok(!(await page.locator('#pane-timeline').isVisible()),'Editor must be hidden before upload');
  assert.ok(!(await page.locator('#editor').isVisible()));
 
  await page.locator('#video-file').setInputFiles('test-fixture.mp4');
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:30000});
- assert.equal(await page.locator('#app').getAttribute('data-phase'),'configure');
- assert.ok(await page.locator('#workflow-config-placeholder').count()===0);
- assert.ok(await page.locator('.workflow-config').isVisible());
+ assert.equal(await page.locator('#app').getAttribute('data-phase'),'upload');
+ assert.ok(await page.locator('#workflow-start').isEnabled(),'Run action on upload screen');
+ assert.ok(await page.locator('#topic-preset').isVisible());
 
  await page.locator('#srt-file').setInputFiles({name:'lecture.srt',mimeType:'text/plain',buffer:Buffer.from(subtitle)});
  await page.waitForFunction(()=>!document.querySelector('#quiz-generate').disabled);
  assert.equal(await page.locator('#app').getAttribute('data-phase'),'results');
+ assert.ok(await page.locator('#pane-timeline').isVisible());
+ assert.ok(!(await page.locator('#drop').isVisible()),'No upload widgets in editor');
+ assert.ok(!(await page.locator('#topic-preset').isVisible()),'Duration belongs to first screen only');
+ const full=await page.evaluate(()=>{
+   const track=document.querySelector('#timeline-track').getBoundingClientRect();
+   return {width:track.width,viewport:document.documentElement.clientWidth};
+ });
+ assert.ok(full.width>=full.viewport*.84,'Timeline must occupy most of the viewport: '+JSON.stringify(full));
  assert.ok(await page.locator('#timeline-track .timeline-part.clip').count()>=1);
- // Fixture initially covers all four seconds. Trim 0.5s to verify a real skipped region.
+ assert.ok(await page.locator('#timeline-monitors').isVisible());
+ // Editing lives under Montage, while timeline stays the primary default tab.
+ await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+ assert.ok(await page.locator('#pane-clip').isVisible());
+ assert.ok(!(await page.locator('#pane-timeline').isVisible()));
  await page.locator('#clip-start').fill('0.5');
+ await page.locator('.top-navigation [data-editor-tab="timeline"]').click();
  await page.waitForFunction(()=>document.querySelectorAll('#timeline-track .timeline-part.skipped').length>=1);
  assert.ok(await page.locator('#timeline-track .timeline-part.skipped').count()>=1);
  assert.ok(await page.locator('#timeline-source').isVisible());
 
  const overview=await page.evaluate(()=>({
   background:getComputedStyle(document.body).backgroundColor,
-  title:document.querySelector('h1')?.textContent,
+  title:document.querySelector('#pane-timeline h1')?.textContent,
   steps:document.querySelectorAll('.journey-step').length,
   renderedClips:document.querySelectorAll('.clip').length,
   safeText:document.querySelector('.privacy')?.textContent
  }));
  assert.equal(overview.steps,4);
- assert.ok(overview.title.includes('короткие видео'));
+ assert.ok(overview.title.includes('Таймлайн'));
  assert.ok(overview.renderedClips>=1);
  assert.ok(overview.safeText.includes('устройстве'));
+ await page.locator('.top-navigation [data-editor-tab="quiz"]').click();
+ assert.ok(await page.locator('#pane-quiz').isVisible());
  await page.locator('#quiz-generate').click();
  const questions=await page.locator('.quiz-question').count();
  assert.ok(questions>=3,'No reviewable term-recall quiz questions: '+questions);
@@ -54,7 +72,7 @@ try{
  assert.ok(await page.locator('#quiz-result').isVisible());
  const [quizDownload]=await Promise.all([page.waitForEvent('download'),page.locator('#quiz-download').click()]);
  assert.match(quizDownload.suggestedFilename(),/\.quiz\.json$/);
- await page.locator('[data-scroll="quiz-panel"]').click();
+ await page.locator('.top-navigation [data-editor-tab="timeline"]').click();
  await page.evaluate(()=>window.scrollTo(0,0));
  await page.screenshot({path:'mvp-desktop.png',fullPage:true});
  await page.locator('#timeline-section').scrollIntoViewIfNeeded();
@@ -64,6 +82,10 @@ try{
  assert.ok(timeFromSeek>=0,'No source scrubbing');
  await page.locator('#timeline-add').click();
  assert.ok(await page.locator('#timeline-track .timeline-part.clip').count()>=2);
+ await page.locator('.top-navigation [data-editor-tab="export"]').click();
+ assert.ok(await page.locator('#export').isVisible());
+ assert.ok(await page.locator('#output-quality').isVisible());
+ await page.locator('.top-navigation [data-editor-tab="quiz"]').click();
  await page.locator('#quiz-panel').scrollIntoViewIfNeeded();
  await page.screenshot({path:'mvp-quiz.png',fullPage:false});
  const mobile=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:1});
