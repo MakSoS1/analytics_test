@@ -1,0 +1,37 @@
+name: ExamClips OCR Models Comparison
+on:
+  push:
+    branches: [feat/examclips-ocr-context-20261016]
+    paths:
+      - 'examclips-local/scripts/ocr_model_benchmark.py'
+      - '.github/workflows/examclips-ocr-model-benchmark.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: examclips-local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated CPU benchmark packages and Tesseract languages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus
+          python -m pip install -q 'rapidocr>=3.8,<4' 'onnxruntime>=1.20,<2' pillow pytesseract
+      - name: Run OCR comparison on synthetic English and Russian lecture slides
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+        run: python scripts/ocr_model_benchmark.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: examclips-ocr-synthetic-comparison
+          path: examclips-local/ocr_benchmark_results/
+          if-no-files-found: warn
