@@ -142,6 +142,86 @@ root.innerHTML=`
 </main>
 <footer>ExamClips · Локальная обработка · Без загрузки исходных видео · Проверяйте формулы, субтитры и границы тем перед публикацией</footer>`;
 const $=id=>document.getElementById(id);
+
+const generatedQuizzes=new Map(),quizSelections=new Map();
+function quizKey(c){return c?[c.id,c.start,c.end,c.title].join('|'):''}
+function updateDashboard(){
+ const ready=clips.filter(c=>c.id!=='draft-1'&&c.end>c.start);
+ const checked=ready.filter(c=>c.status==='approved');
+ $('kpi-topics').textContent=String(ready.length);
+ $('kpi-approved').textContent=String(checked.length);
+ $('kpi-duration').textContent=Math.round(ready.reduce((sum,c)=>sum+c.end-c.start,0)/60)+' мин';
+ const stages=[
+   ['journey-upload',!!media,'journey-upload-state',media?'Видео выбрано':'Выберите файл'],
+   ['journey-transcript',chunks.length>0,'journey-transcript-state',chunks.length+' реплик'],
+   ['journey-topics',ready.length>0,'journey-topics-state',ready.length+' предложено'],
+   ['journey-output',checked.length>0,null,null]
+ ];
+ for(const [id,done,caption,text] of stages){
+   $(id).classList.toggle('done',done);
+   if(caption&&text!==null)$(caption).textContent=text;
+ }
+}
+function renderQuiz(){
+ const mount=$('quiz-content');mount.replaceChildren();
+ const clip=current(),key=quizKey(clip);
+ const questions=generatedQuizzes.get(key)||[];
+ $('quiz-generate').disabled=!media||!chunks.length||!clip||clip.id==='draft-1'||busy;
+ $('quiz-download').disabled=!questions.length||busy;
+ $('quiz-grade').disabled=!questions.length||busy;
+ $('quiz-result').hidden=true;
+ if(!questions.length){
+   const p=document.createElement('p');p.className='empty';
+   p.textContent=chunks.length?'Выберите микротему и нажмите «Создать тест». Вопросы формируются только по тексту выбранной темы.':'После расшифровки здесь можно создать проверку терминов из лекции.';
+   mount.append(p);return;
+ }
+ const answers=quizSelections.get(key)||[];
+ questions.forEach((q,i)=>{
+   const section=document.createElement('section');section.className='quiz-question';
+   const heading=document.createElement('b');heading.textContent=(i+1)+'. '+q.prompt;
+   const quote=document.createElement('p');quote.className='quiz-quote';quote.textContent='«'+q.quote+'»';
+   const options=document.createElement('div');options.className='quiz-options';
+   q.options.forEach((option,j)=>{
+      const label=document.createElement('label'),radio=document.createElement('input');
+      radio.type='radio';radio.name='q-'+i;radio.value=String(j);radio.checked=answers[i]===j;
+      radio.onchange=()=>{const selections=quizSelections.get(key)||[];selections[i]=j;quizSelections.set(key,selections)};
+      const text=document.createElement('span');text.textContent=option;label.append(radio,text);options.append(label);
+   });
+   section.append(heading,quote,options);mount.append(section);
+ });
+}
+function initMvpEvents(){
+ document.querySelectorAll('[data-scroll]').forEach(button=>{
+   button.addEventListener('click',()=>{
+     const anchor=document.getElementById(button.dataset.scroll);
+     if(!anchor)return;
+     anchor.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});
+     document.querySelectorAll('[data-scroll]').forEach(x=>x.classList.toggle('active',x===button));
+   });
+ });
+ $('quiz-generate').onclick=()=>{
+   const clip=current();if(!clip)return;
+   const key=quizKey(clip),questions=quizForClip(clip,chunks,{count:5});
+   generatedQuizzes.set(key,questions);quizSelections.delete(key);
+   renderQuiz();
+   status(questions.length?'Создано '+questions.length+' вопросов по исходной речи. Проверьте формулировки.':'В выбранной микротеме пока недостаточно распознанных предложений для достоверного теста.');
+ };
+ $('quiz-grade').onclick=()=>{
+   const key=quizKey(current()),questions=generatedQuizzes.get(key)||[],choices=quizSelections.get(key)||[];
+   if(!questions.length)return;
+   const outcome=gradeQuiz(questions,choices);
+   $('quiz-result').hidden=false;
+   $('quiz-result').textContent='Результат: '+outcome.correct+' из '+outcome.total+
+       ' · '+outcome.percent+'%. Это оценка узнавания терминов, а не экзамен на понимание.';
+ };
+ $('quiz-download').onclick=()=>{
+   const clip=current();if(!clip)return;
+   const questions=generatedQuizzes.get(quizKey(clip))||[];if(!questions.length)return;
+   download(new Blob([JSON.stringify(toQuizJson(clip,questions),null,2)],{type:'application/json;charset=utf-8'}),
+     safeName(clip.title)+'.quiz.json');
+ };
+}
+
 let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
 function status(msg){$('progress').textContent=msg;$('status').textContent=msg.slice(0,48)}
 function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)))}
@@ -151,6 +231,7 @@ function enable(){
   $('scan-chapters').disabled=!has||busy;
   $('forget-asr').disabled=!has||busy;
   $('suggest-topics').disabled=!has||busy||!chunks.length;
+  $('quiz-generate').disabled=!has||busy||!chunks.length||current()?.id==='draft-1';
   $('export-all').disabled=!has||busy||!chunks.length||clips.every(c=>c.id==='draft-1');
   $('verify-topic').disabled=!clip||busy||!chunks.length||current()?.id==='draft-1';
   $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
@@ -180,7 +261,7 @@ function renderClips(){
   });$('clip-count').textContent=String(clips.length);enable();
 }
 function sync(){
-  renderClips();const c=current();if(!c)return;
+  renderClips();updateDashboard();renderQuiz();const c=current();if(!c)return;
   $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
   $('approve-topic').textContent=c.status==='approved'
     ? '✓ Микротема проверена вручную · снять отметку'
@@ -223,7 +304,7 @@ async function selectFile(file){
       }
     }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
     sync();
-  }catch(e){media=null;clips=[];error(e)}finally{setBusy(false)}
+  }catch(e){media=null;clips=[];updateDashboard();renderQuiz();error(e)}finally{setBusy(false)}
 }
 $('video-file').addEventListener('change',e=>selectFile(e.target.files?.[0]));
 $('drop').addEventListener('dragover',e=>{e.preventDefault();$('drop').classList.add('over')});
@@ -498,4 +579,4 @@ function loop(){
   }
   previewRaf=requestAnimationFrame(loop);
 }
-loop();enable();
+initMvpEvents();loop();enable();updateDashboard();renderQuiz();
