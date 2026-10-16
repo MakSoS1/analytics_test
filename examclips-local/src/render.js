@@ -2,6 +2,7 @@ import {Output,Mp4OutputFormat,BufferTarget,CanvasSource,AudioSampleSink,AudioSa
 import {paintFrame,WIDTH,HEIGHT} from './composition.js';
 import {validRange} from './segments.js';
 import {captionCueAt} from './editorial-motion.js';
+import {captionSequenceAt} from './caption-flow.js';
 export async function exportClip(media,clip,chunks,{quality='standard',onProgress=()=>{},signal}={}){
   const high=quality==='high',fps=high?30:15;
   const outWidth=high?1080:WIDTH,outHeight=high?1920:HEIGHT;
@@ -24,7 +25,7 @@ export async function exportClip(media,clip,chunks,{quality='standard',onProgres
       if(signal?.aborted)throw new DOMException('Stopped','AbortError');
       if(!sample)throw Error('Не удалось декодировать видеокадр '+i);
       try{
-        paintFrame(canvas,sample,sample.displayWidth,sample.displayHeight,clip.layout,clip.focusX,captionCueAt(chunks,times[i]),clip.scene||null,times[i]-clip.start);
+        paintFrame(canvas,sample,sample.displayWidth,sample.displayHeight,clip.layout,clip.focusX,captionSequenceAt(chunks,times[i]),clip.scene||null,times[i]-clip.start);
         await videoSource.add(i/fps,Math.min(1/fps,(clip.end-clip.start)-i/fps));
       }finally{sample.close()}
       i++;if(i%30===0||i===frames)onProgress(`Видео ${i}/${frames} кадров`);
