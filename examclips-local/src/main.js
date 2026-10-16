@@ -9,13 +9,16 @@ import {analyzeScene} from './scene-analysis.js';
 import {sampleSlideCuts} from './slide-cuts.js';
 import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
+import {planSelectiveStories,sourceSegments,storyDuration,summarizeStoryPlan} from './selective-stories.js';
+import {makeStoryReviewPayload} from './story-review.js';
 import {captionCueAt} from './editorial-motion.js';
 import {captionSequenceAt} from './caption-flow.js';
-import {timelinePieces,timelineStats,timelineTimeAtFraction,amendClipBoundary} from './source-timeline.js';
+import {timelinePieces,timelineStats,timelineTimeAtFraction,amendClipBoundary,appendSourceSegment,reorderSourceSegments,removeSourceSegment} from './source-timeline.js';
 import {buildReviewPayload} from './completion-review.js';
 import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
 const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
 let localReviewAvailable=false;
+let latestEditorialCandidates=[];
 const root=document.querySelector('#app');
 root.dataset.phase='upload';
 root.innerHTML=`
@@ -39,6 +42,14 @@ root.innerHTML=`
     <div class="file-note" id="file-note">Файл пока не выбран. Ничего не загружается на сервер.</div>
  <div id="initial-duration" class="initial-duration">
    <label for="topic-preset">Длина будущих роликов</label>
+   <label for="story-keep">Сколько содержательного материала искать
+    <select id="story-keep">
+      <option value=".15">Строгий отбор · до 15% записи</option>
+      <option value=".3" selected>Выборочно · до 30% записи</option>
+      <option value=".5">Больше деталей · до 50% записи</option>
+    </select>
+   </label>
+   <p class="hint">Это потолок, не цель. Из всей лекции может получиться всего один полезный ролик или ни одного.</p>
  </div>
  <button id="settings-toggle" class="settings-toggle" type="button">Настройки анализа <span>▾</span></button>
  <div class="onboarding">Обработка проходит на вашем устройстве. Вы сможете изменить выбранные фрагменты на таймлайне в любой момент.</div>
@@ -169,7 +180,7 @@ root.innerHTML=`
           <h2>Таймлайн лекции</h2>
           <p class="hint">Синие участки попадут в ролики, серые будут пропущены. Выбирайте фрагменты и перетаскивайте края, как в видеоредакторе.</p></div>
         <div class="timeline-actions">
-          <button id="timeline-regenerate" disabled>↻ Перенарезать по речи</button>
+          <button id="timeline-regenerate" disabled>↻ Пересмотреть интересные моменты</button><button id="timeline-ai-select" hidden disabled title="Работает только через установленную Ollama на этом ПК">✧ Уточнить отбор через локальную LLM</button>
           <button id="timeline-recompose" disabled>✧ Пересобрать выбранный кадр</button>
         </div>
       </div>
@@ -179,7 +190,8 @@ root.innerHTML=`
       <div id="timeline-track" class="timeline-track" aria-label="Выбранные фрагменты и пропуски"></div>
       <div class="timeline-foot">
         <span id="timeline-current">00:00:00 / 00:00:00</span>
-        <button id="timeline-add" disabled>+ Создать клип в этой точке</button>
+        <div class="timeline-restore-actions"><button id="timeline-append" disabled>+ Добавить отрывок к микротеме</button>
+ <button id="timeline-add" disabled>+ Новый ролик из этой точки</button></div>
       </div>
     </section>
     <section class="quiz-panel" id="quiz-panel">
@@ -257,6 +269,11 @@ function setupPrimaryTimeline(){
  pane('timeline').append($('timeline-section'));
  pane('timeline').append(document.querySelector('.kpis'));
  const editor=$('editor');editor.querySelector('.controls').classList.add('clip-controls');pane('clip').append(editor);
+ const piecesEditor=document.createElement('section');piecesEditor.className='story-pieces-editor';
+ piecesEditor.innerHTML='<div class="panel-title"><b>Фрагменты выбранной микротемы</b><span class="muted">Именно в этом порядке они будут склеены</span></div>'+
+  '<div id="story-piece-list" class="story-piece-list"></div>'+
+  '<p class="hint">Отрывки можно переставлять или удалить. Переходы между несмежными частями нужно проверить вручную.</p>';
+ pane('clip').append(piecesEditor);
  const subtitleHeading=$('save-srt').closest('.panel-title'),transcript=$('transcript'),hint=transcript.nextElementSibling;
  pane('captions').append(subtitleHeading,transcript);
  if(hint?.classList.contains('hint'))pane('captions').append(hint);
@@ -288,11 +305,11 @@ function setEditorTab(name){
 const generatedQuizzes=new Map(),quizSelections=new Map();
 function quizKey(c){return c?[c.id,c.start,c.end,c.title].join('|'):''}
 function updateDashboard(){
- const ready=clips.filter(c=>c.id!=='draft-1'&&c.end>c.start);
+ const ready=clips.filter(c=>c.id!=='draft-1'&&storyDuration(c)>0);
  const checked=ready.filter(c=>c.status==='approved');
  $('kpi-topics').textContent=String(ready.length);
  $('kpi-approved').textContent=String(checked.length);
- $('kpi-duration').textContent=Math.round(ready.reduce((sum,c)=>sum+c.end-c.start,0)/60)+' мин';
+ $('kpi-duration').textContent=Math.round(ready.reduce((sum,c)=>sum+storyDuration(c),0)/60)+' мин';
  const stages=[
    ['journey-upload',!!media,'journey-upload-state',media?'Видео выбрано':'Выберите файл'],
    ['journey-transcript',chunks.length>0,'journey-transcript-state',chunks.length+' реплик'],
@@ -339,6 +356,7 @@ async function probeLocalReview(){
    if(!response.ok||!String(response.headers.get('content-type')||'').includes('application/json'))return;
    const result=await response.json();
    localReviewAvailable=Boolean(result.available);
+   $('timeline-ai-select').hidden=!localReviewAvailable;
    if(!localReviewAvailable)$('review-state').textContent='Ollama не найдена на этом ПК; проверка качества тем остаётся ручной.';
    enable();
  }catch{/* Static or offline browser fallback without local Ollama */}
@@ -364,6 +382,30 @@ function initMvpEvents(){
    updateTimelinePlayhead();
    status('Выбран пропущенный участок. Можете создать клип из текущей точки.');
  };
+ $('timeline-ai-select').onclick=async()=>{
+   if(!media||!localReviewAvailable||!latestEditorialCandidates.length||busy)return;
+   if(!confirm('Локальная модель уточнит полезные моменты по тексту. Заменить текущую разметку? Сохраните JSON проекта, если хотите её оставить.'))return;
+   abort=new AbortController();setBusy(true);
+   try{
+     showOperation('topics',null,'Локальная LLM оценивает полезность объяснений и несмежные связные части…');
+     const payload=makeStoryReviewPayload(latestEditorialCandidates,media.duration,{
+       keepFraction:Number($('story-keep').value||.3)
+     });
+     const response=await fetch('/api/local-story-plan',{
+       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),
+       signal:abort.signal
+     });
+     const result=await response.json();
+     if(!response.ok||!result.verified||!Array.isArray(result.clips))
+       throw Error(result.error||'Модель не вернула подтверждённые цитатами фрагменты');
+     clips=result.clips;selected=0;sync();
+     status(result.clips.length
+       ? 'Локальная LLM предложила '+result.clips.length+' микротем: '+result.summary.keptPercent+
+         '% записи. Необходимо вручную проверить смысловую связность каждого ролика.'
+       : 'Локальная LLM не нашла надёжных цельных объяснений. Можно выбрать фрагменты вручную.');
+   }catch(err){if(err.name!=='AbortError')error(err);else status('Отбор отменён — исходная разметка сохранена')}
+   finally{abort=null;setBusy(false)}
+ };
  $('timeline-regenerate').onclick=()=>{
    if(!media||!chunks.length)return;
    if(!confirm('Повторно найти микротемы? Текущие ручные изменения границ и их подтверждения будут заменены.'))return;
@@ -372,6 +414,15 @@ function initMvpEvents(){
  $('timeline-recompose').onclick=()=>{
    if(!media||!current()||busy)return;
    $('analyze-scene').click();
+ };
+ $('timeline-append').onclick=()=>{
+   const c=current();if(!media||!c||busy||c.id==='draft-1')return;
+   const start=Math.max(0,Math.min(media.duration-.5,$('player').currentTime||0));
+   const end=Math.min(media.duration,start+Math.min(20,Math.max(1,media.duration-start)));
+   try{
+      clips[selected]=appendSourceSegment(c,start,end,media.duration);sync();
+      status('К микротеме добавлен отрывок '+timecode(start)+'–'+timecode(end)+'. Проверьте переход.');
+   }catch(err){status(err.message)}
  };
  $('timeline-add').onclick=()=>{
    if(!media||busy)return;
@@ -465,7 +516,7 @@ function renderTimeline(){
  track.replaceChildren();ruler.replaceChildren();
  if(!media){$('timeline-current').textContent='00:00:00 / 00:00:00';return}
  const duration=media.duration,spans=timelinePieces(clips,duration),stat=timelineStats(clips,duration);
- $('timeline-coverage').textContent=stat.percent+'% лекции выбрано · '+stat.clips+' фрагментов';
+ $('timeline-coverage').textContent=stat.percent+'% записи взято · '+stat.clips+' роликов · '+stat.pieces+' отрывков';
  const tickCount=Math.max(2,Math.min(12,Math.floor(duration/60)||2));
  for(let i=0;i<=tickCount;i++){
    const tick=document.createElement('span');tick.className='timeline-tick';
@@ -481,11 +532,11 @@ function renderTimeline(){
    if(span.kind==='clip'){
       el.classList.toggle('active',span.id===active?.id);
       const idx=clips.findIndex(c=>c.id===span.id);
-      el.title=(span.title||'Микротема')+' · '+timecode(span.start)+' — '+timecode(span.end);
+      el.title=(span.title||'Микротема')+' · часть '+(span.segmentIndex+1)+' · '+timecode(span.start)+' — '+timecode(span.end);
       el.setAttribute('role','button');el.tabIndex=0;
       el.setAttribute('aria-label','Перейти к '+(span.title||'микротеме'));
       const label=document.createElement('span');label.className='timeline-part-text';
-      label.textContent=String(idx+1).padStart(2,'0')+' · '+(span.title||'Фрагмент');
+      label.textContent=String(idx+1).padStart(2,'0')+'.'+(span.segmentIndex+1)+' · '+(span.title||'Фрагмент');
       el.append(label);
       el.onclick=()=>{if(busy)return;selected=idx;sync();$('player').currentTime=span.start};
       el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click()}};
@@ -507,7 +558,7 @@ function renderTimeline(){
             document.removeEventListener('pointermove',move);
             document.removeEventListener('pointerup',release);
             const t=timelineTimeAtFraction((event.clientX-rect.left)/rect.width,duration);
-            try{clips[idx]=amendClipBoundary(initial,edge,t,duration);selected=idx;sync();
+            try{clips[idx]=amendClipBoundary(initial,edge,t,duration,span.segmentIndex);selected=idx;sync();
               status('Граница сохранена. Проверьте микротему и заново создайте композицию.')}
             catch(err){status('Не удалось изменить границу: '+err.message);renderTimeline()}
           };
@@ -519,6 +570,8 @@ function renderTimeline(){
    track.append(el);
  }
  $('timeline-add').disabled=busy||!media;
+ $('timeline-append').disabled=busy||!media||!current()||current().id==='draft-1';
+ $('timeline-ai-select').disabled=busy||!localReviewAvailable||!latestEditorialCandidates.length;
  $('timeline-regenerate').disabled=busy||!chunks.length;
  $('timeline-recompose').disabled=busy||!current()||current()?.id==='draft-1';
  updateTimelinePlayhead();
@@ -535,8 +588,9 @@ function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)
 function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
-  for(const id of ['timeline-regenerate','timeline-recompose','timeline-add'])if($(id))$(id).disabled=busy||!has||(id==='timeline-regenerate'&&!chunks.length);
+  for(const id of ['timeline-regenerate','timeline-recompose','timeline-add','timeline-append'])if($(id))$(id).disabled=busy||!has||(id==='timeline-regenerate'&&!chunks.length);
   $('workflow-start').disabled=!has||busy;
+  $('timeline-ai-select').disabled=!has||busy||!localReviewAvailable||!latestEditorialCandidates.length;
   $('workflow-srt').disabled=!has||busy;
   $('scan-chapters').disabled=!has||busy;
   $('forget-asr').disabled=!has||busy;
@@ -558,6 +612,28 @@ function download(blob,name){
 }
 function safeName(s){return (s||'examclips').replace(/[^\p{L}\p{N}_-]+/gu,'_').slice(0,48)}
 function current(){return clips[selected]}
+function renderStoryPieces(){
+ const area=$('story-piece-list');if(!area)return;
+ area.replaceChildren();const clip=current();if(!clip)return;
+ sourceSegments(clip).forEach((piece,i,all)=>{
+   const row=document.createElement('div');row.className='story-piece';
+   const name=document.createElement('span');name.className='story-piece-label';
+   name.textContent='№ '+(i+1)+' · '+timecode(piece.start).slice(0,8)+' → '+timecode(piece.end).slice(0,8)+
+       ' · '+Math.round(piece.end-piece.start)+' сек';
+   const actions=document.createElement('div');actions.className='story-piece-actions';
+   const btn=(text,disabled,action,label)=>{
+     const b=document.createElement('button');b.type='button';b.textContent=text;b.disabled=disabled||busy;
+     b.title=label;b.setAttribute('aria-label',label);b.onclick=action;actions.append(b);
+   };
+   btn('▶',false,()=>{
+     $('player').currentTime=piece.start;$('player').play().catch(()=>{});
+   },'Воспроизвести этот отрывок');
+   btn('↑',i===0,()=>{clips[selected]=reorderSourceSegments(clip,i,-1);sync()},'Раньше в ролике');
+   btn('↓',i===all.length-1,()=>{clips[selected]=reorderSourceSegments(clip,i,1);sync()},'Позже в ролике');
+   btn('×',all.length<2,()=>{clips[selected]=removeSourceSegment(clip,i);sync()},'Удалить отрывок из ролика');
+   row.append(name,actions);area.append(row);
+ });
+}
 function renderClips(){
   const holder=$('clips');holder.replaceChildren();
   if(!clips.length){holder.textContent='Нет клипов. Импортируйте SRT или запустите Whisper.';enable();return}
@@ -565,14 +641,14 @@ function renderClips(){
     const btn=document.createElement('button');btn.className='clip'+(i===selected?' active':'');
     const n=document.createElement('span');n.className='clip-num';n.textContent=String(i+1).padStart(2,'0');
     const title=document.createElement('span');title.className='clip-name';title.textContent=clip.title;
-    const duration=document.createElement('small');duration.textContent=timecode(clip.end-clip.start);
+    const duration=document.createElement('small');duration.textContent=timecode(storyDuration(clip));
     btn.title=(clip.reviewReasons||[]).join('; ');
     btn.append(n,title,duration);btn.addEventListener('click',()=>{selected=i;sync()});holder.append(btn);
   });$('clip-count').textContent=String(clips.length);enable();
 }
 function sync(){
   renderClips();updateDashboard();renderQuiz();renderTimeline();const c=current();if(!c)return;
-  $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
+  $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(storyDuration(c));
   $('approve-topic').textContent=c.status==='approved'
     ? '✓ Микротема проверена вручную · снять отметку'
     : '✓ Проверил вступление, объяснение и вывод';
@@ -589,8 +665,8 @@ function sync(){
     : 'Проверка завершённости через Ollama необязательна и выполняется только на этом компьютере.';
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
   $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
-  $('player').currentTime=c.start;
-  updateTimelinePlayhead();
+  $('player').currentTime=sourceSegments(c)[0]?.start??c.start;
+  renderStoryPieces();updateTimelinePlayhead();
 }
 function setBusy(v){busy=v;if(!v&&root.dataset.phase==='results')$('processing-panel').hidden=true;enable()}
 async function selectFile(file){
@@ -601,7 +677,7 @@ async function selectFile(file){
     if(media)await media.input.dispose();
     if(originalUrl)URL.revokeObjectURL(originalUrl);
     media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
-    sourceFile=file;sceneCuts=[];
+    sourceFile=file;sceneCuts=[];latestEditorialCandidates=[];
     $('file-note').textContent=`${file.name} · ${timecode(media.duration)} · ${media.width}×${media.height} · ${(file.size/1e6).toFixed(1)} МБ`;
     // A draft is NOT an AI-generated completed lesson; only ASR/SRT can produce topic proposals.
     clips=[{id:'draft-1',start:0,end:Math.min(media.duration,180),title:'Черновик — сначала распознайте лекцию',
@@ -681,14 +757,26 @@ function proposeTopics(){
     : $('topic-preset').value==='compact'
       ? {min:60,target:105,max:180}
       : {min:60,target:165,max:300};
-  const ideas=buildMicrotopics(chunks,media.duration,{...cfg,sceneCuts});
-  if(ideas.length)clips=ideas;
+  const keepFraction=Number($('story-keep').value||.3);
+  const plan=planSelectiveStories(chunks,media.duration,{...cfg,keepFraction,maxStories:12,sceneCuts});
+  latestEditorialCandidates=plan.candidates;
+  const shortDemo=media.duration<=10&&chunks.some(x=>x.text?.trim());
+  clips=plan.clips.length?plan.clips:shortDemo
+    ? [{id:'short-preview',title:'Тестовое короткое видео — проверьте вручную',
+      start:chunks[0].start,end:chunks.at(-1).end,layout:'hybrid',focusX:50,
+      segments:[{start:chunks[0].start,end:chunks.at(-1).end}],
+      status:'needs-review',confidence:'low',method:'short-test-preview',
+      reviewReasons:['Слишком короткий источник для содержательной оценки; технический предпросмотр']}]
+    :[];
+  const highlights=timelineStats(clips,media.duration);
+  status('Кандидатов: '+clips.length+', сохранено '+highlights.percent+
+    '% исходной записи. Пропущенный материал всегда остаётся доступен внизу на таймлайне.');
   setPhase('results');
   selected=0;
   const report=coverageReport(chunks,media.duration);
-  $('topic-coverage').textContent='Транскрипт до ~'+report.percent+'% длительности лекции. Найдено смен слайдов: '+sceneCuts.length+'. '+
-   (report.partial?'Остальная часть НЕ проанализирована. Для всего видео выберите «Вся лекция». ':'')+
-   'Это предварительные кандидаты: убедитесь, что каждый ролик понятен самостоятельно.';
+  $('topic-coverage').textContent='Анализ охватил ~'+report.percent+'% лекции; в кандидаты взято '+timelineStats(clips,media.duration).percent+'%. '+
+   (report.partial?'Остальная часть НЕ распознана — для полноценного отбора нужен весь транскрипт. ':'')+
+   'Информация отобрана эвристически, не моделью понимания: обязательно просмотрите логическую связность склеек.';
   sync();
 }
 $('scan-chapters').onclick=async()=>{
@@ -708,6 +796,10 @@ $('scan-chapters').onclick=async()=>{
 $('suggest-topics').onclick=()=>{proposeTopics();status('Микротемы пересчитаны по локальному транскрипту.')};
 $('verify-topic').onclick=async()=>{
   const c=current();if(!media||!c||!chunks.length)return;
+  if(sourceSegments(c).length>1){
+    status('Локальный текстовый LLM-рецензент пока не проверяет составные микротемы. Проверьте последовательность вручную.');
+    return;
+  }
   setBusy(true);status('Локальная LLM изучает выбранную микротему и соседний контекст...');
   try{
     const payload=buildReviewPayload(c,chunks,media.duration);
@@ -727,10 +819,11 @@ $('verify-topic').onclick=async()=>{
 $('apply-review').onclick=()=>{
   const c=current(),v=c?.llmReview;
   if(!c||!v?.evidenceVerified||!media)return;
+  if(sourceSegments(c).length>1){status('Для составных микротем границы редактируются вручную по отрывкам.');return}
   const a=Math.max(0,c.start+(v.suggestedStartDelta||0));
   const b=Math.min(media.duration,c.end+(v.suggestedEndDelta||0));
   if(b<=a||b-a>300){status('Изменение отвергнуто: ролик должен длиться не более 5 минут.');return}
-  c.start=a;c.end=b;
+  c.start=a;c.end=b;c.segments=[{start:a,end:b}];delete c.scene;
   c.status='needs-review';delete c.approvedAt;
   c.reviewReasons=['Границы скорректированы по рекомендации LLM; требуется окончательная проверка.'];
   delete c.llmReview;sync();
@@ -743,13 +836,16 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
     const start=Number($('clip-start').value),end=Number($('clip-end').value);
     if(key==='clip-start'||key==='clip-end'){
       if(!validRange(start,end,media.duration)){status('Некорректные границы клипа');return}
-      c.start=start;c.end=end;
+      if(sourceSegments(c).length>1){
+        status('Для составного ролика используйте границы отдельных отрывков на таймлайне.');return;
+      }
+      c.start=start;c.end=end;c.segments=[{start,end}];
     }
     c.title=$('clip-title').value;c.layout=$('layout').value;c.focusX=Number($('focus').value);
     // Any manual boundary edit invalidates prior LLM evidence for that interval.
     if(key==='clip-start'||key==='clip-end'||key==='clip-title'){
       delete c.llmReview;
-      if(key==='clip-start'||key==='clip-end')delete c.scene;
+      if(key==='clip-start'||key==='clip-end'){delete c.scene;delete c.scenes;}
       if(c.status==='approved'){c.status='needs-review';delete c.approvedAt;c.reviewReasons=['Содержимое изменилось: проверьте микротему заново.']}
       enable();
     }
@@ -766,7 +862,7 @@ $('transcript').addEventListener('change',()=>{
   if(parsed.length){chunks=parsed;enable();status('Субтитры обновлены. Для новой нарезки нажмите «Предложить микротемы».')}
   else status('Неверный SRT, прежняя разметка сохранена');
 });
-$('play-clip').onclick=()=>{const c=current();if(!c)return;$('player').currentTime=c.start;$('player').play()};
+$('play-clip').onclick=()=>{const c=current();if(!c)return;$('player').currentTime=sourceSegments(c)[0]?.start||c.start;$('player').play()};
 $('approve-topic').onclick=()=>{
  const c=current();if(!c||!media)return;
  if(c.status==='approved'){
@@ -781,21 +877,36 @@ $('approve-topic').onclick=()=>{
 };
 $('listen-context').onclick=()=>{
  const c=current();if(!c)return;
- $('player').currentTime=Math.max(0,c.start-15);
+ $('player').currentTime=Math.max(0,(sourceSegments(c)[0]?.start??c.start)-15);
  $('player').play();
  status('Воспроизводятся 15 секунд перед началом, чтобы проверить контекст.');
 };
 for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
  $(key).onclick=()=>{
   const c=current();if(!c||!media)return;
-  if(side==='start')c.start=Math.max(0,c.start-15);
-  else c.end=Math.min(media.duration,c.end+15);
-  c.reviewReasons=['Граница изменена вручную. Проверьте её смысловую завершённость.'];
-  c.status='needs-review';delete c.approvedAt;delete c.llmReview;
+  const pieces=sourceSegments(c);
+  const idx=side==='start'?0:pieces.length-1;
+  const piece=pieces[idx];
+  clips[selected]=amendClipBoundary(c,side,
+    side==='start'?Math.max(0,piece.start-15):Math.min(media.duration,piece.end+15),media.duration,idx);
+  delete clips[selected].scenes;
+  clips[selected].reviewReasons=['Граница изменена вручную. Проверьте её смысловую завершённость.'];
+  clips[selected].status='needs-review';delete clips[selected].approvedAt;delete clips[selected].llmReview;
   sync();status('Временная граница изменена. Повторите предпросмотр.');
  };
 }
-$('player').addEventListener('timeupdate',()=>{const c=current();if(c&&!$('player').paused&&$('player').currentTime>=c.end)$('player').pause();updateTimelinePlayhead()});
+$('player').addEventListener('timeupdate',()=>{
+ const c=current(),v=$('player');
+ if(c&&!v.paused){
+   const pieces=sourceSegments(c);
+   const index=pieces.findIndex(p=>v.currentTime>=p.start-.15&&v.currentTime<p.end+.16);
+   if(index>=0&&v.currentTime>=pieces[index].end-.045){
+      if(index+1<pieces.length)v.currentTime=pieces[index+1].start;
+      else v.pause();
+   }else if(index<0&&pieces.length&&v.currentTime>=pieces.at(-1).end){v.pause()}
+ }
+ updateTimelinePlayhead();
+});
 $('add').onclick=()=>{
   if(!media)return;const last=current();
   const start=last?Math.min(media.duration-1,Math.max(0,last.end)):0;
@@ -848,12 +959,24 @@ $('analyze-scene').onclick=async()=>{
   try{
     showOperation('composition',null,'Пересобираем кадр по текущей микротеме…');
     const lang=$('language').value==='ru'?'ru':'en';
-    const {scene,recognizedLines,note,sceneCount,ocrBackend,context}=await analyzeScene(media,c,chunks,{language:lang,ocrEngine:$('ocr-engine').value,onProgress:status,signal:abort.signal});
-    scene.theme=c.scene?.theme||'warm';c.scene=scene;c.layout='hybrid';c.speakerPreset='auto';$('speaker-preset').value='auto';$('layout').value='hybrid';
-    $('scene-hint').textContent='Сцен: '+sceneCount+', областей: '+scene.panels.length+', OCR строк: '+recognizedLines+
-      '. Движок OCR: '+ocrBackend+'. Содержание: '+(context?.kind||'unknown')+
-      (context?.activeTab?' · активная вкладка: '+context.activeTab:'')+'. '+note;
-    status('Композиция построена на устройстве. Проверьте схему, формулы и вебку.');
+    const parts=sourceSegments(c);
+    const scenes=[],details=[];
+    for(let i=0;i<parts.length;i++){
+      if(abort.signal.aborted)throw new DOMException('Stopped','AbortError');
+      status('OCR и монтаж отрывка '+(i+1)+' из '+parts.length);
+      const section={...c,start:parts[i].start,end:parts[i].end,scene:undefined};
+      const data=await analyzeScene(media,section,
+        chunks.filter(row=>row.end>section.start&&row.start<section.end),
+        {language:lang,ocrEngine:$('ocr-engine').value,onProgress:status,signal:abort.signal});
+      data.scene.theme=c.scene?.theme||'warm';
+      scenes.push(data.scene);details.push(data);
+    }
+    c.scenes=scenes;c.scene=scenes[0];c.layout='hybrid';c.speakerPreset='auto';
+    $('speaker-preset').value='auto';$('layout').value='hybrid';
+    const totalOcr=details.reduce((n,x)=>n+x.recognizedLines,0);
+    $('scene-hint').textContent='Раздельно обработано '+parts.length+' частей · OCR строк: '+totalOcr+
+      '. Каждую склейку и формулы нужно проверить.';
+    status('Композиция для '+parts.length+' частей создана локально. Проверьте смысловые переходы.');
   }catch(e){if(e.name==='AbortError')status('Анализ отменён');else error(e)}
   finally{abort=null;setBusy(false)}
 };
@@ -916,8 +1039,13 @@ $('export').onclick=async()=>{
 function loop(){
   const video=$('player'),c=current();
   if(media&&c&&video.readyState>=2){
-    const caption=captionSequenceAt(chunks,video.currentTime);
-    try{paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,c.scene||null,Math.max(0,video.currentTime-c.start))}catch{}
+    const valid=sourceSegments(c).some(x=>video.currentTime>=x.start&&video.currentTime<x.end);
+    const caption=valid?captionSequenceAt(chunks,video.currentTime):null;
+    const index=sourceSegments(c).findIndex(part=>video.currentTime>=part.start&&video.currentTime<part.end);
+    const activePiece=sourceSegments(c)[Math.max(0,index)];
+    try{paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,
+       c.scenes?.[Math.max(0,index)]||c.scene||null,
+       Math.max(0,video.currentTime-(activePiece?.start||0)))}catch{}
   }
   previewRaf=requestAnimationFrame(loop);
 }

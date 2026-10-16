@@ -1,7 +1,7 @@
 name: ExamClips Local MVP CI
 on:
   push:
-    branches: [feat/examclips-local-mvp-20261015, feat/examclips-hybrid-composer-20261015, feat/examclips-microtopics-live-presenter-20261016, feat/examclips-completion-20261016, feat/examclips-ocr-context-20261016, feat/examclips-mvp-ui-deploy-20261016, feat/examclips-workflow-timeline-captions-20261016, feat/examclips-timeline-primary-20261016]
+    branches: [feat/examclips-local-mvp-20261015, feat/examclips-hybrid-composer-20261015, feat/examclips-microtopics-live-presenter-20261016, feat/examclips-completion-20261016, feat/examclips-ocr-context-20261016, feat/examclips-mvp-ui-deploy-20261016, feat/examclips-workflow-timeline-captions-20261016, feat/examclips-timeline-primary-20261016, feat/examclips-selective-story-edl-20261016]
     paths: ['examclips-local/**', 'docs/superpowers/**', '.github/workflows/examclips-local-mvp.yml']
   pull_request:
     paths: ['examclips-local/**', 'docs/superpowers/**', '.github/workflows/examclips-local-mvp.yml']
@@ -45,11 +45,18 @@ jobs:
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-mvp-vite.log 2>&1 &
           sleep 4
           node scripts/mvp-ui-smoke.mjs
+      - name: Long quiet lecture with only sparse useful teaching segments
+        run: |
+          ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=white:s=320x180:r=2 -f lavfi -i sine=frequency=441:sample_rate=16000 -t 180 -c:v libx264 -preset ultrafast -c:a aac -shortest selective-lecture-fixture.mp4
+          node scripts/sparse-lecture-smoke.mjs
       - name: Browser integration test
         run: |
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-vite.log 2>&1 &
           sleep 4
           npm run smoke
+      - name: Stitch noncontiguous original source clips with uninterrupted audio
+        run: |
+          node scripts/noncontiguous-edl-smoke.mjs
       - name: Batch export whole series to local folder
         run: |
           node scripts/batch-export-smoke.mjs

@@ -1,6 +1,7 @@
 import {defineConfig} from 'vite';
 import {rapidOcrBridge} from './local-ocr-bridge.js';
 import {normalizeReview,prepareReviewRequest,reviewPrompt} from './src/completion-review.js';
+import {storyReviewPrompt,validateStoryReview} from './src/story-review.js';
 // A strictly loopback-only Ollama bridge for local Vite launches.
 // Only review text is sent to loopback Ollama; optional OCR PNG stays on localhost Python.
 // Production static builds have no bridge: the browser fallback remains available.
@@ -33,7 +34,7 @@ async function readJsonRequest(req){
 function localOllamaBridge(){
  const register=(server)=>{
   server.middlewares.use(async(req,res,next)=>{
-    if(!req.url?.startsWith('/api/local-review'))return next();
+    if(!req.url?.startsWith('/api/local-review')&&!req.url?.startsWith('/api/local-story-plan'))return next();
     if(!allowedAddress(req.socket.remoteAddress))return fail(res,403,'Доступ только с текущего компьютера');
     if(req.headers.origin&&req.headers.origin!=='http://'+req.headers.host)
       return fail(res,403,'Недопустимый Origin — локальная проверка защищена');
@@ -42,6 +43,31 @@ function localOllamaBridge(){
         let models=[];try{models=await installedModels()}catch{}
         return reply(res,{available:models.length>0,model:models.find(x=>/qwen/i.test(x))||models[0]||null,
           note:'Модели используются только в Ollama на 127.0.0.1. Новые веса не скачиваются.'});
+      }
+      if(req.url==='/api/local-story-plan'&&req.method==='POST'){
+        if(!(req.headers['content-type']||'').startsWith('application/json'))
+          return fail(res,415,'Ожидается application/json');
+        const payload=await readJsonRequest(req);
+        if(!payload||!Array.isArray(payload.sections)||payload.sections.length>40||
+           !(payload.duration>0&&payload.duration<=10800)||
+           !(payload.keepFraction>0&&payload.keepFraction<=1)||
+           payload.sections.some(c=>!c||!/^candidate-[0-9]{1,4}$/.test(c.id)||
+             !(c.start>=0&&c.end>c.start&&c.end<=payload.duration)||
+             typeof c.text!=='string'||c.text.length>520))
+          return fail(res,400,'Недопустимые участки лекции для локального отбора');
+        const models=await installedModels();
+        const model=models.find(x=>/qwen/i.test(x))||models[0];
+        if(!model)return fail(res,503,'Нет локально установленной LLM Ollama');
+        const answer=await fetch(OLLAMA+'/api/generate',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({model,prompt:storyReviewPrompt(payload),stream:false,format:'json',
+            options:{temperature:0,num_predict:1700,num_ctx:12000},keep_alive:'2m'}),
+          signal:AbortSignal.timeout(180000)
+        });
+        if(!answer.ok)throw Error('Локальная LLM не ответила на запрос отбора');
+        const raw=await answer.json();
+        let parsed;try{parsed=JSON.parse(raw.response)}catch{throw Error('Локальная модель вернула некорректный JSON')}
+        return reply(res,validateStoryReview(parsed,payload));
       }
       if(req.url==='/api/local-review'&&req.method==='POST'){
         if(!(req.headers['content-type']||'').startsWith('application/json'))
