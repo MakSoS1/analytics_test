@@ -180,7 +180,7 @@ root.innerHTML=`
           <h2>Таймлайн лекции</h2>
           <p class="hint">Синие участки попадут в ролики, серые будут пропущены. Выбирайте фрагменты и перетаскивайте края, как в видеоредакторе.</p></div>
         <div class="timeline-actions">
-          <button id="timeline-regenerate" disabled>↻ Пересмотреть интересные моменты</button><button id="timeline-ai-select" disabled title="Работает только через установленную Ollama на этом ПК">✧ Уточнить отбор через локальную LLM</button>
+          <button id="timeline-regenerate" disabled>↻ Пересмотреть интересные моменты</button><button id="timeline-ai-select" hidden disabled title="Работает только через установленную Ollama на этом ПК">✧ Уточнить отбор через локальную LLM</button>
           <button id="timeline-recompose" disabled>✧ Пересобрать выбранный кадр</button>
         </div>
       </div>
@@ -356,6 +356,7 @@ async function probeLocalReview(){
    if(!response.ok||!String(response.headers.get('content-type')||'').includes('application/json'))return;
    const result=await response.json();
    localReviewAvailable=Boolean(result.available);
+   $('timeline-ai-select').hidden=!localReviewAvailable;
    if(!localReviewAvailable)$('review-state').textContent='Ollama не найдена на этом ПК; проверка качества тем остаётся ручной.';
    enable();
  }catch{/* Static or offline browser fallback without local Ollama */}
@@ -676,7 +677,7 @@ async function selectFile(file){
     if(media)await media.input.dispose();
     if(originalUrl)URL.revokeObjectURL(originalUrl);
     media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
-    sourceFile=file;sceneCuts=[];
+    sourceFile=file;sceneCuts=[];latestEditorialCandidates=[];
     $('file-note').textContent=`${file.name} · ${timecode(media.duration)} · ${media.width}×${media.height} · ${(file.size/1e6).toFixed(1)} МБ`;
     // A draft is NOT an AI-generated completed lesson; only ASR/SRT can produce topic proposals.
     clips=[{id:'draft-1',start:0,end:Math.min(media.duration,180),title:'Черновик — сначала распознайте лекцию',
