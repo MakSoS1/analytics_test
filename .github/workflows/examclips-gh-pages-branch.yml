@@ -1,7 +1,7 @@
 name: ExamClips Ready-to-Publish Branch
 on:
   push:
-    branches: [feat/examclips-timeline-primary-20261016]
+    branches: [feat/examclips-selective-story-edl-20261016]
     paths:
       - 'examclips-local/**'
       - '.github/workflows/examclips-gh-pages-branch.yml'
