@@ -1,0 +1,35 @@
+name: ExamClips Ready-to-Publish Branch
+on:
+  push:
+    branches: [feat/examclips-mvp-ui-deploy-20261016]
+    paths:
+      - 'examclips-local/**'
+      - '.github/workflows/examclips-gh-pages-branch.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  prepare-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build tested frontend as static site
+        working-directory: examclips-local
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm test
+          EXAMCLIPS_BASE=/analytics_test/ npm run build
+          test -f dist/index.html
+          touch dist/.nojekyll
+      - name: Push prebuilt site to isolated gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./examclips-local/dist
+          force_orphan: true
+          enable_jekyll: false

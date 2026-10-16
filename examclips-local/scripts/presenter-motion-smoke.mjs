@@ -21,7 +21,8 @@ try{
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled);
  await page.locator('#srt-file').setInputFiles(subtitle);
  await page.waitForFunction(()=>!document.querySelector('#export').disabled);
- await page.locator('#layout').selectOption('hybrid');
+ await page.locator('.controls .detail-settings summary').click();
+  await page.locator('#layout').selectOption('hybrid');
  const [download]=await Promise.all([page.waitForEvent('download',{timeout:90000}),page.locator('#export').click()]);
  const file=resolve(work,'presenter-motion-export.mp4');await download.saveAs(file);
  const a=samplePixels(.6,file),b=samplePixels(2.6,file);

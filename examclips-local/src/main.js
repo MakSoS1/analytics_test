@@ -1,4 +1,5 @@
 import './styles.css';
+import {quizForClip,gradeQuiz,toQuizJson} from './quiz.js';
 import {openMedia} from './media.js';
 import {transcribe} from './asr.js';
 import {buildClips,parseSrt,toSrt,validRange,timecode,textAt} from './segments.js';
@@ -11,29 +12,44 @@ import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {captionCueAt} from './editorial-motion.js';
 import {buildReviewPayload} from './completion-review.js';
 import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
+const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
+let localReviewAvailable=false;
 const root=document.querySelector('#app');
 root.innerHTML=`
-<header class="top"><div class="brand"><span class="brand-icon">✦</span> ExamClips <span class="pill">LOCAL MVP</span></div><div class="privacy">◈ Исходники остаются на устройстве</div></header>
+<header class="top">
+ <div class="brand"><span class="brand-icon">▶</span> ExamClips <span class="pill">BETA</span></div>
+ <nav class="top-navigation" aria-label="Разделы">
+  <button data-scroll="overview" class="active" type="button">Обзор</button>
+  <button data-scroll="editor" type="button">Микротемы</button>
+  <button data-scroll="quiz-panel" type="button">Тесты</button>
+ </nav>
+ <div class="privacy">● Видео остаётся на устройстве</div>
+</header>
 <main class="shell">
   <aside class="sidebar">
-    <div class="heading">Мои лекции <span class="muted">01 / 01</span></div>
+    <div class="heading">Новая обработка <span class="muted">Приватно</span></div>
     <label class="drop" id="drop"><span class="drop-icon">⬆</span><b>Выберите видео</b><small>MP4, MOV, WebM · до 180 мин / 2 ГБ</small><input type="file" id="video-file" accept="video/mp4,video/quicktime,video/webm,video/*" hidden></label>
-    <div class="file-note" id="file-note">Файл пока не выбран</div>
+    <div class="file-note" id="file-note">Файл пока не выбран. Ничего не загружается на сервер.</div>
+ <div class="onboarding">1. Выбери запись лекции. 2. Распознай речь или импортируй SRT. 3. Проверь фрагменты и получи вертикальные видео.</div>
     <div class="settings">
+      <div class="heading">1. Расшифровка</div>
+      <details class="detail-settings"><summary>Язык и параметры Whisper</summary><div class="detail-body">
       <label>Распознавание речи<select id="language"><option value="auto">Авто (RU / EN)</option><option value="ru">Русский</option><option value="en">English</option></select></label>
       <label>Размер локальной модели<select id="asr-model">
         <option value="tiny">Whisper Tiny — быстрый режим</option>
         <option value="base">Whisper Base — качественнее, требует больше ресурсов</option>
       </select></label>
       <label>Объём для распознавания<select id="asr-limit"><option value="all" selected>Вся лекция — полный анализ микротем</option><option value="300">Первые 5 минут — быстрая проба</option><option value="900">Первые 15 минут — проба</option></select></label>
-      <button class="primary" id="transcribe" disabled>✧ Распознать / продолжить локально</button>
+      </div></details>
+      <button class="primary" id="transcribe" disabled>✦ Распознать лекцию локально</button>
       <button id="forget-asr" disabled>Удалить сохранённую расшифровку из кэша</button>
       <button id="import-srt" disabled>Импорт SRT (без AI)</button>
       <input type="file" accept=".srt,text/plain" id="srt-file" hidden>
       <p class="hint">При первом запуске выбранной Whisper скачиваются веса модели (Tiny или Base). Полная обработка часовой лекции может быть долгой на слабом ПК; для проверки выберите первые 5 минут. Видеоданные не загружаются в облако.</p>
     </div>
     <div class="settings">
-  <label>Длина учебной микротемы<select id="topic-preset">
+  <div class="heading">2. Найти микротемы</div>
+  <label>Длительность<select id="topic-preset">
     <option value="full">Полная мысль · обычно 1–3 мин, максимум 5 мин</option>
     <option value="compact">Короткие объяснения · обычно 1–2 мин, максимум 3 мин</option>
   </select></label>
@@ -41,13 +57,24 @@ root.innerHTML=`
   <button id="suggest-topics" disabled>✧ Предложить законченные микротемы</button>
   <p class="hint" id="topic-coverage">Для смысловой нарезки нужна расшифровка речи. Рекомендации по границам предварительные: проверьте начало и вывод каждой микротемы.</p>
 </div>
-<div class="section-title">Микротемы <span id="clip-count">0</span></div>
+<div class="section-title">3. Готовые фрагменты <span id="clip-count">0</span></div>
     <div id="clips" class="clips"><p class="empty">После загрузки предложим фрагменты. Начальную и конечную границу можно изменять.</p></div>
   </aside>
-  <section class="workspace">
-    <div class="workspace-top"><div><div class="eyebrow">РЕДАКТОР МИКРОУРОКОВ</div><h1>Одна законченная тема — один ролик</h1><p class="lead">От 1 до 5 минут: понятный вход в тему, объяснение и итог. Графика синхронизируется с живым видео лектора.</p></div><span class="status" id="status">Ожидание видео</span></div>
-    <div class="editor">
-      <div class="stage"><canvas id="preview" width="${WIDTH}" height="${HEIGHT}"></canvas><video id="player" controls playsinline preload="metadata"></video><p class="stage-note">Предпросмотр композиции 9:16</p></div>
+  <section class="workspace" id="overview">
+    <div class="workspace-top"><div><div class="eyebrow">ОБРАБОТКА ЛЕКЦИЙ · EXAMCLIPS</div><h1>Из лекции — в понятные короткие видео</h1><p class="lead">Текст, формулы и слайды остаются в кадре. Монтаж и расшифровка выполняются на устройстве.</p></div><span class="status" id="status">Ожидание видео</span></div>
+    <div class="journey" aria-label="Этапы обработки">
+      <div class="journey-step" id="journey-upload"><div class="journey-number">1</div><div><b>Лекция</b><small id="journey-upload-state">Выберите файл</small></div></div>
+      <div class="journey-step" id="journey-transcript"><div class="journey-number">2</div><div><b>Транскрипция</b><small id="journey-transcript-state">Whisper / SRT</small></div></div>
+      <div class="journey-step" id="journey-topics"><div class="journey-number">3</div><div><b>Микротемы</b><small id="journey-topics-state">1–5 минут</small></div></div>
+      <div class="journey-step" id="journey-output"><div class="journey-number">4</div><div><b>Ролики + тесты</b><small>Экспорт на устройство</small></div></div>
+    </div>
+    <div class="kpis" aria-label="Локальная статистика проекта">
+      <div class="kpi"><strong id="kpi-topics">0</strong><span>Микротем найдено</span></div>
+      <div class="kpi"><strong id="kpi-duration">0 мин</strong><span>Длительность фрагментов</span></div>
+      <div class="kpi"><strong id="kpi-approved">0</strong><span>Проверено вручную</span></div>
+    </div>
+    <div class="editor" id="editor">
+      <div class="stage"><canvas id="preview" width="${WIDTH}" height="${HEIGHT}"></canvas><video id="player" controls playsinline preload="metadata"></video><p class="stage-note">Предпросмотр · вертикальный формат 9:16</p></div>
       <div class="controls">
         <div class="panel-title"><b id="selected-title">Настройки микротемы</b><span class="muted" id="selected-time"></span></div>
   <div id="topic-review" class="topic-review">Проверьте, что ролик понятен без просмотра предыдущих частей лекции.</div>
@@ -59,6 +86,7 @@ root.innerHTML=`
   </div>
         <label>Заголовок<input id="clip-title" disabled maxlength="90"></label>
         <div class="two"><label>Начало, сек<input type="number" id="clip-start" min="0" step=".1" disabled></label><label>Конец, сек<input type="number" id="clip-end" min="0" step=".1" disabled></label></div>
+        <details class="detail-settings"><summary>Расширенные настройки монтажа и OCR</summary><div class="detail-body">
         <label>Композиция<select id="layout" disabled><option value="hybrid">AI-композиция: объекты + вебка</option><option value="fit">Исходный слайд целиком</option><option value="focus">Акцент на выбранной области</option><option value="crop">Заполнить вертикальный кадр</option></select></label>
         <label>Движок распознавания слайдов<select id="ocr-engine">
 <option value="auto">Авто — RapidOCR, если установлен; иначе Tesseract.js</option>
@@ -79,7 +107,8 @@ root.innerHTML=`
 <option value="standard">Быстро — 720×1280, 15 FPS</option>
 <option value="high">Качественно — 1080×1920, 30 FPS</option>
 </select></label>
-<div class="buttons"><button id="play-clip" disabled>▶ Просмотреть клип</button><button class="primary" id="export" disabled>↓ Экспорт MP4</button></div>
+</div></details>
+<div class="buttons"><button id="play-clip" disabled>▶ Посмотреть</button><button class="primary" id="export" disabled>↓ Экспорт MP4</button></div>
 <button id="export-all" disabled>↓ Экспортировать все микротемы в папку</button>
         <div class="buttons">
   <button id="extend-start" disabled>← Ещё 15 сек в начале</button>
@@ -99,11 +128,117 @@ root.innerHTML=`
         <button id="load-project">Открыть проект JSON</button><input id="project-file" type="file" accept=".json,application/json" hidden>
       </div>
     </div>
+    <section class="quiz-panel" id="quiz-panel">
+      <div class="quiz-header">
+        <div><h2>Мини-тест по материалу</h2>
+          <p class="quiz-intro">Проверка ключевых терминов из реальной речи преподавателя. Ответы остаются в браузере.</p></div>
+        <div class="quiz-actions"><button id="quiz-generate" disabled>Создать тест</button><button id="quiz-download" disabled>↓ JSON теста</button></div>
+      </div>
+      <div id="quiz-content" aria-live="polite"><p class="empty">Сначала распознайте лекцию и выберите микротему.</p></div>
+      <button id="quiz-grade" disabled>Проверить ответы</button>
+      <div id="quiz-result" class="quiz-result" hidden></div>
+      <p class="hint" style="margin-top:12px">Это тест на воспроизведение терминов из транскрипта, а не автоматически проверенная оценка понимания темы.</p>
+    </section>
     <div class="progress-row"><div id="progress" aria-live="polite">Готов к загрузке лекции</div><button id="cancel" disabled>Остановить</button></div>
   </section>
 </main>
-<footer>ExamClips Local MVP · Никаких облачных видеозагрузок · Проверяйте границы, формулы и субтитры вручную</footer>`;
+<footer>ExamClips · Локальная обработка · Без загрузки исходных видео · Проверяйте формулы, субтитры и границы тем перед публикацией</footer>`;
 const $=id=>document.getElementById(id);
+
+const generatedQuizzes=new Map(),quizSelections=new Map();
+function quizKey(c){return c?[c.id,c.start,c.end,c.title].join('|'):''}
+function updateDashboard(){
+ const ready=clips.filter(c=>c.id!=='draft-1'&&c.end>c.start);
+ const checked=ready.filter(c=>c.status==='approved');
+ $('kpi-topics').textContent=String(ready.length);
+ $('kpi-approved').textContent=String(checked.length);
+ $('kpi-duration').textContent=Math.round(ready.reduce((sum,c)=>sum+c.end-c.start,0)/60)+' мин';
+ const stages=[
+   ['journey-upload',!!media,'journey-upload-state',media?'Видео выбрано':'Выберите файл'],
+   ['journey-transcript',chunks.length>0,'journey-transcript-state',chunks.length+' реплик'],
+   ['journey-topics',ready.length>0,'journey-topics-state',ready.length+' предложено'],
+   ['journey-output',checked.length>0,null,null]
+ ];
+ for(const [id,done,caption,text] of stages){
+   $(id).classList.toggle('done',done);
+   if(caption&&text!==null)$(caption).textContent=text;
+ }
+}
+function renderQuiz(){
+ const mount=$('quiz-content');mount.replaceChildren();
+ const clip=current(),key=quizKey(clip);
+ const questions=generatedQuizzes.get(key)||[];
+ $('quiz-generate').disabled=!media||!chunks.length||!clip||clip.id==='draft-1'||busy;
+ $('quiz-download').disabled=!questions.length||busy;
+ $('quiz-grade').disabled=!questions.length||busy;
+ $('quiz-result').hidden=true;
+ if(!questions.length){
+   const p=document.createElement('p');p.className='empty';
+   p.textContent=chunks.length?'Выберите микротему и нажмите «Создать тест». Вопросы формируются только по тексту выбранной темы.':'После расшифровки здесь можно создать проверку терминов из лекции.';
+   mount.append(p);return;
+ }
+ const answers=quizSelections.get(key)||[];
+ questions.forEach((q,i)=>{
+   const section=document.createElement('section');section.className='quiz-question';
+   const heading=document.createElement('b');heading.textContent=(i+1)+'. '+q.prompt;
+   const quote=document.createElement('p');quote.className='quiz-quote';quote.textContent='«'+q.quote+'»';
+   const options=document.createElement('div');options.className='quiz-options';
+   q.options.forEach((option,j)=>{
+      const label=document.createElement('label'),radio=document.createElement('input');
+      radio.type='radio';radio.name='q-'+i;radio.value=String(j);radio.checked=answers[i]===j;
+      radio.onchange=()=>{const selections=quizSelections.get(key)||[];selections[i]=j;quizSelections.set(key,selections)};
+      const text=document.createElement('span');text.textContent=option;label.append(radio,text);options.append(label);
+   });
+   section.append(heading,quote,options);mount.append(section);
+ });
+}
+async function probeLocalReview(){
+ if(!isLocalDesktop)return;
+ try{
+   const response=await fetch('/api/local-review-capabilities',{cache:'no-store',signal:AbortSignal.timeout(4000)});
+   if(!response.ok||!String(response.headers.get('content-type')||'').includes('application/json'))return;
+   const result=await response.json();
+   localReviewAvailable=Boolean(result.available);
+   if(!localReviewAvailable)$('review-state').textContent='Ollama не найдена на этом ПК; проверка качества тем остаётся ручной.';
+   enable();
+ }catch{/* Static or offline browser fallback without local Ollama */}
+}
+function initMvpEvents(){
+ document.querySelectorAll('[data-scroll]').forEach(button=>{
+   button.addEventListener('click',()=>{
+     const anchor=document.getElementById(button.dataset.scroll);
+     if(!anchor)return;
+     anchor.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});
+     document.querySelectorAll('[data-scroll]').forEach(x=>x.classList.toggle('active',x===button));
+   });
+ });
+ if(!isLocalDesktop){
+   const opt=$('ocr-engine').querySelector('option[value="rapid"]');if(opt)opt.disabled=true;
+   $('ocr-engine').value='tesseract';
+ }
+ $('quiz-generate').onclick=()=>{
+   const clip=current();if(!clip)return;
+   const key=quizKey(clip),questions=quizForClip(clip,chunks,{count:5});
+   generatedQuizzes.set(key,questions);quizSelections.delete(key);
+   renderQuiz();
+   status(questions.length?'Создано '+questions.length+' вопросов по исходной речи. Проверьте формулировки.':'В выбранной микротеме пока недостаточно распознанных предложений для достоверного теста.');
+ };
+ $('quiz-grade').onclick=()=>{
+   const key=quizKey(current()),questions=generatedQuizzes.get(key)||[],choices=quizSelections.get(key)||[];
+   if(!questions.length)return;
+   const outcome=gradeQuiz(questions,choices);
+   $('quiz-result').hidden=false;
+   $('quiz-result').textContent='Результат: '+outcome.correct+' из '+outcome.total+
+       ' · '+outcome.percent+'%. Это оценка узнавания терминов, а не экзамен на понимание.';
+ };
+ $('quiz-download').onclick=()=>{
+   const clip=current();if(!clip)return;
+   const questions=generatedQuizzes.get(quizKey(clip))||[];if(!questions.length)return;
+   download(new Blob([JSON.stringify(toQuizJson(clip,questions),null,2)],{type:'application/json;charset=utf-8'}),
+     safeName(clip.title)+'.quiz.json');
+ };
+}
+
 let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
 function status(msg){$('progress').textContent=msg;$('status').textContent=msg.slice(0,48)}
 function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)))}
@@ -113,8 +248,9 @@ function enable(){
   $('scan-chapters').disabled=!has||busy;
   $('forget-asr').disabled=!has||busy;
   $('suggest-topics').disabled=!has||busy||!chunks.length;
+  $('quiz-generate').disabled=!has||busy||!chunks.length||current()?.id==='draft-1';
   $('export-all').disabled=!has||busy||!chunks.length||clips.every(c=>c.id==='draft-1');
-  $('verify-topic').disabled=!clip||busy||!chunks.length||current()?.id==='draft-1';
+  $('verify-topic').disabled=!isLocalDesktop||!localReviewAvailable||!clip||busy||!chunks.length||current()?.id==='draft-1';
   $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
     !((current()?.llmReview?.suggestedStartDelta||0)||(current()?.llmReview?.suggestedEndDelta||0));
   for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context','approve-topic'])$(id).disabled=!clip||busy;
@@ -142,7 +278,7 @@ function renderClips(){
   });$('clip-count').textContent=String(clips.length);enable();
 }
 function sync(){
-  renderClips();const c=current();if(!c)return;
+  renderClips();updateDashboard();renderQuiz();const c=current();if(!c)return;
   $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
   $('approve-topic').textContent=c.status==='approved'
     ? '✓ Микротема проверена вручную · снять отметку'
@@ -151,7 +287,9 @@ function sync(){
     ? 'Проверить: '+c.reviewReasons.join(' · ')
     : 'Границы выбраны вручную. Проверьте вступление, объяснение и вывод.';
 
-  $('review-state').textContent=c.llmReview
+  $('review-state').textContent=!localReviewAvailable
+    ? 'AI-проверка через установленную на ПК Ollama доступна только при локальном запуске. Для веб-версии используйте ручную проверку.'
+    : c.llmReview
     ? 'Локальная модель: '+c.llmReview.verdict+' · '+c.llmReview.explanation+
       ' · Доказательства: '+(c.llmReview.evidence||[]).join(' | ')+
       ' · Это не гарантия качества — проверьте самостоятельно.'
@@ -185,7 +323,7 @@ async function selectFile(file){
       }
     }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
     sync();
-  }catch(e){media=null;clips=[];error(e)}finally{setBusy(false)}
+  }catch(e){media=null;clips=[];updateDashboard();renderQuiz();error(e)}finally{setBusy(false)}
 }
 $('video-file').addEventListener('change',e=>selectFile(e.target.files?.[0]));
 $('drop').addEventListener('dragover',e=>{e.preventDefault();$('drop').classList.add('over')});
@@ -460,4 +598,4 @@ function loop(){
   }
   previewRaf=requestAnimationFrame(loop);
 }
-loop();enable();
+initMvpEvents();loop();enable();updateDashboard();renderQuiz();probeLocalReview();

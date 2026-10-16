@@ -73,6 +73,7 @@ function localOllamaBridge(){
  return {name:'examclips-local-ollama-bridge',configureServer:register,configurePreviewServer:register};
 }
 export default defineConfig({
+ base:process.env.EXAMCLIPS_BASE||'/',
  server:{host:'127.0.0.1',strictPort:false},
  preview:{host:'127.0.0.1'},
  plugins:[localOllamaBridge(),rapidOcrBridge()]
