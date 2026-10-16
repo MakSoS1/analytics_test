@@ -502,7 +502,7 @@ function sync(){
   $('player').currentTime=c.start;
   updateTimelinePlayhead();
 }
-function setBusy(v){busy=v;enable()}
+function setBusy(v){busy=v;if(!v&&root.dataset.phase==='results')$('processing-panel').hidden=true;enable()}
 async function selectFile(file){
   if(!file)return;
   if(file.size>2e9){status('Файл больше лимита MVP 2 ГБ');return}
@@ -603,6 +603,7 @@ $('scan-chapters').onclick=async()=>{
  if(!media)return;
  abort=new AbortController();setBusy(true);
  try{
+  showOperation('topics',null,'Ищем изменения учебного материала в исходной лекции…');
   status('Локальный анализ смен слайдов на протяжении лекции...');
   const cuts=await sampleSlideCuts(media,{start:0,end:media.duration},
     {sampleEvery:8,signal:abort.signal,onProgress:status});
@@ -753,6 +754,7 @@ $('analyze-scene').onclick=async()=>{
   const c=current();if(!media||!c)return;
   abort=new AbortController();setBusy(true);
   try{
+    showOperation('composition',null,'Пересобираем кадр по текущей микротеме…');
     const lang=$('language').value==='ru'?'ru':'en';
     const {scene,recognizedLines,note,sceneCount,ocrBackend,context}=await analyzeScene(media,c,chunks,{language:lang,ocrEngine:$('ocr-engine').value,onProgress:status,signal:abort.signal});
     scene.theme=c.scene?.theme||'warm';c.scene=scene;c.layout='hybrid';c.speakerPreset='auto';$('speaker-preset').value='auto';$('layout').value='hybrid';
@@ -776,12 +778,19 @@ $('export-all').onclick=async()=>{
  if(!work.length)return;
  abort=new AbortController();setBusy(true);
  let exported=0;
+ showOperation('composition',0,'Пакетный экспорт '+work.length+' роликов…');
  try{
    for(const clip of work){
      if(abort.signal.aborted)throw new DOMException('Stopped','AbortError');
      status('Экспорт '+(exported+1)+'/'+work.length+': '+clip.title);
      const blob=await exportClip(media,clip,chunks,{quality:$('output-quality').value,signal:abort.signal,
-       onProgress:m=>status((exported+1)+'/'+work.length+' · '+m)});
+       onProgress:m=>{
+         const msg=(exported+1)+'/'+work.length+' · '+m;
+         status(msg);
+         const part=String(m).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
+         const fraction=part?Number(part[1])/Math.max(1,Number(part[2])):0;
+         showOperation('composition',100*(exported+fraction)/work.length,msg);
+       }});
      const name=String(exported+1).padStart(2,'0')+'_'+safeName(clip.title)+
        (clip.status==='approved'?'':'_DRAFT')+'.mp4';
      const handle=await dir.getFileHandle(name,{create:true});
