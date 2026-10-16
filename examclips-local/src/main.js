@@ -844,7 +844,7 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
     // Any manual boundary edit invalidates prior LLM evidence for that interval.
     if(key==='clip-start'||key==='clip-end'||key==='clip-title'){
       delete c.llmReview;
-      if(key==='clip-start'||key==='clip-end')delete c.scene;
+      if(key==='clip-start'||key==='clip-end'){delete c.scene;delete c.scenes;}
       if(c.status==='approved'){c.status='needs-review';delete c.approvedAt;c.reviewReasons=['Содержимое изменилось: проверьте микротему заново.']}
       enable();
     }
@@ -861,7 +861,7 @@ $('transcript').addEventListener('change',()=>{
   if(parsed.length){chunks=parsed;enable();status('Субтитры обновлены. Для новой нарезки нажмите «Предложить микротемы».')}
   else status('Неверный SRT, прежняя разметка сохранена');
 });
-$('play-clip').onclick=()=>{const c=current();if(!c)return;$('player').currentTime=c.start;$('player').play()};
+$('play-clip').onclick=()=>{const c=current();if(!c)return;$('player').currentTime=sourceSegments(c)[0]?.start||c.start;$('player').play()};
 $('approve-topic').onclick=()=>{
  const c=current();if(!c||!media)return;
  if(c.status==='approved'){
@@ -876,17 +876,21 @@ $('approve-topic').onclick=()=>{
 };
 $('listen-context').onclick=()=>{
  const c=current();if(!c)return;
- $('player').currentTime=Math.max(0,c.start-15);
+ $('player').currentTime=Math.max(0,(sourceSegments(c)[0]?.start??c.start)-15);
  $('player').play();
  status('Воспроизводятся 15 секунд перед началом, чтобы проверить контекст.');
 };
 for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
  $(key).onclick=()=>{
   const c=current();if(!c||!media)return;
-  if(side==='start')c.start=Math.max(0,c.start-15);
-  else c.end=Math.min(media.duration,c.end+15);
-  c.reviewReasons=['Граница изменена вручную. Проверьте её смысловую завершённость.'];
-  c.status='needs-review';delete c.approvedAt;delete c.llmReview;
+  const pieces=sourceSegments(c);
+  const idx=side==='start'?0:pieces.length-1;
+  const piece=pieces[idx];
+  clips[selected]=amendClipBoundary(c,side,
+    side==='start'?Math.max(0,piece.start-15):Math.min(media.duration,piece.end+15),media.duration,idx);
+  delete clips[selected].scenes;
+  clips[selected].reviewReasons=['Граница изменена вручную. Проверьте её смысловую завершённость.'];
+  clips[selected].status='needs-review';delete clips[selected].approvedAt;delete clips[selected].llmReview;
   sync();status('Временная граница изменена. Повторите предпросмотр.');
  };
 }
@@ -954,12 +958,24 @@ $('analyze-scene').onclick=async()=>{
   try{
     showOperation('composition',null,'Пересобираем кадр по текущей микротеме…');
     const lang=$('language').value==='ru'?'ru':'en';
-    const {scene,recognizedLines,note,sceneCount,ocrBackend,context}=await analyzeScene(media,c,chunks,{language:lang,ocrEngine:$('ocr-engine').value,onProgress:status,signal:abort.signal});
-    scene.theme=c.scene?.theme||'warm';c.scene=scene;c.layout='hybrid';c.speakerPreset='auto';$('speaker-preset').value='auto';$('layout').value='hybrid';
-    $('scene-hint').textContent='Сцен: '+sceneCount+', областей: '+scene.panels.length+', OCR строк: '+recognizedLines+
-      '. Движок OCR: '+ocrBackend+'. Содержание: '+(context?.kind||'unknown')+
-      (context?.activeTab?' · активная вкладка: '+context.activeTab:'')+'. '+note;
-    status('Композиция построена на устройстве. Проверьте схему, формулы и вебку.');
+    const parts=sourceSegments(c);
+    const scenes=[],details=[];
+    for(let i=0;i<parts.length;i++){
+      if(abort.signal.aborted)throw new DOMException('Stopped','AbortError');
+      status('OCR и монтаж отрывка '+(i+1)+' из '+parts.length);
+      const section={...c,start:parts[i].start,end:parts[i].end,scene:undefined};
+      const data=await analyzeScene(media,section,
+        chunks.filter(row=>row.end>section.start&&row.start<section.end),
+        {language:lang,ocrEngine:$('ocr-engine').value,onProgress:status,signal:abort.signal});
+      data.scene.theme=c.scene?.theme||'warm';
+      scenes.push(data.scene);details.push(data);
+    }
+    c.scenes=scenes;c.scene=scenes[0];c.layout='hybrid';c.speakerPreset='auto';
+    $('speaker-preset').value='auto';$('layout').value='hybrid';
+    const totalOcr=details.reduce((n,x)=>n+x.recognizedLines,0);
+    $('scene-hint').textContent='Раздельно обработано '+parts.length+' частей · OCR строк: '+totalOcr+
+      '. Каждую склейку и формулы нужно проверить.';
+    status('Композиция для '+parts.length+' частей создана локально. Проверьте смысловые переходы.');
   }catch(e){if(e.name==='AbortError')status('Анализ отменён');else error(e)}
   finally{abort=null;setBusy(false)}
 };
@@ -1024,7 +1040,11 @@ function loop(){
   if(media&&c&&video.readyState>=2){
     const valid=sourceSegments(c).some(x=>video.currentTime>=x.start&&video.currentTime<x.end);
     const caption=valid?captionSequenceAt(chunks,video.currentTime):null;
-    try{paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,c.scene||null,Math.max(0,video.currentTime-c.start))}catch{}
+    const index=sourceSegments(c).findIndex(part=>video.currentTime>=part.start&&video.currentTime<part.end);
+    const activePiece=sourceSegments(c)[Math.max(0,index)];
+    try{paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,
+       c.scenes?.[Math.max(0,index)]||c.scene||null,
+       Math.max(0,video.currentTime-(activePiece?.start||0)))}catch{}
   }
   previewRaf=requestAnimationFrame(loop);
 }
