@@ -41,7 +41,7 @@ export async function exportClip(media,clip,chunks,{quality='standard',onProgres
        try{
          paintFrame(canvas,frame,frame.displayWidth,frame.displayHeight,
            clip.layout,clip.focusX,captionSequenceAt(chunks,times[pos]),
-           clip.scene||null,videoOffset+pos/fps);
+           clip.scenes?.[index]||clip.scene||null,pos/fps);
          // Continuous output time across disjoint parts; no 300s silent gap.
          const pts=videoOffset+pos/fps;
          const frameDuration=Math.max(.00001,Math.min(1/fps,videoOffset+duration-pts));
