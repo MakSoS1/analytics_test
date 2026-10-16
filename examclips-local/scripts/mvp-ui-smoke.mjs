@@ -15,10 +15,26 @@ try{
  const page=await browser.newPage({viewport:{width:1470,height:980},deviceScaleFactor:1,acceptDownloads:true});
  page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});
+ assert.equal(await page.locator('#app').getAttribute('data-phase'),'upload');
+ assert.ok(await page.locator('#drop').isVisible());
+ assert.ok(!(await page.locator('#editor').isVisible()));
+
  await page.locator('#video-file').setInputFiles('test-fixture.mp4');
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:30000});
+ assert.equal(await page.locator('#app').getAttribute('data-phase'),'configure');
+ assert.ok(await page.locator('#workflow-config-placeholder').count()===0);
+ assert.ok(await page.locator('.workflow-config').isVisible());
+
  await page.locator('#srt-file').setInputFiles({name:'lecture.srt',mimeType:'text/plain',buffer:Buffer.from(subtitle)});
  await page.waitForFunction(()=>!document.querySelector('#quiz-generate').disabled);
+ assert.equal(await page.locator('#app').getAttribute('data-phase'),'results');
+ assert.ok(await page.locator('#timeline-track .timeline-part.clip').count()>=1);
+ // Fixture initially covers all four seconds. Trim 0.5s to verify a real skipped region.
+ await page.locator('#clip-start').fill('0.5');
+ await page.waitForFunction(()=>document.querySelectorAll('#timeline-track .timeline-part.skipped').length>=1);
+ assert.ok(await page.locator('#timeline-track .timeline-part.skipped').count()>=1);
+ assert.ok(await page.locator('#timeline-source').isVisible());
+
  const overview=await page.evaluate(()=>({
   background:getComputedStyle(document.body).backgroundColor,
   title:document.querySelector('h1')?.textContent,
@@ -41,6 +57,13 @@ try{
  await page.locator('[data-scroll="quiz-panel"]').click();
  await page.evaluate(()=>window.scrollTo(0,0));
  await page.screenshot({path:'mvp-desktop.png',fullPage:true});
+ await page.locator('#timeline-section').scrollIntoViewIfNeeded();
+ await page.screenshot({path:'mvp-timeline.png',fullPage:false});
+ await page.locator('#timeline-source').click({position:{x:65,y:24}});
+ const timeFromSeek=await page.locator('#player').evaluate(el=>el.currentTime);
+ assert.ok(timeFromSeek>=0,'No source scrubbing');
+ await page.locator('#timeline-add').click();
+ assert.ok(await page.locator('#timeline-track .timeline-part.clip').count()>=2);
  await page.locator('#quiz-panel').scrollIntoViewIfNeeded();
  await page.screenshot({path:'mvp-quiz.png',fullPage:false});
  const mobile=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:1});

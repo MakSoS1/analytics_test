@@ -10,11 +10,14 @@ import {sampleSlideCuts} from './slide-cuts.js';
 import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {captionCueAt} from './editorial-motion.js';
+import {captionSequenceAt} from './caption-flow.js';
+import {timelinePieces,timelineStats,timelineTimeAtFraction,amendClipBoundary} from './source-timeline.js';
 import {buildReviewPayload} from './completion-review.js';
 import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
 const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
 let localReviewAvailable=false;
 const root=document.querySelector('#app');
+root.dataset.phase='upload';
 root.innerHTML=`
 <header class="top">
  <div class="brand"><span class="brand-icon">▶</span> ExamClips <span class="pill">BETA</span></div>
@@ -30,8 +33,9 @@ root.innerHTML=`
     <div class="heading">Новая обработка <span class="muted">Приватно</span></div>
     <label class="drop" id="drop"><span class="drop-icon">⬆</span><b>Выберите видео</b><small>MP4, MOV, WebM · до 180 мин / 2 ГБ</small><input type="file" id="video-file" accept="video/mp4,video/quicktime,video/webm,video/*" hidden></label>
     <div class="file-note" id="file-note">Файл пока не выбран. Ничего не загружается на сервер.</div>
+ <button id="settings-toggle" class="settings-toggle" type="button">Настройки анализа <span>▾</span></button>
  <div class="onboarding">1. Выбери запись лекции. 2. Распознай речь или импортируй SRT. 3. Проверь фрагменты и получи вертикальные видео.</div>
-    <div class="settings">
+    <div class="settings config-group">
       <div class="heading">1. Расшифровка</div>
       <details class="detail-settings"><summary>Язык и параметры Whisper</summary><div class="detail-body">
       <label>Распознавание речи<select id="language"><option value="auto">Авто (RU / EN)</option><option value="ru">Русский</option><option value="en">English</option></select></label>
@@ -47,7 +51,7 @@ root.innerHTML=`
       <input type="file" accept=".srt,text/plain" id="srt-file" hidden>
       <p class="hint">При первом запуске выбранной Whisper скачиваются веса модели (Tiny или Base). Полная обработка часовой лекции может быть долгой на слабом ПК; для проверки выберите первые 5 минут. Видеоданные не загружаются в облако.</p>
     </div>
-    <div class="settings">
+    <div class="settings topic-settings">
   <div class="heading">2. Найти микротемы</div>
   <label>Длительность<select id="topic-preset">
     <option value="full">Полная мысль · обычно 1–3 мин, максимум 5 мин</option>
@@ -57,11 +61,34 @@ root.innerHTML=`
   <button id="suggest-topics" disabled>✧ Предложить законченные микротемы</button>
   <p class="hint" id="topic-coverage">Для смысловой нарезки нужна расшифровка речи. Рекомендации по границам предварительные: проверьте начало и вывод каждой микротемы.</p>
 </div>
-<div class="section-title">3. Готовые фрагменты <span id="clip-count">0</span></div>
+<div class="section-title clip-heading">3. Готовые фрагменты <span id="clip-count">0</span></div>
     <div id="clips" class="clips"><p class="empty">После загрузки предложим фрагменты. Начальную и конечную границу можно изменять.</p></div>
   </aside>
   <section class="workspace" id="overview">
     <div class="workspace-top"><div><div class="eyebrow">ОБРАБОТКА ЛЕКЦИЙ · EXAMCLIPS</div><h1>Из лекции — в понятные короткие видео</h1><p class="lead">Текст, формулы и слайды остаются в кадре. Монтаж и расшифровка выполняются на устройстве.</p></div><span class="status" id="status">Ожидание видео</span></div>
+    <div class="workflow-config">
+      <div class="workflow-config-icon">✦</div>
+      <h2>Лекция загружена. Как будем обрабатывать?</h2>
+      <p>Выберите язык и режим в левой панели. Расшифровка, определение микротем и подготовка монтажа запускаются последовательно.</p>
+      <div class="workflow-config-actions">
+        <button class="primary" id="workflow-start" disabled>Начать анализ лекции →</button>
+        <button id="workflow-srt" disabled>У меня уже есть SRT</button>
+      </div>
+      <p class="hint">Видео останется на этом устройстве. Модели Whisper могут скачиваться при первом запуске.</p>
+    </div>
+    <section id="processing-panel" class="processing-panel" aria-label="Текущий ход анализа" hidden>
+      <div class="processing-header"><div><span class="eyebrow" id="processing-step-label">ЭТАП 1 ИЗ 4</span>
+        <h2 id="processing-title">Обработка видео</h2></div><strong id="processing-percent">Подготовка</strong></div>
+      <div class="processing-meter" role="progressbar" aria-label="Прогресс текущей операции" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="processing-meter-fill"></span></div>
+      <div class="processing-stages">
+        <div data-process="prepare" class="current"><b>01</b><span>Подготовка</span></div>
+        <div data-process="asr"><b>02</b><span>Распознавание</span></div>
+        <div data-process="topics"><b>03</b><span>Выбор тем</span></div>
+        <div data-process="composition"><b>04</b><span>Монтаж</span></div>
+      </div>
+      <p id="processing-detail">Чтение локального файла…</p>
+      <button id="processing-cancel" type="button">Остановить операцию</button>
+    </section>
     <div class="journey" aria-label="Этапы обработки">
       <div class="journey-step" id="journey-upload"><div class="journey-number">1</div><div><b>Лекция</b><small id="journey-upload-state">Выберите файл</small></div></div>
       <div class="journey-step" id="journey-transcript"><div class="journey-number">2</div><div><b>Транскрипция</b><small id="journey-transcript-state">Whisper / SRT</small></div></div>
@@ -128,6 +155,25 @@ root.innerHTML=`
         <button id="load-project">Открыть проект JSON</button><input id="project-file" type="file" accept=".json,application/json" hidden>
       </div>
     </div>
+    <section class="timeline-section" id="timeline-section">
+      <div class="timeline-heading">
+        <div><div class="eyebrow">ИСТОЧНИК И МОНТАЖ</div>
+          <h2>Таймлайн лекции</h2>
+          <p class="hint">Синие участки попадут в ролики, серые будут пропущены. Выбирайте фрагменты и перетаскивайте края, как в видеоредакторе.</p></div>
+        <div class="timeline-actions">
+          <button id="timeline-regenerate" disabled>↻ Перенарезать по речи</button>
+          <button id="timeline-recompose" disabled>✧ Пересобрать выбранный кадр</button>
+        </div>
+      </div>
+      <div class="timeline-legend"><span><i class="legend-kept"></i>В ролике</span><span><i class="legend-skipped"></i>Пропущено</span><span id="timeline-coverage">0% лекции выбрано</span></div>
+      <div class="timeline-ruler" id="timeline-ruler"></div>
+      <div class="timeline-source" id="timeline-source" aria-label="Оригинальная лекция. Нажмите, чтобы перейти ко времени."><div id="timeline-playhead"></div></div>
+      <div id="timeline-track" class="timeline-track" aria-label="Выбранные фрагменты и пропуски"></div>
+      <div class="timeline-foot">
+        <span id="timeline-current">00:00:00 / 00:00:00</span>
+        <button id="timeline-add" disabled>+ Создать клип в этой точке</button>
+      </div>
+    </section>
     <section class="quiz-panel" id="quiz-panel">
       <div class="quiz-header">
         <div><h2>Мини-тест по материалу</h2>
@@ -204,6 +250,46 @@ async function probeLocalReview(){
  }catch{/* Static or offline browser fallback without local Ollama */}
 }
 function initMvpEvents(){
+ $('settings-toggle').onclick=()=>{
+   const open=$('settings-toggle').closest('.sidebar').classList.toggle('show-settings');
+   $('settings-toggle').textContent=open?'Скрыть настройки анализа ▴':'Настройки анализа ▾';
+ };
+  $('workflow-start').onclick=()=>$('transcribe').click();
+ $('workflow-srt').onclick=()=>$('import-srt').click();
+ $('processing-cancel').onclick=()=>abort?.abort();
+ $('timeline-source').onclick=e=>{
+   if(!media)return;
+   const rect=e.currentTarget.getBoundingClientRect();
+   $('player').currentTime=timelineTimeAtFraction((e.clientX-rect.left)/Math.max(1,rect.width),media.duration);
+   updateTimelinePlayhead();
+ };
+ $('timeline-track').onclick=e=>{
+   if(!media||busy||!e.target.classList.contains('skipped'))return;
+   const rect=$('timeline-track').getBoundingClientRect();
+   $('player').currentTime=timelineTimeAtFraction((e.clientX-rect.left)/Math.max(1,rect.width),media.duration);
+   updateTimelinePlayhead();
+   status('Выбран пропущенный участок. Можете создать клип из текущей точки.');
+ };
+ $('timeline-regenerate').onclick=()=>{
+   if(!media||!chunks.length)return;
+   if(!confirm('Повторно найти микротемы? Текущие ручные изменения границ и их подтверждения будут заменены.'))return;
+   proposeTopics();status('Нарезка пересчитана. Проверьте новый список клипов.');
+ };
+ $('timeline-recompose').onclick=()=>{
+   if(!media||!current()||busy)return;
+   $('analyze-scene').click();
+ };
+ $('timeline-add').onclick=()=>{
+   if(!media||busy)return;
+   const start=Math.max(0,Math.min(media.duration-.6,$('player').currentTime||0));
+   const end=Math.min(media.duration,start+60);
+   clips.push({id:'manual-'+Date.now(),start,end,title:'Добавленный фрагмент — нужна проверка',
+      layout:'hybrid',focusX:50,status:'needs-review',
+      reviewReasons:['Фрагмент добавлен из исходной лекции; проверьте смысл и границы']});
+   selected=clips.length-1;setPhase('results');sync();
+   status('Фрагмент добавлен из исходной лекции. Можно поменять его границы на дорожке.');
+ };
+
  document.querySelectorAll('[data-scroll]').forEach(button=>{
    button.addEventListener('click',()=>{
      const anchor=document.getElementById(button.dataset.scroll);
@@ -240,11 +326,128 @@ function initMvpEvents(){
 }
 
 let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
-function status(msg){$('progress').textContent=msg;$('status').textContent=msg.slice(0,48)}
+function setPhase(value){
+ if(!['upload','configure','processing','results'].includes(value))return;
+ root.dataset.phase=value;
+ $('processing-panel').hidden=value!=='processing';
+}
+function showOperation(stage,percent,message,{standalone=false}={}){
+ const stages=['prepare','asr','topics','composition'];
+ const i=Math.max(0,stages.indexOf(stage));
+ $('processing-panel').hidden=false;
+ $('processing-title').textContent=['Подготовка','Распознаём речь','Формируем микротемы','Создаём видео'][i];
+ $('processing-step-label').textContent='ЭТАП '+(i+1)+' ИЗ 4';
+ $('processing-detail').textContent=message;
+ const bar=$('processing-panel').querySelector('.processing-meter');
+ const pct=Number.isFinite(percent)?Math.round(Math.max(0,Math.min(100,percent))):null;
+ $('processing-meter-fill').style.width=(pct??7)+'%';
+ bar.classList.toggle('indeterminate',pct===null);
+ if(pct===null)bar.removeAttribute('aria-valuenow');else bar.setAttribute('aria-valuenow',String(pct));
+ $('processing-percent').textContent=pct===null?'Выполняется':pct+'% этапа';
+ document.querySelectorAll('[data-process]').forEach((el,j)=>{
+  el.classList.toggle('current',j===i);el.classList.toggle('done',j<i);
+ });
+ if(standalone&&root.dataset.phase!=='results')setPhase('processing');
+}
+async function buildPrivateFilmstrip(videoMedia){
+ // Sampled thumbnails are created and retained only in this browser session.
+ const holder=$('timeline-source');
+ holder.querySelectorAll('.filmstrip-tile').forEach(x=>x.remove());
+ const N=10;
+ for(let i=0;i<N;i++){
+   if(media!==videoMedia)return;
+   const at=Math.max(0,Math.min(videoMedia.duration-.05,videoMedia.duration*(i+.5)/N));
+   try{
+     const sample=await videoMedia.videoSink.getSample(at);
+     if(!sample)continue;
+     const image=document.createElement('canvas');image.width=150;image.height=84;
+     try{sample.draw(image.getContext('2d'),0,0,150,84)}finally{sample.close()}
+     if(media!==videoMedia)return;
+     const tile=document.createElement('div');tile.className='filmstrip-tile';
+     tile.style.left=(i*100/N)+'%';tile.style.width=(100/N)+'%';
+     tile.style.backgroundImage='url("'+image.toDataURL('image/jpeg',.55)+'")';
+     tile.setAttribute('aria-hidden','true');holder.append(tile);
+   }catch{ /* Some video codecs cannot seek efficiently; keep plain track. */ }
+ }
+}
+function renderTimeline(){
+ const track=$('timeline-track'),ruler=$('timeline-ruler');
+ track.replaceChildren();ruler.replaceChildren();
+ if(!media){$('timeline-current').textContent='00:00:00 / 00:00:00';return}
+ const duration=media.duration,spans=timelinePieces(clips,duration),stat=timelineStats(clips,duration);
+ $('timeline-coverage').textContent=stat.percent+'% лекции выбрано · '+stat.clips+' фрагментов';
+ const tickCount=Math.max(2,Math.min(12,Math.floor(duration/60)||2));
+ for(let i=0;i<=tickCount;i++){
+   const tick=document.createElement('span');tick.className='timeline-tick';
+   tick.style.left=(i/tickCount*100)+'%';
+   tick.textContent=timecode(duration*i/tickCount).slice(duration>=3600?0:3,8);
+   ruler.append(tick);
+ }
+ const active=current();
+ for(const span of spans){
+   const el=document.createElement('div');el.className='timeline-part '+span.kind;
+   el.style.left=(span.start/duration*100)+'%';
+   el.style.width=((span.end-span.start)/duration*100)+'%';
+   if(span.kind==='clip'){
+      el.classList.toggle('active',span.id===active?.id);
+      const idx=clips.findIndex(c=>c.id===span.id);
+      el.title=(span.title||'Микротема')+' · '+timecode(span.start)+' — '+timecode(span.end);
+      el.setAttribute('role','button');el.tabIndex=0;
+      el.setAttribute('aria-label','Перейти к '+(span.title||'микротеме'));
+      const label=document.createElement('span');label.className='timeline-part-text';
+      label.textContent=String(idx+1).padStart(2,'0')+' · '+(span.title||'Фрагмент');
+      el.append(label);
+      el.onclick=()=>{if(busy)return;selected=idx;sync();$('player').currentTime=span.start};
+      el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click()}};
+      for(const edge of ['start','end']){
+        const handle=document.createElement('button');handle.type='button';
+        handle.className='timeline-handle '+edge;
+        handle.title=edge==='start'?'Изменить начало':'Изменить конец';
+        handle.setAttribute('aria-label',handle.title);
+        handle.addEventListener('pointerdown',e=>{
+          if(busy)return;
+          e.preventDefault();e.stopPropagation();
+          const initial=clips[idx];const rect=track.getBoundingClientRect();
+          const move=event=>{
+            const t=timelineTimeAtFraction((event.clientX-rect.left)/rect.width,duration);
+            handle.dataset.preview=timecode(t);
+            el.title='Новая граница: '+timecode(t);
+          };
+          const release=event=>{
+            document.removeEventListener('pointermove',move);
+            document.removeEventListener('pointerup',release);
+            const t=timelineTimeAtFraction((event.clientX-rect.left)/rect.width,duration);
+            try{clips[idx]=amendClipBoundary(initial,edge,t,duration);selected=idx;sync();
+              status('Граница сохранена. Проверьте микротему и заново создайте композицию.')}
+            catch(err){status('Не удалось изменить границу: '+err.message);renderTimeline()}
+          };
+          document.addEventListener('pointermove',move);document.addEventListener('pointerup',release,{once:true});
+        });
+        el.append(handle);
+      }
+   }else{el.title='Пропущено: '+timecode(span.start)+' — '+timecode(span.end)}
+   track.append(el);
+ }
+ $('timeline-add').disabled=busy||!media;
+ $('timeline-regenerate').disabled=busy||!chunks.length;
+ $('timeline-recompose').disabled=busy||!current()||current()?.id==='draft-1';
+ updateTimelinePlayhead();
+}
+function updateTimelinePlayhead(){
+ if(!media)return;
+ const now=$('player').currentTime||0;
+ const percent=Math.max(0,Math.min(100,now/media.duration*100));
+ $('timeline-playhead').style.left=percent+'%';
+ $('timeline-current').textContent=timecode(now).slice(0,8)+' / '+timecode(media.duration).slice(0,8);
+}
+function status(msg){$('progress').textContent=msg;$('status').textContent=msg.slice(0,48);if(!$('processing-panel').hidden)$('processing-detail').textContent=msg}
 function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)))}
 function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
+  for(const id of ['timeline-regenerate','timeline-recompose','timeline-add'])if($(id))$(id).disabled=busy||!has||(id==='timeline-regenerate'&&!chunks.length);
+  $('workflow-start').disabled=!has||busy;
+  $('workflow-srt').disabled=!has||busy;
   $('scan-chapters').disabled=!has||busy;
   $('forget-asr').disabled=!has||busy;
   $('suggest-topics').disabled=!has||busy||!chunks.length;
@@ -278,7 +481,7 @@ function renderClips(){
   });$('clip-count').textContent=String(clips.length);enable();
 }
 function sync(){
-  renderClips();updateDashboard();renderQuiz();const c=current();if(!c)return;
+  renderClips();updateDashboard();renderQuiz();renderTimeline();const c=current();if(!c)return;
   $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
   $('approve-topic').textContent=c.status==='approved'
     ? '✓ Микротема проверена вручную · снять отметку'
@@ -297,8 +500,9 @@ function sync(){
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
   $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
   $('player').currentTime=c.start;
+  updateTimelinePlayhead();
 }
-function setBusy(v){busy=v;enable()}
+function setBusy(v){busy=v;if(!v&&root.dataset.phase==='results')$('processing-panel').hidden=true;enable()}
 async function selectFile(file){
   if(!file)return;
   if(file.size>2e9){status('Файл больше лимита MVP 2 ГБ');return}
@@ -322,8 +526,10 @@ async function selectFile(file){
         $('transcript').value=toSrt(chunks);status('Проект восстановлен; проверьте ролики');
       }
     }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
+    setPhase(chunks.length?'results':'configure');
     sync();
-  }catch(e){media=null;clips=[];updateDashboard();renderQuiz();error(e)}finally{setBusy(false)}
+    buildPrivateFilmstrip(media).catch(()=>{});
+  }catch(e){media=null;clips=[];updateDashboard();renderQuiz();setPhase('upload');error(e)}finally{setBusy(false)}
 }
 $('video-file').addEventListener('change',e=>selectFile(e.target.files?.[0]));
 $('drop').addEventListener('dragover',e=>{e.preventDefault();$('drop').classList.add('over')});
@@ -334,12 +540,13 @@ $('srt-file').onchange=async e=>{
   if(!media)return;try{
     chunks=parseSrt(await e.target.files[0].text(),media.duration);
     if(!chunks.length)throw Error('Не найдены валидные интервалы SRT');
-    proposeTopics();$('transcript').value=toSrt(chunks);sync();
+    proposeTopics();$('transcript').value=toSrt(chunks);setPhase('results');sync();
     status('SRT импортирован. Найдены кандидаты на законченные микротемы; проверьте их границы.');
   }catch(err){error(err)}
 };
 $('transcribe').onclick=async()=>{
   abort=new AbortController();setBusy(true);
+  setPhase('processing');showOperation('prepare',null,'Подготавливаем Whisper…',{standalone:true});
   let key=null;
   try{
     const limit=$('asr-limit').value==='all'?Infinity:Number($('asr-limit').value);
@@ -347,10 +554,16 @@ $('transcribe').onclick=async()=>{
     const previous=await loadCheckpoint(key,media.duration).catch(()=>null);
     if(previous?.completedWindows.length)status('Продолжаю распознавание: сохранено '+previous.completedWindows.length+' окон по 30 секунд.');
     chunks=await transcribe(media,{limit,language:$('language').value,
-      onProgress:status,signal:abort.signal,model:$('asr-model').value,resume:previous,
+      onProgress:msg=>{
+        status(msg);
+        const m=String(msg).match(/Whisper:\s*(\d+)\s*\/\s*(\d+)\s*с/);
+        if(m)showOperation('asr',100*Number(m[1])/Math.max(1,Number(m[2])),msg);
+        else showOperation('prepare',null,msg);
+      },signal:abort.signal,model:$('asr-model').value,resume:previous,
       onCheckpoint:async checkpoint=>saveCheckpoint(key,checkpoint)});
     if(!chunks.length)throw Error('Распознавание не вернуло речи. Попробуйте SRT или проверьте звук.');
-    proposeTopics();$('transcript').value=toSrt(chunks);sync();
+    showOperation('topics',null,'Ищем законченные мысли в транскрипте…');
+    proposeTopics();$('transcript').value=toSrt(chunks);setPhase('results');sync();
     status('Распознано '+chunks.length+' реплик. Кэш сохранён локально. Проверьте каждый предложенный микроурок.');
   }catch(e){
     if(key){
@@ -359,6 +572,7 @@ $('transcribe').onclick=async()=>{
     }
     if(e.name==='AbortError')status('Остановлено: локальный прогресс сохранён, следующий запуск продолжит с контрольной точки.');
     else error(e);
+    setPhase(chunks.length?'results':'configure');
   }finally{abort=null;setBusy(false)}
 };
 $('forget-asr').onclick=async()=>{
@@ -377,6 +591,7 @@ function proposeTopics(){
     : {min:60,target:165,max:300};
   const ideas=buildMicrotopics(chunks,media.duration,{...cfg,sceneCuts});
   if(ideas.length)clips=ideas;
+  setPhase('results');
   selected=0;
   const report=coverageReport(chunks,media.duration);
   $('topic-coverage').textContent='Транскрипт до ~'+report.percent+'% длительности лекции. Найдено смен слайдов: '+sceneCuts.length+'. '+
@@ -388,6 +603,7 @@ $('scan-chapters').onclick=async()=>{
  if(!media)return;
  abort=new AbortController();setBusy(true);
  try{
+  showOperation('topics',null,'Ищем изменения учебного материала в исходной лекции…');
   status('Локальный анализ смен слайдов на протяжении лекции...');
   const cuts=await sampleSlideCuts(media,{start:0,end:media.duration},
     {sampleEvery:8,signal:abort.signal,onProgress:status});
@@ -441,6 +657,7 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
     // Any manual boundary edit invalidates prior LLM evidence for that interval.
     if(key==='clip-start'||key==='clip-end'||key==='clip-title'){
       delete c.llmReview;
+      if(key==='clip-start'||key==='clip-end')delete c.scene;
       if(c.status==='approved'){c.status='needs-review';delete c.approvedAt;c.reviewReasons=['Содержимое изменилось: проверьте микротему заново.']}
       enable();
     }
@@ -449,7 +666,7 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
       for(const chapter of c.scene.chapters||[])chapter.scene.title=c.title;
     }
     $('focus-value').textContent=c.focusX+'%';$('selected-time').textContent=timecode(c.end-c.start);
-    renderClips();
+    renderClips();renderTimeline();
   });
 }
 $('transcript').addEventListener('change',()=>{
@@ -486,7 +703,7 @@ for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
   sync();status('Временная граница изменена. Повторите предпросмотр.');
  };
 }
-$('player').addEventListener('timeupdate',()=>{const c=current();if(c&&!$('player').paused&&$('player').currentTime>=c.end)$('player').pause()});
+$('player').addEventListener('timeupdate',()=>{const c=current();if(c&&!$('player').paused&&$('player').currentTime>=c.end)$('player').pause();updateTimelinePlayhead()});
 $('add').onclick=()=>{
   if(!media)return;const last=current();
   const start=last?Math.min(media.duration-1,Math.max(0,last.end)):0;
@@ -537,6 +754,7 @@ $('analyze-scene').onclick=async()=>{
   const c=current();if(!media||!c)return;
   abort=new AbortController();setBusy(true);
   try{
+    showOperation('composition',null,'Пересобираем кадр по текущей микротеме…');
     const lang=$('language').value==='ru'?'ru':'en';
     const {scene,recognizedLines,note,sceneCount,ocrBackend,context}=await analyzeScene(media,c,chunks,{language:lang,ocrEngine:$('ocr-engine').value,onProgress:status,signal:abort.signal});
     scene.theme=c.scene?.theme||'warm';c.scene=scene;c.layout='hybrid';c.speakerPreset='auto';$('speaker-preset').value='auto';$('layout').value='hybrid';
@@ -560,12 +778,19 @@ $('export-all').onclick=async()=>{
  if(!work.length)return;
  abort=new AbortController();setBusy(true);
  let exported=0;
+ showOperation('composition',0,'Пакетный экспорт '+work.length+' роликов…');
  try{
    for(const clip of work){
      if(abort.signal.aborted)throw new DOMException('Stopped','AbortError');
      status('Экспорт '+(exported+1)+'/'+work.length+': '+clip.title);
      const blob=await exportClip(media,clip,chunks,{quality:$('output-quality').value,signal:abort.signal,
-       onProgress:m=>status((exported+1)+'/'+work.length+' · '+m)});
+       onProgress:m=>{
+         const msg=(exported+1)+'/'+work.length+' · '+m;
+         status(msg);
+         const part=String(m).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
+         const fraction=part?Number(part[1])/Math.max(1,Number(part[2])):0;
+         showOperation('composition',100*(exported+fraction)/work.length,msg);
+       }});
      const name=String(exported+1).padStart(2,'0')+'_'+safeName(clip.title)+
        (clip.status==='approved'?'':'_DRAFT')+'.mp4';
      const handle=await dir.getFileHandle(name,{create:true});
@@ -584,16 +809,22 @@ $('export').onclick=async()=>{
   const c=current();if(!media||!c)return;
   abort=new AbortController();setBusy(true);
   try{
+    showOperation('composition',0,'Экспортируем вертикальное видео со звуком…');
     status('Кодирование MP4 со звуком. В зависимости от ПК может занять несколько минут...');
-    const blob=await exportClip(media,c,chunks,{quality:$('output-quality').value,onProgress:status,signal:abort.signal});
+    const blob=await exportClip(media,c,chunks,{quality:$('output-quality').value,onProgress:msg=>{
+      status(msg);
+      const match=String(msg).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
+      if(match)showOperation('composition',100*Number(match[1])/Number(match[2]),msg);
+      else showOperation('composition',null,msg);
+    },signal:abort.signal});
     download(blob,safeName(c.title)+(c.status==='approved'?'':'_DRAFT')+'.mp4');
     status('Экспорт завершён: '+(blob.size/1e6).toFixed(1)+' МБ');
-  }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e)}finally{abort=null;setBusy(false)}
+  }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e)}finally{abort=null;$('processing-panel').hidden=true;setBusy(false)}
 };
 function loop(){
   const video=$('player'),c=current();
   if(media&&c&&video.readyState>=2){
-    const caption=captionCueAt(chunks,video.currentTime);
+    const caption=captionSequenceAt(chunks,video.currentTime);
     try{paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,c.scene||null,Math.max(0,video.currentTime-c.start))}catch{}
   }
   previewRaf=requestAnimationFrame(loop);

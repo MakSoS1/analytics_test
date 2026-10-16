@@ -9,6 +9,7 @@ function lineWrap(ctx,text,maxWidth){
 }
 export function paintFrame(canvas,source,width,height,layout,focusX,subtitle='',scene=null,elapsed=0){
   if(layout==='hybrid')return paintHybrid(canvas,source,width,height,subtitle,scene,elapsed);
+  subtitle=typeof subtitle==='string'?subtitle:(subtitle?.plain||'');
   const ctx=canvas.getContext('2d'),cw=canvas.width,ch=canvas.height;
   ctx.fillStyle='#09111f';ctx.fillRect(0,0,cw,ch);
   const draw=(sx,sy,sw,sh,dx,dy,dw,dh)=>{
@@ -169,23 +170,49 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
    crop(ctx,src,spec.speaker,g.speaker.x+inset,g.speaker.y+inset,g.speaker.w-inset*2,g.speaker.h-inset*2,sw,sh,true);
    ctx.restore();
  }
- // Subtitle lives in a reserved safety area, never overlaps formulas/diagram.
- const sub=g.subtitles;
- if(subtitle.trim()){
-   roundedSurface(ctx,sub,p.caption,18*s);
-   const pad=18*s;
-   const captionText=String(subtitle).replace(/\s+/g,' ').trim();
-   const metrics=fitTypography(ctx,captionText,{
-       width:sub.w-pad*2,height:sub.h-pad*2,
-       maxFont:32*s,minFont:23*s,maxLines:g.speaker?4:2,weight:700,lineHeight:1.16
-   });
-   const totalH=metrics.lines.length*metrics.lineHeight;
-   const textY=sub.y+(sub.h-totalH)/2;
-   ctx.save();ctx.font='700 '+metrics.size+'px system-ui, sans-serif';
-   ctx.textBaseline='top';ctx.textAlign='left';ctx.fillStyle='#18233B';
-   for(let i=0;i<metrics.lines.length;i++)
-     ctx.fillText(metrics.lines[i],sub.x+pad,textY+i*metrics.lineHeight);
+ // Reels-style transparent karaoke captions: no box, no permanently reserved space.
+ // Draw only words already spoken, 2-4 at a time, with a subtle pop/highlight.
+ const cap=subtitle&&typeof subtitle==='object'?subtitle:null;
+ const tokens=cap?.words||[];
+ if(tokens.length){
+     const fontSize=44*s,baseline=g.subtitles.y+69*s;
+   ctx.save();
+   ctx.textAlign='left';ctx.textBaseline='alphabetic';
+   ctx.font='850 '+fontSize+'px system-ui, sans-serif';
+   const desiredWidths=tokens.map(w=>ctx.measureText(w.text).width);
+   const unscaledWidth=desiredWidths.reduce((a,b)=>a+b,0)+(tokens.length-1)*12*s;
+   const adapt=Math.min(1,(g.subtitles.w-4*s)/Math.max(1,unscaledWidth));
+   ctx.translate(g.subtitles.x+(g.subtitles.w-unscaledWidth*adapt)/2,0);
+   ctx.scale(adapt,adapt);
+   let xx=0;
+   for(const word of tokens){
+     if(word.visible){
+       const isActive=word.active;
+       const opacity=isActive?1:.94;
+       ctx.save();ctx.globalAlpha=opacity;
+       const pop=isActive?1.018+.023*(1-Math.min(1,cap.progress*4)):1;
+       const middle=xx+ctx.measureText(word.text).width/2;
+       ctx.translate(middle,baseline/adapt);
+       ctx.scale(pop,pop);
+       ctx.font='850 '+fontSize+'px system-ui, sans-serif';
+       ctx.lineJoin='round';ctx.lineWidth=9*s;ctx.strokeStyle='#071021';
+       ctx.shadowColor='#07102199';ctx.shadowBlur=10*s;
+       ctx.strokeText(word.text,-(desiredWidths[tokens.indexOf(word)]/2),0);
+       ctx.shadowBlur=0;
+       ctx.fillStyle=isActive?'#73B3FF':'#FFFFFF';
+       ctx.fillText(word.text,-(desiredWidths[tokens.indexOf(word)]/2),0);
+       ctx.restore();
+     }
+     xx+=desiredWidths[tokens.indexOf(word)]+12*s;
+   }
    ctx.restore();
+ }else if(typeof subtitle==='string'&&subtitle.trim()){
+   // Compatibility with old callers; still no subtitle rectangle.
+   const text=subtitle.replace(/\s+/g,' ').slice(0,70);
+   ctx.save();ctx.font='850 39px system-ui, sans-serif';ctx.textAlign='center';
+   ctx.lineJoin='round';ctx.lineWidth=9;ctx.strokeStyle='#081322';
+   ctx.strokeText(text,width/2,g.subtitles.y+63);
+   ctx.fillStyle='#fff';ctx.fillText(text,width/2,g.subtitles.y+63);ctx.restore();
  }
  ctx.restore();
 }
