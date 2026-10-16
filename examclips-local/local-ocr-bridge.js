@@ -21,7 +21,7 @@ export function validatePngRequest(data){
   throw Error('Not a PNG');
  return {language:data.language,png_base64:data.png_base64};
 }
-export function runPrivateOcr(input,python=localPython,{timeout=90000}={}){
+export function runPrivateOcr(input,python=localPython,{timeout=180000}={}){
  return new Promise((resolve,reject)=>{
   const child=spawn(python,[pathToWorker],{
    cwd:base,windowsHide:true,shell:false,stdio:['pipe','pipe','pipe'],env:{...process.env,PYTHONIOENCODING:'utf-8'}
@@ -62,7 +62,7 @@ function respond(res,status,obj){
  res.end(JSON.stringify(obj));
 }
 export function rapidOcrBridge(){
- let availability=null,lastProbe=0;
+ let availability=null,lastProbe=0,inFlight=false;
  const middleware=(server)=>{
   server.middlewares.use(async(req,res,next)=>{
    if(!req.url?.startsWith('/api/local-ocr'))return next();
@@ -82,11 +82,14 @@ export function rapidOcrBridge(){
      if(!existsSync(localPython))return respond(res,503,{error:'RapidOCR не установлен. Выберите Tesseract.js или запустите установщик локального OCR.'});
      if(!String(req.headers['content-type']||'').startsWith('application/json'))
        return respond(res,415,{error:'JSON required'});
+     if(inFlight)return respond(res,429,{error:'RapidOCR уже обрабатывает другой кадр'});
+     inFlight=true;
      try{
        const input=validatePngRequest(await readBounded(req));
        const result=await runPrivateOcr(input);
        return respond(res,200,result);
      }catch(e){return respond(res,503,{error:String(e.message||e).slice(0,350)})}
+     finally{inFlight=false}
    }
    return respond(res,404,{error:'Unknown local OCR endpoint'});
   });
