@@ -57,6 +57,8 @@ try{
  await page.locator('[data-scroll="quiz-panel"]').click();
  await page.evaluate(()=>window.scrollTo(0,0));
  await page.screenshot({path:'mvp-desktop.png',fullPage:true});
+ await page.locator('#timeline-section').scrollIntoViewIfNeeded();
+ await page.screenshot({path:'mvp-timeline.png',fullPage:false});
  await page.locator('#timeline-source').click({position:{x:65,y:24}});
  const timeFromSeek=await page.locator('#player').evaluate(el=>el.currentTime);
  assert.ok(timeFromSeek>=0,'No source scrubbing');
