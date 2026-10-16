@@ -208,6 +208,8 @@ function setupPrimaryTimeline(){
  const startButtons=document.querySelector('.workflow-config-actions');
  sidebar.insertBefore(startButtons,document.querySelector('.topic-settings'));
  startButtons.classList.add('upload-start-actions');
+ const languageOptions=sidebar.querySelector('.config-group details');
+ if(languageOptions)languageOptions.open=true;
  const workspace=document.querySelector('.workspace');
  const switcher=document.createElement('nav');switcher.className='workspace-tab-switcher';
  switcher.setAttribute('aria-label','Вкладки редактора');
