@@ -2,7 +2,7 @@ import {defineConfig} from 'vite';
 import {rapidOcrBridge} from './local-ocr-bridge.js';
 import {normalizeReview,prepareReviewRequest,reviewPrompt} from './src/completion-review.js';
 // A strictly loopback-only Ollama bridge for local Vite launches.
-// No endpoints forward video, audio, stills or full lecture files.
+// Only review text is sent to loopback Ollama; optional OCR PNG stays on localhost Python.
 // Production static builds have no bridge: the browser fallback remains available.
 const OLLAMA='http://127.0.0.1:11434';
 const allowedAddress=ip=>ip==='127.0.0.1'||ip==='::1'||ip==='::ffff:127.0.0.1';
