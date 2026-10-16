@@ -29,6 +29,9 @@ try{
  await page.waitForFunction(()=>!document.querySelector('#quiz-generate').disabled);
  assert.equal(await page.locator('#app').getAttribute('data-phase'),'results');
  assert.ok(await page.locator('#timeline-track .timeline-part.clip').count()>=1);
+ // Fixture initially covers all four seconds. Trim 0.5s to verify a real skipped region.
+ await page.locator('#clip-start').fill('0.5');
+ await page.waitForFunction(()=>document.querySelectorAll('#timeline-track .timeline-part.skipped').length>=1);
  assert.ok(await page.locator('#timeline-track .timeline-part.skipped').count()>=1);
  assert.ok(await page.locator('#timeline-source').isVisible());
 
