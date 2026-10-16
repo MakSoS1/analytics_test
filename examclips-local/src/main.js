@@ -388,6 +388,15 @@ function initMvpEvents(){
    if(!media||!current()||busy)return;
    $('analyze-scene').click();
  };
+ $('timeline-append').onclick=()=>{
+   const c=current();if(!media||!c||busy||c.id==='draft-1')return;
+   const start=Math.max(0,Math.min(media.duration-.5,$('player').currentTime||0));
+   const end=Math.min(media.duration,start+Math.min(20,Math.max(1,media.duration-start)));
+   try{
+      clips[selected]=appendSourceSegment(c,start,end,media.duration);sync();
+      status('К микротеме добавлен отрывок '+timecode(start)+'–'+timecode(end)+'. Проверьте переход.');
+   }catch(err){status(err.message)}
+ };
  $('timeline-add').onclick=()=>{
    if(!media||busy)return;
    const start=Math.max(0,Math.min(media.duration-.6,$('player').currentTime||0));
@@ -757,6 +766,10 @@ $('scan-chapters').onclick=async()=>{
 $('suggest-topics').onclick=()=>{proposeTopics();status('Микротемы пересчитаны по локальному транскрипту.')};
 $('verify-topic').onclick=async()=>{
   const c=current();if(!media||!c||!chunks.length)return;
+  if(sourceSegments(c).length>1){
+    status('Локальный текстовый LLM-рецензент пока не проверяет составные микротемы. Проверьте последовательность вручную.');
+    return;
+  }
   setBusy(true);status('Локальная LLM изучает выбранную микротему и соседний контекст...');
   try{
     const payload=buildReviewPayload(c,chunks,media.duration);
@@ -776,10 +789,11 @@ $('verify-topic').onclick=async()=>{
 $('apply-review').onclick=()=>{
   const c=current(),v=c?.llmReview;
   if(!c||!v?.evidenceVerified||!media)return;
+  if(sourceSegments(c).length>1){status('Для составных микротем границы редактируются вручную по отрывкам.');return}
   const a=Math.max(0,c.start+(v.suggestedStartDelta||0));
   const b=Math.min(media.duration,c.end+(v.suggestedEndDelta||0));
   if(b<=a||b-a>300){status('Изменение отвергнуто: ролик должен длиться не более 5 минут.');return}
-  c.start=a;c.end=b;
+  c.start=a;c.end=b;c.segments=[{start:a,end:b}];delete c.scene;
   c.status='needs-review';delete c.approvedAt;
   c.reviewReasons=['Границы скорректированы по рекомендации LLM; требуется окончательная проверка.'];
   delete c.llmReview;sync();
@@ -792,7 +806,10 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
     const start=Number($('clip-start').value),end=Number($('clip-end').value);
     if(key==='clip-start'||key==='clip-end'){
       if(!validRange(start,end,media.duration)){status('Некорректные границы клипа');return}
-      c.start=start;c.end=end;
+      if(sourceSegments(c).length>1){
+        status('Для составного ролика используйте границы отдельных отрывков на таймлайне.');return;
+      }
+      c.start=start;c.end=end;c.segments=[{start,end}];
     }
     c.title=$('clip-title').value;c.layout=$('layout').value;c.focusX=Number($('focus').value);
     // Any manual boundary edit invalidates prior LLM evidence for that interval.
@@ -844,7 +861,18 @@ for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
   sync();status('Временная граница изменена. Повторите предпросмотр.');
  };
 }
-$('player').addEventListener('timeupdate',()=>{const c=current();if(c&&!$('player').paused&&$('player').currentTime>=c.end)$('player').pause();updateTimelinePlayhead()});
+$('player').addEventListener('timeupdate',()=>{
+ const c=current(),v=$('player');
+ if(c&&!v.paused){
+   const pieces=sourceSegments(c);
+   const index=pieces.findIndex(p=>v.currentTime>=p.start-.15&&v.currentTime<p.end+.16);
+   if(index>=0&&v.currentTime>=pieces[index].end-.045){
+      if(index+1<pieces.length)v.currentTime=pieces[index+1].start;
+      else v.pause();
+   }else if(index<0&&pieces.length&&v.currentTime>=pieces.at(-1).end){v.pause()}
+ }
+ updateTimelinePlayhead();
+});
 $('add').onclick=()=>{
   if(!media)return;const last=current();
   const start=last?Math.min(media.duration-1,Math.max(0,last.end)):0;
@@ -965,7 +993,8 @@ $('export').onclick=async()=>{
 function loop(){
   const video=$('player'),c=current();
   if(media&&c&&video.readyState>=2){
-    const caption=captionSequenceAt(chunks,video.currentTime);
+    const valid=sourceSegments(c).some(x=>video.currentTime>=x.start&&video.currentTime<x.end);
+    const caption=valid?captionSequenceAt(chunks,video.currentTime):null;
     try{paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,c.scene||null,Math.max(0,video.currentTime-c.start))}catch{}
   }
   previewRaf=requestAnimationFrame(loop);
