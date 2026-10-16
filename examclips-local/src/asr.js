@@ -1,9 +1,10 @@
 import {mono16k} from './media.js';
 import {isSilent} from './audio-utils.js';
 import {normalizeCheckpoint,remainingWindows} from './asr-checkpoint.js';
+import {packWordEvents} from './word-align.js';
 // First use of this module downloads the Whisper model from Hugging Face.
 // Media/audio remains local: the ASR pipeline receives only Float32Arrays.
-let transcriber=null,deviceName=null,activeModel=null;
+let transcriber=null,deviceName=null,activeModel=null,wordTimestampSupported=true;
 const MODEL_IDS={tiny:'onnx-community/whisper-tiny',base:'onnx-community/whisper-base'};
 export async function getTranscriber(onProgress=()=>{},model='tiny'){
   const modelId=MODEL_IDS[model];
@@ -46,16 +47,32 @@ export async function transcribe(media,{
    onProgress('Whisper: '+Math.round(start)+'/'+Math.round(until)+' с (из кэша: '+done.size+' блоков)');
    const pcm=await mono16k(media.audioSink,start,end);
    if(!isSilent(pcm)){
-     const opts={return_timestamps:true,task:'transcribe'};
+     const opts={return_timestamps:wordTimestampSupported?'word':true,task:'transcribe'};
      if(language!=='auto')opts.language=language;
-     const result=await t(pcm,opts);
+     let result;
+     try{result=await t(pcm,opts)}
+     catch(err){
+       if(!wordTimestampSupported)throw err;
+       // Certain ONNX Whisper variants do not support cross-attention word alignment.
+       // Fall back to phrase timing, transparently estimating word placements later.
+       wordTimestampSupported=false;
+       onProgress('Слова по отдельности недоступны; продолжаю с таймкодами фраз.');
+       result=await t(pcm,{...opts,return_timestamps:true});
+     }
      if(result?.chunks?.length){
-       for(const item of result.chunks){
-         if(!item.text?.trim())continue;
-         const a=Array.isArray(item.timestamp)?item.timestamp:[0,end-start];
-         const from=Math.min(end,start+Math.max(0,a[0]||0));
-         const to=Math.min(end,start+(a[1]??end-start));
-         if(to>from)chunks.push({start:from,end:to,text:item.text.trim()});
+       const isWordOutput=wordTimestampSupported&&opts.return_timestamps==='word'&&
+         result.chunks.length>=2&&result.chunks.every(item=>
+           String(item.text||'').trim().split(/\s+/).length<=2);
+       if(isWordOutput){
+         chunks.push(...packWordEvents(result.chunks,start,end));
+       }else{
+         for(const item of result.chunks){
+           if(!item.text?.trim())continue;
+           const a=Array.isArray(item.timestamp)?item.timestamp:[0,end-start];
+           const from=Math.min(end,start+Math.max(0,a[0]||0));
+           const to=Math.min(end,start+(a[1]??end-start));
+           if(to>from)chunks.push({start:from,end:to,text:item.text.trim()});
+         }
        }
      }else if(result?.text?.trim()){
        chunks.push({start,end,text:result.text.trim()});
