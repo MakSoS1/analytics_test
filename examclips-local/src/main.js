@@ -574,6 +574,28 @@ function download(blob,name){
 }
 function safeName(s){return (s||'examclips').replace(/[^\p{L}\p{N}_-]+/gu,'_').slice(0,48)}
 function current(){return clips[selected]}
+function renderStoryPieces(){
+ const area=$('story-piece-list');if(!area)return;
+ area.replaceChildren();const clip=current();if(!clip)return;
+ sourceSegments(clip).forEach((piece,i,all)=>{
+   const row=document.createElement('div');row.className='story-piece';
+   const name=document.createElement('span');name.className='story-piece-label';
+   name.textContent='№ '+(i+1)+' · '+timecode(piece.start).slice(0,8)+' → '+timecode(piece.end).slice(0,8)+
+       ' · '+Math.round(piece.end-piece.start)+' сек';
+   const actions=document.createElement('div');actions.className='story-piece-actions';
+   const btn=(text,disabled,action,label)=>{
+     const b=document.createElement('button');b.type='button';b.textContent=text;b.disabled=disabled||busy;
+     b.title=label;b.setAttribute('aria-label',label);b.onclick=action;actions.append(b);
+   };
+   btn('▶',false,()=>{
+     $('player').currentTime=piece.start;$('player').play().catch(()=>{});
+   },'Воспроизвести этот отрывок');
+   btn('↑',i===0,()=>{clips[selected]=reorderSourceSegments(clip,i,-1);sync()},'Раньше в ролике');
+   btn('↓',i===all.length-1,()=>{clips[selected]=reorderSourceSegments(clip,i,1);sync()},'Позже в ролике');
+   btn('×',all.length<2,()=>{clips[selected]=removeSourceSegment(clip,i);sync()},'Удалить отрывок из ролика');
+   row.append(name,actions);area.append(row);
+ });
+}
 function renderClips(){
   const holder=$('clips');holder.replaceChildren();
   if(!clips.length){holder.textContent='Нет клипов. Импортируйте SRT или запустите Whisper.';enable();return}
@@ -697,14 +719,25 @@ function proposeTopics(){
     : $('topic-preset').value==='compact'
       ? {min:60,target:105,max:180}
       : {min:60,target:165,max:300};
-  const ideas=buildMicrotopics(chunks,media.duration,{...cfg,sceneCuts});
-  if(ideas.length)clips=ideas;
+  const keepFraction=Number($('story-keep').value||.3);
+  const plan=planSelectiveStories(chunks,media.duration,{...cfg,keepFraction,maxStories:12,sceneCuts});
+  const shortDemo=media.duration<=10&&chunks.some(x=>x.text?.trim());
+  clips=plan.clips.length?plan.clips:shortDemo
+    ? [{id:'short-preview',title:'Тестовое короткое видео — проверьте вручную',
+      start:chunks[0].start,end:chunks.at(-1).end,layout:'hybrid',focusX:50,
+      segments:[{start:chunks[0].start,end:chunks.at(-1).end}],
+      status:'needs-review',confidence:'low',method:'short-test-preview',
+      reviewReasons:['Слишком короткий источник для содержательной оценки; технический предпросмотр']}]
+    :[];
+  const highlights=timelineStats(clips,media.duration);
+  status('Кандидатов: '+clips.length+', сохранено '+highlights.percent+
+    '% исходной записи. Пропущенный материал всегда остаётся доступен внизу на таймлайне.');
   setPhase('results');
   selected=0;
   const report=coverageReport(chunks,media.duration);
-  $('topic-coverage').textContent='Транскрипт до ~'+report.percent+'% длительности лекции. Найдено смен слайдов: '+sceneCuts.length+'. '+
-   (report.partial?'Остальная часть НЕ проанализирована. Для всего видео выберите «Вся лекция». ':'')+
-   'Это предварительные кандидаты: убедитесь, что каждый ролик понятен самостоятельно.';
+  $('topic-coverage').textContent='Анализ охватил ~'+report.percent+'% лекции; в кандидаты взято '+timelineStats(clips,media.duration).percent+'%. '+
+   (report.partial?'Остальная часть НЕ распознана — для полноценного отбора нужен весь транскрипт. ':'')+
+   'Информация отобрана эвристически, не моделью понимания: обязательно просмотрите логическую связность склеек.';
   sync();
 }
 $('scan-chapters').onclick=async()=>{
