@@ -217,3 +217,8 @@ footer{color:#93a3b8;text-align:center;font-size:10px;padding:17px 14px;backgrou
  .timeline-section{padding:18px 12px}.timeline-heading h2{font-size:20px}.timeline-legend{flex-wrap:wrap;gap:10px}#timeline-coverage{margin-left:0}
  .timeline-part-text{font-size:8px;padding:0 6px}.timeline-source{height:45px}.timeline-track{height:70px}
 }
+
+.timeline-source .filmstrip-tile{position:absolute;top:0;height:100%;background-position:center;background-size:cover;
+ opacity:.79;pointer-events:none;filter:saturate(.78)}
+.timeline-source .filmstrip-tile+ .filmstrip-tile{border-left:1px solid #cbd9ea}
+.timeline-source::before{padding:4px 8px;background:#f8fbffd9;border-radius:5px}
