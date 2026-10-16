@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {planSelectiveStories,sourceSegments,storyDuration,summarizeStoryPlan,findLectureCandidates,
-selectValuableCandidates} from '../src/selective-stories.js';
+selectValuableCandidates,tightSpeechPieces} from '../src/selective-stories.js';
 const chunk=(start,end,text)=>({start,end,text});
 const informative='Docker контейнеры позволяют изолировать приложения потому что процессы используют общее ядро системы. Например зависимости программы остаются внутри образа.';
 const more='Docker контейнер использует образ для повторяемого запуска и изоляции процессов. Это позволяет независимо обновлять сервисы и конфигурацию.';
@@ -44,3 +44,18 @@ test('budget and overlapping intervals are consistently bounded',()=>{
  assert.equal(summary.keptSeconds,80);assert.equal(summary.keptPercent,40);
 });
 test('no text creates no clips',()=>assert.deepEqual(planSelectiveStories([],3600).clips,[]));
+
+test('observed gaps over 1.15s are removed within one educational explanation',()=>{
+ const pieces=tightSpeechPieces([
+  chunk(0,6,'Docker важен'),
+  chunk(7.6,13,'Потому что сохраняет зависимости'),
+  chunk(13.2,20,'Таким образом запуск повторяем')
+ ]);
+ assert.equal(pieces.length,2);
+ assert.ok(pieces[0].end<=6.2);
+ assert.ok(pieces[1].end>=20);
+});
+test('normal short breathing pauses are preserved instead of jump-cutting every word',()=>{
+ const pieces=tightSpeechPieces([chunk(1,2,'Контейнер'),chunk(2.6,3.4,'образ'),chunk(4.1,5,'сборка')]);
+ assert.equal(pieces.length,1);
+});
