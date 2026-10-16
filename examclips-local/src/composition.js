@@ -9,7 +9,7 @@ function lineWrap(ctx,text,maxWidth){
 }
 export function paintFrame(canvas,source,width,height,layout,focusX,subtitle='',scene=null,elapsed=0){
   if(layout==='hybrid')return paintHybrid(canvas,source,width,height,subtitle,scene,elapsed);
-  if(subtitle&&typeof subtitle==='object')subtitle=subtitle.plain||'';
+  subtitle=typeof subtitle==='string'?subtitle:(subtitle?.plain||'');
   const ctx=canvas.getContext('2d'),cw=canvas.width,ch=canvas.height;
   ctx.fillStyle='#09111f';ctx.fillRect(0,0,cw,ch);
   const draw=(sx,sy,sw,sh,dx,dy,dw,dh)=>{
