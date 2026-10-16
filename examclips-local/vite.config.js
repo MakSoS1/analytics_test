@@ -1,4 +1,5 @@
 import {defineConfig} from 'vite';
+import {rapidOcrBridge} from './local-ocr-bridge.js';
 import {normalizeReview,prepareReviewRequest,reviewPrompt} from './src/completion-review.js';
 // A strictly loopback-only Ollama bridge for local Vite launches.
 // No endpoints forward video, audio, stills or full lecture files.
@@ -74,5 +75,5 @@ function localOllamaBridge(){
 export default defineConfig({
  server:{host:'127.0.0.1',strictPort:false},
  preview:{host:'127.0.0.1'},
- plugins:[localOllamaBridge()]
+ plugins:[localOllamaBridge(),rapidOcrBridge()]
 });
