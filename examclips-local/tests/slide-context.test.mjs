@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {analyzeSlideContext,speechTarget,sourceEvidence,selectedTabFromPixels} from '../src/slide-context.js';
+import {analyzeSlideContext,speechTarget,sourceEvidence,selectedTabFromPixels,normalizeMixedCyrillicHeading} from '../src/slide-context.js';
 const mk=(text,x0,y0,x1,y1,confidence=95)=>({text,box:{x0,y0,x1,y1},confidence});
 const lines=[
  mk('Explore how each method works',58,22,530,60),
@@ -51,4 +51,14 @@ test('invalid geometry and confidence filtered deterministically',()=>{
 test('short Cyrillic heading token remains part of visible lesson title',()=>{
  const ctx=analyzeSlideContext([mk('Как',60,60,148,110,94),mk('работают контейнеры',165,60,850,110,96)],1440,810);
  assert.equal(ctx.title,'Как работают контейнеры');
+});
+
+test('real PP-OCRv5 output preserves full title despite low confidence Cyrillic/Latin mix',()=>{
+ const ctx=analyzeSlideContext([
+   mk('Кaк',57,69,178,126,55.2),
+   mk('работают',182,66,486,128,99.57),
+   mk('контейнеры',485,70,849,129,99.67)
+ ],1440,810);
+ assert.equal(ctx.title,'Как работают контейнеры');
+ assert.equal(normalizeMixedCyrillicHeading('Docker, Кaк и PySINDy'),'Docker, Как и PySINDy');
 });
