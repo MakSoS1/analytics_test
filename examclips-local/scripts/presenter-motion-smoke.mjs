@@ -13,7 +13,7 @@ const page=await browser.newPage({acceptDownloads:true});
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
 function samplePixels(seconds,filename){
   return execFileSync('ffmpeg',['-loglevel','error','-ss',String(seconds),'-i',filename,'-frames:v','1',
-    '-vf','crop=175:140:54:1012,scale=128:96','-f','rawvideo','-pix_fmt','gray','pipe:1'],{maxBuffer:10e6});
+    '-vf','crop=235:160:395:998,scale=128:96','-f','rawvideo','-pix_fmt','gray','pipe:1'],{maxBuffer:10e6});
 }
 try{
  await page.goto('http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});
