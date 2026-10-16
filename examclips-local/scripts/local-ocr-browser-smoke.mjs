@@ -28,8 +28,9 @@ try{
      const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
      const slide=analyzeSlideContext(detected.lines,canvas.width,canvas.height,
        {sampleRgb:(x,y)=>[pixels[(y*canvas.width+x)*4],pixels[(y*canvas.width+x)*4+1],pixels[(y*canvas.width+x)*4+2]]});
-     return {engine:detected.engine,lines:detected.lines.length,title:slide.title,tabs:slide.tabs.map(t=>t.text),active:slide.activeTab};
+     return {engine:detected.engine,lines:detected.lines.length,title:slide.title,tabs:slide.tabs.map(t=>t.text),active:slide.activeTab,raw:lang==='ru'?detected.lines:[]};
    },{base64,lang});
+   console.log('OCR_BROWSER_DETAILS',lang,JSON.stringify(result));
    assert.ok(result.engine.startsWith('PP-OCR'),JSON.stringify(result));
    assert.ok(result.lines>=3,JSON.stringify(result));
    assert.ok(result.title.includes(expected),JSON.stringify(result));
