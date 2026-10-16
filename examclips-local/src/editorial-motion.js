@@ -75,8 +75,10 @@ export function editorialGeometry(width=720,height=1280,{speaker=true}={}){
   return {
     eyebrow:scale({x:42,y:42,w:636,h:32}),
     title:scale({x:42,y:93,w:636,h:108}),
-    stage:scale({x:30,y:229,w:660,h:speaker?745:888}),
-    speaker:speaker?scale({x:33,y:996,w:255,h:204}):null,
-    subtitles:scale(speaker?{x:308,y:1004,w:378,h:170}:{x:38,y:1135,w:644,h:72})
+    stage:scale({x:30,y:211,w:660,h:speaker?845:1000}),
+    // Larger lecturer crop, anchored over the lower-right edge of the board.
+    speaker:speaker?scale({x:356,y:957,w:315,h:284}):null,
+    // Transparent floating caption position: NOT a reserved subtitle panel.
+    subtitles:scale({x:54,y:speaker?838:1046,w:612,h:100})
   };
 }
