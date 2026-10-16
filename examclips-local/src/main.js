@@ -249,6 +249,42 @@ async function probeLocalReview(){
  }catch{/* Static or offline browser fallback without local Ollama */}
 }
 function initMvpEvents(){
+ $('workflow-start').onclick=()=>$('transcribe').click();
+ $('workflow-srt').onclick=()=>$('import-srt').click();
+ $('processing-cancel').onclick=()=>abort?.abort();
+ $('timeline-source').onclick=e=>{
+   if(!media)return;
+   const rect=e.currentTarget.getBoundingClientRect();
+   $('player').currentTime=timelineTimeAtFraction((e.clientX-rect.left)/Math.max(1,rect.width),media.duration);
+   updateTimelinePlayhead();
+ };
+ $('timeline-track').onclick=e=>{
+   if(!media||busy||!e.target.classList.contains('skipped'))return;
+   const rect=$('timeline-track').getBoundingClientRect();
+   $('player').currentTime=timelineTimeAtFraction((e.clientX-rect.left)/Math.max(1,rect.width),media.duration);
+   updateTimelinePlayhead();
+   status('Выбран пропущенный участок. Можете создать клип из текущей точки.');
+ };
+ $('timeline-regenerate').onclick=()=>{
+   if(!media||!chunks.length)return;
+   if(!confirm('Повторно найти микротемы? Текущие ручные изменения границ и их подтверждения будут заменены.'))return;
+   proposeTopics();status('Нарезка пересчитана. Проверьте новый список клипов.');
+ };
+ $('timeline-recompose').onclick=()=>{
+   if(!media||!current()||busy)return;
+   $('analyze-scene').click();
+ };
+ $('timeline-add').onclick=()=>{
+   if(!media||busy)return;
+   const start=Math.max(0,Math.min(media.duration-.6,$('player').currentTime||0));
+   const end=Math.min(media.duration,start+60);
+   clips.push({id:'manual-'+Date.now(),start,end,title:'Добавленный фрагмент — нужна проверка',
+      layout:'hybrid',focusX:50,status:'needs-review',
+      reviewReasons:['Фрагмент добавлен из исходной лекции; проверьте смысл и границы']});
+   selected=clips.length-1;setPhase('results');sync();
+   status('Фрагмент добавлен из исходной лекции. Можно поменять его границы на дорожке.');
+ };
+
  document.querySelectorAll('[data-scroll]').forEach(button=>{
    button.addEventListener('click',()=>{
      const anchor=document.getElementById(button.dataset.scroll);
@@ -383,6 +419,7 @@ function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)
 function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
+  for(const id of ['timeline-regenerate','timeline-recompose','timeline-add'])if($(id))$(id).disabled=busy||!has||(id==='timeline-regenerate'&&!chunks.length);
   $('workflow-start').disabled=!has||busy;
   $('workflow-srt').disabled=!has||busy;
   $('scan-chapters').disabled=!has||busy;
@@ -638,7 +675,7 @@ for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
   sync();status('Временная граница изменена. Повторите предпросмотр.');
  };
 }
-$('player').addEventListener('timeupdate',()=>{const c=current();if(c&&!$('player').paused&&$('player').currentTime>=c.end)$('player').pause()});
+$('player').addEventListener('timeupdate',()=>{const c=current();if(c&&!$('player').paused&&$('player').currentTime>=c.end)$('player').pause();updateTimelinePlayhead()});
 $('add').onclick=()=>{
   if(!media)return;const last=current();
   const start=last?Math.min(media.duration-1,Math.max(0,last.end)):0;
@@ -736,11 +773,17 @@ $('export').onclick=async()=>{
   const c=current();if(!media||!c)return;
   abort=new AbortController();setBusy(true);
   try{
+    showOperation('composition',0,'Экспортируем вертикальное видео со звуком…');
     status('Кодирование MP4 со звуком. В зависимости от ПК может занять несколько минут...');
-    const blob=await exportClip(media,c,chunks,{quality:$('output-quality').value,onProgress:status,signal:abort.signal});
+    const blob=await exportClip(media,c,chunks,{quality:$('output-quality').value,onProgress:msg=>{
+      status(msg);
+      const match=String(msg).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
+      if(match)showOperation('composition',100*Number(match[1])/Number(match[2]),msg);
+      else showOperation('composition',null,msg);
+    },signal:abort.signal});
     download(blob,safeName(c.title)+(c.status==='approved'?'':'_DRAFT')+'.mp4');
     status('Экспорт завершён: '+(blob.size/1e6).toFixed(1)+' МБ');
-  }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e)}finally{abort=null;setBusy(false)}
+  }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e)}finally{abort=null;$('processing-panel').hidden=true;setBusy(false)}
 };
 function loop(){
   const video=$('player'),c=current();
