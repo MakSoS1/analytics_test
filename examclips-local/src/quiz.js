@@ -1,3 +1,4 @@
+import {splitTranscriptForStory} from './selective-stories.js';
 /**
  * Educational term-recall quiz (MVP, extractive only).
  * The correct answer is copied from the local transcript; no generative facts.
@@ -8,7 +9,7 @@ const words=(text='')=>String(text).match(/[\p{L}][\p{L}\p{N}-]{4,}/gu)||[];
 const clean=s=>String(s).toLowerCase().normalize('NFC');
 export function quizForClip(clip,chunks,{count=5}={}){
  if(!clip||!Array.isArray(chunks))return [];
- const text=chunks.filter(x=>x.end>clip.start&&x.start<clip.end).map(x=>x.text).join(' ').replace(/\s+/g,' ');
+ const text=splitTranscriptForStory(chunks,clip).map(x=>x.text).join(' ').replace(/\s+/g,' ');
  if(text.length<110)return [];
  const sentences=text.split(/(?<=[.!?…])\s+/u).map(x=>x.trim()).filter(s=>s.length>=36&&s.length<=245);
  const vocabulary=[...new Set(words(text).map(clean))]
