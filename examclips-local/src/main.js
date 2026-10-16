@@ -21,20 +21,27 @@ root.dataset.phase='upload';
 root.innerHTML=`
 <header class="top">
  <div class="brand"><span class="brand-icon">▶</span> ExamClips <span class="pill">BETA</span></div>
- <nav class="top-navigation" aria-label="Разделы">
-  <button data-scroll="overview" class="active" type="button">Обзор</button>
-  <button data-scroll="editor" type="button">Микротемы</button>
-  <button data-scroll="quiz-panel" type="button">Тесты</button>
+ <nav class="top-navigation" aria-label="Вкладки редактора">
+  <button data-editor-tab="timeline" class="active" type="button">Таймлайн</button>
+  <button data-editor-tab="clip" type="button">Монтаж</button>
+  <button data-editor-tab="captions" type="button">Субтитры</button>
+  <button data-editor-tab="quiz" type="button">Тесты</button>
+  <button data-editor-tab="export" type="button">Экспорт</button>
  </nav>
  <div class="privacy">● Видео остаётся на устройстве</div>
 </header>
 <main class="shell">
   <aside class="sidebar">
-    <div class="heading">Новая обработка <span class="muted">Приватно</span></div>
+    <div class="heading">Подготовка лекции <span class="muted">Приватно</span></div>
+    <h1 class="upload-heading">Превратите лекцию в вертикальные видео</h1>
+    <p class="upload-subtitle">Загрузите запись и задайте параметры один раз. Далее вы перейдёте в полноэкранный таймлайн.</p>
     <label class="drop" id="drop"><span class="drop-icon">⬆</span><b>Выберите видео</b><small>MP4, MOV, WebM · до 180 мин / 2 ГБ</small><input type="file" id="video-file" accept="video/mp4,video/quicktime,video/webm,video/*" hidden></label>
     <div class="file-note" id="file-note">Файл пока не выбран. Ничего не загружается на сервер.</div>
+ <div id="initial-duration" class="initial-duration">
+   <label for="topic-preset">Длина будущих роликов</label>
+ </div>
  <button id="settings-toggle" class="settings-toggle" type="button">Настройки анализа <span>▾</span></button>
- <div class="onboarding">1. Выбери запись лекции. 2. Распознай речь или импортируй SRT. 3. Проверь фрагменты и получи вертикальные видео.</div>
+ <div class="onboarding">Обработка проходит на вашем устройстве. Вы сможете изменить выбранные фрагменты на таймлайне в любой момент.</div>
     <div class="settings config-group">
       <div class="heading">1. Расшифровка</div>
       <details class="detail-settings"><summary>Язык и параметры Whisper</summary><div class="detail-body">
@@ -54,8 +61,9 @@ root.innerHTML=`
     <div class="settings topic-settings">
   <div class="heading">2. Найти микротемы</div>
   <label>Длительность<select id="topic-preset">
-    <option value="full">Полная мысль · обычно 1–3 мин, максимум 5 мин</option>
-    <option value="compact">Короткие объяснения · обычно 1–2 мин, максимум 3 мин</option>
+    <option value="full">Полная микротема · 1–3 минуты (до 5)</option>
+    <option value="compact">Короткое объяснение · 1–2 минуты</option>
+    <option value="short">Короткий момент · 15–45 секунд</option>
   </select></label>
   <button id="scan-chapters" disabled>◫ Найти смены слайдов локально</button>
   <button id="suggest-topics" disabled>✧ Предложить законченные микротемы</button>
@@ -71,8 +79,8 @@ root.innerHTML=`
       <h2>Лекция загружена. Как будем обрабатывать?</h2>
       <p>Выберите язык и режим в левой панели. Расшифровка, определение микротем и подготовка монтажа запускаются последовательно.</p>
       <div class="workflow-config-actions">
-        <button class="primary" id="workflow-start" disabled>Начать анализ лекции →</button>
-        <button id="workflow-srt" disabled>У меня уже есть SRT</button>
+        <button class="primary" id="workflow-start" disabled>Обработать лекцию →</button>
+        <button id="workflow-srt" disabled>Использовать готовые субтитры (SRT)</button>
       </div>
       <p class="hint">Видео останется на этом устройстве. Модели Whisper могут скачиваться при первом запуске.</p>
     </div>
@@ -190,6 +198,92 @@ root.innerHTML=`
 </main>
 <footer>ExamClips · Локальная обработка · Без загрузки исходных видео · Проверяйте формулы, субтитры и границы тем перед публикацией</footer>`;
 const $=id=>document.getElementById(id);
+/** Full-width timeline editor, with the other tools moved to separate tabs.
+ * Moving DOM nodes preserves all existing listeners and export/transcription logic.
+ */
+function setupPrimaryTimeline(){
+ const sidebar=document.querySelector('.sidebar');
+ const duration=$('topic-preset'),oldLabel=duration.closest('label');
+ $('initial-duration').querySelector('label').append(duration);oldLabel.remove();
+ const startButtons=document.querySelector('.workflow-config-actions');
+ sidebar.insertBefore(startButtons,document.querySelector('.topic-settings'));
+ startButtons.classList.add('upload-start-actions');
+ const languageOptions=sidebar.querySelector('.config-group details');
+ if(languageOptions)languageOptions.open=true;
+ const workspace=document.querySelector('.workspace');
+ const switcher=document.createElement('nav');switcher.className='workspace-tab-switcher';
+ switcher.setAttribute('aria-label','Вкладки редактора');
+ switcher.innerHTML=[
+  '<button type="button" data-editor-tab="timeline" class="active">Таймлайн</button>',
+  '<button type="button" data-editor-tab="clip">Монтаж</button>',
+  '<button type="button" data-editor-tab="captions">Субтитры</button>',
+  '<button type="button" data-editor-tab="quiz">Тесты</button>',
+  '<button type="button" data-editor-tab="export">Экспорт</button>'
+ ].join('');
+ const workbench=document.createElement('section');workbench.id='workbench';workbench.className='workbench';
+ workbench.innerHTML=[
+  '<section id="pane-timeline" class="workbench-pane" data-pane="timeline">',
+    '<div class="workbench-heading"><div><span class="eyebrow">МОНТАЖНЫЙ СТОЛ</span>',
+    '<h1>Таймлайн лекции</h1><p>Исходная запись и готовые ролики на общей шкале времени.</p></div>',
+    '<button id="open-clip-settings" type="button">Настроить клип →</button></div>',
+    '<div id="timeline-monitors" class="timeline-monitors">',
+      '<div class="timeline-monitor source-monitor"><div class="monitor-label"><b>Исходная лекция</b><span>16:9 · оригинал</span></div>',
+      '<div class="source-monitor-content"></div></div>',
+      '<div class="timeline-monitor vertical-monitor"><div class="monitor-label"><b>Вертикальный ролик</b><span>9:16 · предпросмотр</span></div>',
+      '<div class="vertical-monitor-content"></div></div>',
+    '</div>',
+  '</section>',
+  '<section id="pane-clip" class="workbench-pane" data-pane="clip" hidden>',
+    '<div class="pane-heading"><span class="eyebrow">МОНТАЖ</span><h2>Настройки клипа</h2>',
+    '<p>Выбирайте композицию, корректируйте границы и размер преподавателя.</p></div></section>',
+  '<section id="pane-captions" class="workbench-pane" data-pane="captions" hidden>',
+    '<div class="pane-heading"><span class="eyebrow">ТЕКСТ</span><h2>Субтитры и расшифровка</h2>',
+    '<p>Исправляйте текст с таймкодами. Субтитры появляются последовательно поверх видео.</p></div></section>',
+  '<section id="pane-quiz" class="workbench-pane" data-pane="quiz" hidden>',
+    '<div class="pane-heading"><span class="eyebrow">ПРОВЕРКА ЗНАНИЙ</span><h2>Мини-тесты</h2></div></section>',
+  '<section id="pane-export" class="workbench-pane" data-pane="export" hidden>',
+    '<div class="pane-heading"><span class="eyebrow">РЕЗУЛЬТАТ</span><h2>Экспорт видео и проекта</h2>',
+    '<p>Файлы сохраняются на устройстве без загрузки исходной лекции.</p></div>',
+    '<div class="export-panel"><div class="export-status"><b>Экспорт выполняется локально</b>',
+    '<p>Перед сохранением проверьте начало, объяснение и окончание микротем.</p></div></div></section>'
+ ].join('');
+ workspace.insertBefore(switcher,workspace.querySelector('.journey'));
+ workspace.insertBefore(workbench,workspace.querySelector('.journey'));
+ const pane=key=>workbench.querySelector('[data-pane="'+key+'"]');
+ const source=workbench.querySelector('.source-monitor-content');
+ const vertical=workbench.querySelector('.vertical-monitor-content');
+ source.append($('player'));vertical.append($('preview'));
+ document.querySelector('.stage').remove();
+ pane('timeline').append($('timeline-section'));
+ pane('timeline').append(document.querySelector('.kpis'));
+ const editor=$('editor');editor.querySelector('.controls').classList.add('clip-controls');pane('clip').append(editor);
+ const subtitleHeading=$('save-srt').closest('.panel-title'),transcript=$('transcript'),hint=transcript.nextElementSibling;
+ pane('captions').append(subtitleHeading,transcript);
+ if(hint?.classList.contains('hint'))pane('captions').append(hint);
+ pane('quiz').append($('quiz-panel'));
+ const exportBox=pane('export').querySelector('.export-panel');
+ exportBox.append($('output-quality').closest('label'),$('export'),$('export-all'));
+ exportBox.append($('save-project').closest('.panel-title'));
+ const projectHint=$('load-project').previousElementSibling;
+ if(projectHint?.classList.contains('hint'))exportBox.append(projectHint);
+ exportBox.append($('load-project'),$('project-file'));
+ pane('timeline').append(document.querySelector('.progress-row'));
+ $('open-clip-settings').onclick=()=>setEditorTab('clip');
+}
+let activeEditorTab='timeline';
+function setEditorTab(name){
+ if(!['timeline','clip','captions','quiz','export'].includes(name))return;
+ activeEditorTab=name;
+ for(const pane of document.querySelectorAll('.workbench-pane'))
+   pane.hidden=pane.dataset.pane!==name;
+ for(const control of document.querySelectorAll('[data-editor-tab]')){
+   const selected=control.dataset.editorTab===name;
+   control.classList.toggle('active',selected);
+   control.setAttribute('aria-selected',String(selected));
+ }
+ root.dataset.editorTab=name;
+}
+
 
 const generatedQuizzes=new Map(),quizSelections=new Map();
 function quizKey(c){return c?[c.id,c.start,c.end,c.title].join('|'):''}
@@ -290,15 +384,10 @@ function initMvpEvents(){
    status('Фрагмент добавлен из исходной лекции. Можно поменять его границы на дорожке.');
  };
 
- document.querySelectorAll('[data-scroll]').forEach(button=>{
-   button.addEventListener('click',()=>{
-     const anchor=document.getElementById(button.dataset.scroll);
-     if(!anchor)return;
-     anchor.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});
-     document.querySelectorAll('[data-scroll]').forEach(x=>x.classList.toggle('active',x===button));
-   });
+ document.querySelectorAll('[data-editor-tab]').forEach(button=>{
+   button.addEventListener('click',()=>setEditorTab(button.dataset.editorTab));
  });
- if(!isLocalDesktop){
+  if(!isLocalDesktop){
    const opt=$('ocr-engine').querySelector('option[value="rapid"]');if(opt)opt.disabled=true;
    $('ocr-engine').value='tesseract';
  }
@@ -328,8 +417,9 @@ function initMvpEvents(){
 let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
 function setPhase(value){
  if(!['upload','configure','processing','results'].includes(value))return;
- root.dataset.phase=value;
+ const old=root.dataset.phase;root.dataset.phase=value;
  $('processing-panel').hidden=value!=='processing';
+ if(value==='results'&&old!=='results')setEditorTab('timeline');
 }
 function showOperation(stage,percent,message,{standalone=false}={}){
  const stages=['prepare','asr','topics','composition'];
@@ -526,7 +616,7 @@ async function selectFile(file){
         $('transcript').value=toSrt(chunks);status('Проект восстановлен; проверьте ролики');
       }
     }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
-    setPhase(chunks.length?'results':'configure');
+    setPhase(chunks.length?'results':'upload');
     sync();
     buildPrivateFilmstrip(media).catch(()=>{});
   }catch(e){media=null;clips=[];updateDashboard();renderQuiz();setPhase('upload');error(e)}finally{setBusy(false)}
@@ -572,7 +662,7 @@ $('transcribe').onclick=async()=>{
     }
     if(e.name==='AbortError')status('Остановлено: локальный прогресс сохранён, следующий запуск продолжит с контрольной точки.');
     else error(e);
-    setPhase(chunks.length?'results':'configure');
+    setPhase(chunks.length?'results':'upload');
   }finally{abort=null;setBusy(false)}
 };
 $('forget-asr').onclick=async()=>{
@@ -586,9 +676,11 @@ $('forget-asr').onclick=async()=>{
 
 function proposeTopics(){
   if(!media||!chunks.length)return;
-  const cfg=$('topic-preset').value==='compact'
-    ? {min:60,target:105,max:180}
-    : {min:60,target:165,max:300};
+  const cfg=$('topic-preset').value==='short'
+    ? {min:15,target:35,max:55}
+    : $('topic-preset').value==='compact'
+      ? {min:60,target:105,max:180}
+      : {min:60,target:165,max:300};
   const ideas=buildMicrotopics(chunks,media.duration,{...cfg,sceneCuts});
   if(ideas.length)clips=ideas;
   setPhase('results');
@@ -829,4 +921,4 @@ function loop(){
   }
   previewRaf=requestAnimationFrame(loop);
 }
-initMvpEvents();loop();enable();updateDashboard();renderQuiz();probeLocalReview();
+setupPrimaryTimeline();setEditorTab('timeline');initMvpEvents();loop();enable();updateDashboard();renderQuiz();probeLocalReview();

@@ -231,3 +231,151 @@ footer{color:#93a3b8;text-align:center;font-size:10px;padding:17px 14px;backgrou
 #app[data-phase="results"] .sidebar:not(.show-settings) .config-group,
 #app[data-phase="results"] .sidebar:not(.show-settings) .topic-settings{display:none}
 #app[data-phase="results"] .sidebar .clip-heading{margin-top:20px}
+
+/* v0.7 — single preparation screen, then editor centered on a full-width timeline. */
+#app[data-phase="upload"] .shell{align-items:flex-start}
+#app[data-phase="upload"] .sidebar{max-width:700px;margin:24px auto 30px;padding:20px 38px}
+#app[data-phase="upload"] .sidebar>.heading{margin-bottom:8px;font-size:13px;color:#6e89ab;justify-content:flex-start}
+#app[data-phase="upload"] .upload-heading{display:block;font-size:clamp(27px,3vw,39px);line-height:1.15;letter-spacing:-1px;margin:6px 0 8px}
+#app[data-phase="upload"] .upload-subtitle{display:block;color:#7790ad;font-size:13px;line-height:1.65;margin:0 0 18px}
+#app[data-phase="upload"] .drop{min-height:175px;padding:18px;gap:9px}
+#app[data-phase="upload"] .drop b{font-size:16px}
+#app[data-phase="upload"] .drop-icon{width:42px;height:42px;font-size:23px}
+#app[data-phase="upload"] .file-note{text-align:left;margin:9px 0 15px}
+#app[data-phase="upload"] .onboarding{padding:11px 13px;margin-top:14px;font-size:11px}
+#app[data-phase="upload"] .sidebar .config-group{display:grid!important;margin:12px 0 6px;padding:12px 0}
+#app[data-phase="upload"] .config-group>.heading{display:none}
+#app[data-phase="upload"] .config-group #transcribe,
+#app[data-phase="upload"] .config-group #forget-asr,
+#app[data-phase="upload"] .config-group #import-srt,
+#app[data-phase="upload"] .config-group>.hint{display:none}
+#app[data-phase="upload"] .config-group .detail-settings{background:#fff}
+#app[data-phase="upload"] .config-group .detail-settings summary{font-size:13px}
+#app[data-phase="upload"] .config-group .detail-settings .detail-body{grid-template-columns:repeat(2,minmax(0,1fr))}
+#app[data-phase="upload"] .config-group .detail-settings .detail-body>label:last-child{grid-column:span 2}
+#app[data-phase="upload"] .sidebar .topic-settings{display:none}
+#app[data-phase="upload"] .initial-duration{display:grid;gap:7px;margin-bottom:10px}
+#app[data-phase="upload"] .initial-duration>label{display:grid;gap:9px;font-size:12px;color:#405a7f;font-weight:750}
+#app[data-phase="upload"] .upload-start-actions{display:flex;gap:10px;margin:12px 0 2px;justify-content:stretch;flex-wrap:nowrap}
+#app[data-phase="upload"] .upload-start-actions>button{flex:1;min-height:51px;font-size:13px}
+.upload-heading,.upload-subtitle{display:none}
+.initial-duration{display:none}
+#app[data-phase="results"] .shell{display:block;min-height:calc(100vh - 76px)}
+#app[data-phase="results"] .sidebar{display:none!important}
+#app[data-phase="results"] .workspace{
+ width:100%;max-width:none;margin:0;padding:16px clamp(14px,2.3vw,36px) 20px;
+ min-height:calc(100vh - 76px);background:#f6f9fd
+}
+#app[data-phase="results"] .workspace-top,
+#app[data-phase="results"] .workspace>.journey,
+#app[data-phase="results"] .workspace>.workflow-config{display:none!important}
+#app[data-phase="results"] .top-navigation{display:flex}
+.workspace-tab-switcher{display:none!important}
+.workbench{width:100%;min-height:calc(100vh - 112px)}
+.workbench-pane[hidden]{display:none!important}
+.workbench-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:1px 0 14px}
+.workbench-heading h1{font-size:28px;margin:4px 0 4px;letter-spacing:-.7px}
+.workbench-heading p{margin:0;color:#7890aa;font-size:12px}
+#open-clip-settings{background:#fff;border-color:#c9dcf6;color:#1456ba}
+.timeline-monitors{
+ display:grid;grid-template-columns:minmax(0,1.7fr) minmax(210px,.85fr);
+ gap:14px;height:clamp(345px,46vh,525px);margin-bottom:14px
+}
+.timeline-monitor{
+ background:#fff;border:1px solid #dce6f5;border-radius:16px;min-width:0;min-height:0;
+ display:flex;flex-direction:column;padding:12px 14px;
+ box-shadow:0 4px 19px #26466d0b
+}
+.monitor-label{display:flex;align-items:center;justify-content:space-between;gap:8px;
+ font-size:12px;color:#203a5e;font-weight:730;margin-bottom:10px}
+.monitor-label span{color:#8b9db3;font-size:10px;white-space:nowrap}
+.source-monitor-content,.vertical-monitor-content{
+ min-height:0;flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;
+ background:#101a2a;border-radius:11px
+}
+#pane-timeline #player{display:block;width:100%;height:100%;object-fit:contain}
+#pane-timeline #preview{display:block;width:auto;height:100%;max-width:100%;object-fit:contain;aspect-ratio:9/16}
+#pane-timeline .timeline-section{
+ margin:0;padding:16px 20px 20px;border-radius:16px;min-height:315px;
+ display:flex;flex-direction:column;justify-content:flex-start
+}
+#pane-timeline .timeline-heading{margin:0 0 10px;justify-content:flex-end;min-height:39px}
+#pane-timeline .timeline-heading>div:first-child{display:none}
+#pane-timeline .timeline-actions{gap:7px}
+#pane-timeline .timeline-actions button{min-height:35px}
+#pane-timeline .timeline-ruler{margin-top:8px}
+#pane-timeline .timeline-source{height:clamp(85px,11vh,125px)}
+#pane-timeline .timeline-track{height:clamp(90px,13vh,140px);margin-top:5px}
+#pane-timeline .timeline-foot{margin-top:12px}
+#pane-timeline .timeline-legend{margin-bottom:16px}
+#pane-timeline>.kpis{display:flex;margin:9px 0 0;gap:9px}
+#pane-timeline>.kpis .kpi{display:flex;flex-direction:row;align-items:center;gap:7px;flex:1;padding:7px 11px;border-radius:10px}
+#pane-timeline>.kpis .kpi strong{font-size:14px}
+#pane-timeline>.kpis .kpi span{font-size:10px}
+#pane-timeline .progress-row{margin:7px 0 0;padding:9px 12px;border:0;background:transparent}
+.pane-heading{margin:8px 0 22px}
+.pane-heading h2{font-size:30px;letter-spacing:-1px;color:#1c3558;margin:7px 0}
+.pane-heading p{font-size:13px;color:#7b91ab}
+#pane-clip .editor{display:block;width:100%;max-width:880px}
+#pane-clip .controls{display:grid;width:100%;padding:25px;grid-template-columns:1fr;gap:14px}
+#pane-captions,#pane-quiz,#pane-export,#pane-clip{max-width:1140px;margin:0 auto;padding:16px 16px 30px}
+#pane-captions #transcript{display:block;min-height:350px;width:100%;font-size:14px;line-height:1.8;padding:22px}
+#pane-captions .panel-title{background:#fff;border:1px solid #e0e9f6;padding:15px 19px;border-radius:13px;margin-bottom:12px}
+#pane-quiz .quiz-panel{margin:0}
+#pane-export .export-panel{display:grid;grid-template-columns:minmax(0,1fr);gap:13px;max-width:720px;
+ border:1px solid var(--line);background:#fff;border-radius:17px;padding:26px}
+#pane-export .export-panel>button{min-height:50px;font-size:13px}
+#pane-export .export-status{padding:18px;background:#eef5ff;border-radius:12px;color:#284b7d}
+#pane-export .export-status p{margin:7px 0 0;font-size:12px;color:#6f86a5}
+#pane-export .export-panel>label{font-size:12px;font-weight:750;color:#516c90}
+#app[data-phase="results"] footer{display:none}
+@media(max-width:850px){
+ #app[data-phase="results"] .top{gap:8px}
+ #app[data-phase="results"] .privacy{display:none}
+ #app[data-phase="results"] .workspace{padding:10px}
+ .timeline-monitors{grid-template-columns:minmax(0,1fr) minmax(140px,.56fr);gap:7px;height:38vh;min-height:260px}
+ .timeline-monitor{padding:8px}
+ .monitor-label{font-size:10px}.monitor-label span{display:none}
+ #pane-timeline .timeline-section{padding:13px 9px}
+ #pane-timeline .timeline-source{height:72px}
+ #pane-timeline .timeline-track{height:85px}
+ .workbench-heading h1{font-size:22px}
+}
+@media(max-width:700px){
+ #app[data-phase="upload"] .sidebar{padding:16px 17px;margin:10px 0;width:100%;max-width:100%}
+ #app[data-phase="upload"] .config-group .detail-settings .detail-body{grid-template-columns:1fr}
+ #app[data-phase="upload"] .config-group .detail-settings .detail-body>label:last-child{grid-column:auto}
+ #app[data-phase="upload"] .upload-start-actions{flex-direction:column}
+ #app[data-phase="results"] .top{height:auto;min-height:70px}
+ #app[data-phase="results"] .top-navigation{max-width:100%;overflow-x:auto}
+ #app[data-phase="results"] .shell{min-height:calc(100vh - 70px)}
+ #app[data-phase="results"] .workspace{padding:10px 8px}
+ .workbench-heading{align-items:flex-start;flex-wrap:wrap}
+ .timeline-monitors{grid-template-columns:1fr 1fr;height:245px}
+ .monitor-label{font-size:9px}
+ #pane-timeline>.kpis{flex-wrap:wrap}
+ #pane-timeline>.kpis .kpi{min-width:140px}
+ #pane-captions,#pane-quiz,#pane-export,#pane-clip{padding:10px 1px}
+ #pane-timeline .timeline-legend{margin-bottom:13px}
+ .timeline-actions{width:100%;justify-content:stretch}
+ .timeline-actions button{flex:1}
+}
+
+/* During processing, show only real progress; upload form and editor are not duplicated. */
+#app[data-phase="processing"] .shell{display:block}
+#app[data-phase="processing"] .sidebar{display:none!important}
+#app[data-phase="processing"] .workspace{width:min(100%,1010px);max-width:1010px;margin:50px auto;padding:20px}
+#app[data-phase="processing"] .workspace-top,
+#app[data-phase="processing"] .workspace>.journey,
+#app[data-phase="processing"] .workspace>.kpis,
+#app[data-phase="processing"] .workspace>.editor,
+#app[data-phase="processing"] .workspace>.timeline-section,
+#app[data-phase="processing"] .workspace>.quiz-panel,
+#app[data-phase="processing"] .workspace>.progress-row,
+#app[data-phase="processing"] .workspace>.workbench,
+#app[data-phase="processing"] .workspace>.workspace-tab-switcher{display:none!important}
+#app[data-phase="processing"] .processing-panel{padding:35px;min-height:335px}
+@media(max-width:700px){
+  #app[data-phase="processing"] .workspace{padding:12px;margin:12px auto}
+  #app[data-phase="processing"] .processing-panel{padding:20px}
+}
