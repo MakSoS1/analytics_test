@@ -12,6 +12,7 @@ import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {captionCueAt} from './editorial-motion.js';
 import {buildReviewPayload} from './completion-review.js';
 import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
+const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
 const root=document.querySelector('#app');
 root.innerHTML=`
 <header class="top">
@@ -199,6 +200,10 @@ function initMvpEvents(){
      document.querySelectorAll('[data-scroll]').forEach(x=>x.classList.toggle('active',x===button));
    });
  });
+ if(!isLocalDesktop){
+   const opt=$('ocr-engine').querySelector('option[value="rapid"]');if(opt)opt.disabled=true;
+   $('ocr-engine').value='tesseract';
+ }
  $('quiz-generate').onclick=()=>{
    const clip=current();if(!clip)return;
    const key=quizKey(clip),questions=quizForClip(clip,chunks,{count:5});
@@ -233,7 +238,7 @@ function enable(){
   $('suggest-topics').disabled=!has||busy||!chunks.length;
   $('quiz-generate').disabled=!has||busy||!chunks.length||current()?.id==='draft-1';
   $('export-all').disabled=!has||busy||!chunks.length||clips.every(c=>c.id==='draft-1');
-  $('verify-topic').disabled=!clip||busy||!chunks.length||current()?.id==='draft-1';
+  $('verify-topic').disabled=!isLocalDesktop||!clip||busy||!chunks.length||current()?.id==='draft-1';
   $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
     !((current()?.llmReview?.suggestedStartDelta||0)||(current()?.llmReview?.suggestedEndDelta||0));
   for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context','approve-topic'])$(id).disabled=!clip||busy;
@@ -270,7 +275,9 @@ function sync(){
     ? 'Проверить: '+c.reviewReasons.join(' · ')
     : 'Границы выбраны вручную. Проверьте вступление, объяснение и вывод.';
 
-  $('review-state').textContent=c.llmReview
+  $('review-state').textContent=!isLocalDesktop
+    ? 'AI-проверка через установленную на ПК Ollama доступна только при локальном запуске. Для веб-версии используйте ручную проверку.'
+    : c.llmReview
     ? 'Локальная модель: '+c.llmReview.verdict+' · '+c.llmReview.explanation+
       ' · Доказательства: '+(c.llmReview.evidence||[]).join(' | ')+
       ' · Это не гарантия качества — проверьте самостоятельно.'
