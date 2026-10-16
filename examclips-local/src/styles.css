@@ -360,3 +360,22 @@ footer{color:#93a3b8;text-align:center;font-size:10px;padding:17px 14px;backgrou
  .timeline-actions{width:100%;justify-content:stretch}
  .timeline-actions button{flex:1}
 }
+
+/* During processing, show only real progress; upload form and editor are not duplicated. */
+#app[data-phase="processing"] .shell{display:block}
+#app[data-phase="processing"] .sidebar{display:none!important}
+#app[data-phase="processing"] .workspace{width:min(100%,1010px);max-width:1010px;margin:50px auto;padding:20px}
+#app[data-phase="processing"] .workspace-top,
+#app[data-phase="processing"] .workspace>.journey,
+#app[data-phase="processing"] .workspace>.kpis,
+#app[data-phase="processing"] .workspace>.editor,
+#app[data-phase="processing"] .workspace>.timeline-section,
+#app[data-phase="processing"] .workspace>.quiz-panel,
+#app[data-phase="processing"] .workspace>.progress-row,
+#app[data-phase="processing"] .workspace>.workbench,
+#app[data-phase="processing"] .workspace>.workspace-tab-switcher{display:none!important}
+#app[data-phase="processing"] .processing-panel{padding:35px;min-height:335px}
+@media(max-width:700px){
+  #app[data-phase="processing"] .workspace{padding:12px;margin:12px auto}
+  #app[data-phase="processing"] .processing-panel{padding:20px}
+}
