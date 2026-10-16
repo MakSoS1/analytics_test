@@ -16,6 +16,7 @@ try{
   raw.fillStyle='#ffffff';raw.font='48px Arial';raw.fillText('Docker containers',95,230);
   const canvas=document.createElement('canvas');canvas.width=720;canvas.height=1280;
   const cues=[{start:0,end:3,text:'Docker запускает отдельные контейнеры быстро'}];
+  document.body.append(canvas);canvas.id='karaoke-preview';
   const outputs=[];
   for(const instant of [null,.2,2.3]){
    paintFrame(canvas,source,1600,900,'hybrid',50,
@@ -35,5 +36,6 @@ try{
  assert.ok(result.diffFromNoSubtitle>0.5,JSON.stringify(result));
  assert.ok(result.diffBetweenSpokenPhrases>0.5,JSON.stringify(result));
  assert.equal(result.emptyCorner,true);
+ await page.locator('#karaoke-preview').screenshot({path:'mvp-karaoke-frame.png'});
  console.log('KARAOKE_OVERLAY_SMOKE_SUCCESS',JSON.stringify(result));
 }finally{await browser.close()}
