@@ -45,6 +45,10 @@ jobs:
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-mvp-vite.log 2>&1 &
           sleep 4
           node scripts/mvp-ui-smoke.mjs
+      - name: Long quiet lecture with only sparse useful teaching segments
+        run: |
+          ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=white:s=320x180:r=2 -f lavfi -i sine=frequency=441:sample_rate=16000 -t 180 -c:v libx264 -preset ultrafast -c:a aac -shortest selective-lecture-fixture.mp4
+          node scripts/sparse-lecture-smoke.mjs
       - name: Browser integration test
         run: |
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-vite.log 2>&1 &
