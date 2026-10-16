@@ -39,8 +39,10 @@ try{
  const [quizDownload]=await Promise.all([page.waitForEvent('download'),page.locator('#quiz-download').click()]);
  assert.match(quizDownload.suggestedFilename(),/\.quiz\.json$/);
  await page.locator('[data-scroll="quiz-panel"]').click();
- await page.locator('#mvp-unavailable').count().catch(()=>0);
+ await page.evaluate(()=>window.scrollTo(0,0));
  await page.screenshot({path:'mvp-desktop.png',fullPage:true});
+ await page.locator('#quiz-panel').scrollIntoViewIfNeeded();
+ await page.screenshot({path:'mvp-quiz.png',fullPage:false});
  const mobile=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:1});
  mobile.on('pageerror',e=>errors.push(e.message));
  await mobile.goto('http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});
