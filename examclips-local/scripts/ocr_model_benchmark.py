@@ -54,16 +54,16 @@ for case in cases:
             results.append(scored("Tesseract PSM"+str(psm),case,text,time.perf_counter()-t0))
         except Exception as exc:errors.append(f"Tesseract {case['id']}:{str(exc)[:200]}")
 try:
-    from rapidocr import RapidOCR
+    from rapidocr import RapidOCR, LangDet, LangRec, OCRVersion, ModelType
     configs=[
       ("PP-OCRv6 small EN",{
-        "Det.ocr_version":"PP-OCRv6","Det.model_type":"small","Det.lang_type":"en",
-        "Rec.ocr_version":"PP-OCRv6","Rec.model_type":"small","Rec.lang_type":"en",
+        "Det.ocr_version":OCRVersion.PPOCRV6,"Det.model_type":ModelType.SMALL,"Det.lang_type":LangDet.EN,
+        "Rec.ocr_version":OCRVersion.PPOCRV6,"Rec.model_type":ModelType.SMALL,"Rec.lang_type":LangRec.EN,
         "Global.text_score":0.35
       },"en"),
       ("PP-OCRv5 Cyrillic mobile",{
-        "Det.ocr_version":"PP-OCRv5","Det.model_type":"mobile","Det.lang_type":"ch",
-        "Rec.ocr_version":"PP-OCRv5","Rec.model_type":"mobile","Rec.lang_type":"cyrillic",
+        "Det.ocr_version":OCRVersion.PPOCRV5,"Det.model_type":ModelType.MOBILE,"Det.lang_type":LangDet.CH,
+        "Rec.ocr_version":OCRVersion.PPOCRV5,"Rec.model_type":ModelType.MOBILE,"Rec.lang_type":LangRec.CYRILLIC,
         "Global.text_score":0.35
       },"cyrillic")
     ]
