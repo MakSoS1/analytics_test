@@ -158,7 +158,7 @@ export function planSelectiveStories(chunks,duration,{
   const diversity=group.length>1;
   clips.push({id:'story-'+(clips.length+1),start,end,
    segments:spans.flatMap(x=>x.sourcePieces||[{start:x.start,end:x.end}]),
-   title:titleFromText(spans.sort((a,b)=>b.score-a.score)[0].text),
+   title:titleFromText([...spans].sort((a,b)=>b.score-a.score)[0].text),
    layout:'hybrid',focusX:50,confidence:'low',status:'needs-review',method:'selective-extractive',
    storyScore:+(group.reduce((n,c)=>n+c.score,0)/group.length).toFixed(2),
    reviewReasons:[
