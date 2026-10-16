@@ -13,6 +13,7 @@ import {captionCueAt} from './editorial-motion.js';
 import {buildReviewPayload} from './completion-review.js';
 import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
 const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
+let localReviewAvailable=false;
 const root=document.querySelector('#app');
 root.innerHTML=`
 <header class="top">
@@ -191,6 +192,17 @@ function renderQuiz(){
    section.append(heading,quote,options);mount.append(section);
  });
 }
+async function probeLocalReview(){
+ if(!isLocalDesktop)return;
+ try{
+   const response=await fetch('/api/local-review-capabilities',{cache:'no-store',signal:AbortSignal.timeout(4000)});
+   if(!response.ok||!String(response.headers.get('content-type')||'').includes('application/json'))return;
+   const result=await response.json();
+   localReviewAvailable=Boolean(result.available);
+   if(!localReviewAvailable)$('review-state').textContent='Ollama не найдена на этом ПК; проверка качества тем остаётся ручной.';
+   enable();
+ }catch{/* Static or offline browser fallback without local Ollama */}
+}
 function initMvpEvents(){
  document.querySelectorAll('[data-scroll]').forEach(button=>{
    button.addEventListener('click',()=>{
@@ -238,7 +250,7 @@ function enable(){
   $('suggest-topics').disabled=!has||busy||!chunks.length;
   $('quiz-generate').disabled=!has||busy||!chunks.length||current()?.id==='draft-1';
   $('export-all').disabled=!has||busy||!chunks.length||clips.every(c=>c.id==='draft-1');
-  $('verify-topic').disabled=!isLocalDesktop||!clip||busy||!chunks.length||current()?.id==='draft-1';
+  $('verify-topic').disabled=!isLocalDesktop||!localReviewAvailable||!clip||busy||!chunks.length||current()?.id==='draft-1';
   $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
     !((current()?.llmReview?.suggestedStartDelta||0)||(current()?.llmReview?.suggestedEndDelta||0));
   for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context','approve-topic'])$(id).disabled=!clip||busy;
@@ -275,7 +287,7 @@ function sync(){
     ? 'Проверить: '+c.reviewReasons.join(' · ')
     : 'Границы выбраны вручную. Проверьте вступление, объяснение и вывод.';
 
-  $('review-state').textContent=!isLocalDesktop
+  $('review-state').textContent=!localReviewAvailable
     ? 'AI-проверка через установленную на ПК Ollama доступна только при локальном запуске. Для веб-версии используйте ручную проверку.'
     : c.llmReview
     ? 'Локальная модель: '+c.llmReview.verdict+' · '+c.llmReview.explanation+
@@ -586,4 +598,4 @@ function loop(){
   }
   previewRaf=requestAnimationFrame(loop);
 }
-initMvpEvents();loop();enable();updateDashboard();renderQuiz();
+initMvpEvents();loop();enable();updateDashboard();renderQuiz();probeLocalReview();
