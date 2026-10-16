@@ -10,6 +10,7 @@ import {sampleSlideCuts} from './slide-cuts.js';
 import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {planSelectiveStories,sourceSegments,storyDuration,summarizeStoryPlan} from './selective-stories.js';
+import {makeStoryReviewPayload} from './story-review.js';
 import {captionCueAt} from './editorial-motion.js';
 import {captionSequenceAt} from './caption-flow.js';
 import {timelinePieces,timelineStats,timelineTimeAtFraction,amendClipBoundary,appendSourceSegment,reorderSourceSegments,removeSourceSegment} from './source-timeline.js';
@@ -17,6 +18,7 @@ import {buildReviewPayload} from './completion-review.js';
 import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
 const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
 let localReviewAvailable=false;
+let latestEditorialCandidates=[];
 const root=document.querySelector('#app');
 root.dataset.phase='upload';
 root.innerHTML=`
@@ -178,7 +180,7 @@ root.innerHTML=`
           <h2>Таймлайн лекции</h2>
           <p class="hint">Синие участки попадут в ролики, серые будут пропущены. Выбирайте фрагменты и перетаскивайте края, как в видеоредакторе.</p></div>
         <div class="timeline-actions">
-          <button id="timeline-regenerate" disabled>↻ Пересмотреть интересные моменты</button>
+          <button id="timeline-regenerate" disabled>↻ Пересмотреть интересные моменты</button><button id="timeline-ai-select" disabled title="Работает только через установленную Ollama на этом ПК">✧ Уточнить отбор через локальную LLM</button>
           <button id="timeline-recompose" disabled>✧ Пересобрать выбранный кадр</button>
         </div>
       </div>
@@ -379,6 +381,30 @@ function initMvpEvents(){
    updateTimelinePlayhead();
    status('Выбран пропущенный участок. Можете создать клип из текущей точки.');
  };
+ $('timeline-ai-select').onclick=async()=>{
+   if(!media||!localReviewAvailable||!latestEditorialCandidates.length||busy)return;
+   if(!confirm('Локальная модель уточнит полезные моменты по тексту. Заменить текущую разметку? Сохраните JSON проекта, если хотите её оставить.'))return;
+   abort=new AbortController();setBusy(true);
+   try{
+     showOperation('topics',null,'Локальная LLM оценивает полезность объяснений и несмежные связные части…');
+     const payload=makeStoryReviewPayload(latestEditorialCandidates,media.duration,{
+       keepFraction:Number($('story-keep').value||.3)
+     });
+     const response=await fetch('/api/local-story-plan',{
+       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),
+       signal:abort.signal
+     });
+     const result=await response.json();
+     if(!response.ok||!result.verified||!Array.isArray(result.clips))
+       throw Error(result.error||'Модель не вернула подтверждённые цитатами фрагменты');
+     clips=result.clips;selected=0;sync();
+     status(result.clips.length
+       ? 'Локальная LLM предложила '+result.clips.length+' микротем: '+result.summary.keptPercent+
+         '% записи. Необходимо вручную проверить смысловую связность каждого ролика.'
+       : 'Локальная LLM не нашла надёжных цельных объяснений. Можно выбрать фрагменты вручную.');
+   }catch(err){if(err.name!=='AbortError')error(err);else status('Отбор отменён — исходная разметка сохранена')}
+   finally{abort=null;setBusy(false)}
+ };
  $('timeline-regenerate').onclick=()=>{
    if(!media||!chunks.length)return;
    if(!confirm('Повторно найти микротемы? Текущие ручные изменения границ и их подтверждения будут заменены.'))return;
@@ -544,6 +570,7 @@ function renderTimeline(){
  }
  $('timeline-add').disabled=busy||!media;
  $('timeline-append').disabled=busy||!media||!current()||current().id==='draft-1';
+ $('timeline-ai-select').disabled=busy||!localReviewAvailable||!latestEditorialCandidates.length;
  $('timeline-regenerate').disabled=busy||!chunks.length;
  $('timeline-recompose').disabled=busy||!current()||current()?.id==='draft-1';
  updateTimelinePlayhead();
@@ -562,6 +589,7 @@ function enable(){
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
   for(const id of ['timeline-regenerate','timeline-recompose','timeline-add','timeline-append'])if($(id))$(id).disabled=busy||!has||(id==='timeline-regenerate'&&!chunks.length);
   $('workflow-start').disabled=!has||busy;
+  $('timeline-ai-select').disabled=!has||busy||!localReviewAvailable||!latestEditorialCandidates.length;
   $('workflow-srt').disabled=!has||busy;
   $('scan-chapters').disabled=!has||busy;
   $('forget-asr').disabled=!has||busy;
@@ -730,6 +758,7 @@ function proposeTopics(){
       : {min:60,target:165,max:300};
   const keepFraction=Number($('story-keep').value||.3);
   const plan=planSelectiveStories(chunks,media.duration,{...cfg,keepFraction,maxStories:12,sceneCuts});
+  latestEditorialCandidates=plan.candidates;
   const shortDemo=media.duration<=10&&chunks.some(x=>x.text?.trim());
   clips=plan.clips.length?plan.clips:shortDemo
     ? [{id:'short-preview',title:'Тестовое короткое видео — проверьте вручную',
