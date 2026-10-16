@@ -344,6 +344,27 @@ function showOperation(stage,percent,message,{standalone=false}={}){
  });
  if(standalone&&root.dataset.phase!=='results')setPhase('processing');
 }
+async function buildPrivateFilmstrip(videoMedia){
+ // Sampled thumbnails are created and retained only in this browser session.
+ const holder=$('timeline-source');
+ holder.querySelectorAll('.filmstrip-tile').forEach(x=>x.remove());
+ const N=10;
+ for(let i=0;i<N;i++){
+   if(media!==videoMedia)return;
+   const at=Math.max(0,Math.min(videoMedia.duration-.05,videoMedia.duration*(i+.5)/N));
+   try{
+     const sample=await videoMedia.videoSink.getSample(at);
+     if(!sample)continue;
+     const image=document.createElement('canvas');image.width=150;image.height=84;
+     try{sample.draw(image.getContext('2d'),0,0,150,84)}finally{sample.close()}
+     if(media!==videoMedia)return;
+     const tile=document.createElement('div');tile.className='filmstrip-tile';
+     tile.style.left=(i*100/N)+'%';tile.style.width=(100/N)+'%';
+     tile.style.backgroundImage='url("'+image.toDataURL('image/jpeg',.55)+'")';
+     tile.setAttribute('aria-hidden','true');holder.append(tile);
+   }catch{ /* Some video codecs cannot seek efficiently; keep plain track. */ }
+ }
+}
 function renderTimeline(){
  const track=$('timeline-track'),ruler=$('timeline-ruler');
  track.replaceChildren();ruler.replaceChildren();
@@ -502,6 +523,7 @@ async function selectFile(file){
     }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
     setPhase(chunks.length?'results':'configure');
     sync();
+    buildPrivateFilmstrip(media).catch(()=>{});
   }catch(e){media=null;clips=[];updateDashboard();renderQuiz();setPhase('upload');error(e)}finally{setBusy(false)}
 }
 $('video-file').addEventListener('change',e=>selectFile(e.target.files?.[0]));
