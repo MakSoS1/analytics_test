@@ -222,3 +222,12 @@ footer{color:#93a3b8;text-align:center;font-size:10px;padding:17px 14px;backgrou
  opacity:.79;pointer-events:none;filter:saturate(.78)}
 .timeline-source .filmstrip-tile+ .filmstrip-tile{border-left:1px solid #cbd9ea}
 .timeline-source::before{padding:4px 8px;background:#f8fbffd9;border-radius:5px}
+
+.settings-toggle{width:100%;display:none;justify-content:space-between;align-items:center;
+ background:#f5f9ff;color:#37608f;border:1px solid #e0eafa;margin:12px 0 8px}
+#app[data-phase="upload"] .settings-toggle{display:none}
+#app[data-phase="configure"] .settings-toggle{display:none}
+#app[data-phase="results"] .settings-toggle{display:flex}
+#app[data-phase="results"] .sidebar:not(.show-settings) .config-group,
+#app[data-phase="results"] .sidebar:not(.show-settings) .topic-settings{display:none}
+#app[data-phase="results"] .sidebar .clip-heading{margin-top:20px}
