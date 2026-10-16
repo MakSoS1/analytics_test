@@ -47,3 +47,8 @@ test('invalid geometry and confidence filtered deterministically',()=>{
  const list=sourceEvidence([mk('invalid',-15,40,100,90),mk('low score',10,20,40,35,8),mk('good',10,20,80,45)],650,450);
  assert.equal(list.length,1);assert.equal(list[0].text,'good');
 });
+
+test('short Cyrillic heading token remains part of visible lesson title',()=>{
+ const ctx=analyzeSlideContext([mk('Как',60,60,148,110,94),mk('работают контейнеры',165,60,850,110,96)],1440,810);
+ assert.equal(ctx.title,'Как работают контейнеры');
+});
