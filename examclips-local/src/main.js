@@ -9,9 +9,10 @@ import {analyzeScene} from './scene-analysis.js';
 import {sampleSlideCuts} from './slide-cuts.js';
 import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
+import {planSelectiveStories,sourceSegments,storyDuration,summarizeStoryPlan} from './selective-stories.js';
 import {captionCueAt} from './editorial-motion.js';
 import {captionSequenceAt} from './caption-flow.js';
-import {timelinePieces,timelineStats,timelineTimeAtFraction,amendClipBoundary} from './source-timeline.js';
+import {timelinePieces,timelineStats,timelineTimeAtFraction,amendClipBoundary,appendSourceSegment,reorderSourceSegments,removeSourceSegment} from './source-timeline.js';
 import {buildReviewPayload} from './completion-review.js';
 import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
 const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
@@ -39,6 +40,14 @@ root.innerHTML=`
     <div class="file-note" id="file-note">Файл пока не выбран. Ничего не загружается на сервер.</div>
  <div id="initial-duration" class="initial-duration">
    <label for="topic-preset">Длина будущих роликов</label>
+   <label for="story-keep">Сколько содержательного материала искать
+    <select id="story-keep">
+      <option value=".15">Строгий отбор · до 15% записи</option>
+      <option value=".3" selected>Выборочно · до 30% записи</option>
+      <option value=".5">Больше деталей · до 50% записи</option>
+    </select>
+   </label>
+   <p class="hint">Это потолок, не цель. Из всей лекции может получиться всего один полезный ролик или ни одного.</p>
  </div>
  <button id="settings-toggle" class="settings-toggle" type="button">Настройки анализа <span>▾</span></button>
  <div class="onboarding">Обработка проходит на вашем устройстве. Вы сможете изменить выбранные фрагменты на таймлайне в любой момент.</div>
@@ -169,7 +178,7 @@ root.innerHTML=`
           <h2>Таймлайн лекции</h2>
           <p class="hint">Синие участки попадут в ролики, серые будут пропущены. Выбирайте фрагменты и перетаскивайте края, как в видеоредакторе.</p></div>
         <div class="timeline-actions">
-          <button id="timeline-regenerate" disabled>↻ Перенарезать по речи</button>
+          <button id="timeline-regenerate" disabled>↻ Пересмотреть интересные моменты</button>
           <button id="timeline-recompose" disabled>✧ Пересобрать выбранный кадр</button>
         </div>
       </div>
@@ -179,7 +188,8 @@ root.innerHTML=`
       <div id="timeline-track" class="timeline-track" aria-label="Выбранные фрагменты и пропуски"></div>
       <div class="timeline-foot">
         <span id="timeline-current">00:00:00 / 00:00:00</span>
-        <button id="timeline-add" disabled>+ Создать клип в этой точке</button>
+        <div class="timeline-restore-actions"><button id="timeline-append" disabled>+ Добавить отрывок к микротеме</button>
+ <button id="timeline-add" disabled>+ Новый ролик из этой точки</button></div>
       </div>
     </section>
     <section class="quiz-panel" id="quiz-panel">
@@ -257,6 +267,11 @@ function setupPrimaryTimeline(){
  pane('timeline').append($('timeline-section'));
  pane('timeline').append(document.querySelector('.kpis'));
  const editor=$('editor');editor.querySelector('.controls').classList.add('clip-controls');pane('clip').append(editor);
+ const piecesEditor=document.createElement('section');piecesEditor.className='story-pieces-editor';
+ piecesEditor.innerHTML='<div class="panel-title"><b>Фрагменты выбранной микротемы</b><span class="muted">Именно в этом порядке они будут склеены</span></div>'+
+  '<div id="story-piece-list" class="story-piece-list"></div>'+
+  '<p class="hint">Отрывки можно переставлять или удалить. Переходы между несмежными частями нужно проверить вручную.</p>';
+ pane('clip').append(piecesEditor);
  const subtitleHeading=$('save-srt').closest('.panel-title'),transcript=$('transcript'),hint=transcript.nextElementSibling;
  pane('captions').append(subtitleHeading,transcript);
  if(hint?.classList.contains('hint'))pane('captions').append(hint);
@@ -288,11 +303,11 @@ function setEditorTab(name){
 const generatedQuizzes=new Map(),quizSelections=new Map();
 function quizKey(c){return c?[c.id,c.start,c.end,c.title].join('|'):''}
 function updateDashboard(){
- const ready=clips.filter(c=>c.id!=='draft-1'&&c.end>c.start);
+ const ready=clips.filter(c=>c.id!=='draft-1'&&storyDuration(c)>0);
  const checked=ready.filter(c=>c.status==='approved');
  $('kpi-topics').textContent=String(ready.length);
  $('kpi-approved').textContent=String(checked.length);
- $('kpi-duration').textContent=Math.round(ready.reduce((sum,c)=>sum+c.end-c.start,0)/60)+' мин';
+ $('kpi-duration').textContent=Math.round(ready.reduce((sum,c)=>sum+storyDuration(c),0)/60)+' мин';
  const stages=[
    ['journey-upload',!!media,'journey-upload-state',media?'Видео выбрано':'Выберите файл'],
    ['journey-transcript',chunks.length>0,'journey-transcript-state',chunks.length+' реплик'],
@@ -465,7 +480,7 @@ function renderTimeline(){
  track.replaceChildren();ruler.replaceChildren();
  if(!media){$('timeline-current').textContent='00:00:00 / 00:00:00';return}
  const duration=media.duration,spans=timelinePieces(clips,duration),stat=timelineStats(clips,duration);
- $('timeline-coverage').textContent=stat.percent+'% лекции выбрано · '+stat.clips+' фрагментов';
+ $('timeline-coverage').textContent=stat.percent+'% записи взято · '+stat.clips+' роликов · '+stat.pieces+' отрывков';
  const tickCount=Math.max(2,Math.min(12,Math.floor(duration/60)||2));
  for(let i=0;i<=tickCount;i++){
    const tick=document.createElement('span');tick.className='timeline-tick';
@@ -481,11 +496,11 @@ function renderTimeline(){
    if(span.kind==='clip'){
       el.classList.toggle('active',span.id===active?.id);
       const idx=clips.findIndex(c=>c.id===span.id);
-      el.title=(span.title||'Микротема')+' · '+timecode(span.start)+' — '+timecode(span.end);
+      el.title=(span.title||'Микротема')+' · часть '+(span.segmentIndex+1)+' · '+timecode(span.start)+' — '+timecode(span.end);
       el.setAttribute('role','button');el.tabIndex=0;
       el.setAttribute('aria-label','Перейти к '+(span.title||'микротеме'));
       const label=document.createElement('span');label.className='timeline-part-text';
-      label.textContent=String(idx+1).padStart(2,'0')+' · '+(span.title||'Фрагмент');
+      label.textContent=String(idx+1).padStart(2,'0')+'.'+(span.segmentIndex+1)+' · '+(span.title||'Фрагмент');
       el.append(label);
       el.onclick=()=>{if(busy)return;selected=idx;sync();$('player').currentTime=span.start};
       el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click()}};
@@ -507,7 +522,7 @@ function renderTimeline(){
             document.removeEventListener('pointermove',move);
             document.removeEventListener('pointerup',release);
             const t=timelineTimeAtFraction((event.clientX-rect.left)/rect.width,duration);
-            try{clips[idx]=amendClipBoundary(initial,edge,t,duration);selected=idx;sync();
+            try{clips[idx]=amendClipBoundary(initial,edge,t,duration,span.segmentIndex);selected=idx;sync();
               status('Граница сохранена. Проверьте микротему и заново создайте композицию.')}
             catch(err){status('Не удалось изменить границу: '+err.message);renderTimeline()}
           };
@@ -519,6 +534,7 @@ function renderTimeline(){
    track.append(el);
  }
  $('timeline-add').disabled=busy||!media;
+ $('timeline-append').disabled=busy||!media||!current()||current().id==='draft-1';
  $('timeline-regenerate').disabled=busy||!chunks.length;
  $('timeline-recompose').disabled=busy||!current()||current()?.id==='draft-1';
  updateTimelinePlayhead();
@@ -535,7 +551,7 @@ function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)
 function enable(){
   const has=!!media,clip=!!clips.length;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
-  for(const id of ['timeline-regenerate','timeline-recompose','timeline-add'])if($(id))$(id).disabled=busy||!has||(id==='timeline-regenerate'&&!chunks.length);
+  for(const id of ['timeline-regenerate','timeline-recompose','timeline-add','timeline-append'])if($(id))$(id).disabled=busy||!has||(id==='timeline-regenerate'&&!chunks.length);
   $('workflow-start').disabled=!has||busy;
   $('workflow-srt').disabled=!has||busy;
   $('scan-chapters').disabled=!has||busy;
@@ -565,14 +581,14 @@ function renderClips(){
     const btn=document.createElement('button');btn.className='clip'+(i===selected?' active':'');
     const n=document.createElement('span');n.className='clip-num';n.textContent=String(i+1).padStart(2,'0');
     const title=document.createElement('span');title.className='clip-name';title.textContent=clip.title;
-    const duration=document.createElement('small');duration.textContent=timecode(clip.end-clip.start);
+    const duration=document.createElement('small');duration.textContent=timecode(storyDuration(clip));
     btn.title=(clip.reviewReasons||[]).join('; ');
     btn.append(n,title,duration);btn.addEventListener('click',()=>{selected=i;sync()});holder.append(btn);
   });$('clip-count').textContent=String(clips.length);enable();
 }
 function sync(){
   renderClips();updateDashboard();renderQuiz();renderTimeline();const c=current();if(!c)return;
-  $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(c.end-c.start);
+  $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(storyDuration(c));
   $('approve-topic').textContent=c.status==='approved'
     ? '✓ Микротема проверена вручную · снять отметку'
     : '✓ Проверил вступление, объяснение и вывод';
@@ -589,8 +605,8 @@ function sync(){
     : 'Проверка завершённости через Ollama необязательна и выполняется только на этом компьютере.';
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
   $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
-  $('player').currentTime=c.start;
-  updateTimelinePlayhead();
+  $('player').currentTime=sourceSegments(c)[0]?.start??c.start;
+  renderStoryPieces();updateTimelinePlayhead();
 }
 function setBusy(v){busy=v;if(!v&&root.dataset.phase==='results')$('processing-panel').hidden=true;enable()}
 async function selectFile(file){
