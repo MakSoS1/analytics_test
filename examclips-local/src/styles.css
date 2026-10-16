@@ -379,3 +379,34 @@ footer{color:#93a3b8;text-align:center;font-size:10px;padding:17px 14px;backgrou
   #app[data-phase="processing"] .workspace{padding:12px;margin:12px auto}
   #app[data-phase="processing"] .processing-panel{padding:20px}
 }
+
+/* v0.8 — sparse, evidence-first teaching stories, not exhaustive slicing. */
+#app[data-phase="upload"] .initial-duration label{gap:7px}
+#app[data-phase="upload"] .initial-duration .hint{font-size:11px;line-height:1.5}
+.timeline-restore-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.timeline-restore-actions>button{min-height:36px;font-size:11px}
+#timeline-ai-select{background:#f5f0ff;color:#6451a2;border-color:#d9cdf7}
+#timeline-ai-select:hover:not(:disabled){background:#ede3ff;border-color:#ac95ed}
+#timeline-coverage{font-variant-numeric:tabular-nums}
+.story-pieces-editor{display:grid;gap:13px;border:1px solid #dbe8f7;background:#fff;
+ border-radius:17px;padding:20px;margin:18px 0;box-shadow:0 4px 15px #205baa09}
+.story-pieces-editor>.panel-title{font-size:15px}
+.story-piece-list{display:grid;gap:10px}
+.story-piece{display:flex;align-items:center;justify-content:space-between;gap:13px;
+ border:1px solid #e0eaf7;background:#f7fbff;border-radius:10px;padding:10px 13px}
+.story-piece-label{font-size:12px;font-weight:750;color:#37587e;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.story-piece-actions{display:flex;gap:5px;flex-shrink:0}
+.story-piece-actions button{padding:7px;min-width:34px;min-height:32px;font-size:15px;border-radius:8px}
+.story-piece-actions button:last-child{color:#a54747}
+#pane-timeline .timeline-heading{flex-wrap:wrap;justify-content:flex-end}
+#pane-timeline .timeline-actions{display:flex;flex-wrap:wrap}
+@media(max-width:850px){
+ .story-piece{align-items:flex-start;flex-wrap:wrap}
+ .story-piece-actions{margin-left:auto}
+ #pane-timeline .timeline-heading{justify-content:flex-start}
+}
+@media(max-width:700px){
+ .timeline-restore-actions{width:100%}
+ .timeline-restore-actions>button{flex:1}
+ #pane-timeline .timeline-actions button{flex:1;white-space:normal}
+}
