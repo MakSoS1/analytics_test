@@ -44,6 +44,16 @@ jobs:
               assert out['engine'].startswith('PP-OCR'),out
               print('LOCAL_PADDLE_WORKER_SUCCESS',lang,len(out['lines']),out['elapsed_ms'])
           PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser app packages without native postinstall
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Browser-to-local PP-OCR roundtrip and UI context
+        run: |
+          EXAMCLIPS_OCR_PYTHON="$(which python)" npm run dev -- --host 127.0.0.1 > /tmp/ocr-browser.log 2>&1 &
+          sleep 5
+          node scripts/local-ocr-browser-smoke.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
