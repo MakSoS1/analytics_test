@@ -10,6 +10,7 @@ import {sampleSlideCuts} from './slide-cuts.js';
 import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {captionCueAt} from './editorial-motion.js';
+import {captionSequenceAt} from './caption-flow.js';
 import {buildReviewPayload} from './completion-review.js';
 import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
 const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
@@ -593,7 +594,7 @@ $('export').onclick=async()=>{
 function loop(){
   const video=$('player'),c=current();
   if(media&&c&&video.readyState>=2){
-    const caption=captionCueAt(chunks,video.currentTime);
+    const caption=captionSequenceAt(chunks,video.currentTime);
     try{paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,c.scene||null,Math.max(0,video.currentTime-c.start))}catch{}
   }
   previewRaf=requestAnimationFrame(loop);
