@@ -9,7 +9,14 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const STOP=new Set(("this that from with into would could about there these those where which what then have were here " +
  "этого этому когда тогда потом поэтому вообще просто действительно значит который которая потому также будет можно наша ваши ваши вот типа такой такие сами самыми есть при как для они она это однако").split(/\s+/));
 const WORD=/[\p{L}\p{N}]{4,}/gu;
-const words=text=>(String(text||'').toLowerCase().match(WORD)||[]).filter(w=>!STOP.has(w));
+function stem(word){
+ // Deliberately small suffix normalization, not a morphological guarantee.
+ if(/[а-яё]/u.test(word)&&word.length>=7)
+   return word.replace(/(?:ования|ование|ениями|ения|ением|ении|ами|ями|ого|ему|ыми|ими|уется|уются|ает|ают|ует|уют|ется|ются|ыми|ой|ые|ия|ие|ия|ов|ев|ам|ям|ах|ях|ом|ем|а|я|ы|и|е|у|ю)$/u,'');
+ if(/[a-z]/.test(word)&&word.length>=7)return word.replace(/(?:ing|ation|ions|ers|ed|es|s)$/,'');
+ return word;
+}
+const words=text=>(String(text||'').toLowerCase().match(WORD)||[]).filter(w=>!STOP.has(w)).map(stem).filter(w=>w.length>=4);
 const OPEN=/(?:во[- ]первых|главное|почему|как работает|разбер[её]м|например|рассмотрим|причина|важно|imagine|consider|why|how it works|for example|here is|the problem|let's explain)/iu;
 const EXPLAIN=/(?:потому что|это значит|это позволяет|например|разница|отличие|следовательно|таким образом|в результате|из-за|поэтому|because|for instance|for example|means that|therefore|as a result|the difference|this allows)/iu;
 const LOW_VALUE=/(?:проверка микрофона|перерыв|организационн|слышно меня|подождите минут|давайте подожд[её]м|one moment|technical difficulties|can you hear me|break time|subscribe|like and subscribe)/iu;
@@ -118,7 +125,7 @@ export function planSelectiveStories(chunks,duration,{
   const group=[first];let total=first.seconds;
   const related=scoreSorted.filter(c=>unused.has(c.id)&&c.id!==first.id)
    .map(c=>({candidate:c,similarity:cosineLike(first.text,c.text)}))
-   .filter(x=>x.similarity>=.19).sort((a,b)=>b.similarity-a.similarity||a.candidate.start-b.candidate.start);
+   .filter(x=>x.similarity>=.135).sort((a,b)=>b.similarity-a.similarity||a.candidate.start-b.candidate.start);
   for(const {candidate,similarity} of related){
    if(group.length>=3||total>=target*.9)break;
    if(total+candidate.seconds>max)continue;
