@@ -11,6 +11,7 @@ import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {captionCueAt} from './editorial-motion.js';
 import {captionSequenceAt} from './caption-flow.js';
+import {timelinePieces,timelineStats,timelineTimeAtFraction,amendClipBoundary} from './source-timeline.js';
 import {buildReviewPayload} from './completion-review.js';
 import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
 const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
@@ -32,7 +33,7 @@ root.innerHTML=`
     <label class="drop" id="drop"><span class="drop-icon">⬆</span><b>Выберите видео</b><small>MP4, MOV, WebM · до 180 мин / 2 ГБ</small><input type="file" id="video-file" accept="video/mp4,video/quicktime,video/webm,video/*" hidden></label>
     <div class="file-note" id="file-note">Файл пока не выбран. Ничего не загружается на сервер.</div>
  <div class="onboarding">1. Выбери запись лекции. 2. Распознай речь или импортируй SRT. 3. Проверь фрагменты и получи вертикальные видео.</div>
-    <div class="settings">
+    <div class="settings config-group">
       <div class="heading">1. Расшифровка</div>
       <details class="detail-settings"><summary>Язык и параметры Whisper</summary><div class="detail-body">
       <label>Распознавание речи<select id="language"><option value="auto">Авто (RU / EN)</option><option value="ru">Русский</option><option value="en">English</option></select></label>
@@ -48,7 +49,7 @@ root.innerHTML=`
       <input type="file" accept=".srt,text/plain" id="srt-file" hidden>
       <p class="hint">При первом запуске выбранной Whisper скачиваются веса модели (Tiny или Base). Полная обработка часовой лекции может быть долгой на слабом ПК; для проверки выберите первые 5 минут. Видеоданные не загружаются в облако.</p>
     </div>
-    <div class="settings">
+    <div class="settings topic-settings">
   <div class="heading">2. Найти микротемы</div>
   <label>Длительность<select id="topic-preset">
     <option value="full">Полная мысль · обычно 1–3 мин, максимум 5 мин</option>
@@ -58,11 +59,34 @@ root.innerHTML=`
   <button id="suggest-topics" disabled>✧ Предложить законченные микротемы</button>
   <p class="hint" id="topic-coverage">Для смысловой нарезки нужна расшифровка речи. Рекомендации по границам предварительные: проверьте начало и вывод каждой микротемы.</p>
 </div>
-<div class="section-title">3. Готовые фрагменты <span id="clip-count">0</span></div>
+<div class="section-title clip-heading">3. Готовые фрагменты <span id="clip-count">0</span></div>
     <div id="clips" class="clips"><p class="empty">После загрузки предложим фрагменты. Начальную и конечную границу можно изменять.</p></div>
   </aside>
   <section class="workspace" id="overview">
     <div class="workspace-top"><div><div class="eyebrow">ОБРАБОТКА ЛЕКЦИЙ · EXAMCLIPS</div><h1>Из лекции — в понятные короткие видео</h1><p class="lead">Текст, формулы и слайды остаются в кадре. Монтаж и расшифровка выполняются на устройстве.</p></div><span class="status" id="status">Ожидание видео</span></div>
+    <div class="workflow-config">
+      <div class="workflow-config-icon">✦</div>
+      <h2>Лекция загружена. Как будем обрабатывать?</h2>
+      <p>Выберите язык и режим в левой панели. Расшифровка, определение микротем и подготовка монтажа запускаются последовательно.</p>
+      <div class="workflow-config-actions">
+        <button class="primary" id="workflow-start" disabled>Начать анализ лекции →</button>
+        <button id="workflow-srt" disabled>У меня уже есть SRT</button>
+      </div>
+      <p class="hint">Видео останется на этом устройстве. Модели Whisper могут скачиваться при первом запуске.</p>
+    </div>
+    <section id="processing-panel" class="processing-panel" aria-label="Текущий ход анализа" hidden>
+      <div class="processing-header"><div><span class="eyebrow" id="processing-step-label">ЭТАП 1 ИЗ 4</span>
+        <h2 id="processing-title">Обработка видео</h2></div><strong id="processing-percent">Подготовка</strong></div>
+      <div class="processing-meter" role="progressbar" aria-label="Прогресс текущей операции" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="processing-meter-fill"></span></div>
+      <div class="processing-stages">
+        <div data-process="prepare" class="current"><b>01</b><span>Подготовка</span></div>
+        <div data-process="asr"><b>02</b><span>Распознавание</span></div>
+        <div data-process="topics"><b>03</b><span>Выбор тем</span></div>
+        <div data-process="composition"><b>04</b><span>Монтаж</span></div>
+      </div>
+      <p id="processing-detail">Чтение локального файла…</p>
+      <button id="processing-cancel" type="button">Остановить операцию</button>
+    </section>
     <div class="journey" aria-label="Этапы обработки">
       <div class="journey-step" id="journey-upload"><div class="journey-number">1</div><div><b>Лекция</b><small id="journey-upload-state">Выберите файл</small></div></div>
       <div class="journey-step" id="journey-transcript"><div class="journey-number">2</div><div><b>Транскрипция</b><small id="journey-transcript-state">Whisper / SRT</small></div></div>
@@ -129,6 +153,25 @@ root.innerHTML=`
         <button id="load-project">Открыть проект JSON</button><input id="project-file" type="file" accept=".json,application/json" hidden>
       </div>
     </div>
+    <section class="timeline-section" id="timeline-section">
+      <div class="timeline-heading">
+        <div><div class="eyebrow">ИСТОЧНИК И МОНТАЖ</div>
+          <h2>Таймлайн лекции</h2>
+          <p class="hint">Синие участки попадут в ролики, серые будут пропущены. Выбирайте фрагменты и перетаскивайте края, как в видеоредакторе.</p></div>
+        <div class="timeline-actions">
+          <button id="timeline-regenerate" disabled>↻ Перенарезать по речи</button>
+          <button id="timeline-recompose" disabled>✧ Пересобрать выбранный кадр</button>
+        </div>
+      </div>
+      <div class="timeline-legend"><span><i class="legend-kept"></i>В ролике</span><span><i class="legend-skipped"></i>Пропущено</span><span id="timeline-coverage">0% лекции выбрано</span></div>
+      <div class="timeline-ruler" id="timeline-ruler"></div>
+      <div class="timeline-source" id="timeline-source" aria-label="Оригинальная лекция. Нажмите, чтобы перейти ко времени."><div id="timeline-playhead"></div></div>
+      <div id="timeline-track" class="timeline-track" aria-label="Выбранные фрагменты и пропуски"></div>
+      <div class="timeline-foot">
+        <span id="timeline-current">00:00:00 / 00:00:00</span>
+        <button id="timeline-add" disabled>+ Создать клип в этой точке</button>
+      </div>
+    </section>
     <section class="quiz-panel" id="quiz-panel">
       <div class="quiz-header">
         <div><h2>Мини-тест по материалу</h2>
