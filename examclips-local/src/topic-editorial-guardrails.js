@@ -30,7 +30,10 @@ export function dedupeTranscriptRows(rows, {maxRepeatGap=2.5}={}){
  const clean=[],removed=[];
  for(const row of sorted){
    const fp=charFingerprint(row.text);
-   const recent=clean.slice(-30).find(x=>row.start-x.end<maxRepeatGap&&
+   const recent=clean.slice(-30).find(x=>
+     // Duplicate ASR hypothesis over the SAME audible interval only.
+     // Identical successive worked steps can be meaningful and MUST remain.
+     row.start<x.end-.25&&row.start-x.start<maxRepeatGap&&
      (charFingerprint(x.text)===fp||
        (fp.length>=55&&x.text.length>=55&&
         jaccard(tokens(row.text),tokens(x.text))>.94&&
