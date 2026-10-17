@@ -9,8 +9,8 @@ try{
  const page=await browser.newPage({viewport:{width:1440,height:960},acceptDownloads:true});
  page.on('pageerror',e=>errors.push(e.message));
  page.on('framenavigated',frame=>{if(frame===page.mainFrame())console.log('STORAGE_TEST_NAVIGATED',frame.url())});
- await page.evaluate(()=>localStorage.setItem('__persistence_probe','persistent'));
  await page.goto('http://127.0.0.1:5173/');
+ await page.evaluate(()=>localStorage.setItem('__persistence_probe','persistent'));
  assert.ok(await page.locator('#library-section').isVisible());
  await page.locator('#video-file').setInputFiles('test-fixture.mp4');
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled);
