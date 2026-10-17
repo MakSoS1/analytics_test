@@ -317,6 +317,7 @@ function setEditorTab(name){
    control.setAttribute('aria-selected',String(selected));
  }
  root.dataset.editorTab=name;
+ scheduleProjectSave();
 }
 
 
@@ -1093,12 +1094,12 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
       for(const chapter of c.scene.chapters||[])chapter.scene.title=c.title;
     }
     $('focus-value').textContent=c.focusX+'%';$('selected-time').textContent=timecode(c.end-c.start);
-    renderClips();renderTimeline();
+    renderClips();renderTimeline();scheduleProjectSave();
   });
 }
 $('transcript').addEventListener('change',()=>{
   if(!media)return;const parsed=parseSrt($('transcript').value,media.duration);
-  if(parsed.length){chunks=parsed;enable();status('Субтитры обновлены. Для новой нарезки нажмите «Предложить микротемы».')}
+  if(parsed.length){chunks=parsed;enable();scheduleProjectSave();status('Субтитры обновлены. Для новой нарезки нажмите «Предложить микротемы».')}
   else status('Неверный SRT, прежняя разметка сохранена');
 });
 $('play-clip').onclick=()=>{const c=current();if(!c)return;$('player').currentTime=sourceSegments(c)[0]?.start||c.start;$('player').play()};
@@ -1179,6 +1180,7 @@ $('style-theme').onchange=()=>{
  const c=current();if(!c||!media)return;
  if(!c.scene)c.scene=makeStoryboard({width:media.width,height:media.height,duration:c.end-c.start});
  c.scene.theme=$('style-theme').value==='midnight'?'midnight':'warm';
+ scheduleProjectSave();
  status('Визуальный стиль изменён, экспорт останется локальным');
 };
 $('speaker-preset').onchange=()=>{
@@ -1190,6 +1192,7 @@ $('speaker-preset').onchange=()=>{
    if(speakerPresets[c.speakerPreset])spec.speaker={...speakerPresets[c.speakerPreset]};
    spec.hideSpeaker=c.speakerPreset==='none';
  }
+ scheduleProjectSave();
  status('Область вебки обновлена локально');
 };
 $('analyze-scene').onclick=async()=>{
@@ -1215,6 +1218,7 @@ $('analyze-scene').onclick=async()=>{
     const totalOcr=details.reduce((n,x)=>n+x.recognizedLines,0);
     $('scene-hint').textContent='Раздельно обработано '+parts.length+' частей · OCR строк: '+totalOcr+
       '. Каждую склейку и формулы нужно проверить.';
+    scheduleProjectSave();
     status('Композиция для '+parts.length+' частей создана локально. Проверьте смысловые переходы.');
   }catch(e){if(e.name==='AbortError')status('Анализ отменён');else error(e)}
   finally{abort=null;setBusy(false)}
