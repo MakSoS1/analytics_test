@@ -11,6 +11,7 @@ import {tightSpeechPieces,sourceSegments,summarizeStoryPlan} from './selective-s
 import {isNonTeachingIntroduction} from './lesson-screenplay.js';
 import {isLectureHousekeeping,meaningfulTitle,topicEvidence} from './lecture-semantics.js';
 import {normalizeSlideChapters,chapterForTime,visualBoundaryBetween} from './lecture-outline.js';
+import {dedupeTranscriptRows,consolidateMicrotopics,assignExclusiveSource} from './topic-editorial-guardrails.js';
 
 const TRIVIAL=/^\s*(?:(?:ээ+|эм+|угу|ну|ага|ага-ага|okay|ok|um+|uh+|you know|ага да|да да)[\s.,!?]*){1,8}$/iu;
 const ADMIN=/(?:проверка микрофона|слышно меня|настроим проектор|техническ(?:ие|ая) проблем|организационный момент|начн[её]м через|подождите минут|перерыв на|дожд[её]мся участников|расписание следующего занятия|can you hear me|microphone check|technical difficulties|we(?:'ll| will) take a break|like and subscribe)/iu;
@@ -178,11 +179,12 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[]}={}
  if(!Number.isFinite(duration)||duration<=0)
   return {clips:[],candidates:[],excluded:[],summary:summarizeStoryPlan([],0)};
  const all=normalizeChunks(chunks,duration);
+ const deDuplicated=dedupeTranscriptRows(all);
  if(!all.length)return {clips:[],candidates:[],excluded:[],summary:summarizeStoryPlan([],duration)};
  const outline=normalizeSlideChapters(chapters,duration);
  const beginning=outline.length?0:genericOpeningSkip(all,duration);
- const kept=[],excluded=[];
- for(const row of all){
+ const kept=[],excluded=[...deDuplicated.removed];
+ for(const row of deDuplicated.rows){
   const chapter=chapterForTime(outline,(row.start+row.end)/2);
   if(chapter?.key==='introduction'||(beginning>0&&row.end<=beginning)||
     !isEducationalSpeech(row.text)){
@@ -211,10 +213,15 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[]}={}
  for(const {rows,chapter} of chapterGroups)
   for(const group of splitChapter(rows,chapter,sceneCuts))
     groups.push({rows:group,chapter});
- const clips=groups.map(({rows,chapter},i)=>asClip(rows,i+1,duration,chapter))
-  .filter(c=>sourceSegments(c).length);
+ const refined=consolidateMicrotopics(groups);
+ excluded.push(...refined.omitted);
+ const clips=assignExclusiveSource(refined.groups.map(({rows,chapter,editorialNotes},i)=>{
+  const clip=asClip(rows,i+1,duration,chapter);
+  if(editorialNotes?.length)clip.reviewReasons.push(...editorialNotes);
+  return clip;
+ })).filter(c=>sourceSegments(c).length&&c.outputSeconds>=12);
  const summary=summarizeStoryPlan(clips,duration);
- const candidateRows=groups.map(({rows,chapter},i)=>({
+ const candidateRows=refined.groups.map(({rows,chapter},i)=>({
    id:'candidate-'+(i+1),start:rows[0].start,end:rows.at(-1).end,
    text:rows.map(r=>r.text).join(' '),
    chapter:chapter?.title||null,sourcePieces:tightSpeechPieces(rows),
@@ -222,9 +229,14 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[]}={}
  }));
  return {clips,candidates:candidateRows,excluded,chapters:outline,
   summary:{...summary,excludedUtterances:excluded.length,
-   processedUtterances:all.length,keptUtterances:kept.length,
-   completionMode:'hierarchical-extractive',
+   processedUtterances:all.length,keptUtterances:Math.max(0,kept.length-refined.omitted.length),
+   completionMode:'hierarchical-reviewed',
    chapters:chapterGroups.length,
+   rawTopicCandidates:groups.length,
+   editorialMerges:refined.mergedCount,
+   duplicateUtterances:deDuplicated.removed.length,
+   rejectedFragments:refined.omitted.length,
+   nonOverlappingSource:true,
    excludedIntroSeconds:+excluded.filter(x=>x.reason.includes('Вступление'))
     .reduce((n,x)=>n+x.end-x.start,0).toFixed(2),
    incompleteTranscript:kept.at(-1).end<duration-5}};
