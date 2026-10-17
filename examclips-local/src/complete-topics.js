@@ -9,6 +9,7 @@
 import {normalizeChunks,titleFromText} from './segments.js';
 import {tightSpeechPieces,sourceSegments,summarizeStoryPlan} from './selective-stories.js';
 import {isNonTeachingIntroduction} from './lesson-screenplay.js';
+import {isLectureHousekeeping,meaningfulTitle,topicEvidence} from './lecture-semantics.js';
 
 const TRIVIAL=/^\s*(?:(?:ээ+|эм+|угу|ну|ага|ага-ага|okay|ok|um+|uh+|you know|ага да|да да)[\s.,!?]*){1,8}$/iu;
 const ADMIN=/(?:проверка микрофона|слышно меня|настроим проектор|техническ(?:ие|ая) проблем|организационный момент|начн[её]м через|подождите минут|перерыв на|дожд[её]мся участников|расписание следующего занятия|can you hear me|microphone check|technical difficulties|we(?:'ll| will) take a break|like and subscribe)/iu;
@@ -32,7 +33,7 @@ function similarity(a,b){
 /** Evidence-first: KEEP material unless unmistakably organizational or empty. */
 export function isEducationalSpeech(text){
  const s=String(text||'').trim();
- if(!s||TRIVIAL.test(s)||isNonTeachingIntroduction(s))return false;
+ if(!s||TRIVIAL.test(s)||isLectureHousekeeping(s)||isNonTeachingIntroduction(s))return false;
  if(ADMIN.test(s)&&!TEACHING.test(s))return false;
  return true;
 }
@@ -51,7 +52,7 @@ function asClip(rows,index,duration){
  return {
    id:'topic-'+index,start:beginning,end,
    segments:pieces,
-   title:titleFromText(rows.find(r=>TEACHING.test(r.text))?.text||joined),
+   title:meaningfulTitle(rows),
    status:'needs-review',confidence:'low',method:'content-complete-extractive',
    layout:'hybrid',focusX:50,
    kind:task?'worked-exercise':'explanation',
@@ -84,9 +85,20 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[]}={}){
    const gap=current.length?Math.max(0,row.start-current.at(-1).end):0;
    const prior=current.slice(-Math.min(current.length,5)).map(x=>x.text).join(' ');
    const clearlyDifferent=gap>150&&similarity(prior,row.text)<.10&&!practical&&current.length>0;
-   // Within an active worked exercise steps/derivations should NOT cause new clips.
-   // A second explicitly introduced problem begins a new completed lesson.
-   const boundary=current.length>0&&(explicit||(newTask&&practical&&finished)||clearlyDifferent);
+   // A complete instructional topic is not defined by an arbitrary duration.
+   // Detect sustained lexical topic changes when a presenter does not literally
+   // say "next topic". Preserve every step of an active worked exercise.
+   const recent=current.slice(-5).map(x=>topicEvidence(x.text)?.key).filter(Boolean);
+   const prev=recent.at(-1);
+   const next=topicEvidence(row.text);
+   const stable=prev&&recent.filter(x=>x===prev).length>=2;
+   const elapsed=current.length?current.at(-1).end-current[0].start:0;
+   const topicSwitch=!!(current.length>=2&&elapsed>=45&&!practical&&stable&&
+     next&&next.key!==prev&&next.key!=='docker-containers'&&
+     prev!=='docker-containers'&&next.weight>=3&&
+     (gap>8||current.length>=4||/^(?:now|next|let'?s|moving|теперь|перейд[её]м|следующ)/iu.test(row.text)));
+   // Within an active worked exercise steps/derivations should NOT create cuts.
+   const boundary=current.length>0&&(explicit||(newTask&&practical&&finished)||clearlyDifferent||topicSwitch);
    if(boundary)emit();
    current.push(row);
    if(newTask)practical=true;
