@@ -24,14 +24,14 @@ test('Docker 59m lecture yields consecutive distinct subtopics and excludes lect
   row(35,58,'About me, my background, I developed billing systems for years.'),
   row(119,151,'Lecture 1 brief. We will cover containers, Dockerfile, images, architecture and networking.'),
   row(198,215,'So today we will cover containers, virtual machines, and Docker architecture.'),
-  row(245,267,'Containers are isolated processes sharing the operating system kernel.'),
-  row(268,289,'Containers are lightweight execution environments with separated dependencies.'),
+  row(286,308,'Containers are isolated processes sharing the operating system kernel.'),
+  row(309,330,'Containers are lightweight execution environments with separated dependencies.'),
   row(314,339,'Virtual machines are complete guest operating systems with their own kernels.'),
   row(340,372,'Unlike a container, each virtual machine virtualizes the hardware and runs a full OS.'),
-  row(510,541,'Docker architecture uses a daemon and container runtime called containerd.'),
-  row(548,575,'The Docker daemon connects the CLI and containerd runtime to launch containers.'),
-  row(622,646,'A Docker image is built from filesystem layers for caching and distribution.'),
-  row(651,678,'Each image layer stores the changes and Docker can reuse a layer.'),
+  row(560,585,'Docker architecture uses a daemon and container runtime called containerd.'),
+  row(586,610,'The Docker daemon connects the CLI and containerd runtime to launch containers.'),
+  row(665,689,'A Docker image is built from filesystem layers for caching and distribution.'),
+  row(690,717,'Each image layer stores the changes and Docker can reuse a layer.'),
   row(801,834,'Dockerfile instructions describe building an application image step by step.'),
   row(839,864,'For example Docker build executes each instruction to create a new layer.'),
   row(1446,1470,'Container lifecycle begins with created, running and stopped states.'),
@@ -50,7 +50,7 @@ test('Docker 59m lecture yields consecutive distinct subtopics and excludes lect
  assert.ok(plan.excluded.some(x=>x.start===119),'Course agenda must not appear');
  assert.ok(plan.clips.length>=8,JSON.stringify(plan.clips.map(c=>c.title)));
  const first=plan.clips[0];
- assert.ok(sourceSegments(first)[0].start>=245,'No lecture opening may remain');
+ assert.ok(sourceSegments(first)[0].start>=275,'No lecture opening may remain');
  const titles=plan.clips.map(c=>c.title);
  assert.ok(titles.some(x=>/Что такое контейнер/.test(x)),JSON.stringify(titles));
  assert.ok(titles.some(x=>/виртуальн/.test(x)),JSON.stringify(titles));
