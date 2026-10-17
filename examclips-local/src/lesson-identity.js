@@ -40,6 +40,21 @@ const FALLBACK={
  'containers-vs-vm':'Контейнеры и виртуальные машины',
  'resource-limits':'Ограничение ресурсов контейнера'
 };
+/** The slide OCR normally uses key="slide-heading", so derive a chapter
+ * category from a source-visible title instead of relying on filename. */
+export function resolvedChapterKey(chapter){
+ const key=String(chapter?.key||'');
+ if(key&&key!=='slide-heading'&&key!=='chapter')return key;
+ const label=String(chapter?.title||'');
+ if(/dockerfile|докерфайл|production.grade\s+images/iu.test(label))return 'dockerfile';
+ if(/container\s+(?:vs\.?|versus)\s+(?:virtual|vm)|контейнер\w*\s+(?:и|против)\s+виртуальн/iu.test(label))return 'containers-vs-vm';
+ if(/networking|docker\s+network|сети\s+docker/iu.test(label))return 'docker-networking';
+ if(/storage|bind\s+mount|volume|хранение\s+данных/iu.test(label))return 'docker-storage';
+ if(/architecture|daemon|containerd|архитектура\s+docker/iu.test(label))return 'docker-architecture';
+ if(/lifecycle|health\s?check|жизненный\s+цикл/iu.test(label))return 'container-lifecycle';
+ if(/resource\s+(?:isolation|limits)|ограничение\s+ресурсов/iu.test(label))return 'resource-limits';
+ return key;
+}
 function evidence(text,chapterKey){
  const corpus=String(text||'');
  const chapter=String(chapterKey||'');
@@ -67,11 +82,11 @@ function evidence(text,chapterKey){
  return null;
 }
 export function rowLessonIdentity(row,chapter){
- return evidence(row?.text,chapter?.key);
+ return evidence(row?.text,resolvedChapterKey(chapter));
 }
 export function lessonIdentity(rows,chapter){
  const corpus=(rows||[]).map(r=>String(r?.text||'').replace(CLEAN,' ').trim()).filter(Boolean);
- const key=chapter?.key;
+ const key=resolvedChapterKey(chapter);
  const scores=new Map();
  // Full group evidence is more reliable than single-line topic keywords.
  for(const text of corpus){
