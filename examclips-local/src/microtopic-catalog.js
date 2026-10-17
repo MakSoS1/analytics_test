@@ -65,10 +65,21 @@ export function renderMicrotopicCatalog(container,clips,chunks,{
   container.append(el('p','catalog-empty','Микротемы появятся после анализа полной расшифровки лекции.'));
   return;
  }
- const grid=el('div','microtopic-grid');
- grid.setAttribute('role','list');
- grid.setAttribute('aria-label','Учебные микротемы по порядку');
+ const gallery=el('div','microtopic-chapters');
+ let grid=null,currentChapter=null,chapterNumber=0;
  clips.forEach((clip,i)=>{
+  const chapterId=clip.chapter?.start??'single';
+  if(!grid||chapterId!==currentChapter){
+    currentChapter=chapterId;chapterNumber++;
+    const section=el('section','microtopic-chapter');
+    const name=clip.chapter?.title||'Учебные темы';
+    const title=el('h3','microtopic-chapter-heading','Глава '+chapterNumber+' · '+name);
+    section.append(title);
+    grid=el('div','microtopic-grid');
+    grid.setAttribute('role','list');
+    grid.setAttribute('aria-label','Микротемы главы '+name);
+    section.append(grid);gallery.append(section);
+  }
   const topic=topicSummary(clip,chunks);
   const card=el('article','microtopic-card'+(i===selected?' selected':''));
   card.dataset.topicIndex=String(i);
@@ -103,7 +114,7 @@ export function renderMicrotopicCatalog(container,clips,chunks,{
   info.append(el('small','microtopic-card-status',label));
   card.append(info);grid.append(card);
  });
- container.append(grid);
+ container.append(gallery);
 }
 export function renderMicrotopicDetail(container,clip,chunks){
  if(!container)return;
