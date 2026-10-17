@@ -147,6 +147,11 @@ export function lessonIdentity(rows,chapter){
  return best||null;
 }
 export function distinctVerifiedConcept(a,b){
+ if(a.verifiedConcept&&b.verifiedConcept&&
+   a.verifiedConcept!==b.verifiedConcept&&
+   (a.rows?.length||0)>=3&&(b.rows?.length||0)>=3&&
+   a.rows.at(-1).end-a.rows[0].start>=45&&
+   b.rows.at(-1).end-b.rows[0].start>=45)return true;
  const left=lessonIdentity(a.rows||[],a.chapter),right=lessonIdentity(b.rows||[],b.chapter);
  return Boolean(left?.specific&&right?.specific&&left.key!==right.key&&
    // Require more than a single incidental mention on both sides
