@@ -1,4 +1,4 @@
-import {Output,Mp4OutputFormat,BufferTarget,CanvasSource,AudioSampleSink,AudioSampleSource,Quality,canEncodeAudio} from 'mediabunny';
+import {Output,Mp4OutputFormat,BufferTarget,StreamTarget,CanvasSource,AudioSampleSink,AudioSampleSource,Quality,canEncodeAudio} from 'mediabunny';
 import {paintFrame,WIDTH,HEIGHT} from './composition.js';
 import {captionSequenceAt} from './caption-flow.js';
 import {sourceSegments,storyDuration} from './selective-stories.js';
@@ -8,19 +8,19 @@ import {sourceSegments,storyDuration} from './selective-stories.js';
  * in the chosen order, and both video and PCM audio are re-timestamped onto
  * a continuous destination timeline. No cloud rendering and no silent gaps.
  */
-export async function exportClip(media,clip,chunks,{quality='standard',onProgress=()=>{},signal}={}){
+export async function exportClip(media,clip,chunks,{quality='standard',onProgress=()=>{},signal,writable=null}={}){
  const high=quality==='high',fps=high?30:15;
  const width=high?1080:WIDTH,height=high?1920:HEIGHT;
  const pieces=sourceSegments(clip),total=storyDuration(clip);
  if(!pieces.length||!(total>.05)||pieces.some(s=>s.start<0||s.end>media.duration||s.end<=s.start))
    throw Error('Недопустимые интервалы исходного видео');
- if(total>601)throw Error('Клип больше 10 минут: разбейте микротему на несколько видео');
  if(typeof VideoEncoder==='undefined')throw Error('WebCodecs VideoEncoder недоступен. Нужен современный браузер.');
  if(media.audioTrack&&!(await canEncodeAudio('aac'))){
   const {registerAacEncoder}=await import('@mediabunny/aac-encoder');registerAacEncoder();
  }
  const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
- const target=new BufferTarget(),output=new Output({format:new Mp4OutputFormat(),target});
+ const target=writable?new StreamTarget(writable,{chunked:true}):new BufferTarget();
+ const output=new Output({format:new Mp4OutputFormat(),target});
  const videoSource=new CanvasSource(canvas,{codec:'avc',quality:new Quality('high')});
  output.addVideoTrack(videoSource);
  let audioSource=null;
@@ -33,9 +33,14 @@ export async function exportClip(media,clip,chunks,{quality='standard',onProgres
    for(let index=0;index<pieces.length;index++){
      const section=pieces[index],duration=section.end-section.start;
      const n=frameCounts[index];
-     const times=Array.from({length:n},(_,i)=>Math.min(section.end-1e-5,section.start+i/fps));
+     // Bound timestamp-array size on a multi-hour worked problem. Each request
+     // seeks only a short slice rather than allocating millions of timestamps.
      let pos=0;
-     for await(const frame of media.videoSink.samplesAtTimestamps(times)){
+     for(let offset=0;offset<n;offset+=fps*10){
+       const stop=Math.min(n,offset+fps*10);
+       const times=Array.from({length:stop-offset},(_,i)=>
+         Math.min(section.end-1e-5,section.start+(offset+i)/fps));
+       for await(const frame of media.videoSink.samplesAtTimestamps(times)){
        if(signal?.aborted)throw new DOMException('Stopped','AbortError');
        if(!frame)throw Error('Не удалось декодировать кадр '+done);
        try{
@@ -49,6 +54,7 @@ export async function exportClip(media,clip,chunks,{quality='standard',onProgres
        }finally{frame.close()}
        pos++;done++;
        if(done%30===0||done===frames)onProgress('Видео '+done+'/'+frames+' кадров · фрагмент '+(index+1)+'/'+pieces.length);
+       }
      }
      if(pos!==n)throw Error('Неполная декомпрессия сегмента '+(index+1));
      videoOffset+=duration;
@@ -73,6 +79,7 @@ export async function exportClip(media,clip,chunks,{quality='standard',onProgres
      }
    }
    await output.finalize();
+   if(writable)return null; // StreamTarget already wrote/closed on disk.
    if(!target.buffer)throw Error('Кодировщик не вернул MP4');
    return new Blob([target.buffer],{type:'video/mp4'});
  }catch(err){try{await output.cancel()}catch{}throw err}
