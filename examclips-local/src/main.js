@@ -272,7 +272,11 @@ function setupPrimaryTimeline(){
     '<div class="catalog-selected"><div class="catalog-preview-panel"><b>Вертикальный ролик · 9:16</b>',
     '<p class="hint">Живой предпросмотр монтажа, ещё не экспортированный MP4.</p>',
     '<canvas id="microtopic-preview" width="720" height="1280" aria-label="Вертикальный предпросмотр выбранной микротемы"></canvas>',
-    '<button id="catalog-preview-play" type="button">▶ Воспроизвести выбранную микротему</button></div>',
+    '<button id="catalog-preview-play" type="button">▶ Воспроизвести выбранную микротему</button>',
+    '<div id="microtopic-final-panel" class="microtopic-final-panel" hidden><strong>Готовый экспортированный MP4</strong>',
+    '<video id="microtopic-final-video" controls playsinline preload="metadata" aria-label="Готовое вертикальное видео"></video></div>',
+    '<button id="microtopic-attach-video" type="button">Открыть готовый MP4 для просмотра</button>',
+    '<input id="microtopic-attach-file" type="file" accept=".mp4,video/mp4" hidden></div>',
     '<div class="catalog-editor-heading"><b>Настройки выбранной микротемы</b><p class="hint">Измените название, границы и композицию перед экспортом.</p></div></div></section></section>',
   '<section id="pane-captions" class="workbench-pane" data-pane="captions" hidden>',
     '<div class="pane-heading"><span class="eyebrow">ТЕКСТ</span><h2>Субтитры и расшифровка</h2>',
@@ -298,6 +302,13 @@ function setupPrimaryTimeline(){
  $('microtopic-back').onclick=()=>{microtopicDetailOpen=false;catalogPlayback=null;updateMicrotopicMode();};
 
  $('catalog-preview-play').onclick=()=>playCatalogTopic(selected);
+ $('microtopic-attach-video').onclick=()=>$('microtopic-attach-file').click();
+ $('microtopic-attach-file').onchange=e=>{
+  const file=e.target.files?.[0];
+  if(!file||!/^video\//.test(file.type)&&!/\.mp4$/i.test(file.name))return;
+  showFinishedMicrotopic(file,clips[selected]?.id);
+  status('Готовый MP4 открыт локально для просмотра, без загрузки на сервер.');
+ };
  $('catalog-reanalyze').onclick=()=>{
    if(!chunks.length){status('Нужна полная расшифровка лекции или SRT.');return}
    if(clips.some(c=>c.status==='approved')&&!confirm('Пересчёт заменит текущие границы и сценарии микротем. Продолжить?'))return;
@@ -328,6 +339,21 @@ function setupPrimaryTimeline(){
 }
 let activeEditorTab='timeline';
 let microtopicDetailOpen=false,catalogPlayback=null,thumbnailGeneration=0;
+let finishedVideoUrl=null,finishedVideoClipId=null;
+function clearFinishedVideo(){
+ if(finishedVideoUrl)URL.revokeObjectURL(finishedVideoUrl);
+ finishedVideoUrl=null;finishedVideoClipId=null;
+ const player=$('microtopic-final-video');
+ if(player){player.pause();player.removeAttribute('src');player.load();}
+}
+function showFinishedMicrotopic(blob,clipId){
+ clearFinishedVideo();
+ if(!blob||!clipId)return;
+ finishedVideoUrl=URL.createObjectURL(blob);
+ finishedVideoClipId=clipId;
+ $('microtopic-final-video').src=finishedVideoUrl;
+ updateMicrotopicMode();
+}
 const topicThumbnails=new Map();
 function updateMicrotopicMode(){
  const overview=$('microtopic-overview'),detail=$('microtopic-detail');
@@ -335,6 +361,9 @@ function updateMicrotopicMode(){
  overview.hidden=microtopicDetailOpen;
  detail.hidden=!microtopicDetailOpen;
  if(microtopicDetailOpen)renderMicrotopicDetail($('microtopic-detail-evidence'),clips[selected],chunks);
+ const finalPanel=$('microtopic-final-panel');
+ if(finalPanel)finalPanel.hidden=!microtopicDetailOpen||!finishedVideoUrl||
+   finishedVideoClipId!==clips[selected]?.id;
 }
 function openMicrotopic(index){
  if(!clips[index])return;
@@ -657,7 +686,7 @@ async function backToLibrary(){
   if(originalUrl)URL.revokeObjectURL(originalUrl);
   media=null;sourceFile=null;originalUrl=null;currentProjectId=null;
   currentSourceHandle=null;pendingLibraryEntry=null;chunks=[];clips=[];
-  chapterScanAbort?.abort();chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();lectureChapters=[];
+  clearFinishedVideo();chapterScanAbort?.abort();chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();lectureChapters=[];
   sceneCuts=[];selected=0;$('video-file').value='';$('srt-file').value='';
   $('transcript').value='';$('file-note').textContent='Выберите другую лекцию или откройте проект из истории.';
   setPhase('upload');renderTimeline();updateDashboard();renderQuiz();enable();
@@ -972,7 +1001,7 @@ async function selectFile(file){
     if(media)await media.input.dispose();
     if(originalUrl)URL.revokeObjectURL(originalUrl);
     media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
-    sourceFile=file;sceneCuts=[];lectureChapters=[];chapterScanAbort?.abort();chapterScanPending=false;chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
+    clearFinishedVideo();sourceFile=file;sceneCuts=[];lectureChapters=[];chapterScanAbort?.abort();chapterScanPending=false;chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
     const resumeEntry=pendingLibraryEntry;
     pendingLibraryEntry=null;
     currentProjectId=resumeEntry?.id||makeId();
@@ -1416,8 +1445,8 @@ $('export').onclick=async()=>{
         else showOperation('composition',null,msg);
       }
     });
-    if(blob)download(blob,filename);
-    status(writable?'Большой MP4 сохранён напрямую на диск.':
+    if(blob){download(blob,filename);showFinishedMicrotopic(blob,c.id)}
+    status(writable?'Большой MP4 сохранён напрямую на диск. Откройте файл в карточке кнопкой «Открыть готовый MP4».':
       'Экспорт завершён: '+(blob.size/1e6).toFixed(1)+' МБ');
   }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e);
     if(writable)try{await writable.abort()}catch{}
