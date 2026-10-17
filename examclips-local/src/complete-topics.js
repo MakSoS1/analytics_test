@@ -41,7 +41,7 @@ export function isEducationalSpeech(text){
 function groupConceptHeading(rows,chapter){
  const labels={
   'container-definition':'Что такое контейнер',
-  'virtual-machines':'Контейнеры против виртуальных машин',
+  'virtual-machines':'Контейнеры и виртуальные машины',
   'docker-build-cache':'Как работает кеширование слоёв Docker',
   'docker-multistage':'Многоэтапная сборка Dockerfile',
   'docker-bridge':'Сеть bridge в Docker',
