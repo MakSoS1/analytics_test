@@ -863,19 +863,42 @@ function setBusy(v){busy=v;if(!v&&root.dataset.phase==='results')$('processing-p
 async function selectFile(file){
   if(!file)return;
   if(file.size>2e9){status('Файл больше лимита MVP 2 ГБ');return}
+  if(pendingLibraryEntry&&!sameVideoFile(pendingLibraryEntry.source,file)){
+    $('file-note').textContent='Это не исходное видео проекта. Нужен файл «'+pendingLibraryEntry.source.name+
+      '» такого же размера и даты изменения. Проект не изменён.';
+    $('video-file').value='';return;
+  }
+  isSwitchingProject=true;
+  clearTimeout(autosaveTimer);
   setBusy(true);status('Чтение локальных метаданных...');
   try{
     if(media)await media.input.dispose();
     if(originalUrl)URL.revokeObjectURL(originalUrl);
     media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
     sourceFile=file;sceneCuts=[];
+    const resumeEntry=pendingLibraryEntry;
+    pendingLibraryEntry=null;
+    currentProjectId=resumeEntry?.id||makeId();
+    currentSourceHandle=resumeEntry?.fileHandle||null;
+    attachedSourceMeta=pickFileMetadata(file);
+    $('remember-video').hidden=!window.showOpenFilePicker;
     $('file-note').textContent=`${file.name} · ${timecode(media.duration)} · ${media.width}×${media.height} · ${(file.size/1e6).toFixed(1)} МБ`;
     // A draft is NOT an AI-generated completed lesson; only ASR/SRT can produce topic proposals.
     clips=[{id:'draft-1',start:0,end:Math.min(media.duration,180),title:'Черновик — сначала распознайте лекцию',
       layout:'hybrid',focusX:50,status:'needs-review',
       reviewReasons:['Нет транскрипта; это произвольный участок, а не законченная микротема']}];
     chunks=[];selected=0;$('transcript').value='';
-    if(projectToRestore){
+    if(resumeEntry?.snapshot){
+      const p=resumeEntry.snapshot;
+      if(Math.abs(p.duration-media.duration)>2)throw Error('Длительность оригинала не совпадает с сохранённым проектом');
+      chunks=p.chunks||[];
+      sceneCuts=Array.isArray(p.sceneCuts)?p.sceneCuts.filter(Number.isFinite):[];
+      clips=p.clips.filter(c=>validRange(c.start,c.end,media.duration));
+      selected=Math.min(clips.length-1,Math.max(0,p.selected||0));
+      timelineView={zoom:Math.min(24,Math.max(1,p.view?.zoom||1)),offset:Math.max(0,Math.min(1,p.view?.offset||0))};
+      $('transcript').value=toSrt(chunks);
+      status('Восстановлен сохранённый монтаж, транскрипт и выбранная микротема.');
+    }else if(projectToRestore){
       const p=projectToRestore;projectToRestore=null;
       if(Math.abs(p.duration-media.duration)>2){status('Длительность видео не совпадает с проектом. Данные не импортированы.')}
       else{
@@ -885,8 +908,16 @@ async function selectFile(file){
     }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
     setPhase(chunks.length?'results':'upload');
     sync();
+    if(resumeEntry?.snapshot){
+      setEditorTab(['timeline','clip','captions','quiz','export'].includes(resumeEntry.snapshot.activeTab)?resumeEntry.snapshot.activeTab:'timeline');
+      requestAnimationFrame(()=>{
+        $('timeline-viewport').scrollLeft=timelineView.offset*$('timeline-canvas').scrollWidth;
+      });
+    }
     buildPrivateFilmstrip(media).catch(()=>{});
-  }catch(e){media=null;clips=[];updateDashboard();renderQuiz();setPhase('upload');error(e)}finally{setBusy(false)}
+    if(!resumeEntry){cacheSmallOriginal(currentProjectId,file).catch(()=>{});}
+  }catch(e){media=null;clips=[];updateDashboard();renderQuiz();setPhase('upload');error(e)}
+   finally{isSwitchingProject=false;setBusy(false);scheduleProjectSave()}
 }
 $('video-file').addEventListener('change',e=>selectFile(e.target.files?.[0]));
 $('drop').addEventListener('dragover',e=>{e.preventDefault();$('drop').classList.add('over')});
