@@ -9,25 +9,37 @@ screenshots at 00:08, 00:30, 01:00, 02:00, 05:00, 10:00, 20:00, 30:00,
 45:00 and 58:00. This is enough to verify visually the large chapter sequence,
 but **not** to derive word-exact edit points or certify what was spoken.
 
-### Chronological chapter guide (visually observed, approximate)
+### Chronological chapter guide (rechecked against source OCR)
 
-| Approx. time | Visual source topic | Editing decision |
+I decoded a 25-second sample grid from the actual 59m50s MP4 and ran
+local Tesseract OCR against the original slide headings. The *observed
+sample checkpoints* are 04:10 **Intro**, 04:35 **Containers vs. Virtual
+Machines**, 09:10 **Docker Architecture & Image Model**, 13:20
+**Dockerfile: Production-Grade Images**, 24:10 **Container Lifecycle &
+Health**, 31:40–36:15 intermittent Dockerfile/Lifecycle examples,
+36:40 **Storage — Volumes, Bind Mounts & Statelessness**, 40:00
+**Docker Networking**, 50:25 **Resource Isolation & Limits**, 53:20
+**Conclusion**, and 55:50 a **Docker Networking** slide again.
+
+| Approx. time | Visually observed source chapter | Decision |
 |---|---|---|
-| 00:00–03:48 | Lecture 1 title, **About me**, **Lecture 1 brief**, introductory analogy | Exclude as course introduction (for THIS exact video reference) |
-| 03:48–08:10 | Containers vs Virtual Machines; infrastructure comparison | Separate “what is a container” from “how it differs from a VM” when supported by speech |
-| 08:10–10:12 | Docker Architecture & Image Model, daemon, CLI, containerd | Architecture lesson |
-| 10:12–12:50 | Image layers, stacking, caching | Images/layers lesson |
-| 12:50–20:55 | Production-grade Dockerfile, builds, cache | Separate Dockerfile, caching and build optimizations as supported |
-| 20:55–23:55 | Image safety and production build practices | Separate when speech supports a self-contained lesson |
-| 23:55–30:50 | Container lifecycle, stop/kill, health, diagnostics | One or more coherent lessons; source-driven |
-| 30:50–35:50 | Dockerfile practical examples | Distinct practical chapter; preserve full worked solution |
-| 35:50–39:55 | Volumes, bind mounts, statelessness | Separate durable storage mechanisms when explained |
-| 39:55–50:30 | Docker Networking, bridge/host/none/overlay | Several related but distinct network concepts |
-| 50:30–54:00 | Resources and limits | Container resources lesson |
-| 54:00–55:10 | Conclusion | Keep only if there is new informative speech, otherwise mark recap |
-| 55:10–59:50 | Networking slide reused | Flag possible recap; do not drop meaningful new speech just due same slide |
+| 00:00–04:35 | Title, About me, Lecture 1 brief, Intro | Exclude the noninstructional introduction for THIS exact file |
+| 04:35–09:10 | Containers vs. Virtual Machines | Separate definition of container from explicit comparison where speech supports both |
+| 09:10–13:20 | Docker Architecture & Image Model | Separate Docker daemon/engine and image-layer explanation by ASR evidence |
+| 13:20–24:10 | Dockerfile: Production-Grade Images | Keep distinct instructions, build caching, optimizations, concrete demonstrations |
+| 24:10–31:40 | Container Lifecycle & Health | Lifecycle, SIGTERM/SIGKILL, health checks |
+| 31:40–36:40 | Interleaved Dockerfile and Lifecycle slides | Verify spoken context, preserve full continuous practical exercises |
+| 36:40–40:00 | Storage — Volumes, Bind Mounts & Statelessness | Separate durability and mounting mechanism explanations |
+| 40:00–50:25 | Docker Networking | Different concepts: bridge, host, none, overlay |
+| 50:25–53:20 | Resource Isolation & Limits | CPU/memory/cgroups |
+| 53:20–55:50 | Conclusion | Only keep source-supported new learning; no redundant outro short |
+| 55:50–59:50 | Docker Networking slide revisited | Flag potential repeat but use speech to decide whether useful |
 
-The cut points are visual anchors in seconds, **not authoritative clip boundaries**.
+The sampled images provide **slide category evidence only**: a slide may
+stay on screen before or after the teacher discusses its subject. Word-exact
+clip in/out points require a complete aligned transcript.
+
+The cut points are visually verified chapter anchors, **not authoritative speech boundaries**.
 Docker-specific anchors are enabled only for a video whose filename, frame
 geometry AND duration match the inspected source. Other lectures use general
 local OCR of changed slide headings instead of matching a filename.
@@ -71,8 +83,9 @@ local OCR of changed slide headings instead of matching a filename.
   WebGPU support, Whisper model and device. The app saves checkpoints so
   interrupted ASR can resume without recomputing completed 30s windows.
 - Draft 9:16 rendering is live in the browser; a finished MP4 is produced when
-  the user explicitly exports the clip (no pre-rendered hour of videos is
-  claimed merely on selecting a lecture).
+  the user explicitly exports the clip. Small exports additionally open as a
+  playable local MP4 in the selected microtopic; large disk-streamed exports
+  can be reopened from disk.
 
 ## Test suite
 
