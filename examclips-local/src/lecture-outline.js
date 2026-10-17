@@ -7,19 +7,22 @@
  * 59m50s ITMO Docker recording (1600x900), NOT guessed from the course agenda.
  */
 const DOCKER_PROFILE=[
- [0,228,'Вводная и организация','introduction'],
- [228,490,'Понятие контейнера и сравнение с VM','containers-vs-vm'],
- [490,612,'Архитектура Docker','docker-architecture'],
- [612,770,'Образы Docker и слои','docker-images'],
- [770,1255,'Dockerfile: сборка, слои и кеширование','dockerfile'],
- [1255,1435,'Безопасность и сборка образов','docker-security'],
- [1435,1850,'Жизненный цикл и диагностика контейнеров','container-lifecycle'],
- [1850,2150,'Dockerfile: практические варианты','dockerfile'],
- [2150,2395,'Сохранение данных: volumes и bind mounts','docker-storage'],
- [2395,3030,'Сети Docker: bridge, host, none и overlay','docker-networking'],
- [3030,3240,'Ограничение ресурсов контейнеров','resource-limits'],
- [3240,3310,'Выводы и повторение','recap'],
- [3310,3590.341,'Повтор материала о сетях','docker-networking']
+ // Independently sampled original lecture slide headings at 25-second steps.
+ // Cut positions are conservative visual anchors, NOT word-exact speech times.
+ [0,275,'Введение, преподаватель и план лекции','introduction'],
+ [275,550,'Контейнеры и виртуальные машины','containers-vs-vm'],
+ [550,800,'Архитектура Docker, модели образов и слоёв','docker-architecture'],
+ [800,1450,'Dockerfile: сборка, образы и производственные практики','dockerfile'],
+ [1450,1900,'Жизненный цикл контейнера и health checks','container-lifecycle'],
+ [1900,1950,'Dockerfile — возврат к примеру','dockerfile'],
+ [1950,2000,'Жизненный цикл — уточнение','container-lifecycle'],
+ [2000,2200,'Dockerfile — практические примеры','dockerfile'],
+ [2200,2400,'Storage: volumes, bind mounts и statelessness','docker-storage'],
+ [2400,3025,'Docker Networking','docker-networking'],
+ [3025,3200,'Resource Isolation & Limits','resource-limits'],
+ [3200,3350,'Conclusion — итог лекции','recap'],
+ [3350,3590.341,'Повтор слайда Docker Networking','docker-networking']
+
 ];
 function interval(row){return {start:row[0],end:row[1],title:row[2],key:row[3],source:'visual-manually-inspected',confidence:'approximate'};}
 export function lectureVisualReference({name='',duration=0,width=0,height=0}={}){
