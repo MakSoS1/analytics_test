@@ -1127,11 +1127,15 @@ function proposeTopics(){
  $('topic-coverage').textContent=
     'Распознано ~'+report.percent+'% записи; предложено '+clips.length+
     ' содержательных микротем, '+summary.keptUtterances+' фраз сохранены, '+
-    summary.excludedUtterances+' организационных/пустых фраз исключены. '+
+    summary.excludedUtterances+' организационных/пустых и повторных фраз исключены. '+
+    (summary.editorialMerges||summary.rejectedFragments||summary.duplicateUtterances?
+      'Редакторская проверка: '+(summary.editorialMerges||0)+' коротких частей объединено, '+
+      (summary.rejectedFragments||0)+' несамостоятельных реплик исключено, '+
+      (summary.duplicateUtterances||0)+' перекрывающихся ASR-повторов устранено. ':'')+
     (report.partial?'Остальная часть лекции не распознана — для полного охвата выберите «Вся лекция». ':'')+
     'Это предварительные границы: убедитесь, что все учебные темы сохранены, а практические решения завершены.';
- status('Сохранены все '+summary.keptUtterances+' содержательных фраз; создано '+clips.length+
-    ' микротем. Длительность роликов не ограничена искусственно.');
+ status('Объяснения сведены в '+clips.length+
+    ' микротем без коротких обрывков и повторного использования исходных секунд. Проверьте завершённость сценариев.');
  sync();
  prepareMicrotopicThumbnails().catch(()=>{});
  scheduleAutoChapterAnalysis();
