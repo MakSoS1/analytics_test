@@ -1285,7 +1285,7 @@ $('load-project').onclick=()=>$('project-file').click();
 $('project-file').onchange=async e=>{
   try{
     const data=JSON.parse(await e.target.files[0].text());
-    if(data.schema!==1||!Array.isArray(data.clips)||!Array.isArray(data.chunks)||!Number.isFinite(data.duration))throw Error('Неизвестный формат проекта');
+    if(![1,2].includes(data.schema)||!Array.isArray(data.clips)||!Array.isArray(data.chunks)||!Number.isFinite(data.duration))throw Error('Неизвестный формат проекта');
     projectToRestore=data;status('Теперь выберите исходный видеофайл этого проекта');
     if(media){await media.input.dispose();media=null;clips=[];$('player').removeAttribute('src');renderClips();enable()}
     $('video-file').click();
