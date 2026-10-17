@@ -28,19 +28,29 @@ try{
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
  await page.locator('#clip-title').fill('Сохранённая тема Docker');
  await page.locator('.top-navigation [data-editor-tab="timeline"]').click();
+ console.log('AUTOSAVE_INITIAL_STATE',await page.evaluate(()=>({
+  note:document.querySelector('#autosave-state').textContent,
+  id:localStorage.getItem('examclips-current-project-id'),
+  phase:document.querySelector('#app')?.dataset.phase
+ })));
+ await page.waitForFunction(()=>!!localStorage.getItem('examclips-current-project-id'),null,{timeout:12000});
  await page.waitForFunction(async()=>{
   const m=await import('/src/project-library.js');
   const entries=await m.listLibraryProjects();
   return entries.length===1&&entries[0].snapshot.clips[0]?.title==='Сохранённая тема Docker';
- },{timeout:12000});
+ },null,{timeout:12000});
  await page.waitForFunction(async()=>{
   const m=await import('/src/project-library.js');
   const entries=await m.listLibraryProjects();
   return entries.length>0&&!!(await m.getCachedOriginal(entries[0].id));
  },{timeout:12000});
+ console.log('AUTOSAVE_FINAL_STATE',await page.evaluate(()=>({
+   text:document.querySelector('#autosave-state')?.textContent,
+   id:localStorage.getItem('examclips-current-project-id')
+ })));
  const beforeReload=await page.evaluate(async()=>{
   const m=await import('/src/project-library.js');
-  return {phase:document.querySelector('#app')?.dataset.phase,probe:localStorage.getItem('__persistence_probe'),url:location.href,origin:location.origin,localId:localStorage.getItem('examclips-current-project-id'),
+  return {saveText:document.querySelector('#autosave-state')?.textContent,phase:document.querySelector('#app')?.dataset.phase,probe:localStorage.getItem('__persistence_probe'),url:location.href,origin:location.origin,localId:localStorage.getItem('examclips-current-project-id'),
    projects:(await m.listLibraryProjects()).map(x=>x.id),
    dbs:await indexedDB.databases()};
  });
