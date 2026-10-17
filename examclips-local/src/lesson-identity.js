@@ -16,6 +16,21 @@ const DOCKER_SECURITY=/(?:\b(?:rootless|non.root\s+user|image\s+scanning|least\s
 const DOCKER_NETWORK=/(?:\b(?:bridge\s+network|overlay\s+network|host\s+network|port\s+mapping|docker0)\b|сеть\s+docker|сетев\w*\s+режим)/iu;
 const DOCKER_STORAGE=/(?:\b(?:bind\s+mount|docker\s+volume|persistent\s+storage)\b|том\w*\s+docker|хранен\w*\s+данн)/iu;
 const DOCKER_LIFECYCLE=/(?:\b(?:container\s+lifecycle|docker\s+(?:start|stop|kill)|health\s?check|sigterm|sigkill)\b|жизненн\w*\s+цикл\s+контейнер)/iu;
+
+const DEFAULT_BRIDGE=/(?:\b(?:default\s+bridge|docker0|bridge\s+networks?|bridge\s+mode)\b|стандартн\w*\s+сеть\s+bridge)/iu;
+const USER_BRIDGE=/(?:\b(?:user[ -]defined\s+bridge|docker\s+network\s+create|custom\s+bridge|automatic\s+name\s+resolution)\b|пользовательск\w*\s+сеть\s+bridge)/iu;
+const HOST_NET=/(?:\b(?:host\s+network|network\s+host|--network\s+host|host\s+mode)\b|сетев\w*\s+режим\s+host)/iu;
+const NONE_NET=/(?:\b(?:none\s+network|network\s+none|--network\s+none|network\s+disabled)\b|сетев\w*\s+режим\s+none)/iu;
+const OVERLAY_NET=/(?:\b(?:overlay\s+network|overlay\s+mode|across\s+multiple\s+hosts)\b|оверлейн\w*\s+сет)/iu;
+const LIFECYCLE_STATES=/(?:\b(?:lifecycle\s+states?|created\s+running\s+stopped|container\s+states?|lifecycle\s+transition)\b|состоян\w*\s+контейнер)/iu;
+const SHUTDOWN=/(?:\b(?:docker\s+stop|docker\s+kill|sigterm|sigkill|graceful\s+shutdown)\b|корректн\w*\s+завершен)/iu;
+const HEALTH=/(?:\b(?:health\s?check|unhealthy|health\s+status|container\s+health)\b|проверк\w*\s+здоровь)/iu;
+const RESTART=/(?:\b(?:restart\s+polic(?:y|ies)|--restart|on.failure\s+restart)\b|политик\w*\s+перезапуск)/iu;
+const VOLUMES=/(?:\b(?:docker\s+volumes?|named\s+volume|persistent\s+storage|volumes?\s+persist)\b|именованн\w*\s+том)/iu;
+const BIND_MOUNTS=/(?:\b(?:bind\s+mounts?|host\s+directory|tmpfs\s+mount|stateless)\b|монтирован\w*\s+каталог)/iu;
+const EPHEMERAL=/(?:\b(?:ephemeral\s+filesystem|container\s+filesystem\s+is\s+ephemeral|temporary\s+filesystem)\b|эфемерн\w*\s+файлов)/iu;
+const DAEMON=/(?:\b(?:docker\s+daemon|docker\s+engine|dockerd|containerd|runc|docker\s+cli)\b|демон\s+docker)/iu;
+const IMAGE_LAYERS=/(?:\b(?:image\s+layers?|read.only\s+layers?|image\s+model|writable\s+layer)\b|сло\w*\s+образ)/iu;
 const CLEAN=/\s+/gu;
 const RULES={
  'dockerfile':[
@@ -28,6 +43,28 @@ const RULES={
  'containers-vs-vm':[
   ['virtual-machines','Контейнеры и виртуальные машины',VM],
   ['container-definition','Что такое контейнер',CONTAINER_DEFINITION]
+ ],
+ 'docker-architecture':[
+  ['docker-daemon','Docker CLI, daemon и containerd',DAEMON],
+  ['docker-image-layers','Слои и модель Docker-образов',IMAGE_LAYERS]
+ ],
+ 'docker-networking':[
+  ['network-userbridge','Пользовательская сеть bridge и DNS',USER_BRIDGE],
+  ['network-defaultbridge','Стандартная сеть bridge и docker0',DEFAULT_BRIDGE],
+  ['network-host','Режим сети host в Docker',HOST_NET],
+  ['network-none','Режим сети none в Docker',NONE_NET],
+  ['network-overlay','Overlay: сеть Docker между хостами',OVERLAY_NET]
+ ],
+ 'docker-storage':[
+  ['storage-ephemeral','Почему файловая система контейнера временная',EPHEMERAL],
+  ['storage-volumes','Volumes: постоянное хранение данных Docker',VOLUMES],
+  ['storage-bind','Bind mounts и tmpfs',BIND_MOUNTS]
+ ],
+ 'container-lifecycle':[
+  ['lifecycle-shutdown','Docker stop и kill: SIGTERM против SIGKILL',SHUTDOWN],
+  ['lifecycle-health','Healthcheck и диагностика контейнера',HEALTH],
+  ['lifecycle-restart','Политики перезапуска Docker',RESTART],
+  ['lifecycle-states','Состояния и переходы контейнера',LIFECYCLE_STATES]
  ]
 };
 const FALLBACK={
@@ -68,7 +105,7 @@ function evidence(text,chapterKey){
      return {key,title,specific:true,chapter};
    }
    if(chapter==='dockerfile')return {key:'dockerfile-general',title:FALLBACK.dockerfile,specific:false,chapter};
-   return {key:'containers-general',title:FALLBACK['containers-vs-vm'],specific:false,chapter};
+   return {key:chapter+'-general',title:FALLBACK[chapter]||'Учебная подтема',specific:false,chapter};
  }
  if(DOCKER_NETWORK.test(corpus)&&chapter==='docker-networking')
    return {key:'docker-networking',title:FALLBACK['docker-networking'],specific:false,chapter};
