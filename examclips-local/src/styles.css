@@ -526,3 +526,40 @@ footer{color:#93a3b8;text-align:center;font-size:10px;padding:17px 14px;backgrou
 }
 
 .catalog-refresh{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:13px}.catalog-refresh .hint{max-width:700px;margin:0}.catalog-refresh button{white-space:nowrap;font-size:12px;min-height:34px}
+
+/* v1.1 — ordered textbook-style chapter gallery and immersive microtopic detail. */
+#microtopic-overview[hidden],#microtopic-detail[hidden]{display:none!important}
+.microtopic-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr));gap:19px;margin:16px 0}
+.microtopic-card{overflow:hidden;min-width:0;border:1px solid #d8e3ef;border-radius:15px;background:#fff;box-shadow:0 4px 18px rgba(31,70,118,.07);transition:transform .15s,border-color .15s,box-shadow .15s}
+.microtopic-card:hover{transform:translateY(-2px);border-color:#89acdd;box-shadow:0 12px 30px rgba(31,70,118,.12)}
+.microtopic-cover{position:relative;display:block;width:100%;aspect-ratio:16/9;border:0;padding:0;background:linear-gradient(130deg,#142851,#58698e);overflow:hidden;cursor:pointer}
+.microtopic-cover-image{display:block;width:100%;height:100%;object-fit:cover;transition:transform .2s}
+.microtopic-cover:hover .microtopic-cover-image{transform:scale(1.035)}
+.microtopic-cover-placeholder{display:grid;place-items:center;color:#d5e4ff;font-size:44px;width:100%;height:100%}
+.microtopic-cover-timestamp{position:absolute;right:9px;bottom:9px;padding:4px 8px;background:rgba(10,20,32,.85);color:#fff;font-size:12px;border-radius:5px;font-variant-numeric:tabular-nums}
+.microtopic-card-content{padding:16px;display:grid;gap:8px}
+.microtopic-card-overline{display:flex;justify-content:space-between;gap:12px;color:#5c7899;font-size:11px;font-weight:750}
+.microtopic-card-title{border:0;background:transparent;text-align:left;color:#163d72;font-weight:800;font-size:16px;line-height:1.35;padding:0;min-height:42px;cursor:pointer}
+.microtopic-card-title:hover{color:#155cd4;text-decoration:underline}
+.microtopic-card-chapter{font-size:12px;color:#7589a4;margin:0;min-height:17px}
+.microtopic-card-status{font-size:11px;color:#7d6337;background:#fdf6e8;padding:6px 8px;border-radius:6px;justify-self:start}
+.microtopic-detail{max-width:1180px;margin:0 auto}
+#microtopic-back{border:1px solid #cbdaf0;color:#1954ac;background:#eef5ff;border-radius:9px;margin:0 0 18px;padding:10px 16px;font-weight:700;cursor:pointer}
+.microtopic-detail-summary{padding:20px 24px;border-radius:16px;background:#f4f8ff;border:1px solid #d4e3f6;margin-bottom:22px}
+.microtopic-detail-summary h2{margin:5px 0;font-size:25px;color:#19395e}
+.microtopic-detail-eyebrow{text-transform:uppercase;letter-spacing:.05em;font-size:11px;color:#4074ac;margin:0;font-weight:800}
+.microtopic-detail-range{font-size:13px;color:#526f91;font-variant-numeric:tabular-nums}
+.microtopic-quality{font-size:12px;font-weight:750;color:#9a6121}
+.microtopic-detail-script,.microtopic-detail-transcript{background:#fff;border:1px solid #dce7f4;border-radius:16px;padding:22px;margin:18px 0}
+.microtopic-detail-script h3,.microtopic-detail-transcript h3{color:#183f70;margin:0 0 17px;font-size:18px}
+.microtopic-summary-item{margin:12px 0;padding:13px 16px;border-radius:9px;background:#f5f9ff;border-left:3px solid #2e69c9}
+.microtopic-summary-item strong{font-size:12px;color:#22549f}
+.microtopic-summary-text{font-size:14px;line-height:1.55;margin:8px 0;color:#273a56}
+.microtopic-proof summary{cursor:pointer;color:#2470cc;font-size:12px;font-weight:700;margin-top:9px}
+.microtopic-proof blockquote{color:#455b78;padding:10px 15px;margin:7px 0;background:#eaf3ff;border-radius:8px;font-size:12px;line-height:1.6}
+.microtopic-transcript-lines .catalog-lines li{grid-template-columns:80px 1fr;padding:7px 0;border-bottom:1px solid #e9f0f7}
+#microtopic-detail .catalog-selected{margin-bottom:22px}
+@media(max-width:660px){
+ .microtopic-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr));gap:12px}
+ .microtopic-detail-script,.microtopic-detail-transcript,.microtopic-detail-summary{padding:13px}
+}
