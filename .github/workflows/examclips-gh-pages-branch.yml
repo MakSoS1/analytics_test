@@ -1,11 +1,14 @@
 name: ExamClips Ready-to-Publish Branch
 on:
   push:
-    branches: [feat/examclips-complete-topics-longform-20261017]
+    branches: [feat/examclips-library-zoom-storyboard-20261017]
     paths:
       - 'examclips-local/**'
       - '.github/workflows/examclips-gh-pages-branch.yml'
   workflow_dispatch:
+concurrency:
+  group: examclips-gh-pages-publish
+  cancel-in-progress: true
 permissions:
   contents: write
 jobs:
@@ -25,6 +28,7 @@ jobs:
           EXAMCLIPS_BASE=/analytics_test/ npm run build
           test -f dist/index.html
           touch dist/.nojekyll
+          printf '{"source_commit":"%s","source_branch":"%s","build_time":"%s"}\n' "$GITHUB_SHA" "$GITHUB_REF_NAME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > dist/site-build.json
       - name: Push prebuilt site to isolated gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
