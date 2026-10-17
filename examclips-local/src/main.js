@@ -263,6 +263,7 @@ function setupPrimaryTimeline(){
     '<div class="pane-heading"><span class="eyebrow">УЧЕБНЫЕ МИКРОУРОКИ</span><h2>Микротемы лекции</h2>',
     '<p>Все найденные темы: название, сценарий, оригинальные таймкоды, расшифровка и вертикальный предпросмотр.</p></div>',
     '<section class="catalog-section"><div class="panel-title"><b>Выделенные микротемы</b><span class="muted">Выберите строку или нажмите «Смотреть 9:16»</span></div>',
+    '<div class="catalog-refresh"><p class="hint">Если проект создан до обновления алгоритма, пересчитайте микротемы по полной расшифровке. Предыдущие автоматические границы будут заменены.</p><button id="catalog-reanalyze" type="button">↻ Заново определить микротемы</button></div>',
     '<div id="microtopic-catalog" aria-live="polite"></div></section>',
     '<div class="catalog-selected"><div class="catalog-preview-panel"><b>Выбранный вертикальный ролик</b>',
     '<p class="hint">Живой предпросмотр монтажа, ещё не экспортированный MP4.</p>',
@@ -291,6 +292,11 @@ function setupPrimaryTimeline(){
  pane('timeline').append(document.querySelector('.kpis'));
  const editor=$('editor');editor.querySelector('.controls').classList.add('clip-controls');pane('clip').append(editor);
  $('catalog-preview-play').onclick=()=>playCatalogTopic(selected);
+ $('catalog-reanalyze').onclick=()=>{
+   if(!chunks.length){status('Нужна полная расшифровка лекции или SRT.');return}
+   if(clips.some(c=>c.status==='approved')&&!confirm('Пересчёт заменит текущие границы и сценарии микротем. Продолжить?'))return;
+   proposeTopics();status('Микротемы пересчитаны. Проверьте начало и полноту каждого ролика.');
+ };
  const piecesEditor=document.createElement('section');piecesEditor.className='story-pieces-editor';
  piecesEditor.innerHTML='<div class="panel-title"><b>Фрагменты выбранной микротемы</b><span class="muted">Именно в этом порядке они будут склеены</span></div>'+
   '<div id="story-piece-list" class="story-piece-list"></div>'+
