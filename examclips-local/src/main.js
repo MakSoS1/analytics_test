@@ -14,6 +14,7 @@ import {planCompleteTopics} from './complete-topics.js';
 import {buildVerifiedLessonScreenplays,storyboardReadyForRendering} from './lesson-screenplay.js';
 import {renderMicrotopicCatalog,renderMicrotopicDetail} from './microtopic-catalog.js';
 import {lectureVisualReference} from './lecture-outline.js';
+import {indexLectureSlides} from './slide-chapter-index.js';
 import {saveLibraryProject,listLibraryProjects,getLibraryProject,deleteLibraryProject,
  pickFileMetadata,sameVideoFile,cacheSmallOriginal,getCachedOriginal,deleteCachedOriginal,
  safeProjectSnapshot} from './project-library.js';
@@ -533,14 +534,15 @@ function initMvpEvents(){
  };
 }
 
-let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
+let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],lectureChapters=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
+let chapterScanPending=false,chapterScanAttempted=false,chapterScanAbort=null;
 
 const LIBRARY_LAST='examclips-current-project-id';
 const makeId=()=>crypto.randomUUID?.()||('project-'+Date.now()+'-'+Math.random().toString(36).slice(2));
 const sourceLabel=()=>sourceFile?.name||attachedSourceMeta?.name||'Лекция';
 function buildCurrentSnapshot(){
  return safeProjectSnapshot({
-  duration:media.duration,clips,chunks,sceneCuts,selected,
+  duration:media.duration,clips,chunks,sceneCuts,lectureChapters,selected,
   activeTab:activeEditorTab,view:{zoom:timelineView.zoom,
     offset:$('timeline-viewport').scrollLeft/Math.max(1,$('timeline-canvas').scrollWidth)}
  });
@@ -969,7 +971,7 @@ async function selectFile(file){
     if(media)await media.input.dispose();
     if(originalUrl)URL.revokeObjectURL(originalUrl);
     media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
-    sourceFile=file;sceneCuts=[];thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
+    sourceFile=file;sceneCuts=[];lectureChapters=[];chapterScanAbort?.abort();chapterScanPending=false;chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
     const resumeEntry=pendingLibraryEntry;
     pendingLibraryEntry=null;
     currentProjectId=resumeEntry?.id||makeId();
@@ -987,6 +989,7 @@ async function selectFile(file){
       if(Math.abs(p.duration-media.duration)>2)throw Error('Длительность оригинала не совпадает с сохранённым проектом');
       chunks=p.chunks||[];
       sceneCuts=Array.isArray(p.sceneCuts)?p.sceneCuts.filter(Number.isFinite):[];
+      lectureChapters=Array.isArray(p.lectureChapters)?p.lectureChapters:[];
       clips=p.clips.filter(c=>validRange(c.start,c.end,media.duration));
       selected=Math.min(clips.length-1,Math.max(0,p.selected||0));
       timelineView={zoom:Math.min(24,Math.max(1,p.view?.zoom||1)),offset:Math.max(0,Math.min(1,p.view?.offset||0))};
@@ -996,7 +999,7 @@ async function selectFile(file){
       const p=projectToRestore;projectToRestore=null;
       if(Math.abs(p.duration-media.duration)>2){status('Длительность видео не совпадает с проектом. Данные не импортированы.')}
       else{
-        chunks=p.chunks||[];sceneCuts=Array.isArray(p.sceneCuts)?p.sceneCuts.filter(Number.isFinite):[];clips=p.clips.filter(c=>validRange(c.start,c.end,media.duration)).map((c,i)=>({...c,id:'clip-'+(i+1)}));
+        chunks=p.chunks||[];sceneCuts=Array.isArray(p.sceneCuts)?p.sceneCuts.filter(Number.isFinite):[];lectureChapters=Array.isArray(p.lectureChapters)?p.lectureChapters:[];clips=p.clips.filter(c=>validRange(c.start,c.end,media.duration)).map((c,i)=>({...c,id:'clip-'+(i+1)}));
         $('transcript').value=toSrt(chunks);status('Проект восстановлен; проверьте ролики');
       }
     }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
@@ -1068,9 +1071,10 @@ $('forget-asr').onclick=async()=>{
 
 function proposeTopics(){
  if(!media||!chunks.length)return;
- const chapters=lectureVisualReference({
+ const reference=lectureVisualReference({
   name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height
  });
+ const chapters=lectureChapters.length?lectureChapters:reference;
  const plan=planCompleteTopics(chunks,media.duration,{sceneCuts,chapters});
  clips=buildVerifiedLessonScreenplays(plan.clips,chunks);
  thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
@@ -1097,20 +1101,46 @@ function proposeTopics(){
     ' микротем. Длительность роликов не ограничена искусственно.');
  sync();
  prepareMicrotopicThumbnails().catch(()=>{});
+ scheduleAutoChapterAnalysis();
+}
+async function scanLectureStructure({automatic=false}={}){
+ if(!media||chapterScanPending)return;
+ const original=media;
+ chapterScanPending=true;chapterScanAbort=new AbortController();
+ if(!automatic)setBusy(true);
+ try{
+   if(!automatic)showOperation('topics',null,'Читаем заголовки изменяющихся слайдов…');
+   const result=await indexLectureSlides(original,{
+     signal:chapterScanAbort.signal,language:$('language').value==='ru'?'ru':'en',
+     onProgress:message=>{if(original===media)status(message)}
+   });
+   if(original!==media)return;
+   if(result.chapters.length>=2){
+     lectureChapters=result.chapters;
+     sceneCuts=result.cuts.filter(t=>t>0&&t<media.duration);
+     proposeTopics();
+     status('Изучены '+result.inspected+' слайдов, найдены '+lectureChapters.length+' глав; проверьте границы по речи.');
+   }else{
+     status('Заголовки слайдов распознаны недостаточно надёжно. Сохраняю анализ речи без выдуманных глав.');
+   }
+ }catch(e){if(e.name==='AbortError')status('Анализ структуры отменён');else status('Анализ слайдов недоступен: '+e.message)}
+ finally{chapterScanPending=false;chapterScanAbort=null;if(!automatic)setBusy(false)}
+}
+function scheduleAutoChapterAnalysis(){
+ if(chapterScanAttempted||chapterScanPending||!media||!chunks.length||
+    lectureChapters.length||media.duration<480||
+    lectureVisualReference({name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height}).length)
+   return;
+ chapterScanAttempted=true;
+ // One bounded background structure pass after ASR; the initial transcript
+ // results remain usable while the client performs optional local OCR.
+ setTimeout(()=>{if(media&&!chapterScanPending)scanLectureStructure({automatic:true}).catch(()=>{})},700);
 }
 $('scan-chapters').onclick=async()=>{
  if(!media)return;
- abort=new AbortController();setBusy(true);
- try{
-  showOperation('topics',null,'Ищем изменения учебного материала в исходной лекции…');
-  status('Локальный анализ смен слайдов на протяжении лекции...');
-  const cuts=await sampleSlideCuts(media,{start:0,end:media.duration},
-    {sampleEvery:8,signal:abort.signal,onProgress:status});
-  sceneCuts=cuts.filter(t=>t>0&&t<media.duration);
-  if(chunks.length)proposeTopics();
-  status('Визуальных смен: '+sceneCuts.length+'. Это признаки, а не доказанные границы микротем.');
- }catch(e){if(e.name==='AbortError')status('Анализ смен слайдов остановлен');else error(e)}
- finally{abort=null;setBusy(false)}
+ if(chunks.length&&clips.some(c=>c.status==='approved')&&
+    !confirm('Поиск новых глав обновит автоматические микротемы. Продолжить?'))return;
+ await scanLectureStructure({automatic:false});
 };
 $('suggest-topics').onclick=()=>{proposeTopics();status('Микротемы пересчитаны по локальному транскрипту.')};
 $('verify-topic').onclick=async()=>{
@@ -1236,7 +1266,7 @@ $('add').onclick=()=>{
 $('remove').onclick=()=>{if(!clips.length)return;clips.splice(selected,1);selected=Math.max(0,Math.min(selected,clips.length-1));sync()};
 $('save-srt').onclick=()=>download(new Blob([toSrt(chunks)],{type:'text/plain;charset=utf-8'}),'examclips.srt');
 $('save-project').onclick=()=>{
-  if(!media)return;const data={schema:1,videoName:media.input.source?.file?.name||$('video-file').files[0]?.name,duration:media.duration,clips,chunks,sceneCuts};
+  if(!media)return;const data={schema:2,videoName:media.input.source?.file?.name||$('video-file').files[0]?.name,duration:media.duration,clips,chunks,sceneCuts,lectureChapters};
   download(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),'examclips.project.json');
 };
 $('load-project').onclick=()=>$('project-file').click();
