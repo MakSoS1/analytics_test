@@ -37,6 +37,7 @@ try{
  assert.ok(result.kept.some(x=>x.left>85),'Late educational explanation incorrectly dropped');
  await page.screenshot({path:'mvp-sparse-lecture-timeline.png',fullPage:false});
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+ await page.locator('.microtopic-card-title').first().click();
  assert.ok(await page.locator('#story-piece-list').isVisible());
  assert.deepEqual(errors,[]);
  console.log('FULL_CONTENT_SPARSE_LECTURE_SUCCESS',JSON.stringify({coveragePercent:percent,
