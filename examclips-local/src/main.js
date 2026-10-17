@@ -11,6 +11,10 @@ import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {sourceSegments,storyDuration} from './selective-stories.js';
 import {planCompleteTopics} from './complete-topics.js';
+import {buildVerifiedLessonScreenplays,storyboardReadyForRendering} from './lesson-screenplay.js';
+import {saveLibraryProject,listLibraryProjects,getLibraryProject,deleteLibraryProject,
+ pickFileMetadata,sameVideoFile,cacheSmallOriginal,getCachedOriginal,deleteCachedOriginal,
+ safeProjectSnapshot} from './project-library.js';
 import {captionCueAt} from './editorial-motion.js';
 import {captionSequenceAt} from './caption-flow.js';
 import {timelinePieces,timelineStats,timelineTimeAtFraction,amendClipBoundary,appendSourceSegment,reorderSourceSegments,removeSourceSegment} from './source-timeline.js';
@@ -19,10 +23,14 @@ import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './as
 const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
 let localReviewAvailable=false;
 const root=document.querySelector('#app');
+let currentProjectId=null,currentSourceHandle=null,attachedSourceMeta=null,pendingLibraryEntry=null;
+let autosaveTimer=null,saving=false,saveAgain=false,isSwitchingProject=false;
+let timelineView={zoom:1,offset:0};
 root.dataset.phase='upload';
 root.innerHTML=`
 <header class="top">
  <div class="brand"><span class="brand-icon">▶</span> ExamClips <span class="pill">BETA</span></div>
+ <button id="back-to-library" type="button" class="back-to-library" hidden>← Все лекции</button>
  <nav class="top-navigation" aria-label="Вкладки редактора">
   <button data-editor-tab="timeline" class="active" type="button">Таймлайн</button>
   <button data-editor-tab="clip" type="button">Монтаж</button>
@@ -45,7 +53,14 @@ root.innerHTML=`
       Паузы и организационные разговоры не попадут в итоговый монтаж.</p>
  </div>
  <button id="settings-toggle" class="settings-toggle" type="button">Настройки анализа <span>▾</span></button>
- <div class="onboarding">Обработка проходит на вашем устройстве. Вы сможете изменить выбранные фрагменты на таймлайне в любой момент.</div>
+ <div class="onboarding">Обработка остаётся на устройстве. История, таймкоды и правки автоматически сохраняются в этом браузере.</div>
+ <section id="library-section" class="library-section" aria-label="Ранее загруженные лекции">
+  <div class="section-title">Мои лекции <span id="library-count">0</span></div>
+  <p class="hint" id="library-hint">Проекты хранятся локально. Для больших видео при открытии может потребоваться повторно выбрать оригинал.</p>
+  <div id="library-items" class="library-items"></div>
+ </section>
+ <div id="autosave-state" class="autosave-state" role="status" aria-live="polite">Проект ещё не сохранён</div>
+ <button id="remember-video" type="button" class="remember-video" hidden>Запомнить доступ к исходному файлу</button>
     <div class="settings config-group">
       <div class="heading">1. Расшифровка</div>
       <details class="detail-settings"><summary>Язык и параметры Whisper</summary><div class="detail-body">
@@ -173,10 +188,21 @@ root.innerHTML=`
           <button id="timeline-recompose" disabled>✧ Пересобрать выбранный кадр</button>
         </div>
       </div>
-      <div class="timeline-legend"><span><i class="legend-kept"></i>В ролике</span><span><i class="legend-skipped"></i>Пропущено</span><span id="timeline-coverage">0% лекции выбрано</span></div>
-      <div class="timeline-ruler" id="timeline-ruler"></div>
-      <div class="timeline-source" id="timeline-source" aria-label="Оригинальная лекция. Нажмите, чтобы перейти ко времени."><div id="timeline-playhead"></div></div>
-      <div id="timeline-track" class="timeline-track" aria-label="Выбранные фрагменты и пропуски"></div>
+      <div class="timeline-zoom-tools" aria-label="Масштаб таймлайна">
+    <label for="timeline-zoom">Масштаб <output id="timeline-zoom-label">1×</output></label>
+    <button id="timeline-zoom-out" type="button" aria-label="Уменьшить таймлайн">−</button>
+    <input id="timeline-zoom" type="range" min="1" max="24" step="1" value="1">
+    <button id="timeline-zoom-in" type="button" aria-label="Увеличить таймлайн">+</button>
+    <button id="timeline-zoom-fit" type="button">Показать целиком</button>
+  </div>
+  <div class="timeline-legend"><span><i class="legend-kept"></i>В ролике</span><span><i class="legend-skipped"></i>Пропущено</span><span id="timeline-coverage">0% лекции выбрано</span></div>
+      <div id="timeline-viewport" class="timeline-viewport" tabindex="0" aria-label="Масштабируемая временная шкала; прокрутка по горизонтали">
+        <div id="timeline-canvas" class="timeline-canvas">
+          <div class="timeline-ruler" id="timeline-ruler"></div>
+          <div class="timeline-source" id="timeline-source" aria-label="Оригинальная лекция. Нажмите, чтобы перейти ко времени."><div id="timeline-playhead"></div></div>
+          <div id="timeline-track" class="timeline-track" aria-label="Выбранные фрагменты и пропуски"></div>
+        </div>
+      </div>
       <div class="timeline-foot">
         <span id="timeline-current">00:00:00 / 00:00:00</span>
         <div class="timeline-restore-actions"><button id="timeline-append" disabled>+ Добавить отрывок к микротеме</button>
@@ -261,6 +287,11 @@ function setupPrimaryTimeline(){
   '<div id="story-piece-list" class="story-piece-list"></div>'+
   '<p class="hint">Отрывки можно переставлять или удалить. Переходы между несмежными частями нужно проверить вручную.</p>';
  pane('clip').append(piecesEditor);
+ const screenplay=document.createElement('section');screenplay.className='screenplay-review';
+ screenplay.innerHTML='<div class="panel-title"><b>Сценарий урока — по исходной речи</b></div>'+
+   '<p class="hint">Сначала составляется план объяснения и проверяется наличие учебных примеров и вывода. Ничего не придумывается сверх транскрипта.</p>'+
+   '<div id="screenplay-beats"></div>';
+ pane('clip').append(screenplay);
  const subtitleHeading=$('save-srt').closest('.panel-title'),transcript=$('transcript'),hint=transcript.nextElementSibling;
  pane('captions').append(subtitleHeading,transcript);
  if(hint?.classList.contains('hint'))pane('captions').append(hint);
@@ -433,6 +464,7 @@ function setPhase(value){
  const old=root.dataset.phase;root.dataset.phase=value;
  $('processing-panel').hidden=value!=='processing';
  if(value==='results'&&old!=='results')setEditorTab('timeline');
+ $('back-to-library').hidden=value!=='results'&&value!=='processing';
 }
 function showOperation(stage,percent,message,{standalone=false}={}){
  const stages=['prepare','asr','topics','composition'];
@@ -478,8 +510,11 @@ function renderTimeline(){
  track.replaceChildren();ruler.replaceChildren();
  if(!media){$('timeline-current').textContent='00:00:00 / 00:00:00';return}
  const duration=media.duration,spans=timelinePieces(clips,duration),stat=timelineStats(clips,duration);
+ $('timeline-canvas').style.width=(timelineView.zoom*100)+'%';
+ $('timeline-zoom').value=String(timelineView.zoom);
+ $('timeline-zoom-label').textContent=timelineView.zoom+'×';
  $('timeline-coverage').textContent=stat.percent+'% записи взято · '+stat.clips+' роликов · '+stat.pieces+' отрывков';
- const tickCount=Math.max(2,Math.min(12,Math.floor(duration/60)||2));
+ const tickCount=Math.max(2,Math.min(160,Math.floor(6*timelineView.zoom)));
  for(let i=0;i<=tickCount;i++){
    const tick=document.createElement('span');tick.className='timeline-tick';
    tick.style.left=(i/tickCount*100)+'%';
@@ -536,6 +571,7 @@ function renderTimeline(){
  $('timeline-regenerate').disabled=busy||!chunks.length;
  $('timeline-recompose').disabled=busy||!current()||current()?.id==='draft-1';
  updateTimelinePlayhead();
+ scheduleProjectSave();
 }
 function updateTimelinePlayhead(){
  if(!media)return;
@@ -572,6 +608,25 @@ function download(blob,name){
 }
 function safeName(s){return (s||'examclips').replace(/[^\p{L}\p{N}_-]+/gu,'_').slice(0,48)}
 function current(){return clips[selected]}
+function renderScreenplay(){
+ const mount=$('screenplay-beats');if(!mount)return;
+ mount.replaceChildren();const c=current();if(!c)return;
+ const evidence=c.screenplay?.beats||[];
+ const status=document.createElement('div');
+ status.className='screenplay-status';
+ status.textContent=storyboardReadyForRendering(c)?
+   'Найдены учебные объяснения — готово к проверке перед монтажом':
+   'Не хватает подтверждённого учебного объяснения — проверьте начало ролика';
+ mount.append(status);
+ for(const beat of evidence){
+  const row=document.createElement('article');row.className='screenplay-beat';
+  const heading=document.createElement('b');heading.textContent=
+    (beat.role==='intro'?'Постановка темы':beat.role==='takeaway'?'Вывод':'Объяснение')+
+    ' · '+timecode(beat.start);
+  const text=document.createElement('p');text.textContent=beat.quote;
+  row.append(heading,text);mount.append(row);
+ }
+}
 function renderStoryPieces(){
  const area=$('story-piece-list');if(!area)return;
  area.replaceChildren();const clip=current();if(!clip)return;
@@ -607,7 +662,7 @@ function renderClips(){
   });$('clip-count').textContent=String(clips.length);enable();
 }
 function sync(){
-  renderClips();updateDashboard();renderQuiz();renderTimeline();const c=current();if(!c)return;
+  renderClips();updateDashboard();renderQuiz();renderTimeline();const c=current();if(!c){scheduleProjectSave();return;}
   $('selected-title').textContent='Микротема '+(selected+1);$('selected-time').textContent=timecode(storyDuration(c));
   $('approve-topic').textContent=c.status==='approved'
     ? '✓ Микротема проверена вручную · снять отметку'
@@ -626,7 +681,7 @@ function sync(){
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
   $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
   $('player').currentTime=sourceSegments(c)[0]?.start??c.start;
-  renderStoryPieces();updateTimelinePlayhead();
+  renderStoryPieces();renderScreenplay();updateTimelinePlayhead();scheduleProjectSave();
 }
 function setBusy(v){busy=v;if(!v&&root.dataset.phase==='results')$('processing-panel').hidden=true;enable()}
 async function selectFile(file){
@@ -713,7 +768,7 @@ $('forget-asr').onclick=async()=>{
 function proposeTopics(){
  if(!media||!chunks.length)return;
  const plan=planCompleteTopics(chunks,media.duration,{sceneCuts});
- clips=plan.clips;
+ clips=buildVerifiedLessonScreenplays(plan.clips,chunks);
  // Tiny regression-only fixture: display source review, never claim a full lesson.
  const shortDemo=media.duration<=10&&chunks.some(x=>x.text?.trim());
  if(!clips.length&&shortDemo)clips=[{
