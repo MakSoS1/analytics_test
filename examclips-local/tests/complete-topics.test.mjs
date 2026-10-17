@@ -6,7 +6,7 @@ const row=(start,end,text)=>({start,end,text});
 const fact='Docker контейнеры позволяют изолировать приложение и сохранять зависимости в образах. Например обновлять сервисы можно без перестройки окружения.';
 test('no proportion or quota even when 90% of lecture is useful',()=>{
  const chunks=Array.from({length:30},(_,i)=>
-  row(i*20,i*20+18,fact+' Поэтому система остаётся воспроизводимой на сервере.'));
+  row(i*20,i*20+18,fact+' Поэтому система остаётся воспроизводимой на сервере. Для операции '+i+' используется собственный последовательный набор параметров, который отличает этот шаг.'));
  const r=planCompleteTopics(chunks,600);
  assert.equal(r.clips.length,1);
  assert.ok(r.summary.keptPercent>=80,r.summary.keptPercent);
@@ -18,9 +18,11 @@ test('one worked practical task may be a single 20-minute vertical video',()=>{
  const rows=[row(0,15,'Сейчас разберём практическую задачу по вычислению производной. Условие задачи следующее.'),
  ...Array.from({length:79},(_,i)=>row(15+i*15,30+i*15,words)),
  row(1200,1215,'Таким образом задача решена, мы получили ответ и проверили вычисления.'),
- row(1220,1240,'Теперь перейдём к другой теме: алгоритм поиска пути в графе и его сложность.')
+ row(1220,1240,'Теперь перейдём к другой теме: алгоритм поиска пути в графе и его сложность.'),
+ row(1241,1270,'Алгоритм поиска пути проходит вершины по очереди, потому что каждое ребро может изменить расстояние до соседних вершин.'),
+ row(1271,1295,'Например алгоритм Дейкстры выбирает ближайшую вершину и обновляет расстояния до остальных узлов.')
  ];
- const res=planCompleteTopics(rows,1240);
+ const res=planCompleteTopics(rows,1300);
  assert.equal(res.clips.length,2);
  assert.equal(res.clips[0].kind,'worked-exercise');
  assert.ok(storyDuration(res.clips[0])>=1200,'Practical worked example was wrongly split');
@@ -41,8 +43,10 @@ test('multiple explicit lesson transitions yield several complete microtopics',(
  const rows=[row(0,18,fact),
  row(20,44,'Следующая тема — балансировка нагрузки; запросы распределяются между серверами.'),
  row(45,75,'Например балансировщик позволяет масштабировать систему, потому что запросы идут на разные узлы.'),
- row(100,135,'Теперь перейдём к другой теме: сетевые протоколы, маршрутизация и обработка адресов.')];
- const r=planCompleteTopics(rows,140);
+ row(100,115,'Теперь перейдём к другой теме: сетевые протоколы, маршрутизация и обработка адресов.'),
+ row(116,129,'IP-пакет включает адрес отправителя и назначения, поэтому маршрутизатор может передать его следующему узлу.'),
+ row(130,140,'Например таблица маршрутизации связывает сеть назначения с интерфейсом отправки.')];
+ const r=planCompleteTopics(rows,145);
  assert.equal(r.clips.length,3);
  assert.ok(r.clips.every(c=>c.status==='needs-review'));
 });
