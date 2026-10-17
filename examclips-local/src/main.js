@@ -1035,6 +1035,9 @@ async function selectFile(file){
     }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
     setPhase(chunks.length?'results':'upload');
     sync();
+    // Generate gallery covers for old saved projects too, not only after
+    // freshly running the chapter planner in this browser session.
+    if(chunks.length&&clips.length)prepareMicrotopicThumbnails().catch(()=>{});
     if(resumeEntry?.snapshot){
       setEditorTab(['timeline','clip','captions','quiz','export'].includes(resumeEntry.snapshot.activeTab)?resumeEntry.snapshot.activeTab:'timeline');
       requestAnimationFrame(()=>{
