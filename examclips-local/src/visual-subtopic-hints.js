@@ -60,6 +60,20 @@ const groupDuration=rows=>rows.length?rows.at(-1).end-rows[0].start:0;
  * and at least one relevant term on each side. It is never a duration quota.
  */
 export function applyVisualSubtopicGuides(groups,hints,{minSpeechSeconds=36,minWords=32}={}){
+ // OCR chapters use key="slide-heading"; normalize their visible heading to
+ // the same educational categories as the inspected full-video guide.
+ const effectiveKey=chapter=>{
+  if(chapter?.key&&chapter.key!=='slide-heading'&&chapter.key!=='chapter')return chapter.key;
+  const title=String(chapter?.title||'');
+  if(/dockerfile|production.grade images/i.test(title))return 'dockerfile';
+  if(/networking/i.test(title))return 'docker-networking';
+  if(/storage|volumes?/i.test(title))return 'docker-storage';
+  if(/lifecycle|health/i.test(title))return 'container-lifecycle';
+  if(/architecture|image model/i.test(title))return 'docker-architecture';
+  if(/virtual machines?/i.test(title))return 'containers-vs-vm';
+  if(/resource/i.test(title))return 'resource-limits';
+  return chapter?.key;
+ };
  if(!hints?.length)return groups;
  const result=[];
  for(const group of groups){
@@ -68,15 +82,13 @@ export function applyVisualSubtopicGuides(groups,hints,{minSpeechSeconds=36,minW
     result.push(group);continue;
   }
   const possible=hints.filter(h=>
-   h.chapterKey===group.chapter?.key&&
+   h.chapterKey===effectiveKey(group.chapter)&&
    h.start>rows[0].start+minSpeechSeconds&&
    h.start<rows.at(-1).end-minSpeechSeconds
   );
   if(!possible.length){result.push(group);continue}
   let pending=[...rows];
-  let first=true;
   for(const hint of possible){
-   const previous=hints.find(h=>h.chapterKey===hint.chapterKey&&h.end<=hint.start&&h.end>hint.start-60);
    const divider=pending.findIndex(r=>(r.start+r.end)/2>=hint.start);
    if(divider<2||divider>=pending.length-2)continue;
    const left=pending.slice(0,divider),right=pending.slice(divider);
@@ -90,7 +102,7 @@ export function applyVisualSubtopicGuides(groups,hints,{minSpeechSeconds=36,minW
    result.push({...group,rows:left,visualSection:leftGuide?.id||null,
      visualTitle:leftGuide?.title||null,visualEvidence:'slide-ocr + speech-cues',
      editorialNotes:[...(group.editorialNotes||[]),'Визуальная граница по слайдам: уточнить начало/окончание по речи']});
-   pending=right;first=false;
+   pending=right;
   }
   if(pending.length)result.push({...group,rows:pending,
     visualSection:hints.find(h=>h.start<=pending[0].start&&h.end>pending[0].start)?.id||null,
