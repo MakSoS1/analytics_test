@@ -379,6 +379,23 @@ async function probeLocalReview(){
  }catch{/* Static or offline browser fallback without local Ollama */}
 }
 function initMvpEvents(){
+ $('back-to-library').onclick=backToLibrary;
+ $('remember-video').onclick=rememberOriginalHandle;
+ $('timeline-zoom').oninput=value=>setTimelineZoom(Number(value.target.value));
+ $('timeline-zoom-in').onclick=()=>setTimelineZoom(timelineView.zoom+1);
+ $('timeline-zoom-out').onclick=()=>setTimelineZoom(timelineView.zoom-1);
+ $('timeline-zoom-fit').onclick=()=>setTimelineZoom(1);
+ $('timeline-viewport').addEventListener('scroll',()=>{
+   if(media){timelineView.offset=$('timeline-viewport').scrollLeft/Math.max(1,$('timeline-canvas').scrollWidth);scheduleProjectSave()}
+ });
+ $('timeline-viewport').addEventListener('wheel',e=>{
+   if(!e.ctrlKey&&!e.metaKey)return;
+   e.preventDefault();setTimelineZoom(timelineView.zoom+(e.deltaY<0?1:-1));
+ },{passive:false});
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&currentProjectId){
+   clearTimeout(autosaveTimer);flushProjectSave();
+ }});
+
  $('settings-toggle').onclick=()=>{
    const open=$('settings-toggle').closest('.sidebar').classList.toggle('show-settings');
    $('settings-toggle').textContent=open?'Скрыть настройки анализа ▴':'Настройки анализа ▾';
@@ -459,6 +476,151 @@ function initMvpEvents(){
 }
 
 let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
+
+const LIBRARY_LAST='examclips-current-project-id';
+const makeId=()=>crypto.randomUUID?.()||('project-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+const sourceLabel=()=>sourceFile?.name||attachedSourceMeta?.name||'Лекция';
+function buildCurrentSnapshot(){
+ return safeProjectSnapshot({
+  duration:media.duration,clips,chunks,sceneCuts,selected,
+  activeTab:activeEditorTab,view:{zoom:timelineView.zoom,
+    offset:$('timeline-viewport').scrollLeft/Math.max(1,$('timeline-canvas').scrollWidth)}
+ });
+}
+async function flushProjectSave(){
+ if(!currentProjectId||!media||isSwitchingProject)return;
+ if(saving){saveAgain=true;return}
+ saving=true;saveAgain=false;
+ $('autosave-state').textContent='Сохраняем таймлайн…';
+ try{
+   const previous=await getLibraryProject(currentProjectId).catch(()=>null);
+   const item={
+     id:currentProjectId,createdAt:previous?.createdAt||new Date().toISOString(),
+     updatedAt:new Date().toISOString(),title:sourceLabel(),duration:media.duration,
+     source:pickFileMetadata(sourceFile),fileHandle:currentSourceHandle||previous?.fileHandle||null,
+     snapshot:buildCurrentSnapshot()
+   };
+   try{await saveLibraryProject(item)}
+   catch(err){
+     // Some browsers do not structured-clone FileSystemHandle in IndexedDB.
+     if(item.fileHandle){item.fileHandle=null;await saveLibraryProject(item)}
+     else throw err;
+   }
+   try{localStorage.setItem(LIBRARY_LAST,currentProjectId)}catch{}
+   $('autosave-state').textContent='✓ Таймлайн сохранён на этом устройстве';
+ }catch(err){
+   $('autosave-state').textContent='Не удалось сохранить проект: '+String(err.message||err).slice(0,100);
+ }finally{
+   saving=false;
+   if(saveAgain&&!isSwitchingProject)scheduleProjectSave();
+ }
+}
+function scheduleProjectSave(){
+ if(!currentProjectId||!media||isSwitchingProject)return;
+ clearTimeout(autosaveTimer);
+ autosaveTimer=setTimeout(()=>{autosaveTimer=null;flushProjectSave()},550);
+}
+async function renderLibrary(){
+ const box=$('library-items');box.replaceChildren();
+ let records=[];
+ try{records=await listLibraryProjects()}catch(err){
+   $('library-hint').textContent='История браузера недоступна: '+err.message;return;
+ }
+ $('library-count').textContent=String(records.length);
+ if(!records.length){const msg=document.createElement('p');msg.className='hint';msg.textContent='Пока нет сохранённых лекций. Загрузите первую — редактор будет автоматически сохранять правки.';box.append(msg);return}
+ for(const rec of records){
+   const item=document.createElement('article');item.className='library-item';
+   const details=document.createElement('div');details.className='library-item-main';
+   const title=document.createElement('strong');title.textContent=rec.title||rec.source?.name||'Лекция';
+   const date=document.createElement('span');date.textContent=
+     (rec.updatedAt?new Date(rec.updatedAt).toLocaleString('ru-RU'):'')+
+     ' · '+Math.round(rec.duration/60)+' мин · '+(rec.snapshot?.clips?.filter(c=>c.id!=='draft-1').length||0)+' микротем';
+   details.append(title,date);
+   const actions=document.createElement('div');actions.className='library-item-actions';
+   const open=document.createElement('button');open.textContent='Продолжить';open.type='button';
+   open.onclick=()=>openSavedProject(rec.id);
+   const remove=document.createElement('button');remove.textContent='Удалить';remove.type='button';
+   remove.setAttribute('aria-label','Удалить проект '+title.textContent);
+   remove.onclick=async()=>{
+     if(!confirm('Удалить проект и сохранённую в этом браузере копию маленького видео?'))return;
+     await deleteLibraryProject(rec.id);await deleteCachedOriginal(rec.id);
+     if(currentProjectId===rec.id){currentProjectId=null;currentSourceHandle=null}
+     if(localStorage.getItem(LIBRARY_LAST)===rec.id)localStorage.removeItem(LIBRARY_LAST);
+     await renderLibrary();
+   };
+   actions.append(open,remove);item.append(details,actions);box.append(item);
+ }
+}
+async function openSavedProject(id){
+ if(busy)return;
+ const rec=await getLibraryProject(id);
+ if(!rec)return renderLibrary();
+ pendingLibraryEntry=rec;
+ try{
+   const cached=await getCachedOriginal(id);
+   if(cached&&sameVideoFile(rec.source,cached)){
+     await selectFile(cached);return;
+   }
+   if(rec.fileHandle&&typeof rec.fileHandle.getFile==='function'){
+     const permission=await rec.fileHandle.queryPermission?.({mode:'read'});
+     const grant=permission==='granted'?'granted':await rec.fileHandle.requestPermission?.({mode:'read'});
+     if(grant==='granted'){
+       const original=await rec.fileHandle.getFile();
+       if(sameVideoFile(rec.source,original)){
+         await selectFile(original);return;
+       }
+     }
+   }
+ }catch(err){$('file-note').textContent='Доступ к оригиналу нужно подтвердить: '+err.message}
+ $('file-note').textContent='Проект «'+(rec.title||rec.source?.name)+'» сохранён. Выберите исходное видео с тем же названием, размером и датой изменения.';
+ $('video-file').value='';
+ $('video-file').click();
+}
+async function backToLibrary(){
+ if(busy){status('Сначала остановите текущую операцию.');return}
+ clearTimeout(autosaveTimer);await flushProjectSave();
+ isSwitchingProject=true;
+ try{
+  $('player').pause();
+  if(media)await media.input.dispose();
+  if(originalUrl)URL.revokeObjectURL(originalUrl);
+  media=null;sourceFile=null;originalUrl=null;currentProjectId=null;
+  currentSourceHandle=null;pendingLibraryEntry=null;chunks=[];clips=[];
+  sceneCuts=[];selected=0;$('video-file').value='';$('srt-file').value='';
+  $('transcript').value='';$('file-note').textContent='Выберите другую лекцию или откройте проект из истории.';
+  setPhase('upload');renderTimeline();updateDashboard();renderQuiz();enable();
+  $('autosave-state').textContent='Проект сохранён. Можно открыть другую лекцию.';
+ }finally{isSwitchingProject=false}
+ await renderLibrary();
+}
+async function rememberOriginalHandle(){
+ if(!media||!window.showOpenFilePicker){
+   status('Этот браузер не поддерживает сохранение доступа. История таймлайна всё равно сохраняется.');return;
+ }
+ try{
+   const [handle]=await window.showOpenFilePicker({types:[{description:'Видео',accept:{'video/*':['.mp4','.mov','.webm']}}]});
+   const candidate=await handle.getFile();
+   if(!sameVideoFile(pickFileMetadata(sourceFile),candidate))
+     throw Error('Выбран другой видеофайл. Выберите оригинал текущего проекта.');
+   currentSourceHandle=handle;await flushProjectSave();
+   $('remember-video').textContent='✓ Доступ к исходнику запомнен (по разрешению браузера)';
+ }catch(err){if(err.name!=='AbortError')status('Не удалось сохранить доступ: '+err.message)}
+}
+async function resumeMostRecent(){
+ await renderLibrary();
+ const id=localStorage.getItem(LIBRARY_LAST);
+ if(!id)return;
+ const rec=await getLibraryProject(id);
+ if(!rec)return;
+ // Reopen cached small videos fully automatically on page reload.
+ try{
+  const cached=await getCachedOriginal(id);
+  if(cached&&sameVideoFile(rec.source,cached)){
+    pendingLibraryEntry=rec;await selectFile(cached);
+  }
+ }catch{/* Library remains available for user to reattach the file */}
+}
+
 function setPhase(value){
  if(!['upload','configure','processing','results'].includes(value))return;
  const old=root.dataset.phase;root.dataset.phase=value;
@@ -504,6 +666,20 @@ async function buildPrivateFilmstrip(videoMedia){
      tile.setAttribute('aria-hidden','true');holder.append(tile);
    }catch{ /* Some video codecs cannot seek efficiently; keep plain track. */ }
  }
+}
+function setTimelineZoom(value){
+ const newZoom=Math.max(1,Math.min(24,Math.round(value)));
+ const viewport=$('timeline-viewport'),canvas=$('timeline-canvas');
+ const previousWidth=canvas.scrollWidth||1,focus=(viewport.scrollLeft+viewport.clientWidth/2)/previousWidth;
+ timelineView.zoom=newZoom;canvas.style.width=newZoom*100+'%';
+ $('timeline-zoom').value=String(newZoom);
+ $('timeline-zoom-label').textContent=newZoom+'×';
+ renderTimeline();
+ requestAnimationFrame(()=>{
+   viewport.scrollLeft=Math.max(0,focus*canvas.scrollWidth-viewport.clientWidth/2);
+   timelineView.offset=viewport.scrollLeft/Math.max(1,canvas.scrollWidth);
+   scheduleProjectSave();
+ });
 }
 function renderTimeline(){
  const track=$('timeline-track'),ruler=$('timeline-ruler');
@@ -1085,3 +1261,4 @@ function loop(){
   previewRaf=requestAnimationFrame(loop);
 }
 setupPrimaryTimeline();setEditorTab('timeline');initMvpEvents();loop();enable();updateDashboard();renderQuiz();probeLocalReview();
+resumeMostRecent().catch(err=>{ $('autosave-state').textContent='История недоступна: '+err.message });
