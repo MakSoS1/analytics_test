@@ -657,6 +657,7 @@ async function backToLibrary(){
   if(originalUrl)URL.revokeObjectURL(originalUrl);
   media=null;sourceFile=null;originalUrl=null;currentProjectId=null;
   currentSourceHandle=null;pendingLibraryEntry=null;chunks=[];clips=[];
+  chapterScanAbort?.abort();chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();lectureChapters=[];
   sceneCuts=[];selected=0;$('video-file').value='';$('srt-file').value='';
   $('transcript').value='';$('file-note').textContent='Выберите другую лекцию или откройте проект из истории.';
   setPhase('upload');renderTimeline();updateDashboard();renderQuiz();enable();
@@ -1106,6 +1107,9 @@ function proposeTopics(){
 async function scanLectureStructure({automatic=false}={}){
  if(!media||chapterScanPending)return;
  const original=media;
+ const editSignature=JSON.stringify(clips.map(c=>({
+   id:c.id,title:c.title,start:c.start,end:c.end,status:c.status,segments:c.segments
+ })));
  chapterScanPending=true;chapterScanAbort=new AbortController();
  if(!automatic)setBusy(true);
  try{
@@ -1118,8 +1122,16 @@ async function scanLectureStructure({automatic=false}={}){
    if(result.chapters.length>=2){
      lectureChapters=result.chapters;
      sceneCuts=result.cuts.filter(t=>t>0&&t<media.duration);
-     proposeTopics();
-     status('Изучены '+result.inspected+' слайдов, найдены '+lectureChapters.length+' глав; проверьте границы по речи.');
+     const edited=JSON.stringify(clips.map(c=>({
+       id:c.id,title:c.title,start:c.start,end:c.end,status:c.status,segments:c.segments
+     })))!==editSignature;
+     if(automatic&&edited){
+       scheduleProjectSave();
+       status('Карта глав готова; вы уже отредактировали микротемы. Не перезаписываю правки. Нажмите «Заново определить микротемы» для пересчёта.');
+     }else{
+       proposeTopics();
+       status('Изучены '+result.inspected+' слайдов, найдены '+lectureChapters.length+' глав; проверьте границы по речи.');
+     }
    }else{
      status('Заголовки слайдов распознаны недостаточно надёжно. Сохраняю анализ речи без выдуманных глав.');
    }
