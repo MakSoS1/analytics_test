@@ -38,6 +38,26 @@ export function isEducationalSpeech(text){
  if(ADMIN.test(s)&&!TEACHING.test(s))return false;
  return true;
 }
+function groupConceptHeading(rows,chapter){
+ const labels={
+  'container-definition':'Что такое контейнер',
+  'virtual-machines':'Контейнеры против виртуальных машин',
+  'docker-build-cache':'Как работает кеширование слоёв Docker',
+  'docker-multistage':'Многоэтапная сборка Dockerfile',
+  'docker-bridge':'Сеть bridge в Docker',
+  'docker-overlay':'Overlay: связь контейнеров между хостами',
+  'docker-host':'Режимы host и none в Docker',
+  'resource-limits':'Ограничение ресурсов контейнера'
+ };
+ const counts=new Map();
+ for(const row of rows){
+   const key=concept(row,chapter);
+   if(key&&labels[key])counts.set(key,(counts.get(key)||0)+1);
+ }
+ const ranked=[...counts].sort((a,b)=>b[1]-a[1]);
+ return ranked.length&&ranked[0][1]>=Math.min(2,rows.length)?
+   labels[ranked[0][0]]:meaningfulTitle(rows);
+}
 function asClip(rows,index,duration,chapter=null){
  const beginning=rows[0].start,end=rows.at(-1).end;
  // Observe gaps, preserve short breathing pauses; never synthesize speech.
@@ -52,9 +72,9 @@ function asClip(rows,index,duration,chapter=null){
  if(task)issues.push('Практическая задача оставлена целиком, даже если она длиннее обычного короткого видео');
  return {
    id:'topic-'+index,start:beginning,end,
-   segments:pieces,chapter:chapter?{title:chapter.title,key:chapter.key,source:chapter.source}:null,
+   segments:pieces,chapter:chapter?{title:chapter.title,key:chapter.key,source:chapter.source,start:chapter.start,end:chapter.end}:null,
    thumbnailTime:beginning+Math.min(6,(end-beginning)*.2),
-   title:meaningfulTitle(rows),
+   title:groupConceptHeading(rows,chapter),
    status:'needs-review',confidence:'low',method:'content-complete-extractive',
    layout:'hybrid',focusX:50,
    kind:task?'worked-exercise':'explanation',
