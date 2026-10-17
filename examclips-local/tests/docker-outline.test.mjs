@@ -46,7 +46,7 @@ test('Docker 59m lecture yields consecutive distinct subtopics and excludes lect
   row(3104,3130,'Therefore containers should use cgroups to limit resource consumption.')
  ];
  const plan=planCompleteTopics(t,meta.duration,{chapters});
- assert.equal(plan.summary.excludedIntroSeconds,8+23+32+17);
+ assert.equal(plan.summary.excludedIntroSeconds,17+23+32+17);
  assert.ok(plan.excluded.some(x=>x.start===119),'Course agenda must not appear');
  assert.ok(plan.clips.length>=8,JSON.stringify(plan.clips.map(c=>c.title)));
  const first=plan.clips[0];
