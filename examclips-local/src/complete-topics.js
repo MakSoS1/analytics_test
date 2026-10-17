@@ -106,9 +106,9 @@ function concept(row,chapter){
    return 'docker-build-cache';
  if(/\b(?:multi.?stage|multiple\s+stages|нескольк\w*\s+этап\w*\s+сборк)/iu.test(t))
    return 'docker-multistage';
- if(/\b(?:bridge\s+network|default\s+bridge|bridge\s+mode)/iu.test(t))return 'docker-bridge';
- if(/\b(?:overlay\s+network|overlay\s+mode)/iu.test(t))return 'docker-overlay';
- if(/\b(?:host\s+network|network\s+host|network\s+none)/iu.test(t))return 'docker-host';
+ if(/\b(?:bridge\s+networks?|docker\s+bridge|default\s+bridge|bridge\s+mode)/iu.test(t))return 'docker-bridge';
+ if(/\b(?:overlay\s+networks?|docker\s+overlay|overlay\s+mode)/iu.test(t))return 'docker-overlay';
+ if(/\b(?:host\s+networks?|network\s+host|network\s+none)/iu.test(t))return 'docker-host';
  if(/\b(?:resource\s+limits?|cpu\s+limits?|memory\s+limits?|cgroups?)/iu.test(t))return 'resource-limits';
  return inferred?.key||chapter?.key||null;
 }
@@ -148,8 +148,16 @@ function splitChapter(rows,chapter,sceneCuts){
     (repeated||gap>10||/^(?:now|next|let'?s|moving|теперь|следующ)/iu.test(row.text));
   const visual=prev?sceneCuts.some(t=>Math.abs(t-row.start)<8&&
     prev.start+15<row.start):false;
-  const topical=!!(moved&&current.length>=2&&
-    ((visual&&gap>2)||current.length>=3||gap>12));
+  // Compare sustained adjacent explanations, not isolated terms.
+  const before=rows.slice(Math.max(0,i-3),i).map(r=>r.text).join(' ');
+  const after=rows.slice(i,i+3).map(r=>r.text).join(' ');
+  const coherentBefore=i>=4?similarity(rows.slice(Math.max(0,i-6),i-3).map(r=>r.text).join(' '),before):0;
+  const coherentAfter=i+4<rows.length?similarity(after,rows.slice(i+3,i+6).map(r=>r.text).join(' ')):0;
+  const strongShift=!!(current.length>=3&&row.start-current[0].start>=55&&
+    similarity(before,after)<.10&&coherentBefore>.13&&coherentAfter>.13);
+  const topical=!!((moved&&current.length>=2&&
+    ((visual&&gap>2)||current.length>=3||gap>12))||
+    (!practical&&strongShift&&(visual||gap>10||explicit)));
   const boundary=!!(current.length&&(explicit||(newTask&&practical&&finished)||
     clearlyDifferent||(!practical&&topical)));
   if(boundary)emit();
