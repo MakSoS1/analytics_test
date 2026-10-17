@@ -34,7 +34,7 @@ try{
   const path=document.querySelector('#timeline-coverage').textContent;
   return {caption,count,start,end,path};
  });
- assert.ok(check.count>=2,'Separate next topic should remain separate: '+JSON.stringify(check));
+ assert.equal(check.count,1,'A 20s topic announcement without an explanation must not become a standalone short: '+JSON.stringify(check));
  assert.ok(Number(check.end)-Number(check.start)>=1200,'20 minute worked problem was wrongly chopped '+JSON.stringify(check));
  assert.ok(check.caption.includes('00:20'),'Expected 20+min timecode '+JSON.stringify(check));
  assert.equal(await page.locator('#story-keep').count(),0);
