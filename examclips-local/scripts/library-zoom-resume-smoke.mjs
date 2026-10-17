@@ -34,7 +34,7 @@ try{
  await page.waitForFunction(async()=>{
   const m=await import('/src/project-library.js');
   const entries=await m.listLibraryProjects();
-  return !!(await m.getCachedOriginal(entries[0].id));
+  return entries.length>0&&!!(await m.getCachedOriginal(entries[0].id));
  },{timeout:12000});
  await page.reload();
  await page.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results',{timeout:20000});
