@@ -77,6 +77,9 @@ try{
  assert.equal(await page.locator('#timeline-zoom-label').textContent(),'8×');
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
  assert.equal(await page.locator('#clip-title').inputValue(),'Сохранённая тема Docker');
+ // Return immediately after an edit, BEFORE the 550ms debounce expires.
+ // A pre-existing in-flight IndexedDB save must not overwrite this latest title.
+ await page.locator('#clip-title').fill('Docker — быстрый переход с сохранением');
  await page.locator('#back-to-library').click();
  await page.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='upload');
  assert.ok(await page.locator('#library-section').isVisible());
@@ -84,9 +87,11 @@ try{
  await page.locator('.library-item-actions button').first().click();
  await page.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results');
  assert.equal(await page.locator('#timeline-zoom-label').textContent(),'8×');
+ await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+ assert.equal(await page.locator('#clip-title').inputValue(),'Docker — быстрый переход с сохранением');
  assert.deepEqual(errors,[]);
  console.log('LIBRARY_RELOAD_ZOOM_SUCCESS',JSON.stringify({
-  projects:1,zoom:8,restoredTitle:'Сохранённая тема Docker',
+  projects:1,zoom:8,restoredTitle:'Docker — быстрый переход с сохранением',
   widthRatio:metrics.inner/metrics.viewport
  }));
 }finally{await browser.close()}
