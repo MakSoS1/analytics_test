@@ -410,3 +410,10 @@ footer{color:#93a3b8;text-align:center;font-size:10px;padding:17px 14px;backgrou
  .timeline-restore-actions>button{flex:1}
  #pane-timeline .timeline-actions button{flex:1;white-space:normal}
 }
+
+/* v0.9: educational completeness, no percentage-coverage or forced runtime presets. */
+#app[data-phase="upload"] .initial-duration{display:block;margin:10px 0 18px}
+.content-preserving-note{margin:0;background:#edf5ff;border:1px solid #d8e8ff;border-radius:12px;
+ color:#415d82;padding:15px 17px;font-size:12px;line-height:1.65}
+.content-preserving-note strong{display:block;color:#164fa7;margin-bottom:4px;font-size:13px}
+#pane-timeline .timeline-legend{flex-wrap:wrap}

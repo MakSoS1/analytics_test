@@ -1,7 +1,7 @@
 name: ExamClips Local MVP CI
 on:
   push:
-    branches: [feat/examclips-local-mvp-20261015, feat/examclips-hybrid-composer-20261015, feat/examclips-microtopics-live-presenter-20261016, feat/examclips-completion-20261016, feat/examclips-ocr-context-20261016, feat/examclips-mvp-ui-deploy-20261016, feat/examclips-workflow-timeline-captions-20261016, feat/examclips-timeline-primary-20261016, feat/examclips-selective-story-edl-20261016]
+    branches: [feat/examclips-local-mvp-20261015, feat/examclips-hybrid-composer-20261015, feat/examclips-microtopics-live-presenter-20261016, feat/examclips-completion-20261016, feat/examclips-ocr-context-20261016, feat/examclips-mvp-ui-deploy-20261016, feat/examclips-workflow-timeline-captions-20261016, feat/examclips-timeline-primary-20261016, feat/examclips-selective-story-edl-20261016, feat/examclips-complete-topics-longform-20261017]
     paths: ['examclips-local/**', 'docs/superpowers/**', '.github/workflows/examclips-local-mvp.yml']
   pull_request:
     paths: ['examclips-local/**', 'docs/superpowers/**', '.github/workflows/examclips-local-mvp.yml']
@@ -49,6 +49,10 @@ jobs:
         run: |
           ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=white:s=320x180:r=2 -f lavfi -i sine=frequency=441:sample_rate=16000 -t 180 -c:v libx264 -preset ultrafast -c:a aac -shortest selective-lecture-fixture.mp4
           node scripts/sparse-lecture-smoke.mjs
+      - name: 20-minute practice problem is one complete microtopic in the browser
+        run: |
+          ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=white:s=320x180:r=1 -f lavfi -i sine=frequency=440:sample_rate=8000 -t 1250 -c:v libx264 -preset ultrafast -c:a aac -shortest long-exercise-fixture.mp4
+          node scripts/long-worked-example-smoke.mjs
       - name: Browser integration test
         run: |
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-vite.log 2>&1 &
@@ -57,6 +61,11 @@ jobs:
       - name: Stitch noncontiguous original source clips with uninterrupted audio
         run: |
           node scripts/noncontiguous-edl-smoke.mjs
+      - name: Verify streamed file-system MP4 export for long lesson mode
+        run: |
+          mkdir -p public
+          cp test-fixture.mp4 public/test-fixture.mp4
+          node scripts/stream-edl-smoke.mjs
       - name: Batch export whole series to local folder
         run: |
           node scripts/batch-export-smoke.mjs

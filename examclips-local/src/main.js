@@ -9,8 +9,8 @@ import {analyzeScene} from './scene-analysis.js';
 import {sampleSlideCuts} from './slide-cuts.js';
 import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
-import {planSelectiveStories,sourceSegments,storyDuration,summarizeStoryPlan} from './selective-stories.js';
-import {makeStoryReviewPayload} from './story-review.js';
+import {sourceSegments,storyDuration} from './selective-stories.js';
+import {planCompleteTopics} from './complete-topics.js';
 import {captionCueAt} from './editorial-motion.js';
 import {captionSequenceAt} from './caption-flow.js';
 import {timelinePieces,timelineStats,timelineTimeAtFraction,amendClipBoundary,appendSourceSegment,reorderSourceSegments,removeSourceSegment} from './source-timeline.js';
@@ -18,7 +18,6 @@ import {buildReviewPayload} from './completion-review.js';
 import {checkpointKey,loadCheckpoint,saveCheckpoint,deleteCheckpoint} from './asr-checkpoint.js';
 const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.hostname);
 let localReviewAvailable=false;
-let latestEditorialCandidates=[];
 const root=document.querySelector('#app');
 root.dataset.phase='upload';
 root.innerHTML=`
@@ -41,15 +40,9 @@ root.innerHTML=`
     <label class="drop" id="drop"><span class="drop-icon">⬆</span><b>Выберите видео</b><small>MP4, MOV, WebM · до 180 мин / 2 ГБ</small><input type="file" id="video-file" accept="video/mp4,video/quicktime,video/webm,video/*" hidden></label>
     <div class="file-note" id="file-note">Файл пока не выбран. Ничего не загружается на сервер.</div>
  <div id="initial-duration" class="initial-duration">
-   <label for="topic-preset">Длина будущих роликов</label>
-   <label for="story-keep">Сколько содержательного материала искать
-    <select id="story-keep">
-      <option value=".15">Строгий отбор · до 15% записи</option>
-      <option value=".3" selected>Выборочно · до 30% записи</option>
-      <option value=".5">Больше деталей · до 50% записи</option>
-    </select>
-   </label>
-   <p class="hint">Это потолок, не цель. Из всей лекции может получиться всего один полезный ролик или ни одного.</p>
+    <p class="content-preserving-note"><strong>Всё учебное содержание — автоматически.</strong>
+      ExamClips найдёт отдельные темы, сохранит законченные объяснения и решения задач, в том числе на 20 минут и дольше.
+      Паузы и организационные разговоры не попадут в итоговый монтаж.</p>
  </div>
  <button id="settings-toggle" class="settings-toggle" type="button">Настройки анализа <span>▾</span></button>
  <div class="onboarding">Обработка проходит на вашем устройстве. Вы сможете изменить выбранные фрагменты на таймлайне в любой момент.</div>
@@ -71,11 +64,7 @@ root.innerHTML=`
     </div>
     <div class="settings topic-settings">
   <div class="heading">2. Найти микротемы</div>
-  <label>Длительность<select id="topic-preset">
-    <option value="full">Полная микротема · 1–3 минуты (до 5)</option>
-    <option value="compact">Короткое объяснение · 1–2 минуты</option>
-    <option value="short">Короткий момент · 15–45 секунд</option>
-  </select></label>
+  <p class="hint">Границы определяются по смысловым переходам, а не по фиксированному времени. Длинная практическая задача остаётся одним видео.</p>
   <button id="scan-chapters" disabled>◫ Найти смены слайдов локально</button>
   <button id="suggest-topics" disabled>✧ Предложить законченные микротемы</button>
   <p class="hint" id="topic-coverage">Для смысловой нарезки нужна расшифровка речи. Рекомендации по границам предварительные: проверьте начало и вывод каждой микротемы.</p>
@@ -111,7 +100,7 @@ root.innerHTML=`
     <div class="journey" aria-label="Этапы обработки">
       <div class="journey-step" id="journey-upload"><div class="journey-number">1</div><div><b>Лекция</b><small id="journey-upload-state">Выберите файл</small></div></div>
       <div class="journey-step" id="journey-transcript"><div class="journey-number">2</div><div><b>Транскрипция</b><small id="journey-transcript-state">Whisper / SRT</small></div></div>
-      <div class="journey-step" id="journey-topics"><div class="journey-number">3</div><div><b>Микротемы</b><small id="journey-topics-state">1–5 минут</small></div></div>
+      <div class="journey-step" id="journey-topics"><div class="journey-number">3</div><div><b>Микротемы</b><small id="journey-topics-state">Полные объяснения</small></div></div>
       <div class="journey-step" id="journey-output"><div class="journey-number">4</div><div><b>Ролики + тесты</b><small>Экспорт на устройство</small></div></div>
     </div>
     <div class="kpis" aria-label="Локальная статистика проекта">
@@ -180,7 +169,7 @@ root.innerHTML=`
           <h2>Таймлайн лекции</h2>
           <p class="hint">Синие участки попадут в ролики, серые будут пропущены. Выбирайте фрагменты и перетаскивайте края, как в видеоредакторе.</p></div>
         <div class="timeline-actions">
-          <button id="timeline-regenerate" disabled>↻ Пересмотреть интересные моменты</button><button id="timeline-ai-select" hidden disabled title="Работает только через установленную Ollama на этом ПК">✧ Уточнить отбор через локальную LLM</button>
+          <button id="timeline-regenerate" disabled>↻ Переанализировать темы</button>
           <button id="timeline-recompose" disabled>✧ Пересобрать выбранный кадр</button>
         </div>
       </div>
@@ -215,8 +204,6 @@ const $=id=>document.getElementById(id);
  */
 function setupPrimaryTimeline(){
  const sidebar=document.querySelector('.sidebar');
- const duration=$('topic-preset'),oldLabel=duration.closest('label');
- $('initial-duration').querySelector('label').append(duration);oldLabel.remove();
  const startButtons=document.querySelector('.workflow-config-actions');
  sidebar.insertBefore(startButtons,document.querySelector('.topic-settings'));
  startButtons.classList.add('upload-start-actions');
@@ -356,7 +343,6 @@ async function probeLocalReview(){
    if(!response.ok||!String(response.headers.get('content-type')||'').includes('application/json'))return;
    const result=await response.json();
    localReviewAvailable=Boolean(result.available);
-   $('timeline-ai-select').hidden=!localReviewAvailable;
    if(!localReviewAvailable)$('review-state').textContent='Ollama не найдена на этом ПК; проверка качества тем остаётся ручной.';
    enable();
  }catch{/* Static or offline browser fallback without local Ollama */}
@@ -382,34 +368,10 @@ function initMvpEvents(){
    updateTimelinePlayhead();
    status('Выбран пропущенный участок. Можете создать клип из текущей точки.');
  };
- $('timeline-ai-select').onclick=async()=>{
-   if(!media||!localReviewAvailable||!latestEditorialCandidates.length||busy)return;
-   if(!confirm('Локальная модель уточнит полезные моменты по тексту. Заменить текущую разметку? Сохраните JSON проекта, если хотите её оставить.'))return;
-   abort=new AbortController();setBusy(true);
-   try{
-     showOperation('topics',null,'Локальная LLM оценивает полезность объяснений и несмежные связные части…');
-     const payload=makeStoryReviewPayload(latestEditorialCandidates,media.duration,{
-       keepFraction:Number($('story-keep').value||.3)
-     });
-     const response=await fetch('/api/local-story-plan',{
-       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),
-       signal:abort.signal
-     });
-     const result=await response.json();
-     if(!response.ok||!result.verified||!Array.isArray(result.clips))
-       throw Error(result.error||'Модель не вернула подтверждённые цитатами фрагменты');
-     clips=result.clips;selected=0;sync();
-     status(result.clips.length
-       ? 'Локальная LLM предложила '+result.clips.length+' микротем: '+result.summary.keptPercent+
-         '% записи. Необходимо вручную проверить смысловую связность каждого ролика.'
-       : 'Локальная LLM не нашла надёжных цельных объяснений. Можно выбрать фрагменты вручную.');
-   }catch(err){if(err.name!=='AbortError')error(err);else status('Отбор отменён — исходная разметка сохранена')}
-   finally{abort=null;setBusy(false)}
- };
  $('timeline-regenerate').onclick=()=>{
    if(!media||!chunks.length)return;
-   if(!confirm('Повторно найти микротемы? Текущие ручные изменения границ и их подтверждения будут заменены.'))return;
-   proposeTopics();status('Нарезка пересчитана. Проверьте новый список клипов.');
+   if(!confirm('Повторно определить границы всех учебных тем? Текущие ручные изменения и подтверждения заменятся.'))return;
+   proposeTopics();status('Темы переопределены без ограничения их общей длительности. Проверьте полноту разбора.');
  };
  $('timeline-recompose').onclick=()=>{
    if(!media||!current()||busy)return;
@@ -571,7 +533,6 @@ function renderTimeline(){
  }
  $('timeline-add').disabled=busy||!media;
  $('timeline-append').disabled=busy||!media||!current()||current().id==='draft-1';
- $('timeline-ai-select').disabled=busy||!localReviewAvailable||!latestEditorialCandidates.length;
  $('timeline-regenerate').disabled=busy||!chunks.length;
  $('timeline-recompose').disabled=busy||!current()||current()?.id==='draft-1';
  updateTimelinePlayhead();
@@ -590,7 +551,6 @@ function enable(){
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
   for(const id of ['timeline-regenerate','timeline-recompose','timeline-add','timeline-append'])if($(id))$(id).disabled=busy||!has||(id==='timeline-regenerate'&&!chunks.length);
   $('workflow-start').disabled=!has||busy;
-  $('timeline-ai-select').disabled=!has||busy||!localReviewAvailable||!latestEditorialCandidates.length;
   $('workflow-srt').disabled=!has||busy;
   $('scan-chapters').disabled=!has||busy;
   $('forget-asr').disabled=!has||busy;
@@ -677,7 +637,7 @@ async function selectFile(file){
     if(media)await media.input.dispose();
     if(originalUrl)URL.revokeObjectURL(originalUrl);
     media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
-    sourceFile=file;sceneCuts=[];latestEditorialCandidates=[];
+    sourceFile=file;sceneCuts=[];
     $('file-note').textContent=`${file.name} · ${timecode(media.duration)} · ${media.width}×${media.height} · ${(file.size/1e6).toFixed(1)} МБ`;
     // A draft is NOT an AI-generated completed lesson; only ASR/SRT can produce topic proposals.
     clips=[{id:'draft-1',start:0,end:Math.min(media.duration,180),title:'Черновик — сначала распознайте лекцию',
@@ -751,33 +711,31 @@ $('forget-asr').onclick=async()=>{
 };
 
 function proposeTopics(){
-  if(!media||!chunks.length)return;
-  const cfg=$('topic-preset').value==='short'
-    ? {min:15,target:35,max:55}
-    : $('topic-preset').value==='compact'
-      ? {min:60,target:105,max:180}
-      : {min:60,target:165,max:300};
-  const keepFraction=Number($('story-keep').value||.3);
-  const plan=planSelectiveStories(chunks,media.duration,{...cfg,keepFraction,maxStories:12,sceneCuts});
-  latestEditorialCandidates=plan.candidates;
-  const shortDemo=media.duration<=10&&chunks.some(x=>x.text?.trim());
-  clips=plan.clips.length?plan.clips:shortDemo
-    ? [{id:'short-preview',title:'Тестовое короткое видео — проверьте вручную',
-      start:chunks[0].start,end:chunks.at(-1).end,layout:'hybrid',focusX:50,
-      segments:[{start:chunks[0].start,end:chunks.at(-1).end}],
-      status:'needs-review',confidence:'low',method:'short-test-preview',
-      reviewReasons:['Слишком короткий источник для содержательной оценки; технический предпросмотр']}]
-    :[];
-  const highlights=timelineStats(clips,media.duration);
-  status('Кандидатов: '+clips.length+', сохранено '+highlights.percent+
-    '% исходной записи. Пропущенный материал всегда остаётся доступен внизу на таймлайне.');
-  setPhase('results');
-  selected=0;
-  const report=coverageReport(chunks,media.duration);
-  $('topic-coverage').textContent='Анализ охватил ~'+report.percent+'% лекции; в кандидаты взято '+timelineStats(clips,media.duration).percent+'%. '+
-   (report.partial?'Остальная часть НЕ распознана — для полноценного отбора нужен весь транскрипт. ':'')+
-   'Информация отобрана эвристически, не моделью понимания: обязательно просмотрите логическую связность склеек.';
-  sync();
+ if(!media||!chunks.length)return;
+ const plan=planCompleteTopics(chunks,media.duration,{sceneCuts});
+ clips=plan.clips;
+ // Tiny regression-only fixture: display source review, never claim a full lesson.
+ const shortDemo=media.duration<=10&&chunks.some(x=>x.text?.trim());
+ if(!clips.length&&shortDemo)clips=[{
+   id:'short-preview',title:'Тестовая запись — проверьте вручную',
+   start:chunks[0].start,end:chunks.at(-1).end,
+   segments:[{start:chunks[0].start,end:chunks.at(-1).end}],
+   layout:'hybrid',focusX:50,status:'needs-review',confidence:'low',
+   reviewReasons:['Слишком короткий исходный материал для оценки учебной завершённости']
+ }];
+ selected=0;
+ setPhase('results');
+ const report=coverageReport(chunks,media.duration);
+ const summary=plan.summary;
+ $('topic-coverage').textContent=
+    'Распознано ~'+report.percent+'% записи; предложено '+clips.length+
+    ' содержательных микротем, '+summary.keptUtterances+' фраз сохранены, '+
+    summary.excludedUtterances+' организационных/пустых фраз исключены. '+
+    (report.partial?'Остальная часть лекции не распознана — для полного охвата выберите «Вся лекция». ':'')+
+    'Это предварительные границы: убедитесь, что все учебные темы сохранены, а практические решения завершены.';
+ status('Сохранены все '+summary.keptUtterances+' содержательных фраз; создано '+clips.length+
+    ' микротем. Длительность роликов не ограничена искусственно.');
+ sync();
 }
 $('scan-chapters').onclick=async()=>{
  if(!media)return;
@@ -822,7 +780,7 @@ $('apply-review').onclick=()=>{
   if(sourceSegments(c).length>1){status('Для составных микротем границы редактируются вручную по отрывкам.');return}
   const a=Math.max(0,c.start+(v.suggestedStartDelta||0));
   const b=Math.min(media.duration,c.end+(v.suggestedEndDelta||0));
-  if(b<=a||b-a>300){status('Изменение отвергнуто: ролик должен длиться не более 5 минут.');return}
+  if(b<=a){status('Некорректные границы ролика.');return}
   c.start=a;c.end=b;c.segments=[{start:a,end:b}];delete c.scene;
   c.status='needs-review';delete c.approvedAt;
   c.reviewReasons=['Границы скорректированы по рекомендации LLM; требуется окончательная проверка.'];
@@ -998,20 +956,20 @@ $('export-all').onclick=async()=>{
    for(const clip of work){
      if(abort.signal.aborted)throw new DOMException('Stopped','AbortError');
      status('Экспорт '+(exported+1)+'/'+work.length+': '+clip.title);
-     const blob=await exportClip(media,clip,chunks,{quality:$('output-quality').value,signal:abort.signal,
-       onProgress:m=>{
-         const msg=(exported+1)+'/'+work.length+' · '+m;
-         status(msg);
-         const part=String(m).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
-         const fraction=part?Number(part[1])/Math.max(1,Number(part[2])):0;
-         showOperation('composition',100*(exported+fraction)/work.length,msg);
-       }});
      const name=String(exported+1).padStart(2,'0')+'_'+safeName(clip.title)+
        (clip.status==='approved'?'':'_DRAFT')+'.mp4';
      const handle=await dir.getFileHandle(name,{create:true});
      const writable=await handle.createWritable();
-     try{await writable.write(blob);await writable.close()}
-     catch(e){try{await writable.abort()}catch{}throw e}
+     try{
+       await exportClip(media,clip,chunks,{quality:$('output-quality').value,signal:abort.signal,writable,
+         onProgress:m=>{
+           const msg=(exported+1)+'/'+work.length+' · '+m;
+           status(msg);
+           const part=String(m).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
+           const fraction=part?Number(part[1])/Math.max(1,Number(part[2])):0;
+           showOperation('composition',100*(exported+fraction)/work.length,msg);
+         }});
+     }catch(e){try{await writable.abort()}catch{}throw e}
      exported++;
    }
    status('Экспортировано '+exported+' микротем локально в выбранную папку.');
@@ -1022,19 +980,41 @@ $('export-all').onclick=async()=>{
 };
 $('export').onclick=async()=>{
   const c=current();if(!media||!c)return;
+  const filename=safeName(c.title)+(c.status==='approved'?'':'_DRAFT')+'.mp4';
+  const long=storyDuration(c)>=300;
+  let writable=null;
+  if(long&&typeof window.showSaveFilePicker==='function'){
+    // Must request filesystem permission synchronously from user's click,
+    // BEFORE awaiting the encoding pipeline.
+    let handle;
+    try{
+      handle=await window.showSaveFilePicker({
+        suggestedName:filename,
+        types:[{description:'MP4 video',accept:{'video/mp4':['.mp4']}}]
+      });
+      writable=await handle.createWritable();
+    }catch(e){if(e.name!=='AbortError')error(e);return}
+  }else if(long){
+    status('Браузер не поддерживает потоковое сохранение: большой MP4 будет собираться в RAM. Для 20+ минут рекомендуем Chrome или Edge.');
+  }
   abort=new AbortController();setBusy(true);
   try{
-    showOperation('composition',0,'Экспортируем вертикальное видео со звуком…');
-    status('Кодирование MP4 со звуком. В зависимости от ПК может занять несколько минут...');
-    const blob=await exportClip(media,c,chunks,{quality:$('output-quality').value,onProgress:msg=>{
-      status(msg);
-      const match=String(msg).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
-      if(match)showOperation('composition',100*Number(match[1])/Number(match[2]),msg);
-      else showOperation('composition',null,msg);
-    },signal:abort.signal});
-    download(blob,safeName(c.title)+(c.status==='approved'?'':'_DRAFT')+'.mp4');
-    status('Экспорт завершён: '+(blob.size/1e6).toFixed(1)+' МБ');
-  }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e)}finally{abort=null;$('processing-panel').hidden=true;setBusy(false)}
+    showOperation('composition',0,'Кодируем '+Math.ceil(storyDuration(c)/60)+' мин оригинального видео…');
+    const blob=await exportClip(media,c,chunks,{
+      quality:$('output-quality').value,writable,signal:abort.signal,
+      onProgress:msg=>{
+        status(msg);
+        const match=String(msg).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
+        if(match)showOperation('composition',100*Number(match[1])/Number(match[2]),msg);
+        else showOperation('composition',null,msg);
+      }
+    });
+    if(blob)download(blob,filename);
+    status(writable?'Большой MP4 сохранён напрямую на диск.':
+      'Экспорт завершён: '+(blob.size/1e6).toFixed(1)+' МБ');
+  }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e);
+    if(writable)try{await writable.abort()}catch{}
+  }finally{abort=null;$('processing-panel').hidden=true;setBusy(false)}
 };
 function loop(){
   const video=$('player'),c=current();

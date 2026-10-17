@@ -16,7 +16,7 @@ try{
  await page.goto('http://127.0.0.1:5173/');
  await page.locator('#video-file').setInputFiles('selective-lecture-fixture.mp4');
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:40000});
- assert.equal(await page.locator('#story-keep').inputValue(),'.3');
+ assert.equal(await page.locator('#story-keep').count(),0,'Editorial budget must be removed');
  await page.locator('#srt-file').setInputFiles({name:'sparse.srt',mimeType:'text/plain',buffer:Buffer.from(srt)});
  await page.waitForFunction(()=>document.querySelector('#app').dataset.phase==='results',{timeout:40000});
  const result=await page.evaluate(()=>{
@@ -29,12 +29,14 @@ try{
  assert.ok(result.kept.length>=1,'No informative candidate was selected: '+JSON.stringify(result));
  assert.ok(result.skipped>=2,'Source gaps missing: '+JSON.stringify(result));
  const percent=Number(result.coverage.match(/(\d+)%/)?.[1]||NaN);
- assert.ok(percent>0&&percent<=30,'Whole lecture was force-filled: '+JSON.stringify(result));
+ assert.ok(percent>0&&percent<50,'Obvious organizational/filler sections were not excluded: '+JSON.stringify(result));
+ assert.ok(result.kept.length>=3,'All 3 teaching explanations should remain: '+JSON.stringify(result));
  assert.ok(!result.kept.some(x=>x.left>=20&&x.left<=40),'Organizational mic break was selected');
+ assert.ok(result.kept.some(x=>x.left>85),'Late educational explanation incorrectly dropped');
  await page.screenshot({path:'mvp-sparse-lecture-timeline.png',fullPage:false});
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
  assert.ok(await page.locator('#story-piece-list').isVisible());
  assert.deepEqual(errors,[]);
- console.log('SPARSE_LECTURE_SELECTION_SUCCESS',JSON.stringify({coveragePercent:percent,
+ console.log('FULL_CONTENT_SPARSE_LECTURE_SUCCESS',JSON.stringify({coveragePercent:percent,
   selectedSourcePieces:result.kept.length,grayGaps:result.skipped,clips:result.clipCount}));
 }finally{await browser.close()}

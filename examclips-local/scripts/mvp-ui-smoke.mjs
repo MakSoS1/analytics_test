@@ -18,8 +18,9 @@ try{
  assert.equal(await page.locator('#app').getAttribute('data-phase'),'upload');
  await page.screenshot({path:'mvp-upload-desktop.png',fullPage:true});
  assert.ok(await page.locator('#drop').isVisible());
- assert.ok(await page.locator('#topic-preset').isVisible(),'Duration options must be on upload screen');
- assert.equal(await page.locator('#topic-preset option').count(),3);
+ assert.equal(await page.locator('#story-keep').count(),0,'No forced share-of-lecture control');
+ assert.equal(await page.locator('#topic-preset').count(),0,'No fixed per-clip duration cap');
+ assert.ok(await page.getByText('Всё учебное содержание — автоматически.').isVisible());
  assert.ok(!(await page.locator('#pane-timeline').isVisible()),'Editor must be hidden before upload');
  assert.ok(!(await page.locator('#editor').isVisible()));
 
@@ -27,14 +28,14 @@ try{
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:30000});
  assert.equal(await page.locator('#app').getAttribute('data-phase'),'upload');
  assert.ok(await page.locator('#workflow-start').isEnabled(),'Run action on upload screen');
- assert.ok(await page.locator('#topic-preset').isVisible());
+ assert.equal(await page.locator('#story-keep').count(),0);
 
  await page.locator('#srt-file').setInputFiles({name:'lecture.srt',mimeType:'text/plain',buffer:Buffer.from(subtitle)});
  await page.waitForFunction(()=>!document.querySelector('#quiz-generate').disabled);
  assert.equal(await page.locator('#app').getAttribute('data-phase'),'results');
  assert.ok(await page.locator('#pane-timeline').isVisible());
  assert.ok(!(await page.locator('#drop').isVisible()),'No upload widgets in editor');
- assert.ok(!(await page.locator('#topic-preset').isVisible()),'Duration belongs to first screen only');
+ assert.equal(await page.locator('#story-keep').count(),0,'No hard percentage anywhere');
  const full=await page.evaluate(()=>{
    const track=document.querySelector('#timeline-track').getBoundingClientRect();
    return {width:track.width,viewport:document.documentElement.clientWidth};
@@ -103,7 +104,7 @@ try{
  await mobile.locator('#srt-file').setInputFiles({name:'lecture.srt',mimeType:'text/plain',buffer:Buffer.from(subtitle)});
  await mobile.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results',{timeout:30000});
  assert.ok(await mobile.locator('#pane-timeline').isVisible());
- assert.ok(!(await mobile.locator('#topic-preset').isVisible()));
+ assert.equal(await mobile.locator('#story-keep').count(),0);
  const mobileTimeline=await mobile.evaluate(()=>({
   clientWidth:document.documentElement.clientWidth,
   scrollWidth:document.documentElement.scrollWidth
