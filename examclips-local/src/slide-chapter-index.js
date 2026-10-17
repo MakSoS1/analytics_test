@@ -60,6 +60,9 @@ export async function indexLectureSlides(media,{signal,language='en',
  const canvas=document.createElement('canvas');
  canvas.width=1152;canvas.height=220;
  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+ const fullCanvas=document.createElement('canvas');
+ fullCanvas.width=1152;fullCanvas.height=Math.max(1,Math.round(1152*media.height/media.width));
+ const fullCtx=fullCanvas.getContext('2d');
  for(let i=0;i<sampled.length;i++){
    if(signal?.aborted)throw new DOMException('Stopped','AbortError');
    let sample;
@@ -68,7 +71,8 @@ export async function indexLectureSlides(media,{signal,language='en',
      if(!sample)continue;
      ctx.clearRect(0,0,canvas.width,canvas.height);
      // Header crop suppresses most presenter tiles and irrelevant body text.
-     ctx.drawImage(sample,0,0,media.width,media.height*.28,0,0,1152,220);
+     sample.draw(fullCtx,0,0,fullCanvas.width,fullCanvas.height);
+     ctx.drawImage(fullCanvas,0,0,fullCanvas.width,fullCanvas.height*.28,0,0,1152,220);
      const found=await recognizeEducationalFrame(canvas,{language,signal,
        onProgress:()=>{}});
      const title=slideHeadingFromLines(found.lines,canvas.width,canvas.height);
