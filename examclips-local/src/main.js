@@ -769,14 +769,14 @@ function enable(){
   $('suggest-topics').disabled=!has||busy||!chunks.length;
   $('quiz-generate').disabled=!has||busy||!chunks.length||current()?.id==='draft-1';
   $('export-all').disabled=!has||busy||!chunks.length||clips.every(c=>
-    c.id==='draft-1'||(c.editorialStatus==='needs-more-context'&&c.status!=='approved'));
+    c.id==='draft-1'||(media.duration>10&&c.editorialStatus==='needs-more-context'&&c.status!=='approved'));
   $('verify-topic').disabled=!isLocalDesktop||!localReviewAvailable||!clip||busy||!chunks.length||current()?.id==='draft-1';
   $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
     !((current()?.llmReview?.suggestedStartDelta||0)||(current()?.llmReview?.suggestedEndDelta||0));
   for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context','approve-topic'])$(id).disabled=!clip||busy;
   // Never accidentally export the arbitrary, untranscribed loading placeholder as a finished micro-lesson.
   $('export').disabled=!clip||busy||current()?.id==='draft-1'||
-    (current()?.editorialStatus==='needs-more-context'&&current()?.status!=='approved');
+    (media?.duration>10&&current()?.editorialStatus==='needs-more-context'&&current()?.status!=='approved');
   for(const id of ['save-srt','save-project','add'])$(id).disabled=!has||busy;
   $('transcript').disabled=!has||busy;$('cancel').disabled=!busy;
 }
@@ -1212,7 +1212,7 @@ $('export-all').onclick=async()=>{
  try{dir=await window.showDirectoryPicker({mode:'readwrite'})}
  catch(e){if(e.name!=='AbortError')error(e);return}
  const work=clips.filter(c=>c.id!=='draft-1'&&
-   (c.editorialStatus!=='needs-more-context'||c.status==='approved')).map(c=>structuredClone(c));
+   (media.duration<=10||c.editorialStatus!=='needs-more-context'||c.status==='approved')).map(c=>structuredClone(c));
  if(!work.length)return;
  abort=new AbortController();setBusy(true);
  let exported=0;
