@@ -36,44 +36,103 @@ export function inferEditorialBeats(clip,chunks){
  if(beats.length===1)beats[0].role='explanation';
  return beats;
 }
+/**
+ * A compact editorial summary is NOT a transcript dump. Each summarized
+ * statement is a short extractive restatement anchored to an unmodified
+ * source quote, its exact time interval and an evidence identifier.
+ * No unsupported conclusion is fabricated for an unfinished explanation.
+ */
+const DEFINITION=/(?:\b(?:is\s+(?:a|an|the)|are\s+(?:a|an)|means|refers\s+to|consists?\s+of|defined\s+as|unlike|different\s+from)\b|(?:это\s+|означает|называется|представляет\s+собой|в\s+отличие\s+от))/iu;
+const EXAMPLE=/(?:\b(?:for\s+example|for\s+instance|let'?s\s+(?:look|take|run|try)|suppose|imagine|when\s+you\s+run)\b|например|допустим|к\s+примеру|рассмотрим\s+пример)/iu;
+const CAUSE=/(?:\b(?:because|therefore|so\s+that|which\s+means|this\s+(?:allows|helps|prevents|reduces)|as\s+a\s+result|compared\s+to)\b|потому\s+что|поэтому|таким\s+образом|это\s+позволяет|следовательно)/iu;
+const SUMMARY_LENGTH=240;
+function conciseSource(text){
+ const v=String(text||'').replace(/\s+/gu,' ').trim();
+ const clauses=v.split(/(?<=[.!?])\s+/u).filter(Boolean);
+ const meaningful=clauses.find(x=>DEFINITION.test(x)||CAUSE.test(x)||EXAMPLE.test(x))||clauses[0]||v;
+ return meaningful.length<=SUMMARY_LENGTH?meaningful:meaningful.slice(0,SUMMARY_LENGTH).replace(/\s+\S*$/u,'').trim()+'…';
+}
+function selectDistinct(beats,count=5){
+ const taken=new Set(),list=[];
+ const best=predicate=>beats.findIndex((b,i)=>!taken.has(i)&&predicate(b.quote));
+ const pick=(predicate,role)=>{
+   const i=best(predicate);
+   if(i<0)return;
+   taken.add(i);
+   list.push({...beats[i],role,sourceQuote:beats[i].quote});
+ };
+ pick(s=>DEFINITION.test(s),'definition');
+ pick(s=>CAUSE.test(s),'mechanism');
+ pick(s=>EXAMPLE.test(s),'example');
+ pick(s=>FINISH.test(s),'takeaway');
+ if(!list.length&&beats.length)pick(()=>true,'explanation');
+ const important=beats.filter((b,i)=>!taken.has(i)&&tokenize(b.quote).length>=7);
+ for(const b of important.slice(0,Math.max(0,count-list.length)))
+   list.push({...b,role:'explanation',sourceQuote:b.quote});
+ return list.slice(0,count).sort((a,b)=>a.start-b.start);
+}
+const LABELS={definition:'Что это',mechanism:'Как и почему работает',
+ example:'Конкретный пример',takeaway:'Результат',explanation:'Ключевая мысль'};
+function summaryBeats(clip,beats){
+ const chosen=selectDistinct(beats);
+ return chosen.map((b,i)=>({
+   id:'evidence-'+(i+1),
+   role:b.role,label:LABELS[b.role]||'Объяснение',
+   text:conciseSource(b.quote),
+   evidence:[{start:b.start,end:b.end,quote:b.quote,source:'lecture'}]
+ }));
+}
 export function buildVerifiedLessonScreenplays(clips,chunks,{
-  requireTranscriptEvidence=true
+ requireTranscriptEvidence=true
 }={}){
- return (clips||[]).map((clip,i)=>{
+ return (clips||[]).map((clip)=>{
    const beats=inferEditorialBeats(clip,chunks);
+   const summary=summaryBeats(clip,beats);
    const material=beats.map(x=>x.quote).join(' ');
    const useful=beats.filter(b=>tokenize(b.quote).length>=5&&
-     (!isNonTeachingIntroduction(b.quote)||TEACH.test(b.quote)));
-   const technical=useful.some(b=>TEACH.test(b.quote));
+     !isNonTeachingIntroduction(b.quote));
+   const technical=useful.some(b=>TEACH.test(b.quote)||DEFINITION.test(b.quote)||CAUSE.test(b.quote));
    const finished=beats.some(b=>FINISH.test(b.quote));
    const minimum=tokenize(material).length>=15;
+   const distinctSources=new Set(summary.flatMap(x=>x.evidence.map(e=>e.start)));
+   const demonstrated=technical&&minimum&&distinctSources.size>=2;
+   const endNearChapter=Number.isFinite(clip.chapter?.end)&&clip.chapter.end-clip.end<=25;
+   // Slide transition alone can never prove an educational conclusion.
+   const fullySupported=demonstrated&&(finished||summary.some(b=>b.role==='takeaway'));
    const issue=[];
-   if(!minimum)issue.push('Недостаточно речи, чтобы подтвердить самостоятельную микротему');
-   if(!technical)issue.push('Не обнаружено предметного объяснения: проверьте, что это не вводная часть');
-   if(!finished)issue.push('В расшифровке не найден явный итог — проверьте завершённость');
+   if(!minimum)issue.push('Недостаточно объяснения для самостоятельной микротемы');
+   if(!technical)issue.push('Нет подтверждённого определения/механизма — проверьте, что это не вступление');
+   if(!demonstrated)issue.push('Мало независимых исходных реплик для связного сценария');
+   if(!fullySupported)issue.push('Явный итог не подтверждён речью: завершённость пока не доказана');
    const firstOriginal=beats.at(0)?.start??clip.start;
    const original=sourceSegments(clip),first=original.at(0);
    let pieces=original;
-   // Trim standalone intro before first evidence, never removing a valid
-   // explanation from the clip. Avoid altering a clip with >1 source piece.
-   if(first&&firstOriginal>first.start+.1&&firstOriginal<first.end&&original.length===1){
+   if(first&&firstOriginal>first.start+.1&&firstOriginal<first.end&&original.length===1)
      pieces=[{start:firstOriginal,end:first.end}];
-   }
-   const approvedForProposal=minimum&&technical;
+   const readyForReview=demonstrated;
+   const screenplay={
+     schema:2,
+     heading:clip.title,
+     summary,
+     beats,
+     quality:{evidenceCount:beats.length,technical,finished,
+       readyForReview,fullySupported,chapterBoundary:endNearChapter,issues:issue},
+     evidencePolicy:'Каждый тезис является сокращением исходной реплики; неподтверждённые выводы не добавляются'
+   };
    return {
      ...clip,
-     segments:pieces,start:Math.min(...pieces.map(x=>x.start)),end:Math.max(...pieces.map(x=>x.end)),
-     screenplay:{schema:1,beats,quality:{
-       evidenceCount:beats.length,technical,finished,readyForReview:approvedForProposal,
-       issues:issue
-     }},
-     status:'needs-review',
+     segments:pieces,start:Math.min(...pieces.map(x=>x.start)),
+     end:Math.max(...pieces.map(x=>x.end)),
+     screenplay,status:'needs-review',
      reviewReasons:[...new Set([...(clip.reviewReasons||[]),...issue])],
-     editorialStatus:approvedForProposal?'proposed':'needs-more-context'
+     editorialStatus:readyForReview?'proposed':'needs-more-context'
    };
  });
 }
 export function storyboardReadyForRendering(clip){
  return !!clip?.screenplay?.quality?.readyForReview&&
-   (clip.screenplay.beats||[]).every(b=>b.source==='lecture'&&b.quote?.length>0);
+   (clip.screenplay.summary||clip.screenplay.beats||[])
+     .every(b=>b.evidence?
+       b.evidence.every(e=>e.source==='lecture'&&e.quote?.length>0&&e.end>e.start):
+       b.source==='lecture'&&b.quote?.length>0);
 }
