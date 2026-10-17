@@ -8,7 +8,7 @@
  */
 const CONTAINER_DEFINITION=/\b(?:what\s+(?:is|are)\s+(?:a\s+)?containers?|containers?\s+(?:is|are)\s+(?:an?\s+)?(?:isolated|lightweight|process|environment)|контейнер(?:ы)?\s+(?:это|представля(?:ют|ет))|что\s+такое\s+контейнер)\b/iu;
 const VM=/(?:\b(?:virtual\s+machines?|hypervisor|hypervisors?|vm\s+versus\s+container|containers?\s+(?:vs\.?|versus)\s+vms?)\b|виртуальн\w*\s+машин|гипервизор)/iu;
-const INSTRUCTIONS=/(?:\b(?:dockerfile|docker\s+file|docker\s+build|build\s+context|buildkit|workdir|entrypoint)\b|\b(?:FROM|RUN|COPY|ADD|CMD|ENV|ARG|EXPOSE|USER|HEALTHCHECK)\b|докерфайл|инструкци\w*\s+dockerfile)/u;
+const INSTRUCTIONS=/(?:\b(?:workdir|entrypoint|build\s+context|copy\s+--from)\b|\b(?:FROM|RUN|COPY|ADD|CMD|ENV|ARG|EXPOSE|USER|HEALTHCHECK)\b|инструкци\w*\s+dockerfile)/u;
 const BUILDCACHE=/(?:\b(?:build\s+cache|layer\s+cach(?:e|ing)|cache\s+invalidat(?:e|ion)|docker\s+build\s+--no-cache|cached\s+layers?)\b|кеширован\w*\s+сло|кэш\w*\s+сборк)/iu;
 const MULTISTAGE=/(?:\b(?:multi[\s-]?stage|multiple\s+build\s+stages?|build\s+stage|scratch\s+image)\b|многоэтапн\w*\s+сборк)/iu;
 const DOCKER_LAYERS=/(?:\b(?:image\s+layers?|layered\s+filesystem|read.only\s+layers?|copy.on.write)\b|сло\w*\s+образ|слоист\w*\s+файл)/iu;
@@ -22,7 +22,7 @@ const RULES={
   ['dockerfile-multistage','Многоэтапная сборка образа',MULTISTAGE],
   ['dockerfile-cache','Кеширование слоёв при сборке Dockerfile',BUILDCACHE],
   ['dockerfile-security','Безопасная сборка Docker-образов',DOCKER_SECURITY],
-  ['dockerfile-instructions','Инструкции Dockerfile: FROM, RUN и COPY',INSTRUCTIONS],
+  ['dockerfile-instructions','Инструкции Dockerfile и их назначение',INSTRUCTIONS],
   ['dockerfile-layers','Как формируются слои Docker-образа',DOCKER_LAYERS]
  ],
  'containers-vs-vm':[
@@ -83,7 +83,14 @@ export function lessonIdentity(rows,chapter){
  }
  const ranked=[...scores.values()].sort((a,b)=>b.score-a.score||b.hits-a.hits);
  const best=ranked[0];
- if(best&&best.specific)return best;
+ if(best&&best.specific){
+   const span=rows.length?rows.at(-1).end-rows[0].start:0;
+   // A single passing mention in eight minutes does not prove eight minutes
+   // are exclusively a multi-stage or cache lesson.
+   if(key==='dockerfile'&&span>120&&best.hits<2)
+     return {key:'dockerfile-general',title:FALLBACK.dockerfile,specific:false,chapter:key};
+   return best;
+ }
  if(key&&FALLBACK[key])return {key:key==='dockerfile'?'dockerfile-general':key,title:FALLBACK[key],specific:false,chapter:key};
  return best||null;
 }
