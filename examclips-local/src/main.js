@@ -768,13 +768,15 @@ function enable(){
   $('forget-asr').disabled=!has||busy;
   $('suggest-topics').disabled=!has||busy||!chunks.length;
   $('quiz-generate').disabled=!has||busy||!chunks.length||current()?.id==='draft-1';
-  $('export-all').disabled=!has||busy||!chunks.length||clips.every(c=>c.id==='draft-1');
+  $('export-all').disabled=!has||busy||!chunks.length||clips.every(c=>
+    c.id==='draft-1'||(c.editorialStatus==='needs-more-context'&&c.status!=='approved'));
   $('verify-topic').disabled=!isLocalDesktop||!localReviewAvailable||!clip||busy||!chunks.length||current()?.id==='draft-1';
   $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
     !((current()?.llmReview?.suggestedStartDelta||0)||(current()?.llmReview?.suggestedEndDelta||0));
   for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context','approve-topic'])$(id).disabled=!clip||busy;
   // Never accidentally export the arbitrary, untranscribed loading placeholder as a finished micro-lesson.
-  $('export').disabled=!clip||busy||current()?.id==='draft-1';
+  $('export').disabled=!clip||busy||current()?.id==='draft-1'||
+    (current()?.editorialStatus==='needs-more-context'&&current()?.status!=='approved');
   for(const id of ['save-srt','save-project','add'])$(id).disabled=!has||busy;
   $('transcript').disabled=!has||busy;$('cancel').disabled=!busy;
 }
@@ -1059,7 +1061,7 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
       if(sourceSegments(c).length>1){
         status('Для составного ролика используйте границы отдельных отрывков на таймлайне.');return;
       }
-      c.start=start;c.end=end;c.segments=[{start,end}];
+      c.start=start;c.end=end;c.segments=[{start,end}];delete c.screenplay;c.editorialStatus='needs-more-context';
     }
     c.title=$('clip-title').value;c.layout=$('layout').value;c.focusX=Number($('focus').value);
     // Any manual boundary edit invalidates prior LLM evidence for that interval.
@@ -1209,7 +1211,8 @@ $('export-all').onclick=async()=>{
  let dir;
  try{dir=await window.showDirectoryPicker({mode:'readwrite'})}
  catch(e){if(e.name!=='AbortError')error(e);return}
- const work=clips.filter(c=>c.id!=='draft-1').map(c=>structuredClone(c));
+ const work=clips.filter(c=>c.id!=='draft-1'&&
+   (c.editorialStatus!=='needs-more-context'||c.status==='approved')).map(c=>structuredClone(c));
  if(!work.length)return;
  abort=new AbortController();setBusy(true);
  let exported=0;
