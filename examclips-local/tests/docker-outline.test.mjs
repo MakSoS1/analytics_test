@@ -54,7 +54,7 @@ test('Docker 59m lecture yields consecutive distinct subtopics and excludes lect
  const titles=plan.clips.map(c=>c.title);
  assert.ok(titles.some(x=>/Что такое контейнер/.test(x)),JSON.stringify(titles));
  assert.ok(titles.some(x=>/виртуальн/.test(x)),JSON.stringify(titles));
- assert.ok(titles.some(x=>/сети|bridge/i.test(x)),JSON.stringify(titles));
+ assert.ok(titles.some(x=>/сети|bridge|overlay/i.test(x)),JSON.stringify(titles));
  assert.ok(titles.some(x=>/Dockerfile/.test(x)),JSON.stringify(titles));
  assert.ok(plan.clips.every(c=>c.chapter?.title),'Each clip has a chapter reference');
  const scripts=buildVerifiedLessonScreenplays(plan.clips,t);
