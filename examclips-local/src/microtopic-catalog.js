@@ -56,51 +56,90 @@ function evidenceLines(cell,items,formatter,{preview=3,label='Показать �
  }
 }
 const roleName={intro:'Тезис',explanation:'Объяснение',takeaway:'Вывод'};
-export function renderMicrotopicCatalog(container,clips,chunks,{selected=0,onSelect,onPlay,onEdit}={}){
+/** Chapter-ordered media gallery, replacing the unscannable six-column table. */
+export function renderMicrotopicCatalog(container,clips,chunks,{
+ selected=0,onSelect,onPlay,onEdit,thumbnails=new Map()
+}={}){
  container.replaceChildren();
  if(!clips?.length){
-   container.append(el('p','catalog-empty','Микротемы появятся после анализа полной расшифровки лекции.'));
-   return;
+  container.append(el('p','catalog-empty','Микротемы появятся после анализа полной расшифровки лекции.'));
+  return;
  }
- const scroll=el('div','catalog-scroll');
- const table=el('table','microtopic-table');
- table.setAttribute('aria-label','Список микротем: сценарий, исходные таймкоды, расшифровка, видео');
- const head=el('thead'),headRow=el('tr');
- for(const title of ['№','Короткое название','Исходные фрагменты','Сценарий из речи','Расшифровка оригинала','Видео']){
-   headRow.append(el('th','',title));
- }
- head.append(headRow);table.append(head);
- const body=el('tbody');
+ const grid=el('div','microtopic-grid');
+ grid.setAttribute('role','list');
+ grid.setAttribute('aria-label','Учебные микротемы по порядку');
  clips.forEach((clip,i)=>{
-   const topic=topicSummary(clip,chunks);
-   const tr=el('tr',selected===i?'selected':'');
-   tr.dataset.topicIndex=String(i);
-   tr.append(el('td','catalog-index',String(i+1).padStart(2,'0')));
-   const titleCell=el('td','catalog-title');
-   const titleBtn=el('button','catalog-title-button',topic.title);
-   titleBtn.type='button';titleBtn.onclick=()=>onSelect?.(i);
-   titleCell.append(titleBtn,
-      el('small','catalog-duration',time(topic.duration)+' · '+(topic.status==='approved'?'Проверено':'Черновик')));
-   tr.append(titleCell);
-   const sourceCell=el('td','catalog-source');
-   for(const piece of topic.pieces)sourceCell.append(el('div','catalog-range',sourceRange(piece)));
-   tr.append(sourceCell);
-   const scriptCell=el('td','catalog-script');
-   evidenceLines(scriptCell,topic.screenplay,b=>(roleName[b.role]||'Объяснение')+': '+b.quote,
-     {preview:3,label:'Развернуть весь сценарий'});
-   if(!topic.finished)scriptCell.append(el('small','catalog-warning','Концовка требует проверки'));
-   tr.append(scriptCell);
-   const transcriptCell=el('td','catalog-transcript');
-   evidenceLines(transcriptCell,topic.spoken,c=>c.text,
-     {preview:2,label:'Вся расшифровка с таймкодами'});
-   tr.append(transcriptCell);
-   const actionCell=el('td','catalog-actions');
-   const play=el('button','catalog-play','▶ Смотреть 9:16');
-   play.type='button';play.onclick=()=>onPlay?.(i);
-   const edit=el('button','catalog-edit','Изменить');
-   edit.type='button';edit.onclick=()=>onEdit?.(i);
-   actionCell.append(play,edit);
-   tr.append(actionCell);body.append(tr);
+  const topic=topicSummary(clip,chunks);
+  const card=el('article','microtopic-card'+(i===selected?' selected':''));
+  card.dataset.topicIndex=String(i);
+  card.setAttribute('role','listitem');
+  const thumb=el('button','microtopic-cover');
+  thumb.type='button';thumb.setAttribute('aria-label','Открыть: '+topic.title);
+  const src=thumbnails.get(clip.id);
+  if(src){
+    const img=el('img','microtopic-cover-image');
+    img.src=src;img.alt='Кадр исходной лекции: '+topic.title;
+    img.loading='lazy';
+    thumb.append(img);
+  }else{
+    const placeholder=el('span','microtopic-cover-placeholder','▶');
+    thumb.append(placeholder);
+  }
+  const stamp=el('span','microtopic-cover-timestamp',time(topic.pieces[0]?.start??clip.start));
+  thumb.append(stamp);thumb.onclick=()=>onSelect?.(i);
+  card.append(thumb);
+  const info=el('div','microtopic-card-content');
+  const row=el('div','microtopic-card-overline');
+  row.append(el('span','microtopic-card-number','Тема '+(i+1)),
+    el('span','microtopic-card-time',time(topic.duration)));
+  info.append(row);
+  const open=el('button','microtopic-card-title',topic.title);
+  open.type='button';open.onclick=()=>onSelect?.(i);info.append(open);
+  const chapter=clip.chapter?.title;
+  if(chapter)info.append(el('p','microtopic-card-chapter',chapter));
+  const quality=clip.screenplay?.quality;
+  const label=quality?.fullySupported?'Есть подтверждённый итог':
+    quality?.readyForReview?'Проверьте завершённость':'Недостаточно доказательств';
+  info.append(el('small','microtopic-card-status',label));
+  card.append(info);grid.append(card);
  });
- table.append(body);scroll.append(table);container.append(scroll);
+ container.append(grid);
+}
+export function renderMicrotopicDetail(container,clip,chunks){
+ if(!container)return;
+ container.replaceChildren();
+ if(!clip)return;
+ const topic=topicSummary(clip,chunks);
+ const heading=el('div','microtopic-detail-summary');
+ heading.append(el('p','microtopic-detail-eyebrow',clip.chapter?.title||'Самостоятельная микротема'),
+  el('h2','',topic.title));
+ const timeBox=el('p','microtopic-detail-range','Исходная запись: '+topic.pieces.map(sourceRange).join(' · '));
+ heading.append(timeBox);
+ const quality=clip.screenplay?.quality;
+ heading.append(el('p','microtopic-quality',quality?.fullySupported?
+  'Есть подтверждённые объяснения и вывод':
+  'Требуется проверка: речь не подтверждает полностью завершённый ответ'));
+ container.append(heading);
+ const script=el('section','microtopic-detail-script');
+ script.append(el('h3','','Краткий сценарий · подтверждённый исходной речью'));
+ const summary=clip.screenplay?.summary||[];
+ if(!summary.length)script.append(el('p','catalog-empty','Сначала распознайте всю речь.'));
+ for(const item of summary){
+   const row=el('article','microtopic-summary-item');
+   row.append(el('strong','',item.label||'Тезис'));
+   row.append(el('p','microtopic-summary-text',item.text));
+   for(const proof of item.evidence||[]){
+     const details=el('details','microtopic-proof');
+     details.append(el('summary','','Источник '+sourceRange(proof)));
+     details.append(el('blockquote','',proof.quote));
+     row.append(details);
+   }
+   script.append(row);
+ }
+ container.append(script);
+ const transcript=el('section','microtopic-detail-transcript');
+ transcript.append(el('h3','','Расшифровка и оригинальные таймкоды'));
+ const transcriptBody=el('div','microtopic-transcript-lines');
+ evidenceLines(transcriptBody,topic.spoken,c=>c.text,{preview:6,label:'Развернуть весь оригинал'});
+ transcript.append(transcriptBody);container.append(transcript);
 }
