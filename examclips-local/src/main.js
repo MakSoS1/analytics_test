@@ -100,7 +100,7 @@ root.innerHTML=`
     <div class="journey" aria-label="Этапы обработки">
       <div class="journey-step" id="journey-upload"><div class="journey-number">1</div><div><b>Лекция</b><small id="journey-upload-state">Выберите файл</small></div></div>
       <div class="journey-step" id="journey-transcript"><div class="journey-number">2</div><div><b>Транскрипция</b><small id="journey-transcript-state">Whisper / SRT</small></div></div>
-      <div class="journey-step" id="journey-topics"><div class="journey-number">3</div><div><b>Микротемы</b><small id="journey-topics-state">1–5 минут</small></div></div>
+      <div class="journey-step" id="journey-topics"><div class="journey-number">3</div><div><b>Микротемы</b><small id="journey-topics-state">Полные объяснения</small></div></div>
       <div class="journey-step" id="journey-output"><div class="journey-number">4</div><div><b>Ролики + тесты</b><small>Экспорт на устройство</small></div></div>
     </div>
     <div class="kpis" aria-label="Локальная статистика проекта">
@@ -956,20 +956,20 @@ $('export-all').onclick=async()=>{
    for(const clip of work){
      if(abort.signal.aborted)throw new DOMException('Stopped','AbortError');
      status('Экспорт '+(exported+1)+'/'+work.length+': '+clip.title);
-     const blob=await exportClip(media,clip,chunks,{quality:$('output-quality').value,signal:abort.signal,
-       onProgress:m=>{
-         const msg=(exported+1)+'/'+work.length+' · '+m;
-         status(msg);
-         const part=String(m).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
-         const fraction=part?Number(part[1])/Math.max(1,Number(part[2])):0;
-         showOperation('composition',100*(exported+fraction)/work.length,msg);
-       }});
      const name=String(exported+1).padStart(2,'0')+'_'+safeName(clip.title)+
        (clip.status==='approved'?'':'_DRAFT')+'.mp4';
      const handle=await dir.getFileHandle(name,{create:true});
      const writable=await handle.createWritable();
-     try{await writable.write(blob);await writable.close()}
-     catch(e){try{await writable.abort()}catch{}throw e}
+     try{
+       await exportClip(media,clip,chunks,{quality:$('output-quality').value,signal:abort.signal,writable,
+         onProgress:m=>{
+           const msg=(exported+1)+'/'+work.length+' · '+m;
+           status(msg);
+           const part=String(m).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
+           const fraction=part?Number(part[1])/Math.max(1,Number(part[2])):0;
+           showOperation('composition',100*(exported+fraction)/work.length,msg);
+         }});
+     }catch(e){try{await writable.abort()}catch{}throw e}
      exported++;
    }
    status('Экспортировано '+exported+' микротем локально в выбранную папку.');
@@ -980,19 +980,41 @@ $('export-all').onclick=async()=>{
 };
 $('export').onclick=async()=>{
   const c=current();if(!media||!c)return;
+  const filename=safeName(c.title)+(c.status==='approved'?'':'_DRAFT')+'.mp4';
+  const long=storyDuration(c)>=300;
+  let writable=null;
+  if(long&&typeof window.showSaveFilePicker==='function'){
+    // Must request filesystem permission synchronously from user's click,
+    // BEFORE awaiting the encoding pipeline.
+    let handle;
+    try{
+      handle=await window.showSaveFilePicker({
+        suggestedName:filename,
+        types:[{description:'MP4 video',accept:{'video/mp4':['.mp4']}}]
+      });
+      writable=await handle.createWritable();
+    }catch(e){if(e.name!=='AbortError')error(e);return}
+  }else if(long){
+    status('Браузер не поддерживает потоковое сохранение: большой MP4 будет собираться в RAM. Для 20+ минут рекомендуем Chrome или Edge.');
+  }
   abort=new AbortController();setBusy(true);
   try{
-    showOperation('composition',0,'Экспортируем вертикальное видео со звуком…');
-    status('Кодирование MP4 со звуком. В зависимости от ПК может занять несколько минут...');
-    const blob=await exportClip(media,c,chunks,{quality:$('output-quality').value,onProgress:msg=>{
-      status(msg);
-      const match=String(msg).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
-      if(match)showOperation('composition',100*Number(match[1])/Number(match[2]),msg);
-      else showOperation('composition',null,msg);
-    },signal:abort.signal});
-    download(blob,safeName(c.title)+(c.status==='approved'?'':'_DRAFT')+'.mp4');
-    status('Экспорт завершён: '+(blob.size/1e6).toFixed(1)+' МБ');
-  }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e)}finally{abort=null;$('processing-panel').hidden=true;setBusy(false)}
+    showOperation('composition',0,'Кодируем '+Math.ceil(storyDuration(c)/60)+' мин оригинального видео…');
+    const blob=await exportClip(media,c,chunks,{
+      quality:$('output-quality').value,writable,signal:abort.signal,
+      onProgress:msg=>{
+        status(msg);
+        const match=String(msg).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
+        if(match)showOperation('composition',100*Number(match[1])/Number(match[2]),msg);
+        else showOperation('composition',null,msg);
+      }
+    });
+    if(blob)download(blob,filename);
+    status(writable?'Большой MP4 сохранён напрямую на диск.':
+      'Экспорт завершён: '+(blob.size/1e6).toFixed(1)+' МБ');
+  }catch(e){if(e.name==='AbortError')status('Экспорт остановлен');else error(e);
+    if(writable)try{await writable.abort()}catch{}
+  }finally{abort=null;$('processing-panel').hidden=true;setBusy(false)}
 };
 function loop(){
   const video=$('player'),c=current();
