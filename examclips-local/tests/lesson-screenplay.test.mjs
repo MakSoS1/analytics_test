@@ -32,3 +32,21 @@ test('one 20 minute exercise remains one screenplay',()=>{
  assert.equal(c.segments[0].end,1220);
  assert.equal(c.screenplay.beats.length,3);
 });
+
+test('agenda with technical keywords is not validated as a finished Docker lesson',()=>{
+ const agenda={start:0,end:20,text:'Сегодня мы поговорим о Docker, Kubernetes и CI/CD, рассмотрим план нашего курса и что будет дальше.'};
+ assert.equal(isNonTeachingIntroduction(agenda.text),true);
+ const [clip]=buildVerifiedLessonScreenplays([{id:'agenda',start:0,end:20}], [agenda]);
+ assert.equal(clip.screenplay.quality.readyForReview,false);
+ assert.equal(clip.editorialStatus,'needs-more-context');
+});
+test('unfinished final explanation is not misleadingly called a takeaway',()=>{
+ const chunks=[
+  {start:0,end:10,text:'Docker контейнеры позволяют изолировать процессы и приложения, используя образы для запуска.'},
+  {start:10,end:25,text:'Например контейнер получает независимую файловую систему и собственную конфигурацию сети.'}
+ ];
+ const [clip]=buildVerifiedLessonScreenplays([{id:'unfinished',start:0,end:25}],chunks);
+ assert.equal(clip.screenplay.beats.at(-1).role,'explanation');
+ assert.equal(clip.screenplay.quality.finished,false);
+ assert.ok(clip.screenplay.quality.issues.some(x=>x.includes('итог')));
+});
