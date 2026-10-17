@@ -11,13 +11,24 @@ try{
  await page.addInitScript(()=>{
   window.__batchRecords=[];
   window.showDirectoryPicker=async()=>({
-   getFileHandle:async(name)=>({createWritable:async()=>({
-    write:async(blob)=>{
-     const bytes=new Uint8Array(await blob.arrayBuffer());
-     window.__batchRecords.push({name,size:bytes.length,signature:String.fromCharCode(...bytes.slice(4,8))});
-    },
-    close:async()=>{},abort:async()=>{}
-   })})
+   getFileHandle:async(name)=>({
+     createWritable:async()=>{
+       const writes=[];
+       return new WritableStream({
+         write:async chunk=>{
+           if(chunk.type!=='write'||!Number.isFinite(chunk.position))
+             throw Error('Expected MediaBunny positional StreamTarget chunk');
+           writes.push({position:chunk.position,data:new Uint8Array(chunk.data)});
+         },
+         close:async()=>{
+           const length=Math.max(0,...writes.map(w=>w.position+w.data.length));
+           const bytes=new Uint8Array(length);
+           for(const part of writes)bytes.set(part.data,part.position);
+           window.__batchRecords.push({name,size:bytes.length,signature:String.fromCharCode(...bytes.slice(4,8))});
+         }
+       });
+     }
+   })
   });
  });
  await page.goto('http://127.0.0.1:5173/');
