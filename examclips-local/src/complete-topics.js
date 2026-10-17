@@ -12,7 +12,7 @@ import {isNonTeachingIntroduction} from './lesson-screenplay.js';
 import {isLectureHousekeeping,meaningfulTitle,topicEvidence} from './lecture-semantics.js';
 import {normalizeSlideChapters,chapterForTime,visualBoundaryBetween} from './lecture-outline.js';
 import {dedupeTranscriptRows,consolidateMicrotopics,assignExclusiveSource} from './topic-editorial-guardrails.js';
-import {lessonIdentity,rowLessonIdentity} from './lesson-identity.js';
+import {lessonIdentity,rowLessonIdentity,resolvedChapterKey} from './lesson-identity.js';
 
 const TRIVIAL=/^\s*(?:(?:ээ+|эм+|угу|ну|ага|ага-ага|okay|ok|um+|uh+|you know|ага да|да да)[\s.,!?]*){1,8}$/iu;
 const ADMIN=/(?:проверка микрофона|слышно меня|настроим проектор|техническ(?:ие|ая) проблем|организационный момент|начн[её]м через|подождите минут|перерыв на|дожд[её]мся участников|расписание следующего занятия|can you hear me|microphone check|technical difficulties|we(?:'ll| will) take a break|like and subscribe)/iu;
@@ -86,7 +86,7 @@ function asClip(rows,index,duration,chapter=null){
 function concept(row,chapter){
  const t=String(row.text||'');
  const inferred=topicEvidence(t);
- if(chapter?.key==='dockerfile')return rowLessonIdentity(row,chapter)?.key||'dockerfile-general';
+ if(resolvedChapterKey(chapter)==='dockerfile')return rowLessonIdentity(row,chapter)?.key||'dockerfile-general';
  if(/\b(?:what\s+is\s+(?:a\s+)?container|containers?\s+(?:are|is)|контейнер\s+это)\b/iu.test(t)&&
     !/\b(?:virtual\s+machines?|vm\b|hypervisor)\b/iu.test(t))
    return 'container-definition';
