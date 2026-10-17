@@ -568,3 +568,9 @@ footer{color:#93a3b8;text-align:center;font-size:10px;padding:17px 14px;backgrou
 .microtopic-chapter{min-width:0}
 .microtopic-chapter-heading{font-size:17px;color:#284c76;letter-spacing:-.3px;margin:4px 0 13px;padding:0 0 9px;border-bottom:1px solid #d4e2f1}
 .microtopic-chapter .microtopic-grid{margin:0}
+
+.microtopic-final-panel{display:grid;gap:9px;border-top:1px solid #d1dff0;padding-top:14px}
+.microtopic-final-panel[hidden]{display:none!important}
+.microtopic-final-panel strong{font-size:13px;color:#25598e}
+#microtopic-final-video{display:block;width:100%;max-width:270px;aspect-ratio:9/16;background:#101829;border-radius:12px;object-fit:contain;margin:0 auto}
+#microtopic-attach-video{font-size:12px;line-height:1.35;min-height:35px}
