@@ -8,6 +8,8 @@ const errors=[];
 try{
  const page=await browser.newPage({viewport:{width:1440,height:960},acceptDownloads:true});
  page.on('pageerror',e=>errors.push(e.message));
+ page.on('framenavigated',frame=>{if(frame===page.mainFrame())console.log('STORAGE_TEST_NAVIGATED',frame.url())});
+ await page.evaluate(()=>localStorage.setItem('__persistence_probe','persistent'));
  await page.goto('http://127.0.0.1:5173/');
  assert.ok(await page.locator('#library-section').isVisible());
  await page.locator('#video-file').setInputFiles('test-fixture.mp4');
@@ -38,7 +40,7 @@ try{
  },{timeout:12000});
  const beforeReload=await page.evaluate(async()=>{
   const m=await import('/src/project-library.js');
-  return {url:location.href,origin:location.origin,localId:localStorage.getItem('examclips-current-project-id'),
+  return {phase:document.querySelector('#app')?.dataset.phase,probe:localStorage.getItem('__persistence_probe'),url:location.href,origin:location.origin,localId:localStorage.getItem('examclips-current-project-id'),
    projects:(await m.listLibraryProjects()).map(x=>x.id),
    dbs:await indexedDB.databases()};
  });
@@ -48,7 +50,7 @@ try{
  catch(err){
   const diagnostics=await page.evaluate(async()=>{
    const m=await import('/src/project-library.js'),entries=await m.listLibraryProjects();
-   return {url:location.href,origin:location.origin,dbs:await indexedDB.databases(),phase:document.querySelector('#app')?.dataset.phase,
+   return {probe:localStorage.getItem('__persistence_probe'),url:location.href,origin:location.origin,dbs:await indexedDB.databases(),phase:document.querySelector('#app')?.dataset.phase,
     status:document.querySelector('#autosave-state')?.textContent,
     note:document.querySelector('#file-note')?.textContent,
     last:localStorage.getItem('examclips-current-project-id'),
