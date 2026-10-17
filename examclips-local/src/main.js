@@ -15,6 +15,7 @@ import {buildVerifiedLessonScreenplays,storyboardReadyForRendering} from './less
 import {renderMicrotopicCatalog,renderMicrotopicDetail} from './microtopic-catalog.js';
 import {lectureVisualReference} from './lecture-outline.js';
 import {dockerVisualSubtopics} from './visual-subtopic-hints.js';
+import {renderLectureCoverage} from './coverage-inspection.js';
 import {indexLectureSlides} from './slide-chapter-index.js';
 import {saveLibraryProject,listLibraryProjects,getLibraryProject,deleteLibraryProject,
  pickFileMetadata,sameVideoFile,cacheSmallOriginal,getCachedOriginal,deleteCachedOriginal,
@@ -267,7 +268,7 @@ function setupPrimaryTimeline(){
     '<p>Учебные главы и микротемы в порядке оригинальной лекции. Откройте карточку, чтобы посмотреть сценарий и видео.</p></div>',
     '<section id="microtopic-overview" class="catalog-section"><div class="panel-title"><b>Микротемы по порядку лекции</b><span class="muted">Обложки — реальные кадры исходного видео</span></div>',
     '<div class="catalog-refresh"><p class="hint">Если проект создан до обновления алгоритма, пересчитайте микротемы по полной расшифровке. Предыдущие автоматические границы будут заменены.</p><button id="catalog-reanalyze" type="button">↻ Заново определить микротемы</button></div>',
-    '<div id="microtopic-catalog" aria-live="polite"></div></section>',
+    '<div id="microtopic-catalog" aria-live="polite"></div><div id="microtopic-coverage-report"></div></section>',
     '<section id="microtopic-detail" class="microtopic-detail" hidden><button id="microtopic-back" type="button">← Все микротемы</button>',
     '<div id="microtopic-detail-evidence"></div>',
     '<div class="catalog-selected"><div class="catalog-preview-panel"><b>Вертикальный ролик · 9:16</b>',
@@ -944,6 +945,9 @@ function renderMicrotopics(){
   onPlay:i=>playCatalogTopic(i),
   onEdit:i=>{openMicrotopic(i);$('clip-title').focus()}
  });
+ if(media)renderLectureCoverage($('microtopic-coverage-report'),
+   dockerVisualSubtopics({name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height}),
+   clips,chunks);
  updateMicrotopicMode();
 }
 function renderClips(){
