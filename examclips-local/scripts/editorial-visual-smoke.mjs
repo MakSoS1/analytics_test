@@ -13,7 +13,9 @@ try{
    const {paintHybrid}=await import('/src/composition.js');
    const {makeStoryboard}=await import('/src/scene-model.js');
    const canvas=document.createElement('canvas');canvas.id='editorial-canvas';canvas.width=720;canvas.height=1280;
-   document.body.replaceChildren(canvas);
+   // Keep the application DOM intact: its asynchronous startup may still update UI nodes.
+   // The visual QA captures only this dedicated canvas, not the surrounding page.
+   document.body.appendChild(canvas);
    const slide=document.createElement('canvas');slide.width=1600;slide.height=900;
    const x=slide.getContext('2d');
    x.fillStyle='#fff';x.fillRect(0,0,1600,900);x.fillStyle='#1A263D';x.font='bold 72px Arial';x.fillText('Docker Networking',65,110);

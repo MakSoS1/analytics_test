@@ -45,6 +45,7 @@ try{
  assert.ok(await page.locator('#timeline-monitors').isVisible());
  // Editing lives under Montage, while timeline stays the primary default tab.
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+ await page.locator('.microtopic-card-title').first().click();
  assert.ok(await page.locator('#pane-clip').isVisible());
  assert.ok(!(await page.locator('#pane-timeline').isVisible()));
  await page.locator('#clip-start').fill('0.5');

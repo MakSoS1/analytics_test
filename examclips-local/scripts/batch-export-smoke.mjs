@@ -37,6 +37,7 @@ try{
  await page.locator('#srt-file').setInputFiles(resolve('test-fixture.srt'));
  await page.waitForFunction(()=>!document.querySelector('#export-all').disabled,{timeout:30000});
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+ await page.locator('.microtopic-card-title').first().click();
  await page.locator('#add').click();
  await page.locator('.top-navigation [data-editor-tab="export"]').click();
  await page.locator('#export-all').click();

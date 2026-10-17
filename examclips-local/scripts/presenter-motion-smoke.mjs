@@ -22,6 +22,7 @@ try{
  await page.locator('#srt-file').setInputFiles(subtitle);
  await page.waitForFunction(()=>!document.querySelector('#export').disabled);
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+ await page.locator('.microtopic-card-title').first().click();
  await page.locator('.controls .detail-settings summary').click();
   await page.locator('#layout').selectOption('hybrid');
  await page.locator('.top-navigation [data-editor-tab="export"]').click();

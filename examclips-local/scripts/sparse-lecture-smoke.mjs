@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const executablePath=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
 const browser=await chromium.launch({executablePath,headless:true,args:['--no-sandbox']});
 const srt=[
+ ['00:00:00,000','00:00:09,000','Меня зовут Алексей, моя должность доцент кафедры. Сначала расскажу о расписании занятий и правилах курса.'],
  ['00:00:10,000','00:00:28,000','Docker контейнеры позволяют изолировать приложения потому что они используют общее ядро системы. Например изоляция библиотек помогает запускать разные версии одного приложения независимо.'],
  ['00:00:40,000','00:01:00,000','Организационный момент проверка микрофона, подождите минуту. Давайте подождём участников и настроим проектор перед перерывом.'],
  ['00:01:35,000','00:01:56,000','Docker контейнер использует изолированный образ с библиотеками и настройками. Поэтому сервис можно воспроизводимо запускать на разных серверах, не настраивая каждый раз систему вручную.'],
@@ -32,9 +33,11 @@ try{
  assert.ok(percent>0&&percent<50,'Obvious organizational/filler sections were not excluded: '+JSON.stringify(result));
  assert.ok(result.kept.length>=3,'All 3 teaching explanations should remain: '+JSON.stringify(result));
  assert.ok(!result.kept.some(x=>x.left>=20&&x.left<=40),'Organizational mic break was selected');
+ assert.ok(!result.kept.some(x=>x.left<4),'Lecturer biography at the beginning must not be made into a clip');
  assert.ok(result.kept.some(x=>x.left>85),'Late educational explanation incorrectly dropped');
  await page.screenshot({path:'mvp-sparse-lecture-timeline.png',fullPage:false});
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+ await page.locator('.microtopic-card-title').first().click();
  assert.ok(await page.locator('#story-piece-list').isVisible());
  assert.deepEqual(errors,[]);
  console.log('FULL_CONTENT_SPARSE_LECTURE_SUCCESS',JSON.stringify({coveragePercent:percent,

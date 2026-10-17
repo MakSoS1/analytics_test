@@ -8,6 +8,13 @@
  */
 import {normalizeChunks,titleFromText} from './segments.js';
 import {tightSpeechPieces,sourceSegments,summarizeStoryPlan} from './selective-stories.js';
+import {isNonTeachingIntroduction} from './lesson-screenplay.js';
+import {isLectureHousekeeping,meaningfulTitle,topicEvidence} from './lecture-semantics.js';
+import {normalizeSlideChapters,chapterForTime,visualBoundaryBetween} from './lecture-outline.js';
+import {dedupeTranscriptRows,consolidateMicrotopics,assignExclusiveSource} from './topic-editorial-guardrails.js';
+import {lessonIdentity,rowLessonIdentity,resolvedChapterKey} from './lesson-identity.js';
+import {refineSubtopics} from './semantic-subtopics.js';
+import {applyVisualSubtopicGuides} from './visual-subtopic-hints.js';
 
 const TRIVIAL=/^\s*(?:(?:ээ+|эм+|угу|ну|ага|ага-ага|okay|ok|um+|uh+|you know|ага да|да да)[\s.,!?]*){1,8}$/iu;
 const ADMIN=/(?:проверка микрофона|слышно меня|настроим проектор|техническ(?:ие|ая) проблем|организационный момент|начн[её]м через|подождите минут|перерыв на|дожд[её]мся участников|расписание следующего занятия|can you hear me|microphone check|technical difficulties|we(?:'ll| will) take a break|like and subscribe)/iu;
@@ -31,11 +38,18 @@ function similarity(a,b){
 /** Evidence-first: KEEP material unless unmistakably organizational or empty. */
 export function isEducationalSpeech(text){
  const s=String(text||'').trim();
- if(!s||TRIVIAL.test(s))return false;
+ if(!s||TRIVIAL.test(s)||isLectureHousekeeping(s)||isNonTeachingIntroduction(s))return false;
  if(ADMIN.test(s)&&!TEACHING.test(s))return false;
  return true;
 }
-function asClip(rows,index,duration){
+function groupConceptHeading(rows,chapter){
+ const identity=lessonIdentity(rows,chapter);
+ // Only evidence from technical speech can override the slide chapter.
+ // A generic "Docker" or "container" must NEVER name a Dockerfile clip.
+ if(identity?.title)return identity.title;
+ return meaningfulTitle(rows);
+}
+function asClip(rows,index,duration,chapter=null,{verifiedTitle=null,verifiedConcept=null,visualTitle=null,visualSection=null}={}){
  const beginning=rows[0].start,end=rows.at(-1).end;
  // Observe gaps, preserve short breathing pauses; never synthesize speech.
  const pieces=tightSpeechPieces(rows).map(x=>({
@@ -49,8 +63,12 @@ function asClip(rows,index,duration){
  if(task)issues.push('Практическая задача оставлена целиком, даже если она длиннее обычного короткого видео');
  return {
    id:'topic-'+index,start:beginning,end,
-   segments:pieces,
-   title:titleFromText(rows.find(r=>TEACHING.test(r.text))?.text||joined),
+   segments:pieces,chapter:chapter?{title:chapter.title,key:chapter.key,source:chapter.source,start:chapter.start,end:chapter.end}:null,
+   thumbnailTime:beginning+Math.min(6,(end-beginning)*.2),
+   title:verifiedTitle||visualTitle||groupConceptHeading(rows,chapter),
+   verifiedConcept:verifiedConcept||null,
+   visualSection:visualSection||null,
+   visualBasis:visualTitle?'Кадры лекции + совпадения терминов с речью; окончательные границы требуют проверки':null,
    status:'needs-review',confidence:'low',method:'content-complete-extractive',
    layout:'hybrid',focusX:50,
    kind:task?'worked-exercise':'explanation',
@@ -64,45 +82,165 @@ function asClip(rows,index,duration){
  * Explicit new-topic transitions create boundaries; a running worked exercise
  * is kept together until the teacher concludes or clearly starts a NEW task.
  */
-export function planCompleteTopics(chunks,duration,{sceneCuts=[]}={}){
+/**
+ * Book-style planning: first assign time-ordered teaching utterances to
+ * chapters (visual hints / slide headings), then find sustained concept
+ * changes INSIDE each chapter. Do not create a clip for chapter names alone.
+ * No fixed output count, percentage, or arbitrary duration-based cut.
+ */
+function concept(row,chapter){
+ const t=String(row.text||'');
+ const inferred=topicEvidence(t);
+ if(resolvedChapterKey(chapter)==='dockerfile')return rowLessonIdentity(row,chapter)?.key||'dockerfile-general';
+ if(/\b(?:what\s+is\s+(?:a\s+)?container|containers?\s+(?:are|is)|контейнер\s+это)\b/iu.test(t)&&
+    !/\b(?:virtual\s+machines?|vm\b|hypervisor)\b/iu.test(t))
+   return 'container-definition';
+ if(/\b(?:difference\s+between\s+containers?\s+and\s+(?:virtual\s+machines?|vms?)|versus\s+(?:vm|virtual)|vs\.?\s+(?:vm|virtual)|отлич\w+\s+от\s+виртуальн)/iu.test(t))
+   return 'virtual-machines';
+ if(/\b(?:cache\s+layer|cache\s+invalid|docker\s+build\s+cache|кеширован\w*\s+сло)/iu.test(t))
+   return 'docker-build-cache';
+ if(/\b(?:multi.?stage|multiple\s+stages|нескольк\w*\s+этап\w*\s+сборк)/iu.test(t))
+   return 'docker-multistage';
+ if(/\b(?:bridge\s+networks?|docker\s+bridge|default\s+bridge|bridge\s+mode)/iu.test(t))return 'docker-bridge';
+ if(/\b(?:overlay\s+networks?|docker\s+overlay|overlay\s+mode)/iu.test(t))return 'docker-overlay';
+ if(/\b(?:host\s+networks?|network\s+host|network\s+none)/iu.test(t))return 'docker-host';
+ if(/\b(?:resource\s+limits?|cpu\s+limits?|memory\s+limits?|cgroups?)/iu.test(t))return 'resource-limits';
+ return inferred?.key==='docker-containers'?(chapter?.key||null):(inferred?.key||chapter?.key||null);
+}
+const CONTENT_START=/(?:\b(?:what\s+is\s+a\s+container|containers?\s+(?:are|is)|virtual\s+machines?\s+(?:are|is)|docker\s+(?:uses|allows)|for\s+example|because|means\s+that|in\s+contrast)\b|\b(?:что\s+такое|контейнер\s+это|например|потому\s+что|в\s+отличие\s+от)\b)/iu;
+function genericOpeningSkip(rows,duration){
+ // For ordinary short instructional recordings, do not enforce a time-based
+ // introductory exclusion. Look for consecutive introductory-language rows.
+ if(duration<150||rows.length<5)return 0;
+ let intro=0;
+ for(const c of rows){
+   if(c.start>Math.min(360,duration*.2))break;
+   if(isLectureHousekeeping(c.text)||isNonTeachingIntroduction(c.text)){
+     intro=Math.max(intro,c.end);continue;
+   }
+   if(CONTENT_START.test(c.text))break;
+   // Generic presenter/plan speech without examples is not convincing learning.
+   const terms=(c.text.match(/[\p{L}\p{N}]{4,}/gu)||[]).length;
+   if(c.start<180&&terms<7){intro=Math.max(intro,c.end);continue}
+   break;
+ }
+ return intro;
+}
+function splitChapter(rows,chapter,sceneCuts){
+ const groups=[];let current=[],practical=false,finished=false;
+ const emit=()=>{if(current.length)groups.push(current);current=[];practical=false;finished=false};
+ for(let i=0;i<rows.length;i++){
+  const row=rows[i],prev=current.at(-1),gap=prev?Math.max(0,row.start-prev.end):0;
+  const explicit=STRONG_CHANGE.test(row.text),newTask=PRACTICE_BEGIN.test(row.text);
+  const prior=current.slice(-Math.min(5,current.length)).map(x=>x.text).join(' ');
+  const clearlyDifferent=gap>100&&similarity(prior,row.text)<.08&&!practical;
+  const recent=current.slice(-4).map(x=>concept(x,chapter)).filter(Boolean);
+  const stable=recent.length>=2&&recent.slice(-2).every(x=>x===recent.at(-1));
+  const next=concept(row,chapter);
+  const nextNext=rows.slice(i,i+3).map(x=>concept(x,chapter)).filter(Boolean);
+  const repeated=next&&nextNext.filter(x=>x===next).length>=2;
+  const transitionIdentity=rowLessonIdentity(row,chapter);
+  const moved=stable&&next&&next!==recent.at(-1)&&next!=='docker-containers'&&
+    transitionIdentity?.specific&&repeated&&
+    (prev.end-current[0].start>=32)&&
+    (rows[Math.min(rows.length-1,i+2)].end-row.start>=20);
+  const visual=prev?sceneCuts.some(t=>Math.abs(t-row.start)<8&&
+    prev.start+15<row.start):false;
+  // Compare sustained adjacent explanations, not isolated terms.
+  const before=rows.slice(Math.max(0,i-3),i).map(r=>r.text).join(' ');
+  const after=rows.slice(i,i+3).map(r=>r.text).join(' ');
+  const coherentBefore=i>=4?similarity(rows.slice(Math.max(0,i-6),i-3).map(r=>r.text).join(' '),before):0;
+  const coherentAfter=i+4<rows.length?similarity(after,rows.slice(i+3,i+6).map(r=>r.text).join(' ')):0;
+  const strongShift=!!(current.length>=3&&row.start-current[0].start>=55&&
+    similarity(before,after)<.10&&coherentBefore>.13&&coherentAfter>.13);
+  // A noun mentioned once isn't a new lesson. Require sustained explanation
+  // and either specific new evidence or a real visual/announced transition.
+  const topical=!!(!practical&&current.length>=2&&
+    ((moved&&prev.end-current[0].start>=32)||
+     (strongShift&&visual&&rows[Math.min(rows.length-1,i+2)].end-row.start>=20)));
+  const boundary=!!(current.length&&(explicit||(newTask&&practical&&finished)||
+    clearlyDifferent||(!practical&&topical)));
+  if(boundary)emit();
+  current.push(row);
+  if(newTask)practical=true;
+  if(PRACTICE_END.test(row.text))finished=true;
+ }
+ emit();
+ return groups;
+}
+/**
+ * Outline chapters come from slide OCR or a validated per-video reference.
+ * Scene cuts alone are weak evidence: they never create arbitrary stories.
+ */
+export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[],visualHints=[]}={}){
  if(!Number.isFinite(duration)||duration<=0)
   return {clips:[],candidates:[],excluded:[],summary:summarizeStoryPlan([],0)};
  const all=normalizeChunks(chunks,duration);
+ const deDuplicated=dedupeTranscriptRows(all);
  if(!all.length)return {clips:[],candidates:[],excluded:[],summary:summarizeStoryPlan([],duration)};
- const kept=[],excluded=[];
- for(const row of all){
-   if(isEducationalSpeech(row.text))kept.push(row);
-   else excluded.push({start:row.start,end:row.end,reason:'Очевидный организационный разговор или слова-паразиты'});
+ const outline=normalizeSlideChapters(chapters,duration);
+ const beginning=outline.length?0:genericOpeningSkip(all,duration);
+ const kept=[],excluded=[...deDuplicated.removed];
+ for(const row of deDuplicated.rows){
+  const chapter=chapterForTime(outline,(row.start+row.end)/2);
+  if(chapter?.key==='introduction'||(beginning>0&&row.end<=beginning)||
+    !isEducationalSpeech(row.text)){
+   excluded.push({start:row.start,end:row.end,reason:chapter?.key==='introduction'?
+     'Вступление/биография/план занятия (визуально подтверждено)':
+     'Организационная или неинформативная речь'});
+  }else kept.push(row);
  }
  if(!kept.length)return {clips:[],candidates:[],excluded,summary:summarizeStoryPlan([],duration)};
- const groups=[];let current=[],practical=false,finished=false;
- const emit=()=>{if(current.length)groups.push(current);current=[];practical=false;finished=false};
+ const chapterGroups=[];let bucket=[],owner=null;
+ const emit=()=>{if(bucket.length)chapterGroups.push({rows:bucket,chapter:owner});bucket=[]};
  for(const row of kept){
-   const explicit=STRONG_CHANGE.test(row.text);
-   const newTask=PRACTICE_BEGIN.test(row.text);
-   const gap=current.length?Math.max(0,row.start-current.at(-1).end):0;
-   const prior=current.slice(-Math.min(current.length,5)).map(x=>x.text).join(' ');
-   const clearlyDifferent=gap>150&&similarity(prior,row.text)<.10&&!practical&&current.length>0;
-   // Within an active worked exercise steps/derivations should NOT cause new clips.
-   // A second explicitly introduced problem begins a new completed lesson.
-   const boundary=current.length>0&&(explicit||(newTask&&practical&&finished)||clearlyDifferent);
-   if(boundary)emit();
-   current.push(row);
-   if(newTask)practical=true;
-   if(PRACTICE_END.test(row.text))finished=true;
+  const chapter=chapterForTime(outline,(row.start+row.end)/2);
+  const chapterId=chapter?.start??null;
+  const priorId=owner?.start??null;
+  const prev=bucket.at(-1);
+  const chapterChanged=bucket.length>0&&chapterId!==priorId;
+  const nearbyBoundary=prev&&visualBoundaryBetween(outline,prev,row);
+  // A known slide-title transition ends the previous chapter, not just a
+  // timer tick. If ASR skipped the slide transition, the speech still aligns.
+  if(chapterChanged||nearbyBoundary)emit();
+  bucket.push(row);owner=chapter;
  }
  emit();
- const clips=groups.map((rows,i)=>asClip(rows,i+1,duration)).filter(c=>sourceSegments(c).length);
+ const groups=[];
+ for(const {rows,chapter} of chapterGroups)
+  for(const group of splitChapter(rows,chapter,sceneCuts))
+    groups.push({rows:group,chapter});
+ const visuallyAligned=applyVisualSubtopicGuides(groups,visualHints);
+ const finer=refineSubtopics(visuallyAligned);
+ const refined=consolidateMicrotopics(finer);
+ excluded.push(...refined.omitted);
+ const clips=assignExclusiveSource(refined.groups.map(({rows,chapter,editorialNotes,verifiedTitle,verifiedConcept,visualTitle,visualSection},i)=>{
+  const clip=asClip(rows,i+1,duration,chapter,{verifiedTitle,verifiedConcept,visualTitle,visualSection});
+  if(editorialNotes?.length)clip.reviewReasons.push(...editorialNotes);
+  return clip;
+ })).filter(c=>sourceSegments(c).length&&c.outputSeconds>=12);
  const summary=summarizeStoryPlan(clips,duration);
- const candidateRows=groups.map((rows,i)=>({
+ const candidateRows=refined.groups.map(({rows,chapter},i)=>({
    id:'candidate-'+(i+1),start:rows[0].start,end:rows.at(-1).end,
    text:rows.map(r=>r.text).join(' '),
-   sourcePieces:tightSpeechPieces(rows),
-   reason:'Полная содержательная тема, предварительная граница',score:1
+   chapter:chapter?.title||null,sourcePieces:tightSpeechPieces(rows),
+   reason:'Учебная микротема в последовательной главе',score:1
  }));
- return {clips,candidates:candidateRows,excluded,
-   summary:{...summary,excludedUtterances:excluded.length,
-     processedUtterances:all.length,keptUtterances:kept.length,
-     completionMode:'all-educational-speech',
-     incompleteTranscript:kept.at(-1).end<duration-5}};
+ return {clips,candidates:candidateRows,excluded,chapters:outline,
+  summary:{...summary,excludedUtterances:excluded.length,
+   processedUtterances:all.length,keptUtterances:Math.max(0,kept.length-refined.omitted.length),
+   completionMode:'hierarchical-reviewed',
+   chapters:chapterGroups.length,
+   rawTopicCandidates:groups.length,
+   semanticSubtopicCandidates:finer.length,
+   evidencedSubtopicSplits:Math.max(0,finer.length-groups.length),
+   visualSubtopicCandidates:visuallyAligned.length,
+   visualEvidenceSplitCount:Math.max(0,visuallyAligned.length-groups.length),
+   editorialMerges:refined.mergedCount,
+   duplicateUtterances:deDuplicated.removed.length,
+   rejectedFragments:refined.omitted.length,
+   nonOverlappingSource:true,
+   excludedIntroSeconds:+excluded.filter(x=>x.reason.includes('Вступление'))
+    .reduce((n,x)=>n+x.end-x.start,0).toFixed(2),
+   incompleteTranscript:kept.at(-1).end<duration-5}};
 }

@@ -31,6 +31,7 @@ try{
   const count=await page.locator('#clip-count').innerText();assert.equal(count,'1');
   const title=await page.locator('#clip-title').inputValue();assert.ok(title.length>0);
   await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+  await page.locator('.microtopic-card-title').first().click();
   await page.locator('.controls .detail-settings summary').click();
   await page.locator('#layout').selectOption('hybrid');
   await page.screenshot({path:resolve(cwd,'smoke-ui.png'),fullPage:true});
@@ -46,6 +47,8 @@ try{
       assert.ok(info.streams.some(s=>s.codec_type==='video'&&s.width===720&&s.height===1280));
       assert.ok(info.streams.some(s=>s.codec_type==='audio'));
       console.log('MP4_SMOKE_SUCCESS',info.format.duration,info.format.size);
+      const playable=await page.locator('#microtopic-final-video').getAttribute('src');
+      assert.ok(playable?.startsWith('blob:'),'Exported MP4 must be playable inside the selected microtopic');
       await page.locator('#output-quality').selectOption('high');
       const [hdDownload]=await Promise.all([
         page.waitForEvent('download',{timeout:120000}),
