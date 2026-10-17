@@ -26,6 +26,7 @@ try{
  }));
  assert.ok(metrics.inner>=metrics.viewport*7,'Timeline did not zoom: '+JSON.stringify(metrics));
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+ await page.locator('.microtopic-card-title').first().click();
  await page.locator('#clip-title').fill('Сохранённая тема Docker');
  await page.locator('.top-navigation [data-editor-tab="timeline"]').click();
  console.log('AUTOSAVE_INITIAL_STATE',await page.evaluate(()=>({
@@ -76,6 +77,7 @@ try{
  }
  assert.equal(await page.locator('#timeline-zoom-label').textContent(),'8×');
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+ await page.locator('.microtopic-card-title').first().click();
  assert.equal(await page.locator('#clip-title').inputValue(),'Сохранённая тема Docker');
  // Return immediately after an edit, BEFORE the 550ms debounce expires.
  // A pre-existing in-flight IndexedDB save must not overwrite this latest title.
@@ -88,6 +90,7 @@ try{
  await page.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results');
  assert.equal(await page.locator('#timeline-zoom-label').textContent(),'8×');
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+ await page.locator('.microtopic-card-title').first().click();
  assert.equal(await page.locator('#clip-title').inputValue(),'Docker — быстрый переход с сохранением');
  assert.deepEqual(errors,[]);
  console.log('LIBRARY_RELOAD_ZOOM_SUCCESS',JSON.stringify({
