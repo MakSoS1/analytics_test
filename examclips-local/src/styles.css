@@ -574,3 +574,13 @@ footer{color:#93a3b8;text-align:center;font-size:10px;padding:17px 14px;backgrou
 .microtopic-final-panel strong{font-size:13px;color:#25598e}
 #microtopic-final-video{display:block;width:100%;max-width:270px;aspect-ratio:9/16;background:#101829;border-radius:12px;object-fit:contain;margin:0 auto}
 #microtopic-attach-video{font-size:12px;line-height:1.35;min-height:35px}
+
+.microtopic-coverage-review{margin:28px 0 10px;padding:20px;background:var(--panel,#fff);border:1px solid #d6e3f1;border-radius:14px;overflow:auto}
+.microtopic-coverage-review h3{margin:0 0 8px;color:#254b7b;font-size:17px}
+.microtopic-coverage-review p{line-height:1.5;margin:0 0 16px}
+.coverage-check-table{width:100%;border-collapse:collapse;font-size:12px;min-width:620px}
+.coverage-check-table th{text-align:left;padding:9px;border-bottom:2px solid #dae6f3;color:#285685}
+.coverage-check-table td{padding:9px;border-bottom:1px solid #e5edf5}
+.coverage-check-table tr[data-status="not-in-clips"] td:last-child{color:#b25030;font-weight:700}
+.coverage-check-table tr[data-status="merged-into-chapter"] td:last-child{color:#9b751a;font-weight:700}
+.coverage-check-table tr[data-status="separate-video"] td:last-child{color:#267951;font-weight:700}
