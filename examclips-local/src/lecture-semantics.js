@@ -24,6 +24,7 @@ const AGENDA=/(?:\b(?:lecture\s*(?:1|one)\s*(?:brief|overview|agenda)|agenda|cou
 const BIO=/(?:\babout\s+me\b|\b(?:i\s+(?:am|work|have|used\s+to)|my\s+(?:name|background|experience|career)|\d{1,2}\+?\s+years?\s+(?:of\s+)?(?:experience|development)|years?\s+(?:in|of)\s+(?:software|development|industry)|i(?:'ve|\s+have)\s+been\s+(?:working|developing))\b|\b(?:меня\s+зовут|мой\s+опыт|мой\s+стаж|я\s+(?:работаю|преподаю)|немного\s+о\s+себе|доцент\s+кафедры)\b)/iu;
 const LOGISTICS=/(?:\b(?:microphone|sound\s+check|can\s+you\s+hear|course\s+schedule|grading|semester|homework\s+deadline|attendance|office\s+hours|let\s+me\s+share\s+my\s+screen)\b|(?:расписани\w*|проверка\s+микрофона|как\s+будет\s+проходить\s+курс|организационн\w*\s+момент))/iu;
 const ENUM=/(?:,|;|\/|\b(?:and|or)\b|\b(?:и|или)\b)/giu;
+const LECTURE_TITLE=/(?:\blecture\s*(?:\d+|one|two|three)\b|\b(?:highload|high-availability)\s+systems\b|лекц(?:ия|ии)\s*\d+)/iu;
 /**
  * Remove clearly introductory biography/outline rows; never reject an
  * evidenced technical explanation just because it begins with "today".
@@ -31,6 +32,7 @@ const ENUM=/(?:,|;|\/|\b(?:and|or)\b|\b(?:и|или)\b)/giu;
 export function isLectureHousekeeping(text){
  const s=String(text||'').trim();
  if(!s)return true;
+ if(LECTURE_TITLE.test(s)&&(s.match(WORDS)||[]).length<=15&&!TEACHING_SIGNAL.test(s))return true;
  if(LOGISTICS.test(s)&&!TEACHING_SIGNAL.test(s))return true;
  if(BIO.test(s)&&!/(?:for example|например|means|то есть|потому что)/iu.test(s))return true;
  if(AGENDA.test(s)){
