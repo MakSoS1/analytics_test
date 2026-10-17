@@ -31,6 +31,7 @@ try{
   const count=await page.locator('#clip-count').innerText();assert.equal(count,'1');
   const title=await page.locator('#clip-title').inputValue();assert.ok(title.length>0);
   await page.locator('.top-navigation [data-editor-tab="clip"]').click();
+  await page.locator('.microtopic-card-title').first().click();
   await page.locator('.controls .detail-settings summary').click();
   await page.locator('#layout').selectOption('hybrid');
   await page.screenshot({path:resolve(cwd,'smoke-ui.png'),fullPage:true});
