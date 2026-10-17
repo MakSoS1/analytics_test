@@ -49,6 +49,10 @@ jobs:
         run: |
           ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=white:s=320x180:r=2 -f lavfi -i sine=frequency=441:sample_rate=16000 -t 180 -c:v libx264 -preset ultrafast -c:a aac -shortest selective-lecture-fixture.mp4
           node scripts/sparse-lecture-smoke.mjs
+      - name: 20-minute practice problem is one complete microtopic in the browser
+        run: |
+          ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=white:s=320x180:r=1 -f lavfi -i sine=frequency=440:sample_rate=8000 -t 1250 -c:v libx264 -preset ultrafast -c:a aac -shortest long-exercise-fixture.mp4
+          node scripts/long-worked-example-smoke.mjs
       - name: Browser integration test
         run: |
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-vite.log 2>&1 &
