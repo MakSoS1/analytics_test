@@ -156,7 +156,9 @@ function splitChapter(rows,chapter,sceneCuts){
   const strongShift=!!(current.length>=3&&row.start-current[0].start>=55&&
     similarity(before,after)<.10&&coherentBefore>.13&&coherentAfter>.13);
   const topical=!!((moved&&current.length>=2&&
-    ((visual&&gap>2)||current.length>=3||gap>12))||
+    // Two independently aligned utterances can establish an independent
+    // educational concept even when a lecturer switches without a pause.
+    (repeated||(visual&&gap>2)||current.length>=3||gap>12))||
     (!practical&&strongShift&&(visual||gap>10||explicit)));
   const boundary=!!(current.length&&(explicit||(newTask&&practical&&finished)||
     clearlyDifferent||(!practical&&topical)));
