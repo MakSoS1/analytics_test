@@ -10,7 +10,7 @@ test('the 26 original slide concepts are independently accounted for in the UI a
   cue(835,883,'COPY transfers application source files while WORKDIR sets the execution directory, so the complete application image builds reproducibly with each changed instruction.'),
   cue(942,1000,'Docker build cache reuses filesystem layers when dependencies have not changed; this avoids reinstalling packages during repeated builds and reduces compilation time.'),
   cue(1001,1083,'A Dockerfile cache invalidation triggers the subsequent image layers to build again, so command ordering makes a considerable difference to the final build time.'),
-  cue(2790,2860,'The host network shares the underlying host machine networking stack directly, removing network isolation and allowing applications inside containers to use host IP addresses and network ports.')
+  cue(2790,2860,'The host network shares the underlying host machine networking stack directly, removing network isolation and allowing applications inside containers to use host IP addresses and network ports; this can improve performance but may cause port conflicts when multiple services are running.')
  ];
  const guide=DOCKER_VISUAL_TOPICS;
  const visuals=guide.filter(x=>x.start===800||x.start===938||x.start===2780);
