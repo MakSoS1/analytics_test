@@ -563,3 +563,8 @@ footer{color:#93a3b8;text-align:center;font-size:10px;padding:17px 14px;backgrou
  .microtopic-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr));gap:12px}
  .microtopic-detail-script,.microtopic-detail-transcript,.microtopic-detail-summary{padding:13px}
 }
+
+.microtopic-chapters{display:grid;gap:30px}
+.microtopic-chapter{min-width:0}
+.microtopic-chapter-heading{font-size:17px;color:#284c76;letter-spacing:-.3px;margin:4px 0 13px;padding:0 0 9px;border-bottom:1px solid #d4e2f1}
+.microtopic-chapter .microtopic-grid{margin:0}
