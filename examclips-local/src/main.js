@@ -24,7 +24,7 @@ const isLocalDesktop=['localhost','127.0.0.1','::1'].includes(window.location.ho
 let localReviewAvailable=false;
 const root=document.querySelector('#app');
 let currentProjectId=null,currentSourceHandle=null,attachedSourceMeta=null,pendingLibraryEntry=null;
-let autosaveTimer=null,saving=false,saveAgain=false,isSwitchingProject=false;
+let autosaveTimer=null,saveQueue=Promise.resolve(),isSwitchingProject=false;
 let timelineView={zoom:1,offset:0};
 root.dataset.phase='upload';
 root.innerHTML=`
@@ -393,7 +393,7 @@ function initMvpEvents(){
    e.preventDefault();setTimelineZoom(timelineView.zoom+(e.deltaY<0?1:-1));
  },{passive:false});
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&currentProjectId){
-   clearTimeout(autosaveTimer);flushProjectSave();
+   clearTimeout(autosaveTimer);flushProjectSave().catch(()=>{});
  }});
 
  $('settings-toggle').onclick=()=>{
@@ -487,38 +487,46 @@ function buildCurrentSnapshot(){
     offset:$('timeline-viewport').scrollLeft/Math.max(1,$('timeline-canvas').scrollWidth)}
  });
 }
-async function flushProjectSave(){
- if(!currentProjectId||!media||isSwitchingProject)return;
- if(saving){saveAgain=true;return}
- saving=true;saveAgain=false;
- $('autosave-state').textContent='Сохраняем таймлайн…';
- try{
-   const previous=await getLibraryProject(currentProjectId).catch(()=>null);
-   const item={
-     id:currentProjectId,createdAt:previous?.createdAt||new Date().toISOString(),
-     updatedAt:new Date().toISOString(),title:sourceLabel(),duration:media.duration,
-     source:pickFileMetadata(sourceFile),fileHandle:currentSourceHandle||previous?.fileHandle||null,
-     snapshot:buildCurrentSnapshot()
-   };
-   try{await saveLibraryProject(item)}
-   catch(err){
-     // Some browsers do not structured-clone FileSystemHandle in IndexedDB.
-     if(item.fileHandle){item.fileHandle=null;await saveLibraryProject(item)}
-     else throw err;
-   }
-   try{localStorage.setItem(LIBRARY_LAST,currentProjectId)}catch{}
-   $('autosave-state').textContent='✓ Таймлайн сохранён на этом устройстве';
- }catch(err){
-   $('autosave-state').textContent='Не удалось сохранить проект: '+String(err.message||err).slice(0,100);
- }finally{
-   saving=false;
-   if(saveAgain&&!isSwitchingProject)scheduleProjectSave();
+function flushProjectSave(){
+ if(!currentProjectId||!media||isSwitchingProject)return saveQueue;
+ // Snapshot now and serialize IndexedDB writes. A slower earlier edit cannot
+ // overwrite a newer one, including during immediate navigation.
+ const projectId=currentProjectId,source=pickFileMetadata(sourceFile);
+ const handle=currentSourceHandle,duration=media.duration,title=sourceLabel();
+ let snapshot;
+ try{snapshot=buildCurrentSnapshot()}catch(err){
+   $('autosave-state').textContent='Не удалось подготовить проект: '+String(err.message||err).slice(0,100);
+   return Promise.reject(err);
  }
+ $('autosave-state').textContent='Сохраняем таймлайн…';
+ const persist=async()=>{
+   try{
+     const previous=await getLibraryProject(projectId).catch(()=>null);
+     const item={id:projectId,createdAt:previous?.createdAt||new Date().toISOString(),
+       updatedAt:new Date().toISOString(),title,duration,source,
+       fileHandle:handle||previous?.fileHandle||null,snapshot};
+     try{await saveLibraryProject(item)}
+     catch(err){
+       if(item.fileHandle){item.fileHandle=null;await saveLibraryProject(item)}
+       else throw err;
+     }
+     if(currentProjectId===projectId){
+       try{localStorage.setItem(LIBRARY_LAST,projectId)}catch{}
+       $('autosave-state').textContent='✓ Таймлайн сохранён на этом устройстве';
+     }
+   }catch(err){
+     if(currentProjectId===projectId)$('autosave-state').textContent=
+       'Не удалось сохранить проект: '+String(err.message||err).slice(0,100);
+     throw err;
+   }
+ };
+ saveQueue=saveQueue.catch(()=>{}).then(persist);
+ return saveQueue;
 }
 function scheduleProjectSave(){
  if(!currentProjectId||!media||isSwitchingProject)return;
  clearTimeout(autosaveTimer);
- autosaveTimer=setTimeout(()=>{autosaveTimer=null;flushProjectSave()},550);
+ autosaveTimer=setTimeout(()=>{autosaveTimer=null;flushProjectSave().catch(()=>{})},550);
 }
 async function renderLibrary(){
  const box=$('library-items');box.replaceChildren();
@@ -578,7 +586,10 @@ async function openSavedProject(id){
 }
 async function backToLibrary(){
  if(busy){status('Сначала остановите текущую операцию.');return}
- clearTimeout(autosaveTimer);await flushProjectSave();
+ clearTimeout(autosaveTimer);
+ try{await flushProjectSave()}catch(err){
+   status('Не удалось сохранить изменения: '+err.message+'. Остаёмся в редакторе.');return;
+ }
  isSwitchingProject=true;
  try{
   $('player').pause();
@@ -870,8 +881,14 @@ async function selectFile(file){
       '» такого же размера и даты изменения. Проект не изменён.';
     $('video-file').value='';return;
   }
-  isSwitchingProject=true;
+  // Persist the current lecture when the user drops a different source directly.
   clearTimeout(autosaveTimer);
+  if(media&&currentProjectId&&!isSwitchingProject){
+    try{await flushProjectSave()}catch(err){
+      status('Предыдущий проект не удалось сохранить: '+err.message);return;
+    }
+  }
+  isSwitchingProject=true;
   setBusy(true);status('Чтение локальных метаданных...');
   try{
     if(media)await media.input.dispose();
