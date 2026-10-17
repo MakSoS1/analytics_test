@@ -25,12 +25,12 @@ function coverage(a,b){
 }
 function charFingerprint(value){return String(value||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/gu,' ')}
 /** Removes *actual* duplicates. Reusing Docker terms does not imply repeated teaching. */
-export function dedupeTranscriptRows(rows, {maxRepeatGap=180}={}){
+export function dedupeTranscriptRows(rows, {maxRepeatGap=2.5}={}){
  const sorted=[...rows].sort((a,b)=>a.start-b.start||a.end-b.end);
  const clean=[],removed=[];
  for(const row of sorted){
    const fp=charFingerprint(row.text);
-   const recent=clean.slice(-30).find(x=>row.start-x.start<maxRepeatGap&&
+   const recent=clean.slice(-30).find(x=>row.start-x.end<maxRepeatGap&&
      (charFingerprint(x.text)===fp||
        (fp.length>=55&&x.text.length>=55&&
         jaccard(tokens(row.text),tokens(x.text))>.94&&
@@ -56,10 +56,13 @@ function compatible(a,b){
  if(!a||!b)return false;
  const x=groupInfo(a),y=groupInfo(b);
  if(y.begin-x.end>35)return false; // don't jump across lengthy unrelated material
- if(sameChapter(a,b))return true;
- // Two different slide headings can be different parts of ONE explanation;
- // require actual shared vocabulary, not just temporal proximity.
- return commonEvidence(a,b)>.42;
+ const shared=commonEvidence(a,b),backwards=commonEvidence(b,a);
+ // The same slide may contain several distinct lessons. Never combine two
+ // different concepts merely because their chapter heading matches.
+ if(sameChapter(a,b))return shared>.24||backwards>.24||
+   (groupInfo(b).seconds<12&&shared>.13);
+ // Across distinct slide headings, demand strong explanatory continuity.
+ return shared>.62&&backwards>.48;
 }
 function combine(a,b){
  return {rows:[...a.rows,...b.rows].sort((x,y)=>x.start-y.start),
@@ -67,14 +70,17 @@ function combine(a,b){
 }
 function brief(g){
  const v=groupInfo(g);
- // Hard stop: never produce a meaningless 4-9s clip. Below ~30s prefer
- // adjacent context if available; 20+s with at least 35 spoken words
- // and two sources may be a complete concise instructional answer.
- return v.seconds<30||v.words<30||g.rows.length<2;
+ // Don't punish slowly spoken / sparse synthetic transcripts which still
+ // span a coherent explanation. A short candidate is a TIME/context issue.
+ return v.seconds<28||(v.seconds<40&&v.words<15)||
+   (g.rows.length<2&&v.seconds<18);
 }
 function viable(g){
  const x=groupInfo(g);
- return x.seconds>=12&&x.words>=16&&(g.rows.length>=2||x.seconds>=25);
+ const sentence=g.rows.map(r=>r.text).join(' ');
+ const explanatory=/(?:потому|поэтому|например|позволя|означает|представляет|в\s+отличие|for example|because|means|allow|is\s+a|are\s+a)/iu.test(sentence);
+ return x.seconds>=12&&x.words>=14&&
+   (g.rows.length>=2||x.seconds>=26||(x.seconds>=17&&explanatory));
 }
 /**
  * Merge only coherent adjacent micro-candidates; discard isolated
@@ -89,7 +95,7 @@ export function consolidateMicrotopics(proposals){
    const before=working[i-1],after=working[i+1];
    const prevCompatible=compatible(before,g);
    const nextCompatible=compatible(g,after);
-   if(prevCompatible||nextCompatible){
+   if((prevCompatible||nextCompatible)&&groupInfo(g).seconds<28){
      if(prevCompatible&&(!nextCompatible||commonEvidence(g,before)>=commonEvidence(g,after))){
        working[i-1]=combine(before,g);working.splice(i,1);
      }else{
