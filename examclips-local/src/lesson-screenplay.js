@@ -4,8 +4,8 @@
  * Checks "informative/not a biography", coherent theme and unfinished endings.
  */
 import {sourceSegments} from './selective-stories.js';
-const INTRO=/\b(?:меня зовут|мне \d{2} лет|я работаю|моя должность|я преподаю|мой стаж|немного о себе|пару слов о себе|биография|доцент кафедры|профессор кафедры|расписание занятий|как будет проходить курс|сегодня познакомимся|записывайте мой email|записывайте мою почту|поставьте лайк|подпишитесь|my name is|i am a professor|i work at|my background|about myself|office hours|course schedule|welcome to the course)\b/iu;
-const TEACH=/\b(?:почему|как работает|что происходит|например|поэтому|потому|разбер|реша|задач|формул|алгоритм|проверим|покажем|получается|следовательно|таким образом|вывод|доказа|конечно|docker|контейнер|образ|оркестрац|how|why|because|solve|example|result|algorithm|exercise)\b/iu;
+const INTRO=/(?:меня зовут|мне \d{2} лет|я работаю|моя должность|я преподаю|мой стаж|немного о себе|пару слов о себе|биография|доцент кафедры|профессор кафедры|расписание занятий|как будет проходить курс|сегодня познакомимся|записывайте мой email|записывайте мою почту|поставьте лайк|подпишитесь|my name is|i am a professor|i work at|my background|about myself|office hours|course schedule|welcome to the course)/iu;
+const TEACH=/(?:почему|как работает|что происходит|например|поэтому|потому|разбер|реша|задач|формул|алгоритм|проверим|покажем|получается|следовательно|таким образом|вывод|доказа|конечно|docker|контейнер|образ|оркестрац|how|why|because|solve|example|result|algorithm|exercise)/iu;
 const FINISH=/(?:итак|таким образом|мы получили|получили ответ|проверили результат|это объясняет|на этом задача|итог|вывод|мы доказали|therefore|conclusion|the result is|we solved|the solution is)/iu;
 const WORDS=/[\p{L}\p{N}]+/gu;
 const tokenize=text=>String(text||'').toLowerCase().match(WORDS)||[];
