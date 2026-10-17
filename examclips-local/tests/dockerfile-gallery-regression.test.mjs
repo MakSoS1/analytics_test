@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {lessonIdentity,distinctVerifiedConcept,rowLessonIdentity} from '../src/lesson-identity.js';
+import {lessonIdentity,distinctVerifiedConcept,rowLessonIdentity,resolvedChapterKey} from '../src/lesson-identity.js';
 import {consolidateMicrotopics} from '../src/topic-editorial-guardrails.js';
 import {planCompleteTopics} from '../src/complete-topics.js';
 import {storyDuration} from '../src/selective-stories.js';
@@ -77,4 +77,19 @@ test('same Dockerfile chapter and coherent continuously spoken ASR is never spli
  assert.ok(plan.clips.every(c=>storyDuration(c)>=50),'An 18-second isolated caption is not a standalone educational short');
  assert.ok(plan.clips.every(c=>!/Что такое контейнер/i.test(c.title)),plan.clips.map(c=>c.title).join(' | '));
  assert.ok(plan.clips.every(c=>c.chapter?.key==='dockerfile'));
+});
+
+test('renamed uploaded Docker lecture uses its OCR slide title, not a filename whitelist',()=>{
+ const ocr={start:800,end:1450,title:'Dockerfile: Production-Grade Images',key:'slide-heading'};
+ assert.equal(resolvedChapterKey(ocr),'dockerfile');
+ const rows=[
+  row(803,830,'Docker containers use images and a file to define production builds.'),
+  row(832,867,'Dockerfile instructions define how our image is built and how dependencies are installed.')
+ ];
+ const title=lessonIdentity(rows,ocr).title;
+ assert.match(title,/Dockerfile/);
+ assert.doesNotMatch(title,/Что такое контейнер/);
+ const plan=planCompleteTopics(rows,1450,{chapters:[ocr]});
+ assert.equal(plan.clips.length,1);
+ assert.match(plan.clips[0].title,/Dockerfile/);
 });
