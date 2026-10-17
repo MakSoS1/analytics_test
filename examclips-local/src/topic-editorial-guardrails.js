@@ -7,6 +7,7 @@
  *
  * No quota or maximum clip length. Decisions are deterministic and auditable.
  */
+import {lessonIdentity,distinctVerifiedConcept} from './lesson-identity.js';
 const WORD=/[\p{L}\p{N}]{3,}/gu;
 const STOP=new Set('the and from with this that what then they them these there into your for are was were will shall can may who how when because therefore also have has had our you for example например поэтому значит который которая которые также будет можно для как при этой этого этом теме topic docker containers container'.split(/\s+/));
 export const tokens=text=>(String(text||'').toLowerCase().match(WORD)||[]).filter(w=>!STOP.has(w));
@@ -55,17 +56,23 @@ function commonEvidence(a,b){
  const aWords=setText(a.rows),bWords=setText(b.rows);
  return coverage(aWords,bWords);
 }
+const NEW_TOPIC=/^\s*(?:now\s+(?:let'?s\s+)?(?:move|switch)|moving\s+on|next\s+topic|let'?s\s+move\s+to\s+(?:a\s+)?different\s+topic|теперь\s+перейд[её]м|следующая\s+тема|переходим\s+к\s+(?:другой|новой|следующей)\s+теме)/iu;
 function compatible(a,b){
  if(!a||!b)return false;
- const x=groupInfo(a),y=groupInfo(b);
- if(y.begin-x.end>35)return false; // don't jump across lengthy unrelated material
+ const x=groupInfo(a),y=groupInfo(b),gap=y.begin-x.end;
+ if(gap>35)return false; // never jump across a lengthy unrelated passage
+ if(NEW_TOPIC.test(b.rows[0]?.text||''))return false;
+ if(distinctVerifiedConcept(a,b))return false;
  const shared=commonEvidence(a,b),backwards=commonEvidence(b,a);
- // The same slide may contain several distinct lessons. Never combine two
- // different concepts merely because their chapter heading matches.
- if(sameChapter(a,b))return shared>.24||backwards>.24||
-   (groupInfo(b).seconds<12&&shared>.13);
- // Across distinct slide headings, demand strong explanatory continuity.
- return shared>.62&&backwards>.48;
+ if(sameChapter(a,b)){
+   // Adjacent isolated ASR lines on ONE slide are context fragments, NOT
+   // separate lessons. Require long independent explanations to keep them apart.
+   if(gap<=10&&(x.seconds<48||y.seconds<48))return true;
+   return shared>.34&&backwards>.26;
+ }
+ // Two different chapters can be related, but that is not sufficient reason
+ // to ignore a slide boundary without shared content evidence.
+ return shared>.62&&backwards>.48&&gap<=12;
 }
 function combine(a,b){
  return {rows:[...a.rows,...b.rows].sort((x,y)=>x.start-y.start),
@@ -73,10 +80,10 @@ function combine(a,b){
 }
 function brief(g){
  const v=groupInfo(g);
- // Don't punish slowly spoken / sparse synthetic transcripts which still
- // span a coherent explanation. A short candidate is a TIME/context issue.
- return v.seconds<28||(v.seconds<40&&v.words<15)||
-   (g.rows.length<2&&v.seconds<18);
+ // Below 48s, assume an unfinished fragment UNLESS supported as a different
+ // sustained concept. Independent 30-48s topics remain separate when their
+ // neighboring explanations have a distinct, source-evidenced identity.
+ return v.seconds<48||(v.seconds<60&&v.words<15);
 }
 function viable(g){
  const x=groupInfo(g);
@@ -98,7 +105,7 @@ export function consolidateMicrotopics(proposals){
    const before=working[i-1],after=working[i+1];
    const prevCompatible=compatible(before,g);
    const nextCompatible=compatible(g,after);
-   if((prevCompatible||nextCompatible)&&groupInfo(g).seconds<28){
+   if(prevCompatible||nextCompatible){
      if(prevCompatible&&(!nextCompatible||commonEvidence(g,before)>=commonEvidence(g,after))){
        working[i-1]=combine(before,g);working.splice(i,1);
      }else{
@@ -112,6 +119,21 @@ export function consolidateMicrotopics(proposals){
      // 12-30 seconds is acceptable only as a flagged single self-contained
      // explanation when joining is unsafe (different unrelated chapter).
      g.editorialNotes=[...(g.editorialNotes||[]),'Короткая тема: проверьте, что она понятна самостоятельно'];
+   }
+ }
+ // A second pass unifies consecutive chapter snippets with the same vague
+ // label. No source evidence separates them, so they cannot be advertised as
+ // "three independent lessons" with one identical heading.
+ for(let i=1;i<working.length;i++){
+   const before=working[i-1],after=working[i];
+   const gap=groupInfo(after).begin-groupInfo(before).end;
+   const left=lessonIdentity(before.rows,before.chapter);
+   const right=lessonIdentity(after.rows,after.chapter);
+   if(sameChapter(before,after)&&gap<=10&&gap>=-3&&
+      !NEW_TOPIC.test(after.rows[0]?.text||'')&&
+      left?.key===right?.key&&!distinctVerifiedConcept(before,after)){
+     working[i-1]=combine(before,after);
+     working.splice(i,1);i=Math.max(0,i-1);
    }
  }
  // Near-verbatim repeated explanations are not additional chapters in a course.
