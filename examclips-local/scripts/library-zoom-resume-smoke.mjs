@@ -37,7 +37,24 @@ try{
   return entries.length>0&&!!(await m.getCachedOriginal(entries[0].id));
  },{timeout:12000});
  await page.reload();
- await page.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results',{timeout:20000});
+ try{await page.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results',{timeout:12000})}
+ catch(err){
+  const diagnostics=await page.evaluate(async()=>{
+   const m=await import('/src/project-library.js'),entries=await m.listLibraryProjects();
+   return {phase:document.querySelector('#app')?.dataset.phase,
+    status:document.querySelector('#autosave-state')?.textContent,
+    note:document.querySelector('#file-note')?.textContent,
+    last:localStorage.getItem('examclips-current-project-id'),
+    entries:await Promise.all(entries.map(async e=>{
+      const file=await m.getCachedOriginal(e.id);
+      return {id:e.id,title:e.title,meta:e.source,
+       cached:!!file,cachedMeta:m.pickFileMetadata(file),
+       same:m.sameVideoFile(e.source,file)};
+    }))};
+  });
+  console.error('AUTORESTORE_DIAGNOSTICS',JSON.stringify(diagnostics),errors);
+  throw err
+ }
  assert.equal(await page.locator('#timeline-zoom-label').textContent(),'8×');
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
  assert.equal(await page.locator('#clip-title').inputValue(),'Сохранённая тема Docker');
