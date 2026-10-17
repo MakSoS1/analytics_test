@@ -36,12 +36,19 @@ try{
   const entries=await m.listLibraryProjects();
   return entries.length>0&&!!(await m.getCachedOriginal(entries[0].id));
  },{timeout:12000});
+ const beforeReload=await page.evaluate(async()=>{
+  const m=await import('/src/project-library.js');
+  return {url:location.href,origin:location.origin,localId:localStorage.getItem('examclips-current-project-id'),
+   projects:(await m.listLibraryProjects()).map(x=>x.id),
+   dbs:await indexedDB.databases()};
+ });
+ console.log('BEFORE_RELOAD_DIAGNOSTICS',JSON.stringify(beforeReload));
  await page.reload();
  try{await page.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results',{timeout:12000})}
  catch(err){
   const diagnostics=await page.evaluate(async()=>{
    const m=await import('/src/project-library.js'),entries=await m.listLibraryProjects();
-   return {phase:document.querySelector('#app')?.dataset.phase,
+   return {url:location.href,origin:location.origin,dbs:await indexedDB.databases(),phase:document.querySelector('#app')?.dataset.phase,
     status:document.querySelector('#autosave-state')?.textContent,
     note:document.querySelector('#file-note')?.textContent,
     last:localStorage.getItem('examclips-current-project-id'),
