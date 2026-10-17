@@ -8,6 +8,7 @@
  */
 import {normalizeChunks,titleFromText} from './segments.js';
 import {tightSpeechPieces,sourceSegments,summarizeStoryPlan} from './selective-stories.js';
+import {isNonTeachingIntroduction} from './lesson-screenplay.js';
 
 const TRIVIAL=/^\s*(?:(?:ээ+|эм+|угу|ну|ага|ага-ага|okay|ok|um+|uh+|you know|ага да|да да)[\s.,!?]*){1,8}$/iu;
 const ADMIN=/(?:проверка микрофона|слышно меня|настроим проектор|техническ(?:ие|ая) проблем|организационный момент|начн[её]м через|подождите минут|перерыв на|дожд[её]мся участников|расписание следующего занятия|can you hear me|microphone check|technical difficulties|we(?:'ll| will) take a break|like and subscribe)/iu;
@@ -31,7 +32,7 @@ function similarity(a,b){
 /** Evidence-first: KEEP material unless unmistakably organizational or empty. */
 export function isEducationalSpeech(text){
  const s=String(text||'').trim();
- if(!s||TRIVIAL.test(s))return false;
+ if(!s||TRIVIAL.test(s)||isNonTeachingIntroduction(s))return false;
  if(ADMIN.test(s)&&!TEACHING.test(s))return false;
  return true;
 }
