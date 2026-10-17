@@ -14,6 +14,7 @@ import {planCompleteTopics} from './complete-topics.js';
 import {buildVerifiedLessonScreenplays,storyboardReadyForRendering} from './lesson-screenplay.js';
 import {renderMicrotopicCatalog,renderMicrotopicDetail} from './microtopic-catalog.js';
 import {lectureVisualReference} from './lecture-outline.js';
+import {dockerVisualSubtopics} from './visual-subtopic-hints.js';
 import {indexLectureSlides} from './slide-chapter-index.js';
 import {saveLibraryProject,listLibraryProjects,getLibraryProject,deleteLibraryProject,
  pickFileMetadata,sameVideoFile,cacheSmallOriginal,getCachedOriginal,deleteCachedOriginal,
@@ -1108,7 +1109,10 @@ function proposeTopics(){
   name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height
  });
  const chapters=lectureChapters.length?lectureChapters:reference;
- const plan=planCompleteTopics(chunks,media.duration,{sceneCuts,chapters});
+ const visualHints=dockerVisualSubtopics({
+   name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height
+ });
+ const plan=planCompleteTopics(chunks,media.duration,{sceneCuts,chapters,visualHints});
  clips=buildVerifiedLessonScreenplays(plan.clips,chunks);
  thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
  // Tiny regression-only fixture: display source review, never claim a full lesson.
@@ -1127,6 +1131,7 @@ function proposeTopics(){
  $('topic-coverage').textContent=
     'Распознано ~'+report.percent+'% записи; предложено '+clips.length+
     ' содержательных микротем, '+summary.keptUtterances+' фраз сохранены, '+
+    (summary.visualEvidenceSplitCount?'По исходным слайдам и содержательной речи подтверждено '+summary.visualEvidenceSplitCount+' дополнительных границ внутри глав. ':'')+
     summary.excludedUtterances+' организационных/пустых и повторных фраз исключены. '+
     (summary.editorialMerges||summary.rejectedFragments||summary.duplicateUtterances?
       'Редакторская проверка: '+(summary.editorialMerges||0)+' коротких частей объединено, '+
