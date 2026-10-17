@@ -12,6 +12,7 @@ import {isNonTeachingIntroduction} from './lesson-screenplay.js';
 import {isLectureHousekeeping,meaningfulTitle,topicEvidence} from './lecture-semantics.js';
 import {normalizeSlideChapters,chapterForTime,visualBoundaryBetween} from './lecture-outline.js';
 import {dedupeTranscriptRows,consolidateMicrotopics,assignExclusiveSource} from './topic-editorial-guardrails.js';
+import {lessonIdentity,rowLessonIdentity} from './lesson-identity.js';
 
 const TRIVIAL=/^\s*(?:(?:ээ+|эм+|угу|ну|ага|ага-ага|okay|ok|um+|uh+|you know|ага да|да да)[\s.,!?]*){1,8}$/iu;
 const ADMIN=/(?:проверка микрофона|слышно меня|настроим проектор|техническ(?:ие|ая) проблем|организационный момент|начн[её]м через|подождите минут|перерыв на|дожд[её]мся участников|расписание следующего занятия|can you hear me|microphone check|technical difficulties|we(?:'ll| will) take a break|like and subscribe)/iu;
@@ -40,24 +41,11 @@ export function isEducationalSpeech(text){
  return true;
 }
 function groupConceptHeading(rows,chapter){
- const labels={
-  'container-definition':'Что такое контейнер',
-  'virtual-machines':'Контейнеры и виртуальные машины',
-  'docker-build-cache':'Как работает кеширование слоёв Docker',
-  'docker-multistage':'Многоэтапная сборка Dockerfile',
-  'docker-bridge':'Сеть bridge в Docker',
-  'docker-overlay':'Overlay: связь контейнеров между хостами',
-  'docker-host':'Режимы host и none в Docker',
-  'resource-limits':'Ограничение ресурсов контейнера'
- };
- const counts=new Map();
- for(const row of rows){
-   const key=concept(row,chapter);
-   if(key&&labels[key])counts.set(key,(counts.get(key)||0)+1);
- }
- const ranked=[...counts].sort((a,b)=>b[1]-a[1]);
- return ranked.length&&ranked[0][1]>=Math.min(2,rows.length)?
-   labels[ranked[0][0]]:meaningfulTitle(rows);
+ const identity=lessonIdentity(rows,chapter);
+ // Only evidence from technical speech can override the slide chapter.
+ // A generic "Docker" or "container" must NEVER name a Dockerfile clip.
+ if(identity?.title)return identity.title;
+ return meaningfulTitle(rows);
 }
 function asClip(rows,index,duration,chapter=null){
  const beginning=rows[0].start,end=rows.at(-1).end;
@@ -98,6 +86,7 @@ function asClip(rows,index,duration,chapter=null){
 function concept(row,chapter){
  const t=String(row.text||'');
  const inferred=topicEvidence(t);
+ if(chapter?.key==='dockerfile')return rowLessonIdentity(row,chapter)?.key||'dockerfile-general';
  if(/\b(?:what\s+is\s+(?:a\s+)?container|containers?\s+(?:are|is)|контейнер\s+это)\b/iu.test(t)&&
     !/\b(?:virtual\s+machines?|vm\b|hypervisor)\b/iu.test(t))
    return 'container-definition';
@@ -111,7 +100,7 @@ function concept(row,chapter){
  if(/\b(?:overlay\s+networks?|docker\s+overlay|overlay\s+mode)/iu.test(t))return 'docker-overlay';
  if(/\b(?:host\s+networks?|network\s+host|network\s+none)/iu.test(t))return 'docker-host';
  if(/\b(?:resource\s+limits?|cpu\s+limits?|memory\s+limits?|cgroups?)/iu.test(t))return 'resource-limits';
- return inferred?.key||chapter?.key||null;
+ return inferred?.key==='docker-containers'?(chapter?.key||null):(inferred?.key||chapter?.key||null);
 }
 const CONTENT_START=/(?:\b(?:what\s+is\s+a\s+container|containers?\s+(?:are|is)|virtual\s+machines?\s+(?:are|is)|docker\s+(?:uses|allows)|for\s+example|because|means\s+that|in\s+contrast)\b|\b(?:что\s+такое|контейнер\s+это|например|потому\s+что|в\s+отличие\s+от)\b)/iu;
 function genericOpeningSkip(rows,duration){
@@ -145,8 +134,11 @@ function splitChapter(rows,chapter,sceneCuts){
   const next=concept(row,chapter);
   const nextNext=rows.slice(i,i+3).map(x=>concept(x,chapter)).filter(Boolean);
   const repeated=next&&nextNext.filter(x=>x===next).length>=2;
+  const transitionIdentity=rowLessonIdentity(row,chapter);
   const moved=stable&&next&&next!==recent.at(-1)&&next!=='docker-containers'&&
-    (repeated||gap>10||/^(?:now|next|let'?s|moving|теперь|следующ)/iu.test(row.text));
+    transitionIdentity?.specific&&repeated&&
+    (prev.end-current[0].start>=32)&&
+    (rows[Math.min(rows.length-1,i+2)].end-row.start>=20);
   const visual=prev?sceneCuts.some(t=>Math.abs(t-row.start)<8&&
     prev.start+15<row.start):false;
   // Compare sustained adjacent explanations, not isolated terms.
@@ -156,11 +148,11 @@ function splitChapter(rows,chapter,sceneCuts){
   const coherentAfter=i+4<rows.length?similarity(after,rows.slice(i+3,i+6).map(r=>r.text).join(' ')):0;
   const strongShift=!!(current.length>=3&&row.start-current[0].start>=55&&
     similarity(before,after)<.10&&coherentBefore>.13&&coherentAfter>.13);
-  const topical=!!((moved&&current.length>=2&&
-    // Two independently aligned utterances can establish an independent
-    // educational concept even when a lecturer switches without a pause.
-    (repeated||(visual&&gap>2)||current.length>=3||gap>12))||
-    (!practical&&strongShift&&(visual||gap>10||explicit)));
+  // A noun mentioned once isn't a new lesson. Require sustained explanation
+  // and either specific new evidence or a real visual/announced transition.
+  const topical=!!(!practical&&current.length>=2&&
+    ((moved&&prev.end-current[0].start>=32)||
+     (strongShift&&visual&&rows[Math.min(rows.length-1,i+2)].end-row.start>=20)));
   const boundary=!!(current.length&&(explicit||(newTask&&practical&&finished)||
     clearlyDifferent||(!practical&&topical)));
   if(boundary)emit();
