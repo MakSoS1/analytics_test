@@ -59,6 +59,10 @@ function commonEvidence(a,b){
 const NEW_TOPIC=/^\s*(?:now\s+(?:let'?s\s+)?(?:move|switch)|moving\s+on|next\s+topic|let'?s\s+move\s+to\s+(?:a\s+)?different\s+topic|теперь\s+перейд[её]м|следующая\s+тема|переходим\s+к\s+(?:другой|новой|следующей)\s+теме)/iu;
 function compatible(a,b){
  if(!a||!b)return false;
+ // Visual landmarks are independent editorial candidates only when there
+ // is substantive narrated context on BOTH sides.
+ if(a.visualSection&&b.visualSection&&a.visualSection!==b.visualSection&&
+    rowSeconds(a.rows)>=36&&rowSeconds(b.rows)>=36)return false;
  const x=groupInfo(a),y=groupInfo(b),gap=y.begin-x.end;
  if(gap>35)return false; // never jump across a lengthy unrelated passage
  if(NEW_TOPIC.test(b.rows[0]?.text||''))return false;
@@ -129,7 +133,9 @@ export function consolidateMicrotopics(proposals){
    const gap=groupInfo(after).begin-groupInfo(before).end;
    const left=lessonIdentity(before.rows,before.chapter);
    const right=lessonIdentity(after.rows,after.chapter);
-   if(sameChapter(before,after)&&gap<=10&&gap>=-3&&
+   if(!(before.visualSection&&after.visualSection&&before.visualSection!==after.visualSection&&
+        rowSeconds(before.rows)>=36&&rowSeconds(after.rows)>=36)&&
+      sameChapter(before,after)&&gap<=10&&gap>=-3&&
       !NEW_TOPIC.test(after.rows[0]?.text||'')&&
       left?.key===right?.key&&!distinctVerifiedConcept(before,after)){
      working[i-1]=combine(before,after);
