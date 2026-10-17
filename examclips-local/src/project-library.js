@@ -4,20 +4,21 @@
  * into a persistent FileSystemFileHandle supported by their browser.
  * All operations reject on errors so the UI cannot claim a save happened.
  */
-const DB='examclips-project-library-v1',STORE='projects';
+const DB='examclips-project-library-v1',STORE='projects',MEDIA='sources';
 const openDb=()=>new Promise((resolve,reject)=>{
  if(typeof indexedDB==='undefined')return reject(Error('IndexedDB unavailable'));
- const request=indexedDB.open(DB,1);
+ const request=indexedDB.open(DB,2);
  request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(STORE))
-   db.createObjectStore(STORE,{keyPath:'id'});};
+   db.createObjectStore(STORE,{keyPath:'id'});
+  if(!db.objectStoreNames.contains(MEDIA))db.createObjectStore(MEDIA);};
  request.onerror=()=>reject(request.error||Error('IndexedDB open failed'));
  request.onsuccess=()=>resolve(request.result);
 });
-async function operation(mode,fn){
+async function operation(mode,fn,storeName=STORE){
  const db=await openDb();
  try{
   return await new Promise((resolve,reject)=>{
-    const tx=db.transaction(STORE,mode),store=tx.objectStore(STORE);
+    const tx=db.transaction(storeName,mode),store=tx.objectStore(storeName);
     let value;
     tx.oncomplete=()=>resolve(value);
     tx.onabort=()=>reject(tx.error||Error('IndexedDB transaction failed'));
@@ -72,4 +73,25 @@ export async function deleteLibraryProject(id){
 }
 export async function wipeLibrary(){
  return operation('readwrite',store=>store.clear());
+}
+
+/** Opportunistic same-device copy for small uploads (<64 MiB).
+ * Larger lectures never copied into IndexedDB; only timeline metadata is saved.
+ */
+export async function cacheSmallOriginal(id,file){
+ if(!file||file.size>64*1024*1024||file.size===0)return false;
+ const usage=await navigator.storage?.estimate?.().catch(()=>null);
+ if(usage?.quota&&(usage.quota-(usage.usage||0))<file.size*2)return false;
+ try{
+  await operation('readwrite',store=>store.put(file,id),MEDIA);
+  return true;
+ }catch{return false}
+}
+export async function getCachedOriginal(id){
+ return operation('readonly',(store,done)=>{
+   const r=store.get(id);r.onsuccess=()=>done(r.result||null);
+ },MEDIA);
+}
+export async function deleteCachedOriginal(id){
+ return operation('readwrite',store=>store.delete(id),MEDIA);
 }
