@@ -59,6 +59,7 @@ jobs:
           node scripts/noncontiguous-edl-smoke.mjs
       - name: Verify streamed file-system MP4 export for long lesson mode
         run: |
+          mkdir -p public
           cp test-fixture.mp4 public/test-fixture.mp4
           node scripts/stream-edl-smoke.mjs
       - name: Batch export whole series to local folder
