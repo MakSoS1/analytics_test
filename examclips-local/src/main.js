@@ -273,7 +273,7 @@ function setupPrimaryTimeline(){
     '<p class="hint">Живой предпросмотр монтажа, ещё не экспортированный MP4.</p>',
     '<canvas id="microtopic-preview" width="720" height="1280" aria-label="Вертикальный предпросмотр выбранной микротемы"></canvas>',
     '<button id="catalog-preview-play" type="button">▶ Воспроизвести выбранную микротему</button></div>',
-    '<div class="catalog-editor-heading"><b>Настройки выбранной микротемы</b><p class="hint">Измените название, границы и композицию перед экспортом.</p></div></div></section>',
+    '<div class="catalog-editor-heading"><b>Настройки выбранной микротемы</b><p class="hint">Измените название, границы и композицию перед экспортом.</p></div></div></section></section>',
   '<section id="pane-captions" class="workbench-pane" data-pane="captions" hidden>',
     '<div class="pane-heading"><span class="eyebrow">ТЕКСТ</span><h2>Субтитры и расшифровка</h2>',
     '<p>Исправляйте текст с таймкодами. Субтитры появляются последовательно поверх видео.</p></div></section>',
