@@ -12,7 +12,8 @@ import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {sourceSegments,storyDuration} from './selective-stories.js';
 import {planCompleteTopics} from './complete-topics.js';
 import {buildVerifiedLessonScreenplays,storyboardReadyForRendering} from './lesson-screenplay.js';
-import {renderMicrotopicCatalog} from './microtopic-catalog.js';
+import {renderMicrotopicCatalog,renderMicrotopicDetail} from './microtopic-catalog.js';
+import {lectureVisualReference} from './lecture-outline.js';
 import {saveLibraryProject,listLibraryProjects,getLibraryProject,deleteLibraryProject,
  pickFileMetadata,sameVideoFile,cacheSmallOriginal,getCachedOriginal,deleteCachedOriginal,
  safeProjectSnapshot} from './project-library.js';
@@ -261,11 +262,13 @@ function setupPrimaryTimeline(){
   '</section>',
   '<section id="pane-clip" class="workbench-pane" data-pane="clip" hidden>',
     '<div class="pane-heading"><span class="eyebrow">УЧЕБНЫЕ МИКРОУРОКИ</span><h2>Микротемы лекции</h2>',
-    '<p>Все найденные темы: название, сценарий, оригинальные таймкоды, расшифровка и вертикальный предпросмотр.</p></div>',
-    '<section class="catalog-section"><div class="panel-title"><b>Выделенные микротемы</b><span class="muted">Выберите строку или нажмите «Смотреть 9:16»</span></div>',
+    '<p>Учебные главы и микротемы в порядке оригинальной лекции. Откройте карточку, чтобы посмотреть сценарий и видео.</p></div>',
+    '<section id="microtopic-overview" class="catalog-section"><div class="panel-title"><b>Микротемы по порядку лекции</b><span class="muted">Обложки — реальные кадры исходного видео</span></div>',
     '<div class="catalog-refresh"><p class="hint">Если проект создан до обновления алгоритма, пересчитайте микротемы по полной расшифровке. Предыдущие автоматические границы будут заменены.</p><button id="catalog-reanalyze" type="button">↻ Заново определить микротемы</button></div>',
     '<div id="microtopic-catalog" aria-live="polite"></div></section>',
-    '<div class="catalog-selected"><div class="catalog-preview-panel"><b>Выбранный вертикальный ролик</b>',
+    '<section id="microtopic-detail" class="microtopic-detail" hidden><button id="microtopic-back" type="button">← Все микротемы</button>',
+    '<div id="microtopic-detail-evidence"></div>',
+    '<div class="catalog-selected"><div class="catalog-preview-panel"><b>Вертикальный ролик · 9:16</b>',
     '<p class="hint">Живой предпросмотр монтажа, ещё не экспортированный MP4.</p>',
     '<canvas id="microtopic-preview" width="720" height="1280" aria-label="Вертикальный предпросмотр выбранной микротемы"></canvas>',
     '<button id="catalog-preview-play" type="button">▶ Воспроизвести выбранную микротему</button></div>',
@@ -290,7 +293,9 @@ function setupPrimaryTimeline(){
  document.querySelector('.stage').remove();
  pane('timeline').append($('timeline-section'));
  pane('timeline').append(document.querySelector('.kpis'));
- const editor=$('editor');editor.querySelector('.controls').classList.add('clip-controls');pane('clip').append(editor);
+ const editor=$('editor');editor.querySelector('.controls').classList.add('clip-controls');$('microtopic-detail').append(editor);
+ $('microtopic-back').onclick=()=>{microtopicDetailOpen=false;catalogPlayback=null;updateMicrotopicMode();};
+
  $('catalog-preview-play').onclick=()=>playCatalogTopic(selected);
  $('catalog-reanalyze').onclick=()=>{
    if(!chunks.length){status('Нужна полная расшифровка лекции или SRT.');return}
@@ -301,12 +306,12 @@ function setupPrimaryTimeline(){
  piecesEditor.innerHTML='<div class="panel-title"><b>Фрагменты выбранной микротемы</b><span class="muted">Именно в этом порядке они будут склеены</span></div>'+
   '<div id="story-piece-list" class="story-piece-list"></div>'+
   '<p class="hint">Отрывки можно переставлять или удалить. Переходы между несмежными частями нужно проверить вручную.</p>';
- pane('clip').append(piecesEditor);
+ $('microtopic-detail').append(piecesEditor);
  const screenplay=document.createElement('section');screenplay.className='screenplay-review';
  screenplay.innerHTML='<div class="panel-title"><b>Сценарий урока — по исходной речи</b></div>'+
    '<p class="hint">Сначала составляется план объяснения и проверяется наличие учебных примеров и вывода. Ничего не придумывается сверх транскрипта.</p>'+
    '<div id="screenplay-beats"></div>';
- pane('clip').append(screenplay);
+ $('microtopic-detail').append(screenplay);
  const subtitleHeading=$('save-srt').closest('.panel-title'),transcript=$('transcript'),hint=transcript.nextElementSibling;
  pane('captions').append(subtitleHeading,transcript);
  if(hint?.classList.contains('hint'))pane('captions').append(hint);
@@ -321,9 +326,46 @@ function setupPrimaryTimeline(){
  $('open-clip-settings').onclick=()=>setEditorTab('clip');
 }
 let activeEditorTab='timeline';
+let microtopicDetailOpen=false,catalogPlayback=null,thumbnailGeneration=0;
+const topicThumbnails=new Map();
+function updateMicrotopicMode(){
+ const overview=$('microtopic-overview'),detail=$('microtopic-detail');
+ if(!overview||!detail)return;
+ overview.hidden=microtopicDetailOpen;
+ detail.hidden=!microtopicDetailOpen;
+ if(microtopicDetailOpen)renderMicrotopicDetail($('microtopic-detail-evidence'),clips[selected],chunks);
+}
+function openMicrotopic(index){
+ if(!clips[index])return;
+ selected=index;microtopicDetailOpen=true;catalogPlayback=null;
+ sync();updateMicrotopicMode();
+}
+async function prepareMicrotopicThumbnails(){
+ const input=media,generation=++thumbnailGeneration;
+ const targets=clips.filter(c=>c.id!=='draft-1');
+ for(const clip of targets){
+   if(input!==media||generation!==thumbnailGeneration)return;
+   if(topicThumbnails.has(clip.id))continue;
+   let sample;
+   try{
+     const at=Math.min(input.duration-.08,Math.max(0,clip.thumbnailTime??clip.start+2));
+     sample=await input.videoSink.getSample(at);
+     if(!sample)continue;
+     const canvas=document.createElement('canvas');canvas.width=400;canvas.height=225;
+     sample.draw(canvas.getContext('2d'),0,0,400,225);
+     topicThumbnails.set(clip.id,canvas.toDataURL('image/jpeg',.76));
+   }catch(err){if(input!==media)return}
+   finally{sample?.close()}
+   if(activeEditorTab==='clip'&&!microtopicDetailOpen&&generation===thumbnailGeneration)
+     renderMicrotopics();
+ }
+}
+
 function setEditorTab(name){
  if(!['timeline','clip','captions','quiz','export'].includes(name))return;
- activeEditorTab=name;
+ const was=activeEditorTab;activeEditorTab=name;
+ if(name==='clip'&&was!=='clip')microtopicDetailOpen=false;
+ updateMicrotopicMode();
  for(const pane of document.querySelectorAll('.workbench-pane'))
    pane.hidden=pane.dataset.pane!==name;
  for(const control of document.querySelectorAll('[data-editor-tab]')){
@@ -856,18 +898,20 @@ function renderStoryPieces(){
 }
 function playCatalogTopic(index){
  const c=clips[index];if(!c||!media)return;
- selected=index;sync();
+ openMicrotopic(index);
+ catalogPlayback={clipId:c.id,pieceIndex:0};
  $('player').currentTime=sourceSegments(c)[0]?.start??c.start;
  $('player').play().catch(err=>status('Не удалось воспроизвести: '+err.message));
 }
 function renderMicrotopics(){
  const mount=$('microtopic-catalog');if(!mount)return;
  renderMicrotopicCatalog(mount,clips,chunks,{
-  selected,
-  onSelect:i=>{selected=i;sync()},
+  selected,thumbnails:topicThumbnails,
+  onSelect:i=>openMicrotopic(i),
   onPlay:i=>playCatalogTopic(i),
-  onEdit:i=>{selected=i;sync();$('clip-title').focus()}
+  onEdit:i=>{openMicrotopic(i);$('clip-title').focus()}
  });
+ updateMicrotopicMode();
 }
 function renderClips(){
   const holder=$('clips');holder.replaceChildren();
@@ -925,7 +969,7 @@ async function selectFile(file){
     if(media)await media.input.dispose();
     if(originalUrl)URL.revokeObjectURL(originalUrl);
     media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
-    sourceFile=file;sceneCuts=[];
+    sourceFile=file;sceneCuts=[];thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
     const resumeEntry=pendingLibraryEntry;
     pendingLibraryEntry=null;
     currentProjectId=resumeEntry?.id||makeId();
@@ -1024,8 +1068,12 @@ $('forget-asr').onclick=async()=>{
 
 function proposeTopics(){
  if(!media||!chunks.length)return;
- const plan=planCompleteTopics(chunks,media.duration,{sceneCuts});
+ const chapters=lectureVisualReference({
+  name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height
+ });
+ const plan=planCompleteTopics(chunks,media.duration,{sceneCuts,chapters});
  clips=buildVerifiedLessonScreenplays(plan.clips,chunks);
+ thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
  // Tiny regression-only fixture: display source review, never claim a full lesson.
  const shortDemo=media.duration<=10&&chunks.some(x=>x.text?.trim());
  if(!clips.length&&shortDemo)clips=[{
@@ -1048,6 +1096,7 @@ function proposeTopics(){
  status('Сохранены все '+summary.keptUtterances+' содержательных фраз; создано '+clips.length+
     ' микротем. Длительность роликов не ограничена искусственно.');
  sync();
+ prepareMicrotopicThumbnails().catch(()=>{});
 }
 $('scan-chapters').onclick=async()=>{
  if(!media)return;
@@ -1335,6 +1384,17 @@ $('export').onclick=async()=>{
 function loop(){
   const video=$('player'),c=current();
   if(media&&c&&video.readyState>=2){
+    if(catalogPlayback?.clipId===c.id&&!video.paused){
+      const pieces=sourceSegments(c),piece=pieces[catalogPlayback.pieceIndex];
+      if(piece&&video.currentTime>=piece.end-.05){
+        if(catalogPlayback.pieceIndex<pieces.length-1){
+          catalogPlayback.pieceIndex++;
+          video.currentTime=pieces[catalogPlayback.pieceIndex].start;
+        }else{
+          video.pause();catalogPlayback=null;
+        }
+      }
+    }
     const valid=sourceSegments(c).some(x=>video.currentTime>=x.start&&video.currentTime<x.end);
     const caption=valid?captionSequenceAt(chunks,video.currentTime):null;
     const index=sourceSegments(c).findIndex(part=>video.currentTime>=part.start&&video.currentTime<part.end);
