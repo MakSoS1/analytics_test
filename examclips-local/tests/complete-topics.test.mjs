@@ -57,3 +57,25 @@ test('a plain educational lesson with no keywords is preserved by default',()=>{
  assert.equal(r.summary.keptUtterances,2);
  assert.ok(r.clips.length>0);
 });
+
+test('late Docker teaching is selected instead of course introduction and lecturer biography',()=>{
+ const rows=[
+  row(0,10,'Здравствуйте, меня зовут Алексей, я преподаю Docker.'),
+  row(11,25,'Сегодня мы поговорим о Docker, Kubernetes и CI/CD, рассмотрим план нашего курса и что будет дальше.'),
+  row(26,45,'Моя должность доцент кафедры, я работаю преподавателем уже много лет.'),
+  row(80,115,'Docker контейнеры позволяют изолировать приложения и зависимости внутри образа, поэтому перенос между серверами повторяем.'),
+  row(118,145,'Например контейнер запускается из образа и использует собственную файловую систему и сетевые настройки.'),
+  row(146,168,'Таким образом получаем переносимую среду выполнения для каждого приложения.')
+ ];
+ const planned=planCompleteTopics(rows,180);
+ assert.equal(planned.summary.excludedUtterances,3);
+ assert.equal(planned.summary.keptUtterances,3);
+ assert.equal(planned.clips.length,1);
+ assert.equal(sourceSegments(planned.clips[0])[0].start,80);
+ assert.ok(storyDuration(planned.clips[0])>70);
+});
+test('teaching explanation inside an opening phrase is not silently discarded',()=>{
+ const explanation='Сегодня рассмотрим Docker на примере: контейнеры позволяют изолировать зависимости и разворачивать приложение независимо от ОС.';
+ assert.equal(isEducationalSpeech(explanation),true);
+ assert.equal(isEducationalSpeech('Today we will cover Docker, Kubernetes, PostgreSQL, and course logistics.'),false);
+});
