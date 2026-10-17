@@ -13,6 +13,7 @@ import {isLectureHousekeeping,meaningfulTitle,topicEvidence} from './lecture-sem
 import {normalizeSlideChapters,chapterForTime,visualBoundaryBetween} from './lecture-outline.js';
 import {dedupeTranscriptRows,consolidateMicrotopics,assignExclusiveSource} from './topic-editorial-guardrails.js';
 import {lessonIdentity,rowLessonIdentity,resolvedChapterKey} from './lesson-identity.js';
+import {refineSubtopics} from './semantic-subtopics.js';
 
 const TRIVIAL=/^\s*(?:(?:ээ+|эм+|угу|ну|ага|ага-ага|okay|ok|um+|uh+|you know|ага да|да да)[\s.,!?]*){1,8}$/iu;
 const ADMIN=/(?:проверка микрофона|слышно меня|настроим проектор|техническ(?:ие|ая) проблем|организационный момент|начн[её]м через|подождите минут|перерыв на|дожд[её]мся участников|расписание следующего занятия|can you hear me|microphone check|technical difficulties|we(?:'ll| will) take a break|like and subscribe)/iu;
@@ -47,7 +48,7 @@ function groupConceptHeading(rows,chapter){
  if(identity?.title)return identity.title;
  return meaningfulTitle(rows);
 }
-function asClip(rows,index,duration,chapter=null){
+function asClip(rows,index,duration,chapter=null,{verifiedTitle=null,verifiedConcept=null}={}){
  const beginning=rows[0].start,end=rows.at(-1).end;
  // Observe gaps, preserve short breathing pauses; never synthesize speech.
  const pieces=tightSpeechPieces(rows).map(x=>({
@@ -63,7 +64,8 @@ function asClip(rows,index,duration,chapter=null){
    id:'topic-'+index,start:beginning,end,
    segments:pieces,chapter:chapter?{title:chapter.title,key:chapter.key,source:chapter.source,start:chapter.start,end:chapter.end}:null,
    thumbnailTime:beginning+Math.min(6,(end-beginning)*.2),
-   title:groupConceptHeading(rows,chapter),
+   title:verifiedTitle||groupConceptHeading(rows,chapter),
+   verifiedConcept:verifiedConcept||null,
    status:'needs-review',confidence:'low',method:'content-complete-extractive',
    layout:'hybrid',focusX:50,
    kind:task?'worked-exercise':'explanation',
@@ -205,10 +207,11 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[]}={}
  for(const {rows,chapter} of chapterGroups)
   for(const group of splitChapter(rows,chapter,sceneCuts))
     groups.push({rows:group,chapter});
- const refined=consolidateMicrotopics(groups);
+ const finer=refineSubtopics(groups);
+ const refined=consolidateMicrotopics(finer);
  excluded.push(...refined.omitted);
- const clips=assignExclusiveSource(refined.groups.map(({rows,chapter,editorialNotes},i)=>{
-  const clip=asClip(rows,i+1,duration,chapter);
+ const clips=assignExclusiveSource(refined.groups.map(({rows,chapter,editorialNotes,verifiedTitle,verifiedConcept},i)=>{
+  const clip=asClip(rows,i+1,duration,chapter,{verifiedTitle,verifiedConcept});
   if(editorialNotes?.length)clip.reviewReasons.push(...editorialNotes);
   return clip;
  })).filter(c=>sourceSegments(c).length&&c.outputSeconds>=12);
@@ -225,6 +228,8 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[]}={}
    completionMode:'hierarchical-reviewed',
    chapters:chapterGroups.length,
    rawTopicCandidates:groups.length,
+   semanticSubtopicCandidates:finer.length,
+   evidencedSubtopicSplits:Math.max(0,finer.length-groups.length),
    editorialMerges:refined.mergedCount,
    duplicateUtterances:deDuplicated.removed.length,
    rejectedFragments:refined.omitted.length,
