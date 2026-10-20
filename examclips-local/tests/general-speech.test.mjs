@@ -74,3 +74,10 @@ test('generic titles cannot turn unrelated image/volume/architecture speech into
  {start:30,end:65,text:'The volume of the building creates an open space, and the architecture allows light to enter.'}],65);
  assert.ok(p.clips.length);assert.ok(p.clips.every(c=>!/Docker|контейнер/u.test(c.title)));
 });
+
+import {inspectLectureCoverage} from '../src/coverage-inspection.js';
+test('OCR chapters without verified identities are not reported as verified separate topics',()=>{
+ const review=inspectLectureCoverage([{start:0,end:60,title:'An observed slide'}],[{start:0,end:60}],
+  [{start:0,end:60,text:'This is an explanation with enough spoken words to review the actual source carefully, while the slide heading alone does not establish the semantic completeness of the resulting lesson.'}]);
+ assert.notEqual(review.rows[0].status,'separate-video');
+});
