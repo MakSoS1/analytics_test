@@ -19,3 +19,8 @@ test('a prose panel is framed around its text, not the adjacent diagram or slide
  const prose=scene.panels.find(p=>p.text.includes('shares'));
  assert.ok(prose.rect.x>.55);assert.ok(prose.rect.h<.4);
 });
+
+import {focusForSpeech} from '../src/scene-model.js';
+test('shared topic words do not pull focus away from the current explanatory text',()=>{
+ assert.equal(focusForSpeech([{text:'host bridge overlay'},{text:'host shares the network stack'}],'host',1),1);
+});

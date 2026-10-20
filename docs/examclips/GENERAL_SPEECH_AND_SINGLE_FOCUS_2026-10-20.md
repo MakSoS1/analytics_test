@@ -42,7 +42,7 @@ source evidence. Diagram edges receive padding rather than clipping text boxes.
 
 ## Verification and limitations
 
-174 unit/regression tests and a production build passed locally. Browser tests
+175 unit/regression tests and a production build passed locally. Browser tests
 cover a single visible source region, opening-only titles (including disjoint
 EDL segments), normal import/edit/save/mobile flows, and changing visual focus.
 CI repeats these checks before publication. Full exports are inspected separately.

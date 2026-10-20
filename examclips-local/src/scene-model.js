@@ -55,7 +55,7 @@ export function focusForSpeech(panels,spoken='',fallback=0){
   });
   const best=Math.max(...scores);
   if(best===0)return fallback%panels.length;
-  return scores.indexOf(best);
+  return scores[fallback]===best?fallback:scores.indexOf(best);
 }
 // Sparse edge scan: locate real source content without OCR or neural inference.
 export function pixelPanels(pixels,width,height){
@@ -98,7 +98,7 @@ export function makeStoryboard({width,height,lines=[],duration=90,chunks=[],spea
         r={x:safeLeft,y:safeTop,w:safeRight-safeLeft,h:safeBottom-safeTop};
       }
       const code=matching.some(l=>/^\s*(?:FROM|WORKDIR|RUN|COPY|CMD|EXPOSE)\s/u.test(l.text));
-      const prose=!code&&matching.length>=2&&matching.some(l=>l.text.split(/\s+/u).length>=7);
+      const prose=!code&&matching.length>=2&&matching.some(l=>l.text.split(/\s+/u).length>=7||(/[.!?]$/u.test(l.text)&&l.text.split(/\s+/u).length>=4));
       if(prose){
         const x=Math.max(0,Math.min(...matching.map(l=>l.box.x0))/width-.035);
         const y=Math.max(0,Math.min(...matching.map(l=>l.box.y0))/height-.035);
@@ -123,7 +123,7 @@ export function makeStoryboard({width,height,lines=[],duration=90,chunks=[],spea
   }));
   const beats=[];
   const count=Math.min(40,Math.max(1,Math.ceil(duration/9)));
-  let previous=-1;
+  let previous=focusForSpeech(panels,chunks.map(c=>c.text).join(' '),0);
   for(let i=0;i<count;i++){
     const a=i*duration/count,b=(i+1)*duration/count;
     const spoken=chunks.filter(c=>c.end>a&&c.start<b).map(c=>c.text).join(' ');
