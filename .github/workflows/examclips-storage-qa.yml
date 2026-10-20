@@ -18,6 +18,8 @@ jobs:
         with:
           node-version: '22'
       - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Install Chrome with H.264 and AAC support for media regression tests
+        run: npx playwright-core install --with-deps chrome
       - name: Install FFmpeg
         run: |
           sudo apt-get update -qq
@@ -28,3 +30,9 @@ jobs:
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-storage-vite.log 2>&1 &
           sleep 4
           node scripts/library-zoom-resume-smoke.mjs
+      - name: Atlas library wizard source comparison and persistence
+        run: node scripts/atlas-ui-smoke.mjs
+      - name: Atlas project compatibility range proposals and source attachment
+        run: node scripts/atlas-project-flows-smoke.mjs
+      - name: Atlas playback continuation and export invalidation after edits
+        run: node scripts/atlas-editing-playback-smoke.mjs

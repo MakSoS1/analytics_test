@@ -1,4 +1,7 @@
 import './styles.css';
+import {mountAtlasShell} from './atlas-shell.js';
+import {findRangeTopics,manualRangeClip,coverageSpans} from './atlas-range.js';
+import {renderAtlasPanels,updateAtlasPlayhead} from './atlas-panels.js';
 import {quizForClip,gradeQuiz,toQuizJson} from './quiz.js';
 import {openMedia} from './media.js';
 import {transcribe} from './asr.js';
@@ -31,6 +34,8 @@ const root=document.querySelector('#app');
 let currentProjectId=null,currentSourceHandle=null,attachedSourceMeta=null,pendingLibraryEntry=null;
 let autosaveTimer=null,saveQueue=Promise.resolve(),isSwitchingProject=false;
 let timelineView={zoom:1,offset:0};
+let atlasShell=null,rangeSelection=null,pendingSrtChunks=null,playbackMode='source',catalogScroll=0,thumbnailTimer=null;
+let detachedDuration=0,projectThumbnail=null;
 root.dataset.phase='upload';
 root.innerHTML=`
 <header class="top">
@@ -301,7 +306,7 @@ function setupPrimaryTimeline(){
  pane('timeline').append($('timeline-section'));
  pane('timeline').append(document.querySelector('.kpis'));
  const editor=$('editor');editor.querySelector('.controls').classList.add('clip-controls');$('microtopic-detail').append(editor);
- $('microtopic-back').onclick=()=>{microtopicDetailOpen=false;catalogPlayback=null;updateMicrotopicMode();};
+ $('microtopic-back').onclick=()=>{microtopicDetailOpen=false;catalogPlayback=null;$('player').pause();updateMicrotopicMode();scheduleProjectSave();requestAnimationFrame(()=>window.scrollTo(0,catalogScroll));};
 
  $('catalog-preview-play').onclick=()=>playCatalogTopic(selected);
  $('microtopic-attach-video').onclick=()=>$('microtopic-attach-file').click();
@@ -309,11 +314,12 @@ function setupPrimaryTimeline(){
   const file=e.target.files?.[0];
   if(!file||!/^video\//.test(file.type)&&!/\.mp4$/i.test(file.name))return;
   showFinishedMicrotopic(file,clips[selected]?.id);
+  e.target.value='';
   status('Готовый MP4 открыт локально для просмотра, без загрузки на сервер.');
  };
  $('catalog-reanalyze').onclick=()=>{
    if(!chunks.length){status('Нужна полная расшифровка лекции или SRT.');return}
-   if(clips.some(c=>c.status==='approved')&&!confirm('Пересчёт заменит текущие границы и сценарии микротем. Продолжить?'))return;
+   if(busy||!confirmReanalysis())return;
    proposeTopics();status('Микротемы пересчитаны. Проверьте начало и полноту каждого ролика.');
  };
  const piecesEditor=document.createElement('section');piecesEditor.className='story-pieces-editor';
@@ -339,12 +345,13 @@ function setupPrimaryTimeline(){
  pane('timeline').append(document.querySelector('.progress-row'));
  $('open-clip-settings').onclick=()=>setEditorTab('clip');
 }
-let activeEditorTab='timeline';
+let activeEditorTab='clip';
 let microtopicDetailOpen=false,catalogPlayback=null,thumbnailGeneration=0;
 let finishedVideoUrl=null,finishedVideoClipId=null;
 function clearFinishedVideo(){
  if(finishedVideoUrl)URL.revokeObjectURL(finishedVideoUrl);
  finishedVideoUrl=null;finishedVideoClipId=null;
+ if($('microtopic-final-panel'))$('microtopic-final-panel').hidden=true;
  const player=$('microtopic-final-video');
  if(player){player.pause();player.removeAttribute('src');player.load();}
 }
@@ -362,18 +369,23 @@ function updateMicrotopicMode(){
  if(!overview||!detail)return;
  overview.hidden=microtopicDetailOpen;
  detail.hidden=!microtopicDetailOpen;
- if(microtopicDetailOpen)renderMicrotopicDetail($('microtopic-detail-evidence'),clips[selected],chunks);
+ if(microtopicDetailOpen)renderMicrotopicDetail($('microtopic-detail-evidence'),clips[selected],chunks,{onSeek:time=>seekOriginal(time,true)});
  const finalPanel=$('microtopic-final-panel');
  if(finalPanel)finalPanel.hidden=!microtopicDetailOpen||!finishedVideoUrl||
    finishedVideoClipId!==clips[selected]?.id;
+ refreshAtlas();
 }
 function openMicrotopic(index){
- if(!clips[index])return;
+ if(!clips[index]||busy)return;
+ if(!microtopicDetailOpen)catalogScroll=window.scrollY;
  selected=index;microtopicDetailOpen=true;catalogPlayback=null;
- sync();updateMicrotopicMode();
+ playbackMode='source';$('player').pause();
+ sync();if(media)$('player').currentTime=sourceSegments(clips[index])[0]?.start??clips[index].start;
+ updateMicrotopicMode();window.scrollTo({top:0});
 }
 async function prepareMicrotopicThumbnails(){
  const input=media,generation=++thumbnailGeneration;
+ if(!input)return;
  const targets=clips.filter(c=>c.id!=='draft-1');
  for(const clip of targets){
    if(input!==media||generation!==thumbnailGeneration)return;
@@ -383,8 +395,10 @@ async function prepareMicrotopicThumbnails(){
      const at=Math.min(input.duration-.08,Math.max(0,clip.thumbnailTime??clip.start+2));
      sample=await input.videoSink.getSample(at);
      if(!sample)continue;
-     const canvas=document.createElement('canvas');canvas.width=400;canvas.height=225;
-     sample.draw(canvas.getContext('2d'),0,0,400,225);
+     const source=document.createElement('canvas');source.width=640;source.height=Math.round(640*input.height/input.width);
+     sample.draw(source.getContext('2d'),0,0,source.width,source.height);
+     const canvas=document.createElement('canvas');canvas.width=WIDTH;canvas.height=HEIGHT;
+     paintFrame(canvas,source,source.width,source.height,clip.layout||'hybrid',clip.focusX??50,null,clip.scene||null,0);
      topicThumbnails.set(clip.id,canvas.toDataURL('image/jpeg',.76));
    }catch(err){if(input!==media)return}
    finally{sample?.close()}
@@ -406,6 +420,8 @@ function setEditorTab(name){
    control.setAttribute('aria-selected',String(selected));
  }
  root.dataset.editorTab=name;
+ if(name==='timeline'){playbackMode='source';catalogPlayback=null;}
+ refreshAtlas();
  scheduleProjectSave();
 }
 
@@ -413,7 +429,7 @@ function setEditorTab(name){
 const generatedQuizzes=new Map(),quizSelections=new Map();
 function quizKey(c){return c?[c.id,c.start,c.end,c.title].join('|'):''}
 function updateDashboard(){
- const ready=clips.filter(c=>c.id!=='draft-1'&&storyDuration(c)>0);
+ const ready=clips.filter(c=>c.id!=='draft-1'&&!c.candidate&&storyDuration(c)>0);
  const checked=ready.filter(c=>c.status==='approved');
  $('kpi-topics').textContent=String(ready.length);
  $('kpi-approved').textContent=String(checked.length);
@@ -490,25 +506,29 @@ function initMvpEvents(){
    const open=$('settings-toggle').closest('.sidebar').classList.toggle('show-settings');
    $('settings-toggle').textContent=open?'Скрыть настройки анализа ▴':'Настройки анализа ▾';
  };
-  $('workflow-start').onclick=()=>$('transcribe').click();
+ $('workflow-start').onclick=()=>{
+   if(!media||busy)return;
+   if(pendingSrtChunks){if(!confirmReanalysis())return;chunks=pendingSrtChunks;pendingSrtChunks=null;proposeTopics();$('transcript').value=toSrt(chunks);sync();status('Микроуроки подготовлены по SRT. Проверьте названия и смысловые границы.');}
+   else $('transcribe').click();
+ };
  $('workflow-srt').onclick=()=>$('import-srt').click();
  $('processing-cancel').onclick=()=>abort?.abort();
  $('timeline-source').onclick=e=>{
    if(!media)return;
    const rect=e.currentTarget.getBoundingClientRect();
-   $('player').currentTime=timelineTimeAtFraction((e.clientX-rect.left)/Math.max(1,rect.width),media.duration);
+   seekOriginal(timelineTimeAtFraction((e.clientX-rect.left)/Math.max(1,rect.width),media.duration));
    updateTimelinePlayhead();
  };
  $('timeline-track').onclick=e=>{
    if(!media||busy||!e.target.classList.contains('skipped'))return;
    const rect=$('timeline-track').getBoundingClientRect();
-   $('player').currentTime=timelineTimeAtFraction((e.clientX-rect.left)/Math.max(1,rect.width),media.duration);
+   seekOriginal(timelineTimeAtFraction((e.clientX-rect.left)/Math.max(1,rect.width),media.duration));
    updateTimelinePlayhead();
    status('Выбран пропущенный участок. Можете создать клип из текущей точки.');
  };
  $('timeline-regenerate').onclick=()=>{
    if(!media||!chunks.length)return;
-   if(!confirm('Повторно определить границы всех учебных тем? Текущие ручные изменения и подтверждения заменятся.'))return;
+   if(busy||!confirmReanalysis())return;
    proposeTopics();status('Темы переопределены без ограничения их общей длительности. Проверьте полноту разбора.');
  };
  $('timeline-recompose').onclick=()=>{
@@ -520,7 +540,7 @@ function initMvpEvents(){
    const start=Math.max(0,Math.min(media.duration-.5,$('player').currentTime||0));
    const end=Math.min(media.duration,start+Math.min(20,Math.max(1,media.duration-start)));
    try{
-      clips[selected]=appendSourceSegment(c,start,end,media.duration);sync();
+      clips[selected]=appendSourceSegment(c,start,end,media.duration);invalidateClip(clips[selected],{content:true});sync();
       status('К микротеме добавлен отрывок '+timecode(start)+'–'+timecode(end)+'. Проверьте переход.');
    }catch(err){status(err.message)}
  };
@@ -538,6 +558,7 @@ function initMvpEvents(){
  document.querySelectorAll('[data-editor-tab]').forEach(button=>{
    button.addEventListener('click',()=>setEditorTab(button.dataset.editorTab));
  });
+ for(const id of ['language','asr-model','asr-limit','ocr-engine','output-quality'])$(id).addEventListener('change',()=>{scheduleProjectSave();refreshAtlas()});
   if(!isLocalDesktop){
    const opt=$('ocr-engine').querySelector('option[value="rapid"]');if(opt)opt.disabled=true;
    $('ocr-engine').value='tesseract';
@@ -571,19 +592,109 @@ let chapterScanPending=false,chapterScanAttempted=false,chapterScanAbort=null;
 const LIBRARY_LAST='examclips-current-project-id';
 const makeId=()=>crypto.randomUUID?.()||('project-'+Date.now()+'-'+Math.random().toString(36).slice(2));
 const sourceLabel=()=>sourceFile?.name||attachedSourceMeta?.name||'Лекция';
+const projectDuration=()=>media?.duration||detachedDuration||0;
+function refreshAtlas(){
+ if(!atlasShell)return;
+ atlasShell.update();
+ renderAtlasPanels({clips,chunks,duration:projectDuration(),selected,media,busy,rangeSelection});
+ updateAtlasPlayhead({time:$('player').currentTime||0,duration:projectDuration(),playing:!$('player').paused});
+}
+function seekOriginal(time,play=false){
+ if(!media){status('Привяжите оригинальное видео для просмотра.');return}
+ playbackMode='source';catalogPlayback=null;
+ $('player').currentTime=Math.max(0,Math.min(media.duration,Number(time)||0));
+ if(play)$('player').play().catch(err=>status('Не удалось воспроизвести: '+err.message));
+ updateTimelinePlayhead();
+}
+function invalidateClip(clip,{content=false}={}){
+ clearFinishedVideo();generatedQuizzes.clear();quizSelections.clear();
+ if(!clip)return;
+ clip.status='needs-review';delete clip.approvedAt;delete clip.llmReview;
+ clip.reviewReasons=['Содержимое изменилось. Проверьте вступление, объяснение и вывод.'];
+ if(content){delete clip.screenplay;delete clip.scene;delete clip.scenes;clip.editorialStatus='needs-more-context';$('player').pause();catalogPlayback=null;playbackMode='source';}
+ topicThumbnails.delete(clip.id);
+ clearTimeout(thumbnailTimer);thumbnailTimer=setTimeout(()=>prepareMicrotopicThumbnails().catch(()=>{}),450);
+}
+function confirmReanalysis(){
+ return !clips.some(c=>c.id!=='draft-1')||confirm('Пересчёт заменит текущие названия, границы, монтаж и подтверждения микротем. Продолжить?');
+}
+function timeValue(value){
+ if(typeof value==='number')return value;
+ const text=String(value).trim().replace(',','.');
+ if(!text)return NaN;
+ const parts=text.split(':').map(Number);
+ return parts.length<=3&&parts.every(Number.isFinite)?parts.reduce((n,p)=>n*60+p,0):NaN;
+}
+function selectAtlasRange(start,end){
+ const a=timeValue(start),b=timeValue(end),duration=projectDuration();
+ if(!Number.isFinite(a)||!Number.isFinite(b)||a<0||b<a||b>duration){status('Введите корректные границы в секундах или ЧЧ:ММ:СС.');return}
+ rangeSelection={start:a,end:b};refreshAtlas();
+}
+function findAtlasRange(){
+ if(busy||!rangeSelection||!chunks.length)return;
+ const proposals=findRangeTopics(chunks,projectDuration(),{...rangeSelection,clips,chapters:lectureChapters,sceneCuts});
+ if(!proposals.length){status('В свободной части этого участка недостаточно речи для нового законченного урока. Расширьте диапазон или проверьте расшифровку.');return}
+ clips.push(...proposals);sync();prepareMicrotopicThumbnails().catch(()=>{});
+ status('Найдено '+proposals.length+' кандидатов по сохранённой речи. Проверьте и примите подходящие в серию.');
+}
+function createAtlasRange(){
+ if(busy||!rangeSelection)return;
+ try{
+  const clip=manualRangeClip(rangeSelection.start,rangeSelection.end,projectDuration());clip.candidate=false;
+  clips.push(clip);selected=clips.length-1;openMicrotopic(selected);prepareMicrotopicThumbnails().catch(()=>{});
+  status('Выбранный участок добавлен. Проверьте его смысл и границы перед экспортом.');
+ }catch(err){status(err.message)}
+}
+function acceptCandidate(index=selected){
+ const clip=clips[index];if(busy||!clip?.candidate)return;
+ clip.candidate=false;clip.status='needs-review';sync();status('Кандидат добавлен в серию. Подтвердите проверку после просмотра.');
+}
+function rejectCandidate(index){
+ if(busy||!clips[index]?.candidate)return;
+ clips.splice(index,1);selected=Math.max(0,Math.min(selected,clips.length-1));
+ if(!clips.length)microtopicDetailOpen=false;sync();status('Кандидат удалён. Остальной монтаж сохранён.');
+}
+function changeAtlasBoundary(piece,edge,time){
+ const clip=current();if(busy||!clip)return;
+ try{clips[selected]=amendClipBoundary(clip,edge,time,projectDuration(),piece);invalidateClip(clips[selected],{content:true});sync();status('Граница изменена. Проверьте переход и полноту объяснения.');}
+ catch(err){status(err.message);refreshAtlas()}
+}
+function navigateAtlas(direction){
+ const order=clips.map((clip,index)=>({clip,index})).filter(({clip})=>clip.id!=='draft-1').sort((a,b)=>a.clip.start-b.clip.start);
+ const position=order.findIndex(item=>item.index===selected),next=order[position+direction];
+ if(next)openMicrotopic(next.index);
+}
+function applySnapshot(raw){
+ const p=safeProjectSnapshot(raw),duration=projectDuration();
+ chunks=p.chunks;sceneCuts=p.sceneCuts;lectureChapters=p.lectureChapters;
+ clips=p.clips.filter(c=>validRange(c.start,c.end,duration));
+ selected=Math.max(0,Math.min(clips.length-1,p.selected||0));
+ timelineView={...p.view};catalogScroll=p.ui.catalogScroll;
+ for(const [id,key] of [['language','language'],['asr-model','asrModel'],['asr-limit','asrLimit'],['ocr-engine','ocrEngine'],['output-quality','outputQuality']])$(id).value=p.settings[key];
+ if(!isLocalDesktop&&$('ocr-engine').value==='rapid')$('ocr-engine').value='tesseract';
+ $('transcript').value=toSrt(chunks);
+ setPhase(!media||chunks.length||clips.some(c=>c.id!=='draft-1')?'results':'configure');
+ setEditorTab(p.activeTab||'clip');
+ microtopicDetailOpen=Boolean(p.ui.detailOpen&&clips[selected]&&activeEditorTab==='clip');
+ sync();
+ const offset=timelineView.offset;
+ requestAnimationFrame(()=>{$('timeline-viewport').scrollLeft=offset*$('timeline-canvas').scrollWidth;if(!microtopicDetailOpen&&activeEditorTab==='clip')window.scrollTo(0,catalogScroll);});
+}
 function buildCurrentSnapshot(){
  return safeProjectSnapshot({
-  duration:media.duration,clips,chunks,sceneCuts,lectureChapters,selected,
+  duration:projectDuration(),clips,chunks,sceneCuts,lectureChapters,selected,
   activeTab:activeEditorTab,view:{zoom:timelineView.zoom,
-    offset:$('timeline-viewport').scrollLeft/Math.max(1,$('timeline-canvas').scrollWidth)}
+    offset:activeEditorTab==='timeline'?$('timeline-viewport').scrollLeft/Math.max(1,$('timeline-canvas').scrollWidth):timelineView.offset},
+  settings:{language:$('language').value,asrModel:$('asr-model').value,asrLimit:$('asr-limit').value,ocrEngine:$('ocr-engine').value,outputQuality:$('output-quality').value},
+  ui:{detailOpen:microtopicDetailOpen,catalogScroll:microtopicDetailOpen?catalogScroll:window.scrollY}
  });
 }
 function flushProjectSave(){
- if(!currentProjectId||!media||isSwitchingProject)return saveQueue;
+ if(!currentProjectId||!projectDuration()||isSwitchingProject)return saveQueue;
  // Snapshot now and serialize IndexedDB writes. A slower earlier edit cannot
  // overwrite a newer one, including during immediate navigation.
- const projectId=currentProjectId,source=pickFileMetadata(sourceFile);
- const handle=currentSourceHandle,duration=media.duration,title=sourceLabel();
+ const projectId=currentProjectId,source=sourceFile?pickFileMetadata(sourceFile):attachedSourceMeta;
+ const handle=currentSourceHandle,duration=projectDuration(),title=sourceLabel(),thumbnail=projectThumbnail;
  let snapshot;
  try{snapshot=buildCurrentSnapshot()}catch(err){
    $('autosave-state').textContent='Не удалось подготовить проект: '+String(err.message||err).slice(0,100);
@@ -595,7 +706,7 @@ function flushProjectSave(){
      const previous=await getLibraryProject(projectId).catch(()=>null);
      const item={id:projectId,createdAt:previous?.createdAt||new Date().toISOString(),
        updatedAt:new Date().toISOString(),title,duration,source,
-       fileHandle:handle||previous?.fileHandle||null,snapshot};
+       fileHandle:handle||previous?.fileHandle||null,thumbnail:thumbnail||previous?.thumbnail||null,snapshot};
      try{await saveLibraryProject(item)}
      catch(err){
        if(item.fileHandle){item.fileHandle=null;await saveLibraryProject(item)}
@@ -615,7 +726,7 @@ function flushProjectSave(){
  return saveQueue;
 }
 function scheduleProjectSave(){
- if(!currentProjectId||!media||isSwitchingProject)return;
+ if(!currentProjectId||!projectDuration()||isSwitchingProject)return;
  clearTimeout(autosaveTimer);
  autosaveTimer=setTimeout(()=>{autosaveTimer=null;flushProjectSave().catch(()=>{})},550);
 }
@@ -629,12 +740,19 @@ async function renderLibrary(){
  if(!records.length){const msg=document.createElement('p');msg.className='hint';msg.textContent='Пока нет сохранённых лекций. Загрузите первую — редактор будет автоматически сохранять правки.';box.append(msg);return}
  for(const rec of records){
    const item=document.createElement('article');item.className='library-item';
+   const cover=document.createElement('button');cover.type='button';cover.className='library-item-cover';
+   cover.setAttribute('aria-label','Открыть лекцию '+(rec.title||'Лекция'));cover.onclick=()=>openSavedProject(rec.id);
+   if(rec.thumbnail){const image=document.createElement('img');image.src=rec.thumbnail;image.alt='Кадр исходной лекции';image.loading='lazy';cover.append(image)}
+   else{const mark=document.createElement('span');mark.textContent='▶';mark.setAttribute('aria-hidden','true');cover.append(mark)}
+   const duration=document.createElement('span');duration.className='library-item-duration';duration.textContent=timecode(rec.duration||0).slice(0,8);cover.append(duration);
    const details=document.createElement('div');details.className='library-item-main';
    const title=document.createElement('strong');title.textContent=rec.title||rec.source?.name||'Лекция';
+   const real=(rec.snapshot?.clips||[]).filter(c=>c.id!=='draft-1'&&!c.candidate),checked=real.filter(c=>c.status==='approved').length;
    const date=document.createElement('span');date.textContent=
-     (rec.updatedAt?new Date(rec.updatedAt).toLocaleString('ru-RU'):'')+
-     ' · '+Math.round(rec.duration/60)+' мин · '+(rec.snapshot?.clips?.filter(c=>c.id!=='draft-1').length||0)+' микротем';
-   details.append(title,date);
+     (rec.updatedAt?new Date(rec.updatedAt).toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'numeric'}):'')+
+     ' · '+real.length+' '+({one:'микроурок',few:'микроурока',many:'микроуроков',other:'микроурока'}[new Intl.PluralRules('ru').select(real.length)]);
+   const review=document.createElement('span');review.className='library-item-review';review.textContent='✓ Проверено '+checked+' / '+real.length;
+   details.append(title,date,review);
    const actions=document.createElement('div');actions.className='library-item-actions';
    const open=document.createElement('button');open.textContent='Продолжить';open.type='button';
    open.onclick=()=>openSavedProject(rec.id);
@@ -647,7 +765,7 @@ async function renderLibrary(){
      if(localStorage.getItem(LIBRARY_LAST)===rec.id)localStorage.removeItem(LIBRARY_LAST);
      await renderLibrary();
    };
-   actions.append(open,remove);item.append(details,actions);box.append(item);
+   actions.append(open,remove);item.append(cover,details,actions);box.append(item);
  }
 }
 async function openSavedProject(id){
@@ -671,9 +789,20 @@ async function openSavedProject(id){
      }
    }
  }catch(err){$('file-note').textContent='Доступ к оригиналу нужно подтвердить: '+err.message}
- $('file-note').textContent='Проект «'+(rec.title||rec.source?.name)+'» сохранён. Выберите исходное видео с тем же названием, размером и датой изменения.';
- $('video-file').value='';
- $('video-file').click();
+ await openDetachedProject(rec);
+}
+async function openDetachedProject(rec){
+ clearTimeout(autosaveTimer);await flushProjectSave();isSwitchingProject=true;
+ try{
+  $('player').pause();if(media)await media.input.dispose();
+  if(originalUrl)URL.revokeObjectURL(originalUrl);
+  media=null;sourceFile=null;originalUrl=null;$('player').removeAttribute('src');$('player').load();
+  detachedDuration=rec.duration||rec.snapshot?.duration||0;currentProjectId=rec.id;attachedSourceMeta=rec.source||{name:rec.title||'Лекция'};
+  currentSourceHandle=rec.fileHandle||null;pendingLibraryEntry=rec;projectThumbnail=rec.thumbnail||null;
+  clearFinishedVideo();chapterScanAbort?.abort();thumbnailGeneration++;topicThumbnails.clear();pendingSrtChunks=null;rangeSelection=null;
+  applySnapshot(rec.snapshot);$('video-file').value='';
+  status('Разметка открыта. Привяжите оригинальное видео для воспроизведения и экспорта.');
+ }finally{isSwitchingProject=false;enable();scheduleProjectSave()}
 }
 async function backToLibrary(){
  if(busy){status('Сначала остановите текущую операцию.');return}
@@ -686,13 +815,17 @@ async function backToLibrary(){
   $('player').pause();
   if(media)await media.input.dispose();
   if(originalUrl)URL.revokeObjectURL(originalUrl);
-  media=null;sourceFile=null;originalUrl=null;currentProjectId=null;
+  media=null;sourceFile=null;originalUrl=null;currentProjectId=null;detachedDuration=0;attachedSourceMeta=null;projectThumbnail=null;
   currentSourceHandle=null;pendingLibraryEntry=null;chunks=[];clips=[];
+  pendingSrtChunks=null;projectToRestore=null;rangeSelection=null;catalogScroll=0;microtopicDetailOpen=false;playbackMode='source';catalogPlayback=null;
   clearFinishedVideo();chapterScanAbort?.abort();chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();lectureChapters=[];
   sceneCuts=[];selected=0;$('video-file').value='';$('srt-file').value='';
   $('transcript').value='';$('file-note').textContent='Выберите другую лекцию или откройте проект из истории.';
-  setPhase('upload');renderTimeline();updateDashboard();renderQuiz();enable();
+  $('player').removeAttribute('src');$('player').load();timelineView={zoom:1,offset:0};
+  try{localStorage.removeItem(LIBRARY_LAST)}catch{}
+  setPhase('upload');atlasShell?.showLibrary();renderClips();renderTimeline();updateDashboard();renderQuiz();enable();
   $('autosave-state').textContent='Проект сохранён. Можно открыть другую лекцию.';
+  status('Выберите сохранённую лекцию или добавьте новую.');
  }finally{isSwitchingProject=false}
  await renderLibrary();
 }
@@ -720,7 +853,7 @@ async function resumeMostRecent(){
   const cached=await getCachedOriginal(id);
   if(cached&&sameVideoFile(rec.source,cached)){
     pendingLibraryEntry=rec;await selectFile(cached);
-  }
+  }else await openDetachedProject(rec);
  }catch{/* Library remains available for user to reattach the file */}
 }
 
@@ -728,8 +861,9 @@ function setPhase(value){
  if(!['upload','configure','processing','results'].includes(value))return;
  const old=root.dataset.phase;root.dataset.phase=value;
  $('processing-panel').hidden=value!=='processing';
- if(value==='results'&&old!=='results')setEditorTab('timeline');
+ if(value==='results'&&old!=='results')setEditorTab('clip');
  $('back-to-library').hidden=value!=='results'&&value!=='processing';
+ refreshAtlas();
 }
 function showOperation(stage,percent,message,{standalone=false}={}){
  const stages=['prepare','asr','topics','composition'];
@@ -763,6 +897,7 @@ async function buildPrivateFilmstrip(videoMedia){
      const image=document.createElement('canvas');image.width=150;image.height=84;
      try{sample.draw(image.getContext('2d'),0,0,150,84)}finally{sample.close()}
      if(media!==videoMedia)return;
+     if(i===0&&!projectThumbnail){projectThumbnail=image.toDataURL('image/jpeg',.8);scheduleProjectSave();}
      const tile=document.createElement('div');tile.className='filmstrip-tile';
      tile.style.left=(i*100/N)+'%';tile.style.width=(100/N)+'%';
      tile.style.backgroundImage='url("'+image.toDataURL('image/jpeg',.55)+'")';
@@ -787,8 +922,8 @@ function setTimelineZoom(value){
 function renderTimeline(){
  const track=$('timeline-track'),ruler=$('timeline-ruler');
  track.replaceChildren();ruler.replaceChildren();
- if(!media){$('timeline-current').textContent='00:00:00 / 00:00:00';return}
- const duration=media.duration,spans=timelinePieces(clips,duration),stat=timelineStats(clips,duration);
+ if(!projectDuration()){$('timeline-current').textContent='00:00:00 / 00:00:00';return}
+ const duration=projectDuration(),accepted=clips.filter(c=>!c.candidate),spans=timelinePieces(accepted,duration),stat=timelineStats(accepted,duration);
  $('timeline-canvas').style.width=(timelineView.zoom*100)+'%';
  $('timeline-zoom').value=String(timelineView.zoom);
  $('timeline-zoom-label').textContent=timelineView.zoom+'×';
@@ -814,7 +949,7 @@ function renderTimeline(){
       const label=document.createElement('span');label.className='timeline-part-text';
       label.textContent=String(idx+1).padStart(2,'0')+'.'+(span.segmentIndex+1)+' · '+(span.title||'Фрагмент');
       el.append(label);
-      el.onclick=()=>{if(busy)return;selected=idx;sync();$('player').currentTime=span.start};
+      el.onclick=()=>{if(busy)return;selected=idx;sync();seekOriginal(span.start)};
       el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click()}};
       for(const edge of ['start','end']){
         const handle=document.createElement('button');handle.type='button';
@@ -834,7 +969,7 @@ function renderTimeline(){
             document.removeEventListener('pointermove',move);
             document.removeEventListener('pointerup',release);
             const t=timelineTimeAtFraction((event.clientX-rect.left)/rect.width,duration);
-            try{clips[idx]=amendClipBoundary(initial,edge,t,duration,span.segmentIndex);selected=idx;sync();
+            try{clips[idx]=amendClipBoundary(initial,edge,t,duration,span.segmentIndex);selected=idx;invalidateClip(clips[idx],{content:true});sync();
               status('Граница сохранена. Проверьте микротему и заново создайте композицию.')}
             catch(err){status('Не удалось изменить границу: '+err.message);renderTimeline()}
           };
@@ -853,35 +988,42 @@ function renderTimeline(){
  scheduleProjectSave();
 }
 function updateTimelinePlayhead(){
- if(!media)return;
+ if(!projectDuration())return;
  const now=$('player').currentTime||0;
- const percent=Math.max(0,Math.min(100,now/media.duration*100));
+ const percent=Math.max(0,Math.min(100,now/projectDuration()*100));
  $('timeline-playhead').style.left=percent+'%';
- $('timeline-current').textContent=timecode(now).slice(0,8)+' / '+timecode(media.duration).slice(0,8);
+ $('timeline-current').textContent=timecode(now).slice(0,8)+' / '+timecode(projectDuration()).slice(0,8);
+ if(atlasShell)updateAtlasPlayhead({time:now,duration:projectDuration(),playing:!$('player').paused});
 }
 function status(msg){$('progress').textContent=msg;$('status').textContent=msg.slice(0,48);if(!$('processing-panel').hidden)$('processing-detail').textContent=msg}
 function error(e){console.error(e);status('Ошибка: '+(e.message||String(e)))}
 function enable(){
-  const has=!!media,clip=!!clips.length;
+  const has=!!media,project=!!projectDuration(),clip=!!current();
+  $('remember-video').hidden=!has||!window.showOpenFilePicker;
   $('transcribe').disabled=!has||busy;$('import-srt').disabled=!has||busy;
   for(const id of ['timeline-regenerate','timeline-recompose','timeline-add','timeline-append'])if($(id))$(id).disabled=busy||!has||(id==='timeline-regenerate'&&!chunks.length);
   $('workflow-start').disabled=!has||busy;
   $('workflow-srt').disabled=!has||busy;
   $('scan-chapters').disabled=!has||busy;
   $('forget-asr').disabled=!has||busy;
-  $('suggest-topics').disabled=!has||busy||!chunks.length;
+  $('suggest-topics').disabled=!project||busy||!chunks.length;
   $('quiz-generate').disabled=!has||busy||!chunks.length||current()?.id==='draft-1';
   $('export-all').disabled=!has||busy||!chunks.length||clips.every(c=>
-    c.id==='draft-1'||(media.duration>10&&c.editorialStatus==='needs-more-context'&&c.status!=='approved'));
+    c.id==='draft-1'||c.candidate||(media.duration>10&&c.editorialStatus==='needs-more-context'&&c.status!=='approved'));
   $('verify-topic').disabled=!isLocalDesktop||!localReviewAvailable||!clip||busy||!chunks.length||current()?.id==='draft-1';
   $('apply-review').disabled=!clip||busy||!current()?.llmReview?.evidenceVerified||
     !((current()?.llmReview?.suggestedStartDelta||0)||(current()?.llmReview?.suggestedEndDelta||0));
   for(const id of ['clip-title','clip-start','clip-end','layout','focus','play-clip','export','remove','analyze-scene','speaker-preset','style-theme','extend-start','extend-end','listen-context','approve-topic'])$(id).disabled=!clip||busy;
   // Never accidentally export the arbitrary, untranscribed loading placeholder as a finished micro-lesson.
-  $('export').disabled=!clip||busy||current()?.id==='draft-1'||
+  $('export').disabled=!has||!clip||busy||current()?.id==='draft-1'||current()?.candidate||
     (media?.duration>10&&current()?.editorialStatus==='needs-more-context'&&current()?.status!=='approved');
-  for(const id of ['save-srt','save-project','add'])$(id).disabled=!has||busy;
-  $('transcript').disabled=!has||busy;$('cancel').disabled=!busy;
+  for(const id of ['save-srt','save-project','add'])$(id).disabled=!project||busy;
+  for(const id of ['play-clip','analyze-scene','listen-context','approve-topic'])$(id).disabled=!has||!clip||busy;
+  $('approve-topic').disabled||=current()?.candidate||current()?.id==='draft-1';
+  $('transcript').disabled=!project||busy;$('cancel').disabled=!busy;
+  if($('catalog-reanalyze'))$('catalog-reanalyze').disabled=!project||!chunks.length||busy;
+  if($('catalog-preview-play'))$('catalog-preview-play').disabled=!has||!clip||busy;
+  refreshAtlas();
 }
 function download(blob,name){
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;
@@ -921,21 +1063,43 @@ function renderStoryPieces(){
      const b=document.createElement('button');b.type='button';b.textContent=text;b.disabled=disabled||busy;
      b.title=label;b.setAttribute('aria-label',label);b.onclick=action;actions.append(b);
    };
-   btn('▶',false,()=>{
-     $('player').currentTime=piece.start;$('player').play().catch(()=>{});
+   btn('▶',!media,()=>{
+     playbackMode='clip';catalogPlayback={clipId:clip.id,pieceIndex:i};$('player').currentTime=piece.start;$('player').play().catch(()=>{});
    },'Воспроизвести этот отрывок');
-   btn('↑',i===0,()=>{clips[selected]=reorderSourceSegments(clip,i,-1);sync()},'Раньше в ролике');
-   btn('↓',i===all.length-1,()=>{clips[selected]=reorderSourceSegments(clip,i,1);sync()},'Позже в ролике');
-   btn('×',all.length<2,()=>{clips[selected]=removeSourceSegment(clip,i);sync()},'Удалить отрывок из ролика');
+   btn('↑',i===0,()=>{clips[selected]=reorderSourceSegments(clip,i,-1);invalidateClip(clips[selected],{content:true});sync()},'Раньше в ролике');
+   btn('↓',i===all.length-1,()=>{clips[selected]=reorderSourceSegments(clip,i,1);invalidateClip(clips[selected],{content:true});sync()},'Позже в ролике');
+   btn('×',all.length<2,()=>{clips[selected]=removeSourceSegment(clip,i);invalidateClip(clips[selected],{content:true});sync()},'Удалить отрывок из ролика');
    row.append(name,actions);area.append(row);
  });
 }
 function playCatalogTopic(index){
  const c=clips[index];if(!c||!media)return;
  openMicrotopic(index);
+ playbackMode='clip';
  catalogPlayback={clipId:c.id,pieceIndex:0};
  $('player').currentTime=sourceSegments(c)[0]?.start??c.start;
  $('player').play().catch(err=>status('Не удалось воспроизвести: '+err.message));
+}
+function toggleCatalogPlayback(){
+ const c=current(),video=$('player');if(!c||!media||busy)return;
+ if(!video.paused){video.pause();return}
+ const pieces=sourceSegments(c);
+ const retained=playbackMode==='clip'&&catalogPlayback?.clipId===c.id?catalogPlayback.pieceIndex:-1;
+ const contains=piece=>piece&&video.currentTime>=piece.start&&video.currentTime<piece.end-.05;
+ let pieceIndex=contains(pieces[retained])?retained:pieces.findIndex(contains);
+ if(pieceIndex<0){pieceIndex=0;video.currentTime=pieces[0]?.start??c.start;}
+ playbackMode='clip';catalogPlayback={clipId:c.id,pieceIndex};
+ video.play().catch(err=>status('Не удалось продолжить просмотр: '+err.message));
+}
+function enforceCatalogPlayback(){
+ const c=current(),video=$('player');
+ if(!media||!c||playbackMode!=='clip'||catalogPlayback?.clipId!==c.id||video.paused)return;
+ const pieces=sourceSegments(c),piece=pieces[catalogPlayback.pieceIndex];
+ if(piece&&video.currentTime>=piece.end-.05){
+  if(catalogPlayback.pieceIndex<pieces.length-1){
+   catalogPlayback.pieceIndex++;video.currentTime=pieces[catalogPlayback.pieceIndex].start;
+  }else{video.pause();catalogPlayback=null;}
+ }
 }
 function renderMicrotopics(){
  const mount=$('microtopic-catalog');if(!mount)return;
@@ -943,7 +1107,8 @@ function renderMicrotopics(){
   selected,thumbnails:topicThumbnails,
   onSelect:i=>openMicrotopic(i),
   onPlay:i=>playCatalogTopic(i),
-  onEdit:i=>{openMicrotopic(i);$('clip-title').focus()}
+  onEdit:i=>{openMicrotopic(i);$('clip-title').focus()},
+  onAccept:acceptCandidate,onReject:rejectCandidate
  });
  if(media)renderLectureCoverage($('microtopic-coverage-report'),
    dockerVisualSubtopics({name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height}),
@@ -981,93 +1146,76 @@ function sync(){
     : 'Проверка завершённости через Ollama необязательна и выполняется только на этом компьютере.';
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
   $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
-  $('player').currentTime=sourceSegments(c)[0]?.start??c.start;
-  renderStoryPieces();renderScreenplay();updateTimelinePlayhead();scheduleProjectSave();
+  renderStoryPieces();renderScreenplay();updateTimelinePlayhead();refreshAtlas();scheduleProjectSave();
 }
-function setBusy(v){busy=v;if(!v&&root.dataset.phase==='results')$('processing-panel').hidden=true;enable()}
+function setBusy(v){busy=v;if(!v&&root.dataset.phase==='results')$('processing-panel').hidden=true;enable();renderStoryPieces()}
 async function selectFile(file){
-  if(!file)return;
-  if(file.size>2e9){status('Файл больше лимита MVP 2 ГБ');return}
-  if(pendingLibraryEntry&&!sameVideoFile(pendingLibraryEntry.source,file)){
-    $('file-note').textContent='Это не исходное видео проекта. Нужен файл «'+pendingLibraryEntry.source.name+
-      '» такого же размера и даты изменения. Проект не изменён.';
-    $('video-file').value='';return;
-  }
-  // Persist the current lecture when the user drops a different source directly.
-  clearTimeout(autosaveTimer);
-  if(media&&currentProjectId&&!isSwitchingProject){
-    try{await flushProjectSave()}catch(err){
-      status('Предыдущий проект не удалось сохранить: '+err.message);return;
-    }
-  }
+ if(!file||busy)return;
+ if(file.size>2e9){status('Файл больше лимита 2 ГБ.');return}
+ const expected=pendingLibraryEntry?.source;
+ if(expected&&((expected.size? !sameVideoFile(expected,file):expected.name&&expected.name!==file.name))){
+  status('Это другой исходник. Выберите «'+expected.name+'» с тем же размером и датой изменения. Проект сохранён.');
+  $('video-file').value='';return;
+ }
+ clearTimeout(autosaveTimer);
+ try{await flushProjectSave()}catch(err){status('Предыдущий проект не удалось сохранить: '+err.message);return}
+ const resumeEntry=pendingLibraryEntry?.id===currentProjectId?
+   {...pendingLibraryEntry,snapshot:buildCurrentSnapshot()}:pendingLibraryEntry;
+ setBusy(true);status('Чтение локальных метаданных…');
+ let opened=null;
+ try{
+  // Validate the replacement before releasing the original or its project.
+  opened=await openMedia(file);
+  if(opened.duration>10800)throw Error('Лекция длиннее 180 минут. Выберите более короткий исходник.');
+  if(resumeEntry?.snapshot&&Math.abs(resumeEntry.snapshot.duration-opened.duration)>2)
+   throw Error('Длительность оригинала не совпадает с сохранённым проектом.');
   isSwitchingProject=true;
-  setBusy(true);status('Чтение локальных метаданных...');
-  try{
-    if(media)await media.input.dispose();
-    if(originalUrl)URL.revokeObjectURL(originalUrl);
-    media=await openMedia(file);originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
-    clearFinishedVideo();sourceFile=file;sceneCuts=[];lectureChapters=[];chapterScanAbort?.abort();chapterScanPending=false;chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
-    const resumeEntry=pendingLibraryEntry;
-    pendingLibraryEntry=null;
-    currentProjectId=resumeEntry?.id||makeId();
-    currentSourceHandle=resumeEntry?.fileHandle||null;
-    attachedSourceMeta=pickFileMetadata(file);
-    $('remember-video').hidden=!window.showOpenFilePicker;
-    $('file-note').textContent=`${file.name} · ${timecode(media.duration)} · ${media.width}×${media.height} · ${(file.size/1e6).toFixed(1)} МБ`;
-    // A draft is NOT an AI-generated completed lesson; only ASR/SRT can produce topic proposals.
-    clips=[{id:'draft-1',start:0,end:Math.min(media.duration,180),title:'Черновик — сначала распознайте лекцию',
-      layout:'hybrid',focusX:50,status:'needs-review',
-      reviewReasons:['Нет транскрипта; это произвольный участок, а не законченная микротема']}];
-    chunks=[];selected=0;$('transcript').value='';
-    if(resumeEntry?.snapshot){
-      const p=resumeEntry.snapshot;
-      if(Math.abs(p.duration-media.duration)>2)throw Error('Длительность оригинала не совпадает с сохранённым проектом');
-      chunks=p.chunks||[];
-      sceneCuts=Array.isArray(p.sceneCuts)?p.sceneCuts.filter(Number.isFinite):[];
-      lectureChapters=Array.isArray(p.lectureChapters)?p.lectureChapters:[];
-      clips=p.clips.filter(c=>validRange(c.start,c.end,media.duration));
-      selected=Math.min(clips.length-1,Math.max(0,p.selected||0));
-      timelineView={zoom:Math.min(24,Math.max(1,p.view?.zoom||1)),offset:Math.max(0,Math.min(1,p.view?.offset||0))};
-      $('transcript').value=toSrt(chunks);
-      status('Восстановлен сохранённый монтаж, транскрипт и выбранная микротема.');
-    }else if(projectToRestore){
-      const p=projectToRestore;projectToRestore=null;
-      if(Math.abs(p.duration-media.duration)>2){status('Длительность видео не совпадает с проектом. Данные не импортированы.')}
-      else{
-        chunks=p.chunks||[];sceneCuts=Array.isArray(p.sceneCuts)?p.sceneCuts.filter(Number.isFinite):[];lectureChapters=Array.isArray(p.lectureChapters)?p.lectureChapters:[];clips=p.clips.filter(c=>validRange(c.start,c.end,media.duration)).map((c,i)=>({...c,id:'clip-'+(i+1)}));
-        $('transcript').value=toSrt(chunks);status('Проект восстановлен; проверьте ролики');
-      }
-    }else status('Видео открыто локально. Можете распознать речь или импортировать SRT.');
-    setPhase(chunks.length?'results':'upload');
-    sync();
-    // Generate gallery covers for old saved projects too, not only after
-    // freshly running the chapter planner in this browser session.
-    if(chunks.length&&clips.length)prepareMicrotopicThumbnails().catch(()=>{});
-    if(resumeEntry?.snapshot){
-      setEditorTab(['timeline','clip','captions','quiz','export'].includes(resumeEntry.snapshot.activeTab)?resumeEntry.snapshot.activeTab:'timeline');
-      requestAnimationFrame(()=>{
-        $('timeline-viewport').scrollLeft=timelineView.offset*$('timeline-canvas').scrollWidth;
-      });
-    }
-    buildPrivateFilmstrip(media).catch(()=>{});
-    if(!resumeEntry){cacheSmallOriginal(currentProjectId,file).catch(()=>{});}
-  }catch(e){media=null;clips=[];updateDashboard();renderQuiz();setPhase('upload');error(e)}
-   finally{isSwitchingProject=false;setBusy(false);scheduleProjectSave()}
+  $('player').pause();if(media)await media.input.dispose();
+  if(originalUrl)URL.revokeObjectURL(originalUrl);
+  media=opened;opened=null;detachedDuration=media.duration;
+  originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
+  clearFinishedVideo();sourceFile=file;sceneCuts=[];lectureChapters=[];chapterScanAbort?.abort();
+  chapterScanPending=false;chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();
+  microtopicDetailOpen=false;catalogPlayback=null;playbackMode='source';rangeSelection=null;pendingSrtChunks=null;
+  generatedQuizzes.clear();quizSelections.clear();
+  pendingLibraryEntry=null;projectToRestore=null;
+  currentProjectId=resumeEntry?.id||makeId();currentSourceHandle=resumeEntry?.fileHandle||null;
+  attachedSourceMeta=pickFileMetadata(file);projectThumbnail=resumeEntry?.thumbnail||null;
+  timelineView={zoom:1,offset:0};catalogScroll=0;
+  $('remember-video').hidden=!window.showOpenFilePicker;
+  $('file-note').textContent=`${file.name} · ${timecode(media.duration)} · ${media.width}×${media.height} · ${(file.size/1e6).toFixed(1)} МБ`;
+  clips=[{id:'draft-1',start:0,end:Math.min(media.duration,180),title:'Черновик — сначала распознайте лекцию',
+   layout:'hybrid',focusX:50,status:'needs-review',reviewReasons:['Сначала нужна расшифровка и проверка законченности объяснения.']}];
+  chunks=[];selected=0;$('transcript').value='';
+  if(resumeEntry?.snapshot){applySnapshot(resumeEntry.snapshot);status('Восстановлены монтаж, расшифровка, настройки и открытый экран.');}
+  else{setPhase('configure');atlasShell?.showWizard(1);sync();status('Видео открыто. Нажмите «Далее», чтобы настроить анализ.');}
+  if(chunks.length&&clips.length)prepareMicrotopicThumbnails().catch(()=>{});
+  buildPrivateFilmstrip(media).catch(()=>{});
+  if(!resumeEntry)await cacheSmallOriginal(currentProjectId,file).catch(()=>false);
+ }catch(err){error(err);if(opened)await opened.input.dispose();}
+ finally{isSwitchingProject=false;setBusy(false);scheduleProjectSave()}
 }
 $('video-file').addEventListener('change',e=>selectFile(e.target.files?.[0]));
 $('drop').addEventListener('dragover',e=>{e.preventDefault();$('drop').classList.add('over')});
 $('drop').addEventListener('dragleave',()=>$('drop').classList.remove('over'));
 $('drop').addEventListener('drop',e=>{e.preventDefault();$('drop').classList.remove('over');selectFile(e.dataTransfer.files?.[0])});
-$('import-srt').onclick=()=>$('srt-file').click();
+$('import-srt').onclick=()=>{$('srt-file').value='';$('srt-file').click()};
 $('srt-file').onchange=async e=>{
-  if(!media)return;try{
-    chunks=parseSrt(await e.target.files[0].text(),media.duration);
-    if(!chunks.length)throw Error('Не найдены валидные интервалы SRT');
+  const file=e.target.files?.[0];if(!media||busy||!file)return;try{
+    const parsed=parseSrt(await file.text(),media.duration);
+    if(!parsed.length)throw Error('Не найдены валидные интервалы SRT');
+    if(root.dataset.phase!=='results'){
+      pendingSrtChunks=parsed;refreshAtlas();status('SRT выбран: '+parsed.length+' реплик. Подтвердите обработку на последнем шаге.');return;
+    }
+    if(!confirmReanalysis())return;
+    chunks=parsed;
     proposeTopics();$('transcript').value=toSrt(chunks);setPhase('results');sync();
     status('SRT импортирован. Найдены кандидаты на законченные микротемы; проверьте их границы.');
   }catch(err){error(err)}
 };
 $('transcribe').onclick=async()=>{
+  if(!media||busy)return;
+  if(clips.some(c=>c.id!=='draft-1')&&!confirmReanalysis())return;
   abort=new AbortController();setBusy(true);
   setPhase('processing');showOperation('prepare',null,'Подготавливаем Whisper…',{standalone:true});
   let key=null;
@@ -1101,26 +1249,27 @@ $('transcribe').onclick=async()=>{
 $('forget-asr').onclick=async()=>{
   if(!sourceFile)return;
   try{
-    const key=await checkpointKey(sourceFile,$('language').value);
+    const key=await checkpointKey(sourceFile,$('language').value+':'+$('asr-model').value);
     await deleteCheckpoint(key);
     status('Локальный кэш Whisper удалён. Уже импортированные/отредактированные субтитры не изменены.');
   }catch(e){error(e)}
 };
 
 function proposeTopics(){
- if(!media||!chunks.length)return;
+ if(!projectDuration()||!chunks.length)return;
  const reference=lectureVisualReference({
-  name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height
+  name:sourceLabel(),duration:projectDuration(),width:media?.width,height:media?.height
  });
  const chapters=lectureChapters.length?lectureChapters:reference;
  const visualHints=dockerVisualSubtopics({
-   name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height
+   name:sourceLabel(),duration:projectDuration(),width:media?.width,height:media?.height
  });
- const plan=planCompleteTopics(chunks,media.duration,{sceneCuts,chapters,visualHints});
+ const plan=planCompleteTopics(chunks,projectDuration(),{sceneCuts,chapters,visualHints});
  clips=buildVerifiedLessonScreenplays(plan.clips,chunks);
  thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
  // Tiny regression-only fixture: display source review, never claim a full lesson.
- const shortDemo=media.duration<=10&&chunks.some(x=>x.text?.trim());
+ clearFinishedVideo();generatedQuizzes.clear();quizSelections.clear();rangeSelection=null;
+ const shortDemo=projectDuration()<=10&&chunks.some(x=>x.text?.trim());
  if(!clips.length&&shortDemo)clips=[{
    id:'short-preview',title:'Тестовая запись — проверьте вручную',
    start:chunks[0].start,end:chunks.at(-1).end,
@@ -1130,7 +1279,7 @@ function proposeTopics(){
  }];
  selected=0;
  setPhase('results');
- const report=coverageReport(chunks,media.duration);
+ const report=coverageReport(chunks,projectDuration());
  const summary=plan.summary;
  $('topic-coverage').textContent=
     'Распознано ~'+report.percent+'% записи; предложено '+clips.length+
@@ -1195,11 +1344,10 @@ function scheduleAutoChapterAnalysis(){
 }
 $('scan-chapters').onclick=async()=>{
  if(!media)return;
- if(chunks.length&&clips.some(c=>c.status==='approved')&&
-    !confirm('Поиск новых глав обновит автоматические микротемы. Продолжить?'))return;
+ if(busy||!confirmReanalysis())return;
  await scanLectureStructure({automatic:false});
 };
-$('suggest-topics').onclick=()=>{proposeTopics();status('Микротемы пересчитаны по локальному транскрипту.')};
+$('suggest-topics').onclick=()=>{if(busy||!confirmReanalysis())return;proposeTopics();status('Микротемы пересчитаны по локальному транскрипту.')};
 $('verify-topic').onclick=async()=>{
   const c=current();if(!media||!c||!chunks.length)return;
   if(sourceSegments(c).length>1){
@@ -1230,6 +1378,7 @@ $('apply-review').onclick=()=>{
   const b=Math.min(media.duration,c.end+(v.suggestedEndDelta||0));
   if(b<=a){status('Некорректные границы ролика.');return}
   c.start=a;c.end=b;c.segments=[{start:a,end:b}];delete c.scene;
+  invalidateClip(c,{content:true});
   c.status='needs-review';delete c.approvedAt;
   c.reviewReasons=['Границы скорректированы по рекомендации LLM; требуется окончательная проверка.'];
   delete c.llmReview;sync();
@@ -1241,13 +1390,15 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
     const c=current();if(!c||busy)return;
     const start=Number($('clip-start').value),end=Number($('clip-end').value);
     if(key==='clip-start'||key==='clip-end'){
-      if(!validRange(start,end,media.duration)){status('Некорректные границы клипа');return}
+      if(!validRange(start,end,projectDuration())){status('Некорректные границы клипа');return}
       if(sourceSegments(c).length>1){
         status('Для составного ролика используйте границы отдельных отрывков на таймлайне.');return;
       }
       c.start=start;c.end=end;c.segments=[{start,end}];delete c.screenplay;c.editorialStatus='needs-more-context';
     }
+    if(key==='clip-title'&&!$('clip-title').value.trim())return;
     c.title=$('clip-title').value;c.layout=$('layout').value;c.focusX=Number($('focus').value);
+    invalidateClip(c,{content:key==='clip-start'||key==='clip-end'});
     // Any manual boundary edit invalidates prior LLM evidence for that interval.
     if(key==='clip-start'||key==='clip-end'||key==='clip-title'){
       delete c.llmReview;
@@ -1260,19 +1411,22 @@ for(const key of ['clip-title','clip-start','clip-end','layout','focus']){
       for(const chapter of c.scene.chapters||[])chapter.scene.title=c.title;
     }
     $('focus-value').textContent=c.focusX+'%';$('selected-time').textContent=timecode(c.end-c.start);
-    renderClips();renderTimeline();scheduleProjectSave();
+    renderClips();renderTimeline();renderQuiz();refreshAtlas();scheduleProjectSave();
   });
 }
 $('transcript').addEventListener('change',()=>{
-  if(!media)return;const parsed=parseSrt($('transcript').value,media.duration);
-  if(parsed.length){chunks=parsed;enable();scheduleProjectSave();status('Субтитры обновлены. Для новой нарезки нажмите «Предложить микротемы».')}
+  if(!projectDuration()||busy)return;const parsed=parseSrt($('transcript').value,projectDuration());
+  if(parsed.length){chunks=parsed;for(const clip of clips)invalidateClip(clip,{content:true});sync();status('Расшифровка обновлена. Существующий монтаж сохранён и требует проверки. Для новой нарезки нажмите «Заново определить микротемы».')}
   else status('Неверный SRT, прежняя разметка сохранена');
 });
-$('play-clip').onclick=()=>{const c=current();if(!c)return;$('player').currentTime=sourceSegments(c)[0]?.start||c.start;$('player').play()};
+$('clip-title').addEventListener('blur',()=>{if(current()&&!$('clip-title').value.trim())$('clip-title').value=current().title});
+for(const [id,key] of [['clip-start','start'],['clip-end','end']])$(id).addEventListener('blur',()=>{if(current())$(id).value=current()[key].toFixed(1)});
+$('play-clip').onclick=()=>playCatalogTopic(selected);
 $('approve-topic').onclick=()=>{
- const c=current();if(!c||!media)return;
+ const c=current();if(!c||!media||busy||c.candidate)return;
  if(c.status==='approved'){
    c.status='needs-review';
+   delete c.approvedAt;
    c.reviewReasons=['Подтверждение снято.'];
  }else{
    c.status='approved';
@@ -1283,8 +1437,7 @@ $('approve-topic').onclick=()=>{
 };
 $('listen-context').onclick=()=>{
  const c=current();if(!c)return;
- $('player').currentTime=Math.max(0,(sourceSegments(c)[0]?.start??c.start)-15);
- $('player').play();
+ seekOriginal(Math.max(0,(sourceSegments(c)[0]?.start??c.start)-15),true);
  status('Воспроизводятся 15 секунд перед началом, чтобы проверить контекст.');
 };
 for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
@@ -1295,6 +1448,7 @@ for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
   const piece=pieces[idx];
   clips[selected]=amendClipBoundary(c,side,
     side==='start'?Math.max(0,piece.start-15):Math.min(media.duration,piece.end+15),media.duration,idx);
+  invalidateClip(clips[selected],{content:true});
   delete clips[selected].scenes;
   clips[selected].reviewReasons=['Граница изменена вручную. Проверьте её смысловую завершённость.'];
   clips[selected].status='needs-review';delete clips[selected].approvedAt;delete clips[selected].llmReview;
@@ -1302,15 +1456,7 @@ for(const [key,side] of [['extend-start','start'],['extend-end','end']]){
  };
 }
 $('player').addEventListener('timeupdate',()=>{
- const c=current(),v=$('player');
- if(c&&!v.paused){
-   const pieces=sourceSegments(c);
-   const index=pieces.findIndex(p=>v.currentTime>=p.start-.15&&v.currentTime<p.end+.16);
-   if(index>=0&&v.currentTime>=pieces[index].end-.045){
-      if(index+1<pieces.length)v.currentTime=pieces[index+1].start;
-      else v.pause();
-   }else if(index<0&&pieces.length&&v.currentTime>=pieces.at(-1).end){v.pause()}
- }
+ enforceCatalogPlayback();
  updateTimelinePlayhead();
 });
 $('add').onclick=()=>{
@@ -1320,21 +1466,24 @@ $('add').onclick=()=>{
   clips.push({id:'microtopic-'+(clips.length+1),start,end,title:'Новая микротема (нужна проверка)',layout:'hybrid',focusX:50,reviewReasons:['Границы выбраны вручную']});
   selected=clips.length-1;sync()
 };
-$('remove').onclick=()=>{if(!clips.length)return;clips.splice(selected,1);selected=Math.max(0,Math.min(selected,clips.length-1));sync()};
+$('remove').onclick=()=>{if(!clips.length||busy||!confirm('Удалить выбранную микротему из проекта?'))return;clearFinishedVideo();clips.splice(selected,1);selected=Math.max(0,Math.min(selected,clips.length-1));if(!clips.length)microtopicDetailOpen=false;sync()};
 $('save-srt').onclick=()=>download(new Blob([toSrt(chunks)],{type:'text/plain;charset=utf-8'}),'examclips.srt');
 $('save-project').onclick=()=>{
-  if(!media)return;const data={schema:2,videoName:media.input.source?.file?.name||$('video-file').files[0]?.name,duration:media.duration,clips,chunks,sceneCuts,lectureChapters};
+  if(!projectDuration())return;const data={...buildCurrentSnapshot(),videoName:sourceLabel(),source:sourceFile?pickFileMetadata(sourceFile):attachedSourceMeta};
   download(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),'examclips.project.json');
 };
 $('load-project').onclick=()=>$('project-file').click();
 $('project-file').onchange=async e=>{
   try{
+    if(busy||!e.target.files?.[0])return;
     const data=JSON.parse(await e.target.files[0].text());
     if(![1,2].includes(data.schema)||!Array.isArray(data.clips)||!Array.isArray(data.chunks)||!Number.isFinite(data.duration))throw Error('Неизвестный формат проекта');
-    projectToRestore=data;status('Теперь выберите исходный видеофайл этого проекта');
-    if(media){await media.input.dispose();media=null;clips=[];$('player').removeAttribute('src');renderClips();enable()}
-    $('video-file').click();
+    const snapshot=safeProjectSnapshot(data);
+    const record={id:makeId(),title:data.videoName||'Импортированный проект',duration:data.duration,source:data.source||{name:data.videoName||'',size:0,modified:0},snapshot};
+    await openDetachedProject(record);
+    status('Проект JSON открыт. Для просмотра и экспорта привяжите его оригинальное видео.');
   }catch(err){error(err)}
+  finally{e.target.value=''}
 };
 
 const speakerPresets={
@@ -1346,19 +1495,20 @@ $('style-theme').onchange=()=>{
  const c=current();if(!c||!media)return;
  if(!c.scene)c.scene=makeStoryboard({width:media.width,height:media.height,duration:c.end-c.start});
  c.scene.theme=$('style-theme').value==='midnight'?'midnight':'warm';
- scheduleProjectSave();
+ for(const scene of [...(c.scenes||[]),...(c.scene.chapters||[]).map(chapter=>chapter.scene)])scene.theme=c.scene.theme;
+ invalidateClip(c);sync();
  status('Визуальный стиль изменён, экспорт останется локальным');
 };
 $('speaker-preset').onchange=()=>{
  const c=current();if(!c||!media)return;
  c.speakerPreset=$('speaker-preset').value;
  if(!c.scene)c.scene=makeStoryboard({width:media.width,height:media.height,duration:c.end-c.start});
- const scenes=[c.scene,...(c.scene.chapters||[]).map(ch=>ch.scene)];
+ const scenes=[c.scene,...(c.scene.chapters||[]).map(ch=>ch.scene),...(c.scenes||[])];
  for(const spec of scenes){
    if(speakerPresets[c.speakerPreset])spec.speaker={...speakerPresets[c.speakerPreset]};
    spec.hideSpeaker=c.speakerPreset==='none';
  }
- scheduleProjectSave();
+ invalidateClip(c);sync();
  status('Область вебки обновлена локально');
 };
 $('analyze-scene').onclick=async()=>{
@@ -1379,12 +1529,12 @@ $('analyze-scene').onclick=async()=>{
       data.scene.theme=c.scene?.theme||'warm';
       scenes.push(data.scene);details.push(data);
     }
-    c.scenes=scenes;c.scene=scenes[0];c.layout='hybrid';c.speakerPreset='auto';
+    invalidateClip(c);c.scenes=scenes;c.scene=scenes[0];c.layout='hybrid';c.speakerPreset='auto';
     $('speaker-preset').value='auto';$('layout').value='hybrid';
     const totalOcr=details.reduce((n,x)=>n+x.recognizedLines,0);
     $('scene-hint').textContent='Раздельно обработано '+parts.length+' частей · OCR строк: '+totalOcr+
       '. Каждую склейку и формулы нужно проверить.';
-    scheduleProjectSave();
+    sync();
     status('Композиция для '+parts.length+' частей создана локально. Проверьте смысловые переходы.');
   }catch(e){if(e.name==='AbortError')status('Анализ отменён');else error(e)}
   finally{abort=null;setBusy(false)}
@@ -1398,7 +1548,7 @@ $('export-all').onclick=async()=>{
  let dir;
  try{dir=await window.showDirectoryPicker({mode:'readwrite'})}
  catch(e){if(e.name!=='AbortError')error(e);return}
- const work=clips.filter(c=>c.id!=='draft-1'&&
+ const work=clips.filter(c=>c.id!=='draft-1'&&!c.candidate&&
    (media.duration<=10||c.editorialStatus!=='needs-more-context'||c.status==='approved')).map(c=>structuredClone(c));
  if(!work.length)return;
  abort=new AbortController();setBusy(true);
@@ -1431,7 +1581,7 @@ $('export-all').onclick=async()=>{
  }finally{abort=null;setBusy(false)}
 };
 $('export').onclick=async()=>{
-  const c=current();if(!media||!c)return;
+  const c=current();if(!media||!c||busy||c.candidate)return;
   const filename=safeName(c.title)+(c.status==='approved'?'':'_DRAFT')+'.mp4';
   const long=storyDuration(c)>=300;
   let writable=null;
@@ -1471,20 +1621,11 @@ $('export').onclick=async()=>{
 function loop(){
   const video=$('player'),c=current();
   if(media&&c&&video.readyState>=2){
-    if(catalogPlayback?.clipId===c.id&&!video.paused){
-      const pieces=sourceSegments(c),piece=pieces[catalogPlayback.pieceIndex];
-      if(piece&&video.currentTime>=piece.end-.05){
-        if(catalogPlayback.pieceIndex<pieces.length-1){
-          catalogPlayback.pieceIndex++;
-          video.currentTime=pieces[catalogPlayback.pieceIndex].start;
-        }else{
-          video.pause();catalogPlayback=null;
-        }
-      }
-    }
+    enforceCatalogPlayback();
     const valid=sourceSegments(c).some(x=>video.currentTime>=x.start&&video.currentTime<x.end);
     const caption=valid?captionSequenceAt(chunks,video.currentTime):null;
-    const index=sourceSegments(c).findIndex(part=>video.currentTime>=part.start&&video.currentTime<part.end);
+    const index=playbackMode==='clip'&&catalogPlayback?.clipId===c.id?catalogPlayback.pieceIndex:
+      sourceSegments(c).findIndex(part=>video.currentTime>=part.start&&video.currentTime<part.end);
     const activePiece=sourceSegments(c)[Math.max(0,index)];
     try{
     paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,
@@ -1496,5 +1637,19 @@ function loop(){
   }
   previewRaf=requestAnimationFrame(loop);
 }
-setupPrimaryTimeline();setEditorTab('timeline');initMvpEvents();loop();enable();updateDashboard();renderQuiz();probeLocalReview();
+setupPrimaryTimeline();
+atlasShell=mountAtlasShell(root,{
+ getState:()=>({phase:root.dataset.phase,media,hasProject:!!currentProjectId,duration:projectDuration(),title:sourceLabel(),busy,detailOpen:microtopicDetailOpen,activeTab:activeEditorTab,clip:current(),pendingSrt:!!pendingSrtChunks}),
+ onLibrary:backToLibrary,onTab:setEditorTab,
+ onStep:()=>{if(media)root.dataset.phase='configure';enable();},
+ onRangeSelect:selectAtlasRange,onRangeFind:findAtlasRange,onRangeCreate:createAtlasRange,
+ onRangeClear:()=>{rangeSelection=null;refreshAtlas()},
+ onSeek:seekOriginal,onBoundary:changeAtlasBoundary,
+ onPrevious:()=>navigateAtlas(-1),onNext:()=>navigateAtlas(1),
+ onPlay:toggleCatalogPlayback,
+ onAccept:()=>acceptCandidate(selected)
+});
+for(const event of ['play','pause','ended'])$('player').addEventListener(event,updateTimelinePlayhead);
+for(const event of ['pointerdown','keydown'])$('player').addEventListener(event,()=>{playbackMode='source';catalogPlayback=null});
+setEditorTab('clip');initMvpEvents();loop();enable();updateDashboard();renderQuiz();probeLocalReview();
 resumeMostRecent().catch(err=>{ $('autosave-state').textContent='История недоступна: '+err.message });

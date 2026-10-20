@@ -36,6 +36,20 @@ export function sameVideoFile(metadata,file){
  return !!metadata&&!!file&&metadata.name===file.name&&
   metadata.size===file.size&&(!metadata.modified||!file.lastModified||metadata.modified===file.lastModified);
 }
+const allowedSetting=(value,choices,fallback)=>choices.includes(value)?value:fallback;
+function snapshotSettings(settings){
+ return {
+  language:allowedSetting(settings?.language,['auto','ru','en'],'auto'),
+  asrModel:allowedSetting(settings?.asrModel,['tiny','base'],'tiny'),
+  asrLimit:allowedSetting(settings?.asrLimit,['all','300','900'],'all'),
+  ocrEngine:allowedSetting(settings?.ocrEngine,['auto','tesseract','rapid'],'auto'),
+  outputQuality:allowedSetting(settings?.outputQuality,['standard','high'],'standard')
+ };
+}
+function snapshotUi(ui){
+ return {detailOpen:ui?.detailOpen===true,
+  catalogScroll:Number.isFinite(ui?.catalogScroll)?Math.max(0,Math.min(1e7,ui.catalogScroll)):0};
+}
 export function safeProjectSnapshot(snapshot){
  if(!snapshot||!Array.isArray(snapshot.clips)||!Array.isArray(snapshot.chunks))throw Error('Invalid project snapshot');
  const safe={
@@ -47,7 +61,9 @@ export function safeProjectSnapshot(snapshot){
   selected:Number.isInteger(snapshot.selected)?snapshot.selected:0,
   activeTab:typeof snapshot.activeTab==='string'?snapshot.activeTab:'timeline',
   view:snapshot.view&&typeof snapshot.view==='object'?snapshot.view:{zoom:1,offset:0},
-  duration:Number(snapshot.duration)||0
+  duration:Number(snapshot.duration)||0,
+  settings:snapshotSettings(snapshot.settings),
+  ui:snapshotUi(snapshot.ui)
  };
  if(safe.duration<=0||safe.duration>10800)throw Error('Invalid media duration');
  return structuredClone(safe);

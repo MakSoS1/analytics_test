@@ -1,7 +1,7 @@
 import {chromium} from 'playwright-core';
 import {existsSync} from 'node:fs';
 import assert from 'node:assert/strict';
-const executablePath=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+const executablePath=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',chromium.executablePath()].filter(Boolean).find(existsSync);
 const browser=await chromium.launch({executablePath,headless:true,args:['--no-sandbox']});
 const srt=[
  ['00:00:00,000','00:00:09,000','Меня зовут Алексей, моя должность доцент кафедры. Сначала расскажу о расписании занятий и правилах курса.'],
@@ -15,11 +15,17 @@ try{
  const page=await browser.newPage({viewport:{width:1440,height:900}});
  const errors=[];page.on('pageerror',err=>errors.push(err.message));
  await page.goto('http://127.0.0.1:5173/');
+ await page.locator('#atlas-new-lecture').click();
  await page.locator('#video-file').setInputFiles('selective-lecture-fixture.mp4');
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:40000});
+ await page.locator('#wizard-next').click();
+ await page.locator('#wizard-next').click();
  assert.equal(await page.locator('#story-keep').count(),0,'Editorial budget must be removed');
  await page.locator('#srt-file').setInputFiles({name:'sparse.srt',mimeType:'text/plain',buffer:Buffer.from(srt)});
+ await page.waitForFunction(()=>document.querySelector('#workflow-start')?.textContent.includes('SRT'));
+ await page.locator('#workflow-start').click();
  await page.waitForFunction(()=>document.querySelector('#app').dataset.phase==='results',{timeout:40000});
+ await page.locator('.top-navigation [data-editor-tab="timeline"]').click();
  const result=await page.evaluate(()=>{
   const tracks=[...document.querySelectorAll('#timeline-track .timeline-part.clip')];
   const kept=tracks.map(e=>({left:parseFloat(e.style.left),width:parseFloat(e.style.width),label:e.innerText}));
@@ -38,6 +44,7 @@ try{
  await page.screenshot({path:'mvp-sparse-lecture-timeline.png',fullPage:false});
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
  await page.locator('.microtopic-card-title').first().click();
+ await page.locator('#atlas-edit-toggle').click();
  assert.ok(await page.locator('#story-piece-list').isVisible());
  assert.deepEqual(errors,[]);
  console.log('FULL_CONTENT_SPARSE_LECTURE_SUCCESS',JSON.stringify({coveragePercent:percent,

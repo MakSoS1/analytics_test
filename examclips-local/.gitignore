@@ -12,3 +12,7 @@ ocr_benchmark_results/
 *.pdmodel
 __pycache__/
 .pytest_cache/
+/test-results/
+/mvp-*.png
+/smoke-ui.png
+/microtopics-gallery.png

@@ -1,7 +1,7 @@
 import {chromium} from 'playwright-core';
 import {existsSync} from 'node:fs';
 import assert from 'node:assert/strict';
-const executablePath=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+const executablePath=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',chromium.executablePath()].filter(Boolean).find(existsSync);
 if(!executablePath)throw Error('Chrome not installed');
 const browser=await chromium.launch({executablePath,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
 const errors=[];
@@ -12,11 +12,17 @@ try{
  await page.goto('http://127.0.0.1:5173/');
  await page.evaluate(()=>localStorage.setItem('__persistence_probe','persistent'));
  assert.ok(await page.locator('#library-section').isVisible());
+ await page.locator('#atlas-new-lecture').click();
  await page.locator('#video-file').setInputFiles('test-fixture.mp4');
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled);
+ await page.locator('#wizard-next').click();
+ await page.locator('#wizard-next').click();
  await page.locator('#srt-file').setInputFiles('test-fixture.srt');
+ await page.waitForFunction(()=>document.querySelector('#workflow-start')?.textContent.includes('SRT'));
+ await page.locator('#workflow-start').click();
  await page.waitForFunction(()=>document.querySelector('#app').dataset.phase==='results');
  assert.ok(await page.locator('#back-to-library').isVisible());
+ await page.locator('.top-navigation [data-editor-tab="timeline"]').click();
  assert.ok(await page.locator('#timeline-zoom-in').isVisible());
  for(let i=0;i<7;i++)await page.locator('#timeline-zoom-in').click();
  assert.equal(await page.locator('#timeline-zoom-label').textContent(),'8×');
@@ -84,13 +90,14 @@ try{
  await page.locator('#clip-title').fill('Docker — быстрый переход с сохранением');
  await page.locator('#back-to-library').click();
  await page.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='upload');
+ assert.ok(await page.locator('#atlas-library').isVisible());
  assert.ok(await page.locator('#library-section').isVisible());
  assert.equal(await page.locator('.library-item').count(),1);
  await page.locator('.library-item-actions button').first().click();
  await page.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results');
  assert.equal(await page.locator('#timeline-zoom-label').textContent(),'8×');
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
- await page.locator('.microtopic-card-title').first().click();
+ assert.ok(await page.locator('#microtopic-detail').isVisible(),'Reopening restores the selected detail view');
  assert.equal(await page.locator('#clip-title').inputValue(),'Docker — быстрый переход с сохранением');
  assert.deepEqual(errors,[]);
  console.log('LIBRARY_RELOAD_ZOOM_SUCCESS',JSON.stringify({

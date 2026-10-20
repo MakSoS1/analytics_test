@@ -1,7 +1,7 @@
 import {chromium} from 'playwright-core';
 import assert from 'node:assert/strict';
 import {existsSync} from 'node:fs';
-const chrome=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',chromium.executablePath()].filter(Boolean).find(existsSync);
 if(!chrome)throw Error('Chrome not installed on the CI runner');
 const browser=await chromium.launch({headless:true,executablePath:chrome,args:['--no-sandbox','--disable-dev-shm-usage']});
 const errors=[];
@@ -17,33 +17,52 @@ try{
  await page.goto('http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});
  assert.equal(await page.locator('#app').getAttribute('data-phase'),'upload');
  await page.screenshot({path:'mvp-upload-desktop.png',fullPage:true});
- assert.ok(await page.locator('#drop').isVisible());
+ assert.ok(await page.locator('#atlas-library').isVisible());
+ assert.ok(!(await page.locator('#drop').isVisible()),'The library opens before the upload wizard');
  assert.equal(await page.locator('#story-keep').count(),0,'No forced share-of-lecture control');
  assert.equal(await page.locator('#topic-preset').count(),0,'No fixed per-clip duration cap');
- assert.ok(await page.getByText('Всё учебное содержание — автоматически.').isVisible());
  assert.ok(!(await page.locator('#pane-timeline').isVisible()),'Editor must be hidden before upload');
  assert.ok(!(await page.locator('#editor').isVisible()));
 
+ await page.locator('#atlas-new-lecture').click();
+ assert.ok(await page.locator('#wizard-step-1').isVisible());
+ assert.ok(await page.locator('#drop').isVisible());
  await page.locator('#video-file').setInputFiles('test-fixture.mp4');
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:30000});
- assert.equal(await page.locator('#app').getAttribute('data-phase'),'upload');
- assert.ok(await page.locator('#workflow-start').isEnabled(),'Run action on upload screen');
+ await page.locator('#wizard-next').click();
+ assert.ok(await page.locator('#wizard-step-2').isVisible());
+ assert.ok(await page.locator('#language').isVisible());
+ assert.equal(await page.locator('#asr-limit').inputValue(),'all');
+ assert.match(await page.locator('#wizard-step-2').innerText(),/Количество роликов определяет содержание/);
+ await page.locator('#wizard-next').click();
+ assert.ok(await page.locator('#wizard-step-3').isVisible());
+ assert.equal(await page.locator('#app').getAttribute('data-phase'),'configure');
+ assert.ok(await page.locator('#workflow-start').isEnabled(),'Run action on the confirmation step');
  assert.equal(await page.locator('#story-keep').count(),0);
 
  await page.locator('#srt-file').setInputFiles({name:'lecture.srt',mimeType:'text/plain',buffer:Buffer.from(subtitle)});
+ await page.waitForFunction(()=>document.querySelector('#workflow-start')?.textContent.includes('SRT'));
+ assert.equal(await page.locator('#app').getAttribute('data-phase'),'configure','SRT stays staged until explicit confirmation');
+ await page.locator('#workflow-start').click();
  await page.waitForFunction(()=>!document.querySelector('#quiz-generate').disabled);
  assert.equal(await page.locator('#app').getAttribute('data-phase'),'results');
- assert.ok(await page.locator('#pane-timeline').isVisible());
+ assert.ok(await page.locator('#microtopic-catalog').isVisible(),'The result opens as a real microtopic grid');
+ assert.ok(!(await page.locator('#pane-timeline').isVisible()));
  assert.ok(!(await page.locator('#drop').isVisible()),'No upload widgets in editor');
  assert.equal(await page.locator('#story-keep').count(),0,'No hard percentage anywhere');
+ await page.locator('.top-navigation [data-editor-tab="timeline"]').click();
+ assert.ok(await page.locator('#pane-timeline').isVisible());
  const full=await page.evaluate(()=>{
    const track=document.querySelector('#timeline-track').getBoundingClientRect();
-   return {width:track.width,viewport:document.documentElement.clientWidth};
+   const section=document.querySelector('#timeline-section'),style=getComputedStyle(section);
+   const available=section.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);
+   return {width:track.width,available,pane:document.querySelector('#pane-timeline').clientWidth};
  });
- assert.ok(full.width>=full.viewport*.84,'Timeline must occupy most of the viewport: '+JSON.stringify(full));
+ assert.ok(full.available>0&&full.width>=full.available*.98,
+  'Timeline must fill the available Atlas work area: '+JSON.stringify(full));
  assert.ok(await page.locator('#timeline-track .timeline-part.clip').count()>=1);
  assert.ok(await page.locator('#timeline-monitors').isVisible());
- // Editing lives under Montage, while timeline stays the primary default tab.
+ // Open a grid card for its visible title and source-boundary controls.
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
  await page.locator('.microtopic-card-title').first().click();
  assert.ok(await page.locator('#pane-clip').isVisible());
@@ -57,11 +76,11 @@ try{
  const overview=await page.evaluate(()=>({
   background:getComputedStyle(document.body).backgroundColor,
   title:document.querySelector('#pane-timeline h1')?.textContent,
-  steps:document.querySelectorAll('.journey-step').length,
+  steps:document.querySelectorAll('.atlas-stepper [data-wizard-step]').length,
   renderedClips:document.querySelectorAll('.clip').length,
   safeText:document.querySelector('.privacy')?.textContent
  }));
- assert.equal(overview.steps,4);
+ assert.equal(overview.steps,3);
  assert.ok(overview.title.includes('Таймлайн'));
  assert.ok(overview.renderedClips>=1);
  assert.ok(overview.safeText.includes('устройстве'));
@@ -100,10 +119,17 @@ try{
  }));
  assert.ok(dimensions.scrollWidth<=dimensions.clientWidth+2,'Mobile horizontal overflow: '+JSON.stringify(dimensions));
  await mobile.screenshot({path:'mvp-mobile.png',fullPage:true});
+ await mobile.locator('#atlas-new-lecture').click();
  await mobile.locator('#video-file').setInputFiles('test-fixture.mp4');
  await mobile.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:30000});
+ await mobile.locator('#wizard-next').click();
+ await mobile.locator('#wizard-next').click();
  await mobile.locator('#srt-file').setInputFiles({name:'lecture.srt',mimeType:'text/plain',buffer:Buffer.from(subtitle)});
+ await mobile.waitForFunction(()=>document.querySelector('#workflow-start')?.textContent.includes('SRT'));
+ await mobile.locator('#workflow-start').click();
  await mobile.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results',{timeout:30000});
+ assert.ok(await mobile.locator('#microtopic-catalog').isVisible());
+ await mobile.locator('.top-navigation [data-editor-tab="timeline"]').click();
  assert.ok(await mobile.locator('#pane-timeline').isVisible());
  assert.equal(await mobile.locator('#story-keep').count(),0);
  const mobileTimeline=await mobile.evaluate(()=>({

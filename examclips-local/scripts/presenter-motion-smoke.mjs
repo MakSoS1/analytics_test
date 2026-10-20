@@ -3,7 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import {resolve} from 'node:path';
 import assert from 'node:assert/strict';
-const chrome=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',chromium.executablePath()].filter(Boolean).find(existsSync);
 if(!chrome)throw Error('No Chrome installation');
 const work=process.cwd();
 const fixture=resolve(work,'presenter-motion-fixture.mp4');
@@ -17,13 +17,18 @@ function samplePixels(seconds,filename){
 }
 try{
  await page.goto('http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});
+ await page.locator('#atlas-new-lecture').click();
  await page.locator('#video-file').setInputFiles(fixture);
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled);
+ await page.locator('#wizard-next').click();
+ await page.locator('#wizard-next').click();
  await page.locator('#srt-file').setInputFiles(subtitle);
+ await page.waitForFunction(()=>document.querySelector('#workflow-start')?.textContent.includes('SRT'));
+ await page.locator('#workflow-start').click();
  await page.waitForFunction(()=>!document.querySelector('#export').disabled);
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
  await page.locator('.microtopic-card-title').first().click();
- await page.locator('.controls .detail-settings summary').click();
+ await page.locator('#atlas-edit-toggle').click();
   await page.locator('#layout').selectOption('hybrid');
  await page.locator('.top-navigation [data-editor-tab="export"]').click();
  const [download]=await Promise.all([page.waitForEvent('download',{timeout:90000}),page.locator('#export').click()]);
