@@ -44,7 +44,10 @@ export function fitTypography(ctx,text,{width,height,maxFont=49,minFont=25,lineH
 export function suitableOcrLines(panel,title=''){
   // Never use low-confidence Tesseract strings or paragraphs too long for a visual card.
   // Technical diagrams and formulas stay as source pixels in the composer.
-  if(!Array.isArray(panel?.lines))return [];
+  if(!Array.isArray(panel?.lines)||panel.sourceOnly)return [];
+  // One command marks the whole panel as technical; dropping individual lines
+  // would silently remove steps or change code punctuation.
+  if(panel.lines.some(line=>/^\s*(?:FROM|WORKDIR|RUN|COPY|ADD|CMD|ENTRYPOINT|EXPOSE|ENV|ARG|USER|HEALTHCHECK)\s|(?:^|\s)(?:docker|npm|pip|sudo)\s|[{};=]|--[a-z]/u.test(String(line))))return [];
   const name=String(title).trim().toLowerCase();
   return panel.lines.map(x=>String(x||'').replace(/\s+/g,' ').trim())
     .filter(x=>x.length>=5&&x.length<=115&&x.toLowerCase()!==name&&!/[{}<>|\\]/.test(x))
@@ -75,10 +78,10 @@ export function editorialGeometry(width=720,height=1280,{speaker=true}={}){
   return {
     eyebrow:scale({x:42,y:42,w:636,h:32}),
     title:scale({x:42,y:93,w:636,h:108}),
-    stage:scale({x:30,y:211,w:660,h:speaker?845:1000}),
+    stage:scale({x:30,y:211,w:660,h:speaker?700:820}),
     // Larger lecturer crop, anchored over the lower-right edge of the board.
-    speaker:speaker?scale({x:356,y:957,w:315,h:284}):null,
+    speaker:speaker?scale({x:356,y:1008,w:315,h:230}):null,
     // Transparent floating caption position: NOT a reserved subtitle panel.
-    subtitles:scale({x:54,y:speaker?838:1046,w:612,h:100})
+    subtitles:scale({x:54,y:speaker?916:1050,w:612,h:100})
   };
 }

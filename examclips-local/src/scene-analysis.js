@@ -98,8 +98,8 @@ export async function analyzeScene(media,clip,chunks,{
     const scoped=chunks.filter(c=>c.end>clip.start+offset&&c.start<clip.start+until)
       .map(c=>({...c,start:Math.max(0,c.start-clip.start-offset),end:Math.min(until-offset,c.end-clip.start-offset)}));
     const entry=makeStoryboard({width:media.width,height:media.height,speaker:camera.box,
-      lines:visible,duration:Math.max(.1,until-offset),chunks:scoped,
-      titleOverride:context.title||clip.title||''});
+      lines:visible,pixels:pix,duration:Math.max(.1,until-offset),chunks:scoped,
+      titleOverride:clip.title||context.title||''});
     entry.context=context;
     entry.ocrBackend=backend;
     // A mention of an OCR-found UI tab/code block is a source-grounded attention cue.
@@ -108,7 +108,8 @@ export async function analyzeScene(media,clip,chunks,{
       const spoken=scoped.filter(c=>c.end>now.time&&c.start<next).map(c=>c.text).join(' ');
       const target=speechTarget(context,spoken);
       if(target&&target.matchedTokens>0){
-        now.focus=((target.box.x0+target.box.x1)/2)>=media.width*.59?1:0;
+        const side=((target.box.x0+target.box.x1)/2)>=media.width*.5?'right':'left';
+        now.focus=Math.max(0,entry.panels.findIndex(p=>p.id===side));
         now.evidence={type:target.type,text:target.text.slice(0,80),tokens:target.matchedTokens};
       }
     }

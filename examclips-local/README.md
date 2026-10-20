@@ -1,10 +1,10 @@
-# ExamClips v0.5: contextual OCR & local 9:16 lecture composition
+# ExamClips v0.10: contextual OCR & local 9:16 lecture composition
 
 This branch is the current local-first ExamClips: transcribe a lecture locally, propose context-reviewable 1–5 minute lessons, recognize relevant slide/UI labels, synchronize scene focus with what the lecturer says, and export with original live presenter video/audio.
 
 ## Windows start
 
-Install Node.js 22 or newer, clone branch feat/examclips-ocr-context-20261016 of https://github.com/MakSoS1/analytics_test and run examclips-local/START_WINDOWS.cmd. The editor opens at http://localhost:5173; first model use can download PUBLIC weights. Media is read from local files only.
+Install Node.js 22 or newer, clone tag v0.10.0 of https://github.com/MakSoS1/analytics_test and run examclips-local/START_WINDOWS.cmd. The editor opens at http://localhost:5173; first model use can download PUBLIC weights. Media is read from local files only.
 
 ## OCR options
 
@@ -41,3 +41,7 @@ Initial model downloads from third-party model hosts need Internet once. Strictl
 Node development: npm install --ignore-scripts --no-audit --no-fund; npm test; npm run build; npm run preview. Local playback/media files, Python .ocr-venv, caches and generated MP4 are Git-ignored.
 
 See docs/superpowers for earlier architectural and microtopic plans and the new OCR evaluation note.
+
+## Real Docker lecture workflow
+
+See [the 2026-10-20 acceptance report](../docs/examclips/REAL_DOCKER_ACCEPTANCE_2026-10-20.md) for the measured native Whisper workflow, exact reproduction commands, source-grounded boundaries and limitations. Source media and generated videos are distributed as release assets. The browser also accepts the resulting SRT or editable project JSON.

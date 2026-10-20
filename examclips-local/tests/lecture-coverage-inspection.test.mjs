@@ -4,7 +4,7 @@ import {DOCKER_VISUAL_TOPICS} from '../src/visual-subtopic-hints.js';
 import {inspectLectureCoverage} from '../src/coverage-inspection.js';
 const cue=(start,end,text)=>({start,end,text});
 const clip=(id,start,end,visualSection=null)=>({id,title:id,start,end,segments:[{start,end}],visualSection});
-test('the 26 original slide concepts are independently accounted for in the UI audit',()=>{
+test('the reviewed original slide concepts are independently accounted for in the UI audit',()=>{
  const rows=[
   cue(800,834,'Dockerfile uses the FROM instruction to select an official base image and RUN executes commands during an application build with several required dependencies.'),
   cue(835,883,'COPY transfers application source files while WORKDIR sets the execution directory, so the complete application image builds reproducibly with each changed instruction.'),
@@ -13,9 +13,9 @@ test('the 26 original slide concepts are independently accounted for in the UI a
   cue(2790,2860,'The host network shares the underlying host machine networking stack directly, removing network isolation and allowing applications inside containers to use host IP addresses and network ports; this can improve performance but may cause port conflicts when multiple services are running.')
  ];
  const guide=DOCKER_VISUAL_TOPICS;
- const visuals=guide.filter(x=>x.start===800||x.start===938||x.start===2780);
+ const visuals=guide.filter(x=>x.start===800||x.start===892||x.start===2780);
  const report=inspectLectureCoverage(visuals,[
-  clip('dockerfile-intro',800,938,'visual-08'),
+  clip('dockerfile-intro',800,892,'visual-08'),
   clip('huge-network-chapter',2400,3025)
  ],rows);
  assert.equal(report.rows.length,3);

@@ -19,6 +19,14 @@ try{
  await page.waitForFunction(()=>document.querySelector('#app').dataset.phase==='results');
  await page.locator('#video-file').setInputFiles('test-fixture.mp4');
  await page.waitForFunction(()=>document.querySelector('#player').readyState>=2);
+ await page.evaluate(()=>{
+  const ctx=document.querySelector('#preview').getContext('2d'),original=ctx.clearRect.bind(ctx);
+  window.pausedDraws=0;ctx.clearRect=(...args)=>{window.pausedDraws++;return original(...args)};
+ });
+ await page.waitForTimeout(300);
+ const pausedBefore=await page.evaluate(()=>window.pausedDraws);
+ await page.waitForTimeout(300);
+ assert.equal(await page.evaluate(()=>window.pausedDraws),pausedBefore,'Paused preview must not redraw continuously');
  await page.locator('#player').evaluate(video=>{video.pause();video.currentTime=2.6});
  await page.locator('#atlas-play').click();
  const resumed=await page.locator('#player').evaluate(video=>({time:video.currentTime,paused:video.paused}));

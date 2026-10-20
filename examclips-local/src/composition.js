@@ -145,11 +145,19 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
  // Course material is the hero. Content switches only on a semantic/timed beat.
  roundedSurface(ctx,g.stage,p.surface,25*width/720,p.line);
  const currentPanel=spec.panels[director.current]||spec.panels[0];
+ const paired=spec.panels.length===2&&spec.panels.every(panel=>panel.sourceOnly);
+ const heroStage=paired?{...g.stage,h:g.stage.h*.59}:g.stage;
+ // Stack the other source region as context, so a wide code block does not
+ // leave most of the portrait empty. Both regions retain their source pixels.
+ if(paired){
+   const other=spec.panels[director.current===0?1:0];
+   renderEditorialPanel(ctx,src,sw,sh,other,{...g.stage,y:g.stage.y+g.stage.h*.62,h:g.stage.h*.38},p);
+ }
  if(director.mix<1){
    const oldPanel=spec.panels[director.previous]||currentPanel;
-   renderEditorialPanel(ctx,src,sw,sh,oldPanel,g.stage,p,{opacity:1-director.mix});
+   renderEditorialPanel(ctx,src,sw,sh,oldPanel,heroStage,p,{opacity:1-director.mix});
  }
- renderEditorialPanel(ctx,src,sw,sh,currentPanel,g.stage,p,{
+ renderEditorialPanel(ctx,src,sw,sh,currentPanel,heroStage,p,{
     opacity:director.mix,rise:(1-director.progress)*12*height/1280,reveal:Math.min(1,.35+t/9)
  });
  // Minimal stage navigation; no pasted OCR text and no duplicate badge rectangles.

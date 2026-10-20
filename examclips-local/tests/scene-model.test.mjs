@@ -28,7 +28,7 @@ test('storyboard is time indexed and original crop geometry is valid',()=>{
 });
 test('non-OCR fallback retains source clips',()=>{
  const s=makeStoryboard({width:640,height:360,duration:4});
- assert.equal(s.method,'pixel-preserving-split');assert.equal(s.panels.length,2);assert.ok(assertScene(s))
+ assert.equal(s.method,'pixel-preserving-split');assert.equal(s.panels.length,1);assert.ok(assertScene(s))
 });
 test('malformed scene and out-of-bounds coordinates are rejected',()=>{
  const s=makeStoryboard({width:640,height:360,duration:4});s.speaker.x=1.2;assert.equal(assertScene(s),false)

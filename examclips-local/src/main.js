@@ -1618,9 +1618,13 @@ $('export').onclick=async()=>{
     if(writable)try{await writable.abort()}catch{}
   }finally{abort=null;$('processing-panel').hidden=true;setBusy(false)}
 };
+let lastPreviewState=null,previewDirty=true;
+for(const event of ['input','change','click'])root.addEventListener(event,()=>{previewDirty=true});
 function loop(){
   const video=$('player'),c=current();
-  if(media&&c&&video.readyState>=2){
+  const drawState=[video.currentTime,c,c?.scene,c?.scenes,c?.layout,c?.focusX,activeEditorTab,microtopicDetailOpen];
+  if(media&&c&&video.readyState>=2&&(previewDirty||!lastPreviewState||drawState.some((value,i)=>value!==lastPreviewState[i]))){
+    lastPreviewState=drawState;previewDirty=false;
     enforceCatalogPlayback();
     const valid=sourceSegments(c).some(x=>video.currentTime>=x.start&&video.currentTime<x.end);
     const caption=valid?captionSequenceAt(chunks,video.currentTime):null;

@@ -6,6 +6,7 @@
  * spoken topic markers and ASR time ranges; instructor reviews before exporting.
  * Filler and long ASR-detected silences are excluded, but uncertainty favours KEEP.
  */
+import {joinSpeechSentences} from './speech-boundaries.js';
 import {normalizeChunks,titleFromText} from './segments.js';
 import {tightSpeechPieces,sourceSegments,summarizeStoryPlan} from './selective-stories.js';
 import {isNonTeachingIntroduction} from './lesson-screenplay.js';
@@ -65,7 +66,7 @@ function asClip(rows,index,duration,chapter=null,{verifiedTitle=null,verifiedCon
    id:'topic-'+index,start:beginning,end,
    segments:pieces,chapter:chapter?{title:chapter.title,key:chapter.key,source:chapter.source,start:chapter.start,end:chapter.end}:null,
    thumbnailTime:beginning+Math.min(6,(end-beginning)*.2),
-   title:verifiedTitle||visualTitle||groupConceptHeading(rows,chapter),
+   title:visualTitle||(['recap','questions'].includes(chapter?.key)?chapter.title:null)||verifiedTitle||groupConceptHeading(rows,chapter),
    verifiedConcept:verifiedConcept||null,
    visualSection:visualSection||null,
    visualBasis:visualTitle?'Кадры лекции + совпадения терминов с речью; окончательные границы требуют проверки':null,
@@ -180,12 +181,20 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[],vis
  if(!all.length)return {clips:[],candidates:[],excluded:[],summary:summarizeStoryPlan([],duration)};
  const outline=normalizeSlideChapters(chapters,duration);
  const beginning=outline.length?0:genericOpeningSkip(all,duration);
+ // An approximate visual heading must not erase an explanation already begun.
+ const spokenChapter=row=>{
+   const chapter=chapterForTime(outline,(row.start+row.end)/2);
+   const explains=/(?:\b(?:means|because|for example|are isolated|is defined|works by|in contrast)\b|означает|потому что|например|представляет собой)/iu.test(row.text);
+   if(chapter?.key==='introduction'&&chapter.confidence==='approximate'&&explains&&isEducationalSpeech(row.text))
+     return outline.find(c=>c.start>=chapter.end&&c.key!=='introduction')||null;
+   return chapter;
+ };
  const kept=[],excluded=[...deDuplicated.removed];
  for(const row of deDuplicated.rows){
-  const chapter=chapterForTime(outline,(row.start+row.end)/2);
-  if(chapter?.key==='introduction'||(beginning>0&&row.end<=beginning)||
+  const chapter=spokenChapter(row);
+  if(['introduction','outro'].includes(chapter?.key)||(beginning>0&&row.end<=beginning)||
     !isEducationalSpeech(row.text)){
-   excluded.push({start:row.start,end:row.end,reason:chapter?.key==='introduction'?
+   excluded.push({start:row.start,end:row.end,reason:['introduction','outro'].includes(chapter?.key)?
      'Вступление/биография/план занятия (визуально подтверждено)':
      'Организационная или неинформативная речь'});
   }else kept.push(row);
@@ -193,8 +202,8 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[],vis
  if(!kept.length)return {clips:[],candidates:[],excluded,summary:summarizeStoryPlan([],duration)};
  const chapterGroups=[];let bucket=[],owner=null;
  const emit=()=>{if(bucket.length)chapterGroups.push({rows:bucket,chapter:owner});bucket=[]};
- for(const row of kept){
-  const chapter=chapterForTime(outline,(row.start+row.end)/2);
+ for(const row of joinSpeechSentences(kept)){
+  const chapter=spokenChapter(row);
   const chapterId=chapter?.start??null;
   const priorId=owner?.start??null;
   const prev=bucket.at(-1);
@@ -207,11 +216,15 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[],vis
  }
  emit();
  const groups=[];
- for(const {rows,chapter} of chapterGroups)
-  for(const group of splitChapter(rows,chapter,sceneCuts))
-    groups.push({rows:group,chapter});
+ for(const {rows,chapter} of chapterGroups){
+  // A source-verified guide is applied to the full narrated chapter. Earlier
+  // keyword splits can otherwise swallow its introduction or split examples.
+  if(visualHints.some(h=>h.chapterKey===resolvedChapterKey(chapter)))groups.push({rows,chapter});
+  else for(const group of splitChapter(rows,chapter,sceneCuts))groups.push({rows:group,chapter});
+ }
+
  const visuallyAligned=applyVisualSubtopicGuides(groups,visualHints);
- const finer=refineSubtopics(visuallyAligned);
+ const finer=visuallyAligned.flatMap(group=>group.visualSection?[group]:refineSubtopics([group]));
  const refined=consolidateMicrotopics(finer);
  excluded.push(...refined.omitted);
  const clips=assignExclusiveSource(refined.groups.map(({rows,chapter,editorialNotes,verifiedTitle,verifiedConcept,visualTitle,visualSection},i)=>{

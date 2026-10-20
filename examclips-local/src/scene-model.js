@@ -43,7 +43,7 @@ export function layoutFromOcr(lines=[],width=1600,height=900){
     {id:'right',label:'Пояснения',rect:paddedRect(right,rect(.59,.165,.375,.685)),
        text:right.map(l=>l.text).join(' ').slice(0,900),lines:right.filter(l=>l.confidence>=75).map(l=>l.text).slice(0,24)}
   ];
-  if(!anyLeft&&!anyRight)return {title:'',panels,hasOcr:false};
+  if(!anyLeft&&!anyRight)return {title:'',panels:[{id:'source',label:'Материал лекции',rect:rect(.02,.16,.96,.68),lines:[],sourceOnly:true}],hasOcr:false};
   return {title,panels,hasOcr:true};
 }
 export function tokens(text=''){return [...new Set((text.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu)||[]).filter(x=>x.length>3))]}
@@ -57,18 +57,55 @@ export function focusForSpeech(panels,spoken='',fallback=0){
   if(best===0)return fallback%panels.length;
   return scores.indexOf(best);
 }
-export function makeStoryboard({width,height,lines=[],duration=90,chunks=[],speaker=null,titleOverride='' }){
+// Sparse edge scan: locate real source content without OCR or neural inference.
+export function pixelPanels(pixels,width,height){
+ if(!pixels||pixels.length!==width*height*4)return null;
+ const step=Math.max(1,Math.floor(width/400)),out=[];
+ for(const [side,lo,hi] of [[0,.02,.5],[1,.5,.98]]){
+  let x0=width,y0=height,x1=0,y1=0,hits=0;
+  for(let y=Math.floor(height*.17);y<height*.82-step;y+=step)
+   for(let x=Math.floor(width*lo);x<width*hi-step;x+=step){
+    const at=(y*width+x)*4,right=at+step*4,below=at+step*width*4;
+    const difference=Math.max(...[0,1,2].map(c=>Math.max(Math.abs(pixels[at+c]-pixels[right+c]),Math.abs(pixels[at+c]-pixels[below+c]))));
+    if(difference<35)continue;
+    hits++;x0=Math.min(x0,x);x1=Math.max(x1,x+step);y0=Math.min(y0,y);y1=Math.max(y1,y+step);
+   }
+  if(hits<12)continue;
+  const x=Math.max(0,x0/width-.025),y=Math.max(.15,y0/height-.035);
+  out.push({side,rect:rect(x,y,Math.min(1-x,(x1-x0)/width+.05),Math.min(.84-y,(y1-y0)/height+.07))});
+ }
+ return out;
+}
+export function makeStoryboard({width,height,lines=[],duration=90,chunks=[],speaker=null,titleOverride='',pixels=null }){
   if(!(width>0&&height>0&&duration>0))throw Error('Invalid scene dimensions or duration');
   const layout=layoutFromOcr(lines,width,height);
-  const panels=layout.panels;
+  let panels=layout.panels;
+  const observed=pixelPanels(pixels,width,height);
+  if(observed?.length){
+    panels=observed.map(({side,rect:r})=>{
+      const matching=lines.filter(l=>l.box&&l.box.y0>=height*.17&&l.box.y0<height*.82&&((l.box.x0+l.box.x1)/2>=width*.5?1:0)===side);
+      // Include entire OCR boxes even when a line crosses the partition.
+      const technical=matching.length>=2&&matching.some(l=>/\b(?:docker\s+(?:run|network|build)|FROM\s|WORKDIR|npm\s|COPY\s|RUN\s)/u.test(l.text));
+      if(technical){
+        const left=Math.max(0,Math.min(...matching.map(l=>l.box.x0))/width-.025);
+        const top=Math.max(.15,Math.min(...matching.map(l=>l.box.y0))/height-.035);
+        const right=Math.min(1,Math.max(...matching.map(l=>l.box.x1))/width+.025);
+        const bottom=Math.min(.84,Math.max(...matching.map(l=>l.box.y1))/height+.035);
+        r={x:left,y:top,w:right-left,h:bottom-top};
+      }
+      const x=Math.min(r.x,...matching.map(l=>l.box.x0/width)),right=Math.max(r.x+r.w,...matching.map(l=>l.box.x1/width));
+      return {id:side?'right':'left',label:side?'Пояснения':'Основная часть',rect:{...r,x,w:Math.min(1,right)-x},
+        text:matching.map(l=>l.text).join(' '),lines:matching.filter(l=>l.confidence>=75).map(l=>l.text),sourceOnly:true};
+    });
+  }
   const beats=[];
   const count=Math.min(40,Math.max(1,Math.ceil(duration/9)));
   let previous=-1;
   for(let i=0;i<count;i++){
     const a=i*duration/count,b=(i+1)*duration/count;
     const spoken=chunks.filter(c=>c.end>a&&c.start<b).map(c=>c.text).join(' ');
-    const target=focusForSpeech(panels,spoken,i);
-    const focus=target===previous&&panels.length>1&&!spoken.trim()?((target+1)%panels.length):target;
+    const target=focusForSpeech(panels,spoken,previous<0?Math.max(0,panels.findIndex(p=>p.text?.trim())):previous);
+    const focus=target;
     beats.push({time:a,focus});previous=focus;
   }
   return {version:2,title:titleOverride||layout.title,panels,beats,speaker:speaker||rect(.815,.854,.18,.14),

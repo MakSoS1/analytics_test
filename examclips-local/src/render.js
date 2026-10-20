@@ -45,7 +45,7 @@ export async function exportClip(media,clip,chunks,{quality='standard',onProgres
        if(!frame)throw Error('Не удалось декодировать кадр '+done);
        try{
          paintFrame(canvas,frame,frame.displayWidth,frame.displayHeight,
-           clip.layout,clip.focusX,captionSequenceAt(chunks,times[pos]),
+           clip.layout,clip.focusX,captionSequenceAt(chunks,times[pos-offset]),
            clip.scenes?.[index]||clip.scene||null,pos/fps);
          // Continuous output time across disjoint parts; no 300s silent gap.
          const pts=videoOffset+pos/fps;

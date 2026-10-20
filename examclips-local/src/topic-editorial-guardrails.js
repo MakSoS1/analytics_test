@@ -62,7 +62,7 @@ function compatible(a,b){
  // Visual landmarks are independent editorial candidates only when there
  // is substantive narrated context on BOTH sides.
  if(a.visualSection&&b.visualSection&&a.visualSection!==b.visualSection&&
-    rowSeconds(a.rows)>=36&&rowSeconds(b.rows)>=36)return false;
+    rowSeconds(a.rows)>=24&&rowSeconds(b.rows)>=24)return false;
  const x=groupInfo(a),y=groupInfo(b),gap=y.begin-x.end;
  if(gap>35)return false; // never jump across a lengthy unrelated passage
  if(NEW_TOPIC.test(b.rows[0]?.text||''))return false;
@@ -79,7 +79,10 @@ function compatible(a,b){
  return shared>.62&&backwards>.48&&gap<=12;
 }
 function combine(a,b){
- return {rows:[...a.rows,...b.rows].sort((x,y)=>x.start-y.start),
+ const shared=(key)=>a[key]&&b[key]&&a[key]!==b[key]?null:(a[key]||b[key]||null);
+ return {visualSection:shared('visualSection'),visualTitle:shared('visualTitle'),
+   verifiedConcept:shared('verifiedConcept'),verifiedTitle:shared('verifiedTitle'),
+   rows:[...a.rows,...b.rows].sort((x,y)=>x.start-y.start),
    chapter:a.chapter||b.chapter,editorialNotes:[...(a.editorialNotes||[]),...(b.editorialNotes||[]),'Объединено: слишком короткая неполная мысль']};
 }
 function brief(g){
@@ -134,10 +137,10 @@ export function consolidateMicrotopics(proposals){
    const left=lessonIdentity(before.rows,before.chapter);
    const right=lessonIdentity(after.rows,after.chapter);
    if(!(before.visualSection&&after.visualSection&&before.visualSection!==after.visualSection&&
-        rowSeconds(before.rows)>=36&&rowSeconds(after.rows)>=36)&&
+        rowSeconds(before.rows)>=24&&rowSeconds(after.rows)>=24)&&
       sameChapter(before,after)&&gap<=10&&gap>=-3&&
       !NEW_TOPIC.test(after.rows[0]?.text||'')&&
-      left?.key===right?.key&&!distinctVerifiedConcept(before,after)){
+      (left?.key===right?.key||(before.visualSection&&before.visualSection===after.visualSection))&&!distinctVerifiedConcept(before,after)){
      working[i-1]=combine(before,after);
      working.splice(i,1);i=Math.max(0,i-1);
    }
