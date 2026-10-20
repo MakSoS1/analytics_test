@@ -2,15 +2,20 @@ import {chromium} from 'playwright-core';
 import {execFileSync} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import assert from 'node:assert/strict';
-const chrome=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',chromium.executablePath()].filter(Boolean).find(existsSync);
 if(!chrome)throw Error('No Chrome');
 const browser=await chromium.launch({executablePath:chrome,headless:true,args:['--no-sandbox']});
 const page=await browser.newPage({acceptDownloads:true,viewport:{width:1280,height:850}});
 try{
  await page.goto('http://127.0.0.1:5173/');
+ await page.locator('#atlas-new-lecture').click();
  await page.locator('#video-file').setInputFiles('test-fixture.mp4');
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:25000});
+ await page.locator('#wizard-next').click();
+ await page.locator('#wizard-next').click();
  await page.locator('#srt-file').setInputFiles('test-fixture.srt');
+ await page.waitForFunction(()=>document.querySelector('#workflow-start')?.textContent.includes('SRT'));
+ await page.locator('#workflow-start').click();
  await page.waitForFunction(()=>document.querySelector('#app').dataset.phase==='results');
  const [download]=await Promise.all([
    page.waitForEvent('download',{timeout:120000}),

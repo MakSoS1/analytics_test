@@ -2,7 +2,7 @@ import {chromium} from 'playwright-core';
 import assert from 'node:assert/strict';
 import {existsSync} from 'node:fs';
 import {resolve} from 'node:path';
-const executable=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+const executable=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',chromium.executablePath()].filter(Boolean).find(existsSync);
 if(!executable)throw Error('Chrome unavailable for editorial screenshots');
 const browser=await chromium.launch({headless:true,executablePath:executable,args:['--no-sandbox','--disable-dev-shm-usage']});
 const page=await browser.newPage({viewport:{width:1100,height:1450}});

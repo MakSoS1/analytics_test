@@ -21,6 +21,8 @@ jobs:
       - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm test
       - run: npm run build
+      - name: Install Chrome with H.264 and AAC support for media regression tests
+        run: npx playwright-core install --with-deps chrome
       - name: Install test codecs
         run: |
           sudo apt-get update -qq
@@ -40,6 +42,12 @@ jobs:
       - name: Browser persistent ASR checkpoint save resume and purge
         run: |
           node scripts/asr-checkpoint-smoke.mjs
+      - name: Atlas library wizard source comparison and persistence
+        run: node scripts/atlas-ui-smoke.mjs
+      - name: Atlas project compatibility range proposals and source attachment
+        run: node scripts/atlas-project-flows-smoke.mjs
+      - name: Atlas playback continuation and export invalidation after edits
+        run: node scripts/atlas-editing-playback-smoke.mjs
       - name: MVP visual UX and local quiz end-to-end browser test
         run: |
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-mvp-vite.log 2>&1 &
@@ -102,5 +110,6 @@ jobs:
             examclips-local/smoke-output-high.mp4
             examclips-local/editorial-*.png
             examclips-local/mvp-*.png
+            examclips-local/test-results/atlas-*.png
             examclips-local/presenter-motion-export.mp4
           if-no-files-found: error

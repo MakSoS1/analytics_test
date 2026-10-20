@@ -2,7 +2,7 @@ import {chromium} from 'playwright-core';
 import {existsSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-const chrome=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',chromium.executablePath()].filter(Boolean).find(existsSync);
 const browser=await chromium.launch({executablePath:chrome,headless:true,args:['--no-sandbox']});
 try{
  const page=await browser.newPage({acceptDownloads:true});

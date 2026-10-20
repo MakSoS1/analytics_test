@@ -1,7 +1,7 @@
 import {chromium} from 'playwright-core';
 import assert from 'node:assert/strict';
 import {existsSync} from 'node:fs';
-const browserPath=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+const browserPath=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',chromium.executablePath()].filter(Boolean).find(existsSync);
 if(!browserPath)throw Error('Chrome unavailable');
 const browser=await chromium.launch({executablePath:browserPath,headless:true,args:['--no-sandbox']});
 const page=await browser.newPage();

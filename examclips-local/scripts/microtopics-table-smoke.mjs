@@ -1,7 +1,7 @@
 import {chromium} from 'playwright-core';
 import assert from 'node:assert/strict';
 import {existsSync} from 'node:fs';
-const executablePath=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+const executablePath=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',chromium.executablePath()].filter(Boolean).find(existsSync);
 if(!executablePath)throw Error('Chrome required');
 const browser=await chromium.launch({headless:true,executablePath,args:['--no-sandbox','--disable-dev-shm-usage']});
 const lines=[
@@ -21,12 +21,17 @@ try{
  const page=await browser.newPage({viewport:{width:1440,height:960}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:5173/');
+ await page.locator('#atlas-new-lecture').click();
  await page.locator('#video-file').setInputFiles('selective-lecture-fixture.mp4');
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled);
+ await page.locator('#wizard-next').click();
+ await page.locator('#wizard-next').click();
  await page.locator('#srt-file').setInputFiles({name:'docker-topics.srt',mimeType:'text/plain',buffer:Buffer.from(srt)});
+ await page.waitForFunction(()=>document.querySelector('#workflow-start')?.textContent.includes('SRT'));
+ await page.locator('#workflow-start').click();
  await page.waitForFunction(()=>document.querySelector('#app')?.dataset.phase==='results');
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
- assert.equal(await page.locator('.top-navigation [data-editor-tab="clip"]').textContent(),'Микротемы');
+ assert.equal(await page.locator('.top-navigation [data-editor-tab="clip"]').textContent(),'Микроуроки');
  assert.ok(await page.locator('#microtopic-catalog').isVisible());
  const cards=page.locator('.microtopic-card');
  assert.ok(await cards.count()>=2,'Expected multiple microtopics: '+await cards.count());

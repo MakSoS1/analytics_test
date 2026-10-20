@@ -1,7 +1,7 @@
 import {chromium} from 'playwright-core';
 import {existsSync} from 'node:fs';
 import assert from 'node:assert/strict';
-const chrome=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+const chrome=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',chromium.executablePath()].filter(Boolean).find(existsSync);
 const browser=await chromium.launch({executablePath:chrome,headless:true,args:['--no-sandbox']});
 const text=(i)=>i===0
  ? 'Сейчас разберём практическую задачу по математике: вычислим производную функции по определению.'
@@ -22,10 +22,18 @@ try{
  const page=await browser.newPage({viewport:{width:1440,height:900}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:5173/');
+ await page.locator('#atlas-new-lecture').click();
  await page.locator('#video-file').setInputFiles('long-exercise-fixture.mp4');
  await page.waitForFunction(()=>!document.querySelector('#import-srt').disabled,{timeout:60000});
+ await page.locator('#wizard-next').click();
+ await page.locator('#wizard-next').click();
  await page.locator('#srt-file').setInputFiles({name:'worked-20-minutes.srt',mimeType:'text/plain',buffer:Buffer.from(srt)});
+ await page.waitForFunction(()=>document.querySelector('#workflow-start')?.textContent.includes('SRT'));
+ await page.locator('#workflow-start').click();
  await page.waitForFunction(()=>document.querySelector('#app').dataset.phase==='results',{timeout:45000});
+ await page.locator('.microtopic-card-title').first().click();
+ assert.ok(await page.locator('#clip-start').isVisible());
+ assert.ok(await page.locator('#clip-end').isVisible());
  const check=await page.evaluate(()=>{
   const caption=document.querySelector('#selected-time').textContent;
   const count=Number(document.querySelector('#clip-count').textContent);
@@ -39,6 +47,7 @@ try{
  assert.ok(check.caption.includes('00:20'),'Expected 20+min timecode '+JSON.stringify(check));
  assert.equal(await page.locator('#story-keep').count(),0);
  assert.equal(await page.locator('#topic-preset').count(),0);
+ await page.locator('.top-navigation [data-editor-tab="timeline"]').click();
  await page.screenshot({path:'mvp-20minute-problem-timeline.png',fullPage:false});
  assert.deepEqual(errors,[]);
  console.log('LONG_WORKED_EXERCISE_UI_SUCCESS',JSON.stringify(check));
