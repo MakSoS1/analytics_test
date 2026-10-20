@@ -86,8 +86,17 @@ all platform-length Shorts.
 
 ## Verification scope
 
-157 deterministic tests, production build, Atlas UI/mobile/project/playback
-browser checks, and real source exports are required before publication.
+157 deterministic tests and production build passed. Atlas UI/mobile/project/
+playback checks, 720p/1080p exports and editorial visual checks passed locally.
+The final real-source run produced 27 MP4 files (720×1280, AAC audio), totalling
+3164.87 seconds, with no browser errors. Scene analysis took 32.28 seconds and
+rendering 172.41 seconds; complete renderer elapsed time was 207.29 seconds.
+Together with small/int8 recognition this is 479.4 seconds (7m59s), or 532.1
+seconds (8m52s) including the measured first model setup. These are sequential
+stage measurements on the M4, not a browser-only or average-PC benchmark.
+All 27 outputs passed stream/duration checks. Visual inspection sampled frames;
+it is not a claim that every second was watched. The intact caching explanation
+lasts 378.7 seconds; source completeness takes priority over Shorts length.
 All automatically proposed lessons retain review status. Keyword coverage and
 synthetic tests do not certify pedagogical completeness or ASR accuracy.
 Performance on an average Windows PC and browser-only full ASR remains unmeasured.
