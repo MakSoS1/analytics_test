@@ -72,6 +72,8 @@ jobs:
           npm run dev -- --host 127.0.0.1 > /tmp/examclips-vite.log 2>&1 &
           sleep 4
           npm run smoke
+      - name: AAC decode fallback when browser falsely reports WebCodecs support
+        run: node scripts/audio-compat-smoke.mjs
       - name: Stitch noncontiguous original source clips with uninterrupted audio
         run: |
           node scripts/noncontiguous-edl-smoke.mjs

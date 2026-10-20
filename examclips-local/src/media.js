@@ -1,4 +1,5 @@
-import {Input,BlobSource,ALL_FORMATS,AudioBufferSink,VideoSampleSink} from 'mediabunny';
+import {Input,BlobSource,ALL_FORMATS,VideoSampleSink} from 'mediabunny';
+import {compatibleAudio} from './audio-compat.js';
 export async function openMedia(file){
   if(!file||file.size===0)throw Error('Пустой видеофайл');
   const input=new Input({source:new BlobSource(file),formats:ALL_FORMATS});
@@ -8,7 +9,7 @@ export async function openMedia(file){
     const duration=await videoTrack.computeDuration();
     if(!(duration>0&&Number.isFinite(duration)))throw Error('Не удалось определить длительность');
     return {input,videoTrack,audioTrack,duration,width:videoTrack.displayWidth,height:videoTrack.displayHeight,
-      videoSink:new VideoSampleSink(videoTrack),audioSink:audioTrack?new AudioBufferSink(audioTrack):null};
+      videoSink:new VideoSampleSink(videoTrack),...await compatibleAudio(audioTrack)};
   }catch(e){await input.dispose();throw e}
 }
 // Stream only 30 seconds of decoded audio at a time, mixing channels and resampling to 16 kHz.

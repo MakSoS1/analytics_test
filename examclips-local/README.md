@@ -4,7 +4,11 @@ This branch is the current local-first ExamClips: transcribe a lecture locally, 
 
 ## Windows start
 
-Install Node.js 22 or newer, clone tag v0.11.0 of https://github.com/MakSoS1/analytics_test and run examclips-local/START_WINDOWS.cmd. The editor opens at http://localhost:5173; first model use can download PUBLIC weights. Media is read from local files only.
+Install Node.js 22 or newer, clone tag v0.11.1 of https://github.com/MakSoS1/analytics_test and run examclips-local/START_WINDOWS.cmd. The editor opens at http://localhost:5173; first model use can download PUBLIC weights. Media is read from local files only.
+
+## Browser audio compatibility
+
+Before processing, the app tests actual audio decoding. If WebCodecs rejects AAC (including YaBrowser configurations that report support), audio is read locally through Web Audio in windows of at most 30 seconds. The same path supplies original audio for MP4 export. No full-lecture PCM buffer or extra decoder download is required.
 
 ## OCR options
 
