@@ -24,3 +24,9 @@ import {focusForSpeech} from '../src/scene-model.js';
 test('shared topic words do not pull focus away from the current explanatory text',()=>{
  assert.equal(focusForSpeech([{text:'host bridge overlay'},{text:'host shares the network stack'}],'host',1),1);
 });
+
+test('presenter spans the content width with a natural widescreen aspect',()=>{
+ const g=editorialGeometry();assert.equal(g.speaker.x,g.stage.x);assert.equal(g.speaker.w,g.stage.w);
+ assert.ok(Math.abs(g.speaker.w/g.speaker.h-16/9)<.04);
+ assert.ok(g.subtitles.y+g.subtitles.h<g.speaker.y);
+});

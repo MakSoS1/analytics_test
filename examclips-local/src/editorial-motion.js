@@ -78,8 +78,8 @@ export function editorialGeometry(width=720,height=1280,{speaker=true}={}){
  const scale=r=>({x:r.x*sx,y:r.y*sy,w:r.w*sx,h:r.h*sy});
  return {
   title:scale({x:50,y:400,w:620,h:330}),
-  stage:scale({x:18,y:32,w:684,h:speaker?900:1080}),
-  speaker:speaker?scale({x:414,y:1050,w:270,h:190}):null,
-  subtitles:scale({x:36,y:speaker?944:1130,w:648,h:100})
+  stage:scale({x:18,y:32,w:684,h:speaker?736:1080}),
+  speaker:speaker?scale({x:18,y:884,w:684,h:384}):null,
+  subtitles:scale({x:36,y:speaker?776:1130,w:648,h:100})
  };
 }

@@ -42,7 +42,7 @@ source evidence. Diagram edges receive padding rather than clipping text boxes.
 
 ## Verification and limitations
 
-175 unit/regression tests and a production build passed locally. Browser tests
+176 unit/regression tests and a production build passed locally. Browser tests
 cover a single visible source region, opening-only titles (including disjoint
 EDL segments), normal import/edit/save/mobile flows, and changing visual focus.
 CI repeats these checks before publication. Full exports are inspected separately.
@@ -62,3 +62,5 @@ conservatively retain a longer lesson. Generated proposals stay reviewable;
 synthetic tests and two external transcripts do not prove accuracy in every
 language, course or teaching style. Browser-only ASR speed and average Windows
 hardware have not been benchmarked. No cloud inference or new paid API is required.
+
+The presenter spans the same 684px width as the main content, in a 16:9 region below the captions, without decorative frames or overlap. Motion checks sample after the 1.6-second opening title.
