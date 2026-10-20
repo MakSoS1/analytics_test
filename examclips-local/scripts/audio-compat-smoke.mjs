@@ -1,8 +1,10 @@
 import {chromium} from 'playwright-core';
 import {resolve} from 'node:path';
+import {existsSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true,args:['--no-sandbox']});
+const executablePath=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',chromium.executablePath()].filter(Boolean).find(existsSync);
+const browser=await chromium.launch({executablePath,headless:true,args:['--no-sandbox']});
 const fixture=resolve(process.env.MEDIA_FIXTURE||'test-fixture.mp4');
 const info=JSON.parse(execFileSync('ffprobe',['-v','error','-show_format','-of','json',fixture]));
 const start=Number(info.format.duration)>130?120:0;
