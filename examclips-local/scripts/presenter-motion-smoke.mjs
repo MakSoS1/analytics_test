@@ -33,7 +33,7 @@ try{
  await page.locator('.top-navigation [data-editor-tab="export"]').click();
  const [download]=await Promise.all([page.waitForEvent('download',{timeout:90000}),page.locator('#export').click()]);
  const file=resolve(work,'presenter-motion-export.mp4');await download.saveAs(file);
- const a=samplePixels(.6,file),b=samplePixels(2.6,file);
+ const a=samplePixels(2,file),b=samplePixels(3.6,file);
  assert.equal(a.length,b.length);
  let sum=0;for(let i=0;i<a.length;i++)sum+=Math.abs(a[i]-b[i]);
  const mean=sum/a.length;

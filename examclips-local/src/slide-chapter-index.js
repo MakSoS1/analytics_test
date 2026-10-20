@@ -26,7 +26,10 @@ export function slideHeadingFromLines(lines=[],width=1152,height=220){
     (b.x1-b.x0)>width*.05&&!ignore.test(String(l.text||''))&&
     /[\p{L}]{3,}/u.test(l.text||'');
  }).sort((a,b)=>a.box.y0-b.box.y0);
- const text=candidates.slice(0,2).map(x=>String(x.text||'').trim())
+ const heading=candidates[0];
+ const near=candidates.filter(l=>l===heading||(l.box.y0-heading.box.y1<Math.max(8,(heading.box.y1-heading.box.y0)*.55)&&
+   l.box.y1-l.box.y0>=(heading.box.y1-heading.box.y0)*.7));
+ const text=near.slice(0,2).map(x=>String(x.text||'').trim())
   .filter(x=>x.length>=6).join(' ').slice(0,92);
  return text;
 }
@@ -48,7 +51,7 @@ export function chaptersFromHeadings(headings,duration){
  })),duration);
 }
 export async function indexLectureSlides(media,{signal,language='en',
-  maxOcrFrames=70,onProgress=()=>{}}={}){
+  maxOcrFrames=70,onProgress=()=>{},recognize=recognizeEducationalFrame}={}){
  if(!media?.videoSink||!Number.isFinite(media.duration))throw Error('No video samples');
  const cuts=await sampleSlideCuts(media,{start:0,end:media.duration},{
    sampleEvery:Math.max(12,Math.min(28,Math.round(media.duration/150))),
@@ -73,7 +76,7 @@ export async function indexLectureSlides(media,{signal,language='en',
      // Header crop suppresses most presenter tiles and irrelevant body text.
      sample.draw(fullCtx,0,0,fullCanvas.width,fullCanvas.height);
      ctx.drawImage(fullCanvas,0,0,fullCanvas.width,fullCanvas.height*.28,0,0,1152,220);
-     const found=await recognizeEducationalFrame(canvas,{language,signal,
+     const found=await recognize(canvas,{language,signal,
        onProgress:()=>{}});
      const title=slideHeadingFromLines(found.lines,canvas.width,canvas.height);
      if(title)headings.push({start:sampled[i],title});

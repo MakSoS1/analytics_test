@@ -1,10 +1,10 @@
-# ExamClips v0.10: contextual OCR & local 9:16 lecture composition
+# ExamClips v0.11: general speech boundaries & single-focus vertical lessons
 
 This branch is the current local-first ExamClips: transcribe a lecture locally, propose context-reviewable 1–5 minute lessons, recognize relevant slide/UI labels, synchronize scene focus with what the lecturer says, and export with original live presenter video/audio.
 
 ## Windows start
 
-Install Node.js 22 or newer, clone tag v0.10.0 of https://github.com/MakSoS1/analytics_test and run examclips-local/START_WINDOWS.cmd. The editor opens at http://localhost:5173; first model use can download PUBLIC weights. Media is read from local files only.
+Install Node.js 22 or newer, clone tag v0.11.0 of https://github.com/MakSoS1/analytics_test and run examclips-local/START_WINDOWS.cmd. The editor opens at http://localhost:5173; first model use can download PUBLIC weights. Media is read from local files only.
 
 ## OCR options
 
@@ -45,3 +45,7 @@ See docs/superpowers for earlier architectural and microtopic plans and the new 
 ## Real Docker lecture workflow
 
 See [the 2026-10-20 acceptance report](../docs/examclips/REAL_DOCKER_ACCEPTANCE_2026-10-20.md) for the measured native Whisper workflow, exact reproduction commands, source-grounded boundaries and limitations. Source media and generated videos are distributed as release assets. The browser also accepts the resulting SRT or editable project JSON.
+
+## General lecture workflow and single-focus video
+
+See [the v0.11 acceptance notes](../docs/examclips/GENERAL_SPEECH_AND_SINGLE_FOCUS_2026-10-20.md). The default app no longer uses the filename-specific Docker guide. Native ASR now retains measured word timestamps; import the editable project JSON to retain them (SRT carries phrase timing only). Title cards disappear after 1.6 seconds; the default dark composition shows one source region at a time.

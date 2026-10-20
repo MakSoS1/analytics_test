@@ -40,14 +40,15 @@ def main():
     processing_started=time.monotonic()
     segments,info=model.transcribe(audio,language=None if a.language=="auto" else a.language,beam_size=3,
         vad_filter=True,vad_parameters={"min_silence_duration_ms":600},
-        word_timestamps=False,condition_on_previous_text=False,
+        word_timestamps=True,condition_on_previous_text=False,
         compression_ratio_threshold=2.4,no_speech_threshold=0.55)
     rows=[]
     for segment in segments:
         text=segment.text.strip()
         if text and segment.end>segment.start:
             rows.append({"start":round(segment.start,3),"end":round(segment.end,3),"text":text,
-                         "no_speech_prob":round(segment.no_speech_prob,4)})
+                         "no_speech_prob":round(segment.no_speech_prob,4),
+                         "words":[{"start":round(w.start,3),"end":round(w.end,3),"text":w.word.strip()} for w in (segment.words or []) if w.word.strip() and w.end>w.start]})
         if len(rows)%100==0 and rows:
             print("ASR_PROGRESS",len(rows),f"last_second={rows[-1]['end']:.0f}",flush=True)
     transcript=out/"lecture-transcript.json"

@@ -1,5 +1,5 @@
 import {makeStoryboard,sourceRect,assertScene} from './scene-model.js';
-import {editorialTimeline,editorialGeometry,fitTypography,suitableOcrLines,paletteFor} from './editorial-motion.js';
+import {editorialTimeline,editorialGeometry,fitTypography,suitableOcrLines,paletteFor,titleCardOpacity} from './editorial-motion.js';
 export const WIDTH=720,HEIGHT=1280;
 function lineWrap(ctx,text,maxWidth){
   const words=text.trim().split(/\s+/),lines=[],current={v:''};
@@ -7,8 +7,8 @@ function lineWrap(ctx,text,maxWidth){
     if(ctx.measureText(next).width>maxWidth&&current.v){lines.push(current.v);current.v=w}else current.v=next}
   if(current.v)lines.push(current.v);return lines.slice(0,4);
 }
-export function paintFrame(canvas,source,width,height,layout,focusX,subtitle='',scene=null,elapsed=0){
-  if(layout==='hybrid')return paintHybrid(canvas,source,width,height,subtitle,scene,elapsed);
+export function paintFrame(canvas,source,width,height,layout,focusX,subtitle='',scene=null,elapsed=0,lessonElapsed=elapsed){
+  if(layout==='hybrid')return paintHybrid(canvas,source,width,height,subtitle,scene,elapsed,lessonElapsed);
   subtitle=typeof subtitle==='string'?subtitle:(subtitle?.plain||'');
   const ctx=canvas.getContext('2d'),cw=canvas.width,ch=canvas.height;
   ctx.fillStyle='#09111f';ctx.fillRect(0,0,cw,ch);
@@ -83,9 +83,8 @@ function renderEditorialPanel(ctx,src,sw,sh,panel,stage,palette,{opacity=1,rise=
  ctx.save();
  ctx.globalAlpha=opacity;
  ctx.translate(0,rise);
- ctx.beginPath();roundBox(ctx,stage.x,stage.y,stage.w,stage.h,25);ctx.clip();
- ctx.fillStyle=palette.surface;ctx.fillRect(stage.x,stage.y,stage.w,stage.h);
- const sourceRectArea={x:stage.x+18,y:stage.y+17,w:stage.w-36,h:stage.h-34};
+ ctx.beginPath();ctx.rect(stage.x,stage.y,stage.w,stage.h);ctx.clip();
+ const sourceRectArea=stage;
  const lines=suitableOcrLines(panel);
  const rich=lines.length>=3&&lines.join(' ').length>70;
  if(rich){
@@ -110,16 +109,14 @@ function renderEditorialPanel(ctx,src,sw,sh,panel,stage,palette,{opacity=1,rise=
    }
  }else{
    // Keep real visual diagram pixels; OCR is not permitted to make up a mathematical relation.
-   roundedSurface(ctx,sourceRectArea,palette.panel,17);
-   ctx.save();roundBox(ctx,sourceRectArea.x,sourceRectArea.y,sourceRectArea.w,sourceRectArea.h,17);ctx.clip();
-   const inset=16;
-   crop(ctx,src,panel.rect,sourceRectArea.x+inset,sourceRectArea.y+inset,
-     sourceRectArea.w-inset*2,sourceRectArea.h-inset*2,sw,sh);
-   ctx.restore();
+   // Subdue white slide backgrounds without changing the source's content.
+   ctx.filter='brightness(0.88)';
+   crop(ctx,src,panel.rect,sourceRectArea.x,sourceRectArea.y,sourceRectArea.w,sourceRectArea.h,sw,sh);
+   ctx.filter='none';
  }
  ctx.restore();
 }
-export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
+export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0,lessonElapsed=elapsed){
  const ctx=canvas.getContext('2d'),actualWidth=canvas.width,actualHeight=canvas.height;
  // Compose in logical 720x1280 coordinates; vector text draws sharply at any export resolution.
  const width=720,height=1280;
@@ -130,60 +127,24 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
    (assertScene(scene)?scene:makeStoryboard({width:sw,height:sh,duration:90}));
  const t=Math.max(0,elapsed-(chapter?.start||0));
  const director=editorialTimeline(spec,t);
- const theme=scene?.theme||spec.theme||'warm';
+ const theme=scene?.theme||spec.theme||'midnight';
  const p=paletteFor(theme),g=editorialGeometry(width,height,{speaker:!spec.hideSpeaker});
  const s=width/720;
  ctx.clearRect(0,0,width,height);
  ctx.fillStyle=p.background;ctx.fillRect(0,0,width,height);
- // Quiet, magazine-style typography: no redundant screenshot of the original slide title.
- label(ctx,'УЧЕБНЫЙ РАЗБОР',g.eyebrow.x,g.eyebrow.y+21*s,{color:p.accent,fontSize:17*s,weight:820});
- const total=spec.panels.length;
- ctx.textAlign='right';ctx.font='650 '+(18*s)+'px system-ui, sans-serif';
- ctx.fillStyle=p.muted;ctx.fillText(String(director.current+1).padStart(2,'0')+' / '+String(total).padStart(2,'0'),width-42*s,64*height/1280);
- const title=(spec.title||scene?.title||'Материал лекции').replace(/\s+/g,' ').trim();
- drawText(ctx,title,g.title.x,g.title.y,g.title,p,'title');
- // Course material is the hero. Content switches only on a semantic/timed beat.
- roundedSurface(ctx,g.stage,p.surface,25*width/720,p.line);
  const currentPanel=spec.panels[director.current]||spec.panels[0];
- const paired=spec.panels.length===2&&spec.panels.every(panel=>panel.sourceOnly);
- const heroStage=paired?{...g.stage,h:g.stage.h*.59}:g.stage;
- // Stack the other source region as context, so a wide code block does not
- // leave most of the portrait empty. Both regions retain their source pixels.
- if(paired){
-   const other=spec.panels[director.current===0?1:0];
-   renderEditorialPanel(ctx,src,sw,sh,other,{...g.stage,y:g.stage.y+g.stage.h*.62,h:g.stage.h*.38},p);
- }
+ // One legible source region per moment. No companion thumbnail or frame chrome.
  if(director.mix<1){
-   const oldPanel=spec.panels[director.previous]||currentPanel;
-   renderEditorialPanel(ctx,src,sw,sh,oldPanel,heroStage,p,{opacity:1-director.mix});
+   renderEditorialPanel(ctx,src,sw,sh,spec.panels[director.previous]||currentPanel,g.stage,p,{opacity:1-director.mix});
  }
- renderEditorialPanel(ctx,src,sw,sh,currentPanel,heroStage,p,{
-    opacity:director.mix,rise:(1-director.progress)*12*height/1280,reveal:Math.min(1,.35+t/9)
- });
- // Minimal stage navigation; no pasted OCR text and no duplicate badge rectangles.
- const dots=spec.panels.length;
- for(let i=0;i<Math.min(8,dots);i++){
-   ctx.fillStyle=i===director.current?p.accent:p.line;
-   roundBox(ctx,(g.stage.x+g.stage.w-22*width/720)-(dots-i-1)*19*width/720,
-     g.stage.y+g.stage.h-24*height/1280, i===director.current?19*s:8*s,5*height/1280,3*s);
-   ctx.fill();
- }
- // Presenter in a compact, vertically cropped PiP; independent from content panel.
- if(g.speaker){
-   roundedSurface(ctx,g.speaker,p.surface,22*s,p.line);
-   const inset=5*s;
-   ctx.save();
-   roundBox(ctx,g.speaker.x+inset,g.speaker.y+inset,g.speaker.w-2*inset,g.speaker.h-2*inset,17*s);ctx.clip();
-   ctx.fillStyle=p.panel;ctx.fillRect(g.speaker.x,g.speaker.y,g.speaker.w,g.speaker.h);
-   crop(ctx,src,spec.speaker,g.speaker.x+inset,g.speaker.y+inset,g.speaker.w-inset*2,g.speaker.h-inset*2,sw,sh,true);
-   ctx.restore();
- }
+ renderEditorialPanel(ctx,src,sw,sh,currentPanel,g.stage,p,{opacity:director.mix,reveal:1});
+ if(g.speaker)crop(ctx,src,spec.speaker,g.speaker.x,g.speaker.y,g.speaker.w,g.speaker.h,sw,sh,true);
  // Reels-style transparent karaoke captions: no box, no permanently reserved space.
  // Draw only words already spoken, 2-4 at a time, with a subtle pop/highlight.
  const cap=subtitle&&typeof subtitle==='object'?subtitle:null;
  const tokens=cap?.words||[];
  if(tokens.length){
-     const fontSize=44*s,baseline=g.subtitles.y+69*s;
+     const fontSize=39*s,baseline=g.subtitles.y+69*s;
    ctx.save();
    ctx.textAlign='left';ctx.textBaseline='alphabetic';
    ctx.font='850 '+fontSize+'px system-ui, sans-serif';
@@ -203,8 +164,8 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
        ctx.translate(middle,baseline/adapt);
        ctx.scale(pop,pop);
        ctx.font='850 '+fontSize+'px system-ui, sans-serif';
-       ctx.lineJoin='round';ctx.lineWidth=9*s;ctx.strokeStyle='#071021';
-       ctx.shadowColor='#07102199';ctx.shadowBlur=10*s;
+       ctx.lineJoin='round';ctx.lineWidth=4*s;ctx.strokeStyle='#071021';
+       ctx.shadowColor='#07102199';ctx.shadowBlur=3*s;
        ctx.strokeText(word.text,-(desiredWidths[tokens.indexOf(word)]/2),0);
        ctx.shadowBlur=0;
        ctx.fillStyle=isActive?'#73B3FF':'#FFFFFF';
@@ -221,6 +182,15 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0){
    ctx.lineJoin='round';ctx.lineWidth=9;ctx.strokeStyle='#081322';
    ctx.strokeText(text,width/2,g.subtitles.y+63);
    ctx.fillStyle='#fff';ctx.fillText(text,width/2,g.subtitles.y+63);ctx.restore();
+ }
+ const title=(scene?.title||spec.title||'').replace(/\s+/gu,' ').trim();
+ const intro=title?titleCardOpacity(lessonElapsed):0;
+ if(intro>0){
+  ctx.save();ctx.globalAlpha=intro;ctx.fillStyle=p.background;ctx.fillRect(0,0,width,height);
+  const fit=fitTypography(ctx,title,{width:g.title.w,height:g.title.h,maxFont:58,minFont:29,maxLines:6,lineHeight:1.15,weight:700});
+  ctx.font='700 '+fit.size+'px system-ui, sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle=p.ink;
+  const top=(height-fit.lines.length*fit.lineHeight)/2;
+  fit.lines.forEach((line,i)=>ctx.fillText(line,width/2,top+i*fit.lineHeight));ctx.restore();
  }
  ctx.restore();
 }

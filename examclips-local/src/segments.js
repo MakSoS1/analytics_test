@@ -4,7 +4,8 @@ export function validRange(start,end,duration){
 }
 export function normalizeChunks(chunks,duration){
   const safe=chunks.filter(c=>c&&typeof c.text==='string'&&c.text.trim()&&Number.isFinite(c.start)&&Number.isFinite(c.end))
-    .map(c=>({text:c.text.trim(),start:Math.max(0,c.start),end:Math.min(duration,c.end)}))
+    .map(c=>({text:c.text.trim(),start:Math.max(0,c.start),end:Math.min(duration,c.end),
+      ...(Array.isArray(c.words)?{words:c.words.filter(w=>Number.isFinite(w.start)&&Number.isFinite(w.end)&&w.end>w.start&&w.start>=c.start-.05&&w.end<=c.end+.05).map(w=>({...w}))}:{})}))
     .filter(c=>c.end>c.start).sort((a,b)=>a.start-b.start);
   return safe;
 }

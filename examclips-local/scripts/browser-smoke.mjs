@@ -62,7 +62,7 @@ try{
   assert.equal(playbackError,null,'The test browser must decode the original H.264/AAC fixture');
   await page.locator('#atlas-play-source').click();
   await page.waitForFunction(()=>{
-    const video=document.querySelector('#player');return !video.paused&&video.currentTime>.3;
+    const video=document.querySelector('#player');return !video.paused&&video.currentTime>2;
   },null,{timeout:10000});
   const first=await samplePlayback();
   await page.waitForFunction(time=>{

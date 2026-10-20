@@ -92,6 +92,8 @@ jobs:
       - name: Browser-only Tesseract.js fallback with no Python OCR installed
         run: |
           node scripts/ocr-browser-smoke.mjs
+      - name: Single primary region and opening-only title
+        run: node scripts/single-focus-smoke.mjs
       - name: Editorial visual QA — three real rendered scenes
         run: |
           node scripts/editorial-visual-smoke.mjs

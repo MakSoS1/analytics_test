@@ -20,7 +20,7 @@ export function inspectLectureCoverage(hints,clips,chunks){
   const spokenCovered=rows.filter(r=>owners.some(o=>sourceSegments(o.clip).some(s=>overlap(s,r)>.5)))
     .reduce((n,r)=>n+overlap(r,h),0);
   const sufficientSpeech=speech>=22&&words>=28;
-  const dedicated=owners.find(o=>o.clip.visualSection===h.id&&
+  const dedicated=owners.find(o=>h.id&&o.clip.visualSection===h.id&&
     o.seconds>=Math.min(30,speech*.5));
   const shared=owners.some(o=>o.sourceSeconds>Math.max(180,(h.end-h.start)*1.7));
   const status=!sufficientSpeech?'insufficient-transcript':
