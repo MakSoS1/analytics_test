@@ -36,5 +36,5 @@ test('captions are paged to a manageable visual phrase without rewriting transcr
 test('OCR text is not reflowed if unsuitable or source-only',()=>{
  assert.deepEqual(suitableOcrLines({lines:['valid teaching sentence','bad {formula}','     ','A']},''),[]);
  assert.equal(suitableOcrLines({},'').length,0);
- assert.equal(paletteFor('no-such-theme').background,'#F5F4F0');
+ assert.equal(paletteFor('no-such-theme').background,'#191C22');
 });

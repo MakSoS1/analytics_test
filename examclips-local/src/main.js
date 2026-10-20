@@ -13,11 +13,9 @@ import {sampleSlideCuts} from './slide-cuts.js';
 import {makeStoryboard} from './scene-model.js';
 import {buildMicrotopics,coverageReport} from './microtopics.js';
 import {sourceSegments,storyDuration} from './selective-stories.js';
-import {planCompleteTopics} from './complete-topics.js';
+import {planGeneralTopics as planCompleteTopics} from './general-topics.js';
 import {buildVerifiedLessonScreenplays,storyboardReadyForRendering} from './lesson-screenplay.js';
 import {renderMicrotopicCatalog,renderMicrotopicDetail} from './microtopic-catalog.js';
-import {lectureVisualReference} from './lecture-outline.js';
-import {dockerVisualSubtopics} from './visual-subtopic-hints.js';
 import {renderLectureCoverage} from './coverage-inspection.js';
 import {indexLectureSlides} from './slide-chapter-index.js';
 import {saveLibraryProject,listLibraryProjects,getLibraryProject,deleteLibraryProject,
@@ -1111,7 +1109,7 @@ function renderMicrotopics(){
   onAccept:acceptCandidate,onReject:rejectCandidate
  });
  if(media)renderLectureCoverage($('microtopic-coverage-report'),
-   dockerVisualSubtopics({name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height}),
+   lectureChapters,
    clips,chunks);
  updateMicrotopicMode();
 }
@@ -1145,7 +1143,7 @@ function sync(){
       ' · Это не гарантия качества — проверьте самостоятельно.'
     : 'Проверка завершённости через Ollama необязательна и выполняется только на этом компьютере.';
   $('clip-title').value=c.title;$('clip-start').value=c.start.toFixed(1);$('clip-end').value=c.end.toFixed(1);
-  $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'warm';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
+  $('layout').value=c.layout;$('style-theme').value=c.scene?.theme||'midnight';$('speaker-preset').value=c.speakerPreset||'auto';$('focus').value=c.focusX;$('focus-value').textContent=c.focusX+'%';
   renderStoryPieces();renderScreenplay();updateTimelinePlayhead();refreshAtlas();scheduleProjectSave();
 }
 function setBusy(v){busy=v;if(!v&&root.dataset.phase==='results')$('processing-panel').hidden=true;enable();renderStoryPieces()}
@@ -1257,14 +1255,7 @@ $('forget-asr').onclick=async()=>{
 
 function proposeTopics(){
  if(!projectDuration()||!chunks.length)return;
- const reference=lectureVisualReference({
-  name:sourceLabel(),duration:projectDuration(),width:media?.width,height:media?.height
- });
- const chapters=lectureChapters.length?lectureChapters:reference;
- const visualHints=dockerVisualSubtopics({
-   name:sourceLabel(),duration:projectDuration(),width:media?.width,height:media?.height
- });
- const plan=planCompleteTopics(chunks,projectDuration(),{sceneCuts,chapters,visualHints});
+ const plan=planCompleteTopics(chunks,projectDuration(),{sceneCuts,chapters:lectureChapters});
  clips=buildVerifiedLessonScreenplays(plan.clips,chunks);
  thumbnailGeneration++;topicThumbnails.clear();microtopicDetailOpen=false;catalogPlayback=null;
  // Tiny regression-only fixture: display source review, never claim a full lesson.
@@ -1334,8 +1325,7 @@ async function scanLectureStructure({automatic=false}={}){
 }
 function scheduleAutoChapterAnalysis(){
  if(chapterScanAttempted||chapterScanPending||!media||!chunks.length||
-    lectureChapters.length||media.duration<480||
-    lectureVisualReference({name:sourceFile?.name,duration:media.duration,width:media.width,height:media.height}).length)
+    lectureChapters.length||media.duration<480)
    return;
  chapterScanAttempted=true;
  // One bounded background structure pass after ASR; the initial transcript
@@ -1526,7 +1516,7 @@ $('analyze-scene').onclick=async()=>{
       const data=await analyzeScene(media,section,
         chunks.filter(row=>row.end>section.start&&row.start<section.end),
         {language:lang,ocrEngine:$('ocr-engine').value,onProgress:status,signal:abort.signal});
-      data.scene.theme=c.scene?.theme||'warm';
+      data.scene.theme=c.scene?.theme||'midnight';
       scenes.push(data.scene);details.push(data);
     }
     invalidateClip(c);c.scenes=scenes;c.scene=scenes[0];c.layout='hybrid';c.speakerPreset='auto';
@@ -1633,8 +1623,9 @@ function loop(){
     const activePiece=sourceSegments(c)[Math.max(0,index)];
     try{
     paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,
-      c.scenes?.[Math.max(0,index)]||c.scene||null,
-      Math.max(0,video.currentTime-(activePiece?.start||0)));
+      c.scenes?.[Math.max(0,index)]||c.scene||{title:c.title},
+      Math.max(0,video.currentTime-(activePiece?.start||0)),
+      sourceSegments(c).slice(0,Math.max(0,index)).reduce((n,p)=>n+p.end-p.start,0)+Math.max(0,video.currentTime-(activePiece?.start||0)));
     if(activeEditorTab==='clip'&&$('microtopic-preview'))
       $('microtopic-preview').getContext('2d').drawImage($('preview'),0,0,720,1280);
    }catch{}

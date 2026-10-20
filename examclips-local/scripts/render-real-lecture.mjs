@@ -38,19 +38,19 @@ try{
  await page.goto('http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});
  const plan=await page.evaluate(async({rows,name})=>{
   const {openMedia}=await import('/src/media.js');
-  const {planCompleteTopics}=await import('/src/complete-topics.js');
-  const {lectureVisualReference}=await import('/src/lecture-outline.js');
-  const {dockerVisualSubtopics}=await import('/src/visual-subtopic-hints.js');
+  const {planGeneralTopics:planCompleteTopics}=await import('/src/general-topics.js');
   const {buildVerifiedLessonScreenplays}=await import('/src/lesson-screenplay.js');
   const file=new File([await(await fetch('/acceptance-source.mp4')).blob()],name,{type:'video/mp4'});
   window.auditMedia=await openMedia(file);window.auditRows=rows;
   const meta={...auditMedia,name};
-  const planned=planCompleteTopics(rows,meta.duration,{chapters:lectureVisualReference(meta),visualHints:dockerVisualSubtopics(meta)});
+  const {indexLectureSlides}=await import('/src/slide-chapter-index.js');
+  const structure=await indexLectureSlides(auditMedia,{recognize:async canvas=>({lines:await window.nativeOcr(canvas.toDataURL('image/png').split(',')[1])})});
+  const planned=planCompleteTopics(rows,meta.duration,{chapters:structure.chapters,sceneCuts:structure.cuts});
   window.auditClips=buildVerifiedLessonScreenplays(planned.clips,rows);
   return {...planned,clips:auditClips};
  },{rows,name:video.split('/').at(-1)});
  await writeFile(join(output,'render-plan.json'),JSON.stringify(plan,null,2));
- const indices=selection==='all'?plan.clips.map((_,i)=>i):selection.split(',').map(n=>Number(n)-1);
+ const indices=selection==='plan'?[]:selection==='all'?plan.clips.map((_,i)=>i):selection.split(',').map(n=>Number(n)-1);
  const results=[];
  for(const index of indices){
   if(!plan.clips[index])throw Error('Unknown clip '+(index+1));
@@ -65,7 +65,7 @@ try{
     const cuts=await sampleSlideCuts(auditMedia,piece);const chapters=[];
     for(let i=0;i<cuts.length;i++){
      const offset=cuts[i],until=cuts[i+1]??piece.end-piece.start;
-     const frame=await auditMedia.videoSink.getSample(piece.start+offset+Math.min(1,(until-offset)/2));
+     const frame=await auditMedia.videoSink.getSample(piece.start+offset+Math.min(12,(until-offset)*.6));
      const canvas=document.createElement('canvas');canvas.width=auditMedia.width;canvas.height=auditMedia.height;
      const ctx=canvas.getContext('2d',{willReadFrequently:true});try{frame.draw(ctx,0,0,canvas.width,canvas.height)}finally{frame.close()}
      const lines=await window.nativeOcr(canvas.toDataURL('image/png').split(',')[1]);

@@ -83,7 +83,7 @@ export function makeStoryboard({width,height,lines=[],duration=90,chunks=[],spea
   const observed=pixelPanels(pixels,width,height);
   if(observed?.length){
     panels=observed.map(({side,rect:r})=>{
-      const matching=lines.filter(l=>l.box&&l.box.y0>=height*.17&&l.box.y0<height*.82&&((l.box.x0+l.box.x1)/2>=width*.5?1:0)===side);
+      const matching=lines.filter(l=>l.box&&l.confidence>=55&&/[\p{L}\p{N}]{3}/u.test(l.text)&&l.box.y0>=height*.17&&l.box.y0<height*.82&&((l.box.x0+l.box.x1)/2>=width*.5?1:0)===side);
       // Include entire OCR boxes even when a line crosses the partition.
       const technical=matching.length>=2&&matching.some(l=>/\b(?:docker\s+(?:run|network|build)|FROM\s|WORKDIR|npm\s|COPY\s|RUN\s)/u.test(l.text));
       if(technical){
@@ -97,7 +97,17 @@ export function makeStoryboard({width,height,lines=[],duration=90,chunks=[],spea
         const safeTop=code?Math.min(r.y,top):top,safeBottom=code?Math.max(r.y+r.h,bottom):bottom;
         r={x:safeLeft,y:safeTop,w:safeRight-safeLeft,h:safeBottom-safeTop};
       }
-      const x=Math.min(r.x,...matching.map(l=>l.box.x0/width)),right=Math.max(r.x+r.w,...matching.map(l=>l.box.x1/width));
+      const code=matching.some(l=>/^\s*(?:FROM|WORKDIR|RUN|COPY|CMD|EXPOSE)\s/u.test(l.text));
+      const prose=!code&&matching.length>=2&&matching.some(l=>l.text.split(/\s+/u).length>=7);
+      if(prose){
+        const x=Math.max(0,Math.min(...matching.map(l=>l.box.x0))/width-.035);
+        const y=Math.max(0,Math.min(...matching.map(l=>l.box.y0))/height-.035);
+        const right=Math.min(1,Math.max(...matching.map(l=>l.box.x1))/width+.035);
+        const bottom=Math.min(.84,Math.max(...matching.map(l=>l.box.y1))/height+.035);
+        r={x,y,w:right-x,h:bottom-y};
+      }
+      const x=Math.max(0,Math.min(r.x,...matching.map(l=>l.box.x0/width-.02))),right=Math.min(1,Math.max(r.x+r.w,...matching.map(l=>l.box.x1/width+.025)));
+
       return {id:side?'right':'left',label:side?'Пояснения':'Основная часть',rect:{...r,x,w:Math.min(1,right)-x},
         text:matching.map(l=>l.text).join(' '),lines:matching.filter(l=>l.confidence>=75).map(l=>l.text),sourceOnly:true};
     });

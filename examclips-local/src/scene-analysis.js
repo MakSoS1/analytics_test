@@ -71,7 +71,7 @@ export async function analyzeScene(media,clip,chunks,{
   for(let i=0;i<cuts.length;i++){
     if(signal?.aborted)throw new DOMException('Stopped','AbortError');
     const offset=cuts[i],until=cuts[i+1]??duration;
-    const at=Math.min(media.duration-.05,clip.start+offset+Math.min(2,(until-offset)/3));
+    const at=Math.min(media.duration-.05,clip.start+offset+Math.min(12,(until-offset)*.6));
     const sample=await media.videoSink.getSample(Math.max(0,at));
     if(!sample)throw Error('Не удалось получить учебный кадр');
     const canvas=createCanvas(media.width,media.height),ctx=canvas.getContext('2d',{willReadFrequently:true});

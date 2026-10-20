@@ -6,10 +6,10 @@ export const smoothstep = t => {const x=clamp01(t);return x*x*(3-2*x)};
 export const PALETTES = Object.freeze({
   warm: {background:'#F5F4F0',ink:'#16213B',muted:'#66718A',surface:'#FFFFFF',panel:'#F6F8FB',
     line:'#E4E8EF',accent:'#305FE8',accentSurface:'#EAF0FF',caption:'#FFFFFF'},
-  midnight: {background:'#0F1422',ink:'#F6F7FA',muted:'#9DAEC7',surface:'#192234',panel:'#222E43',
+  midnight: {background:'#191C22',ink:'#F6F7FA',muted:'#9DAEC7',surface:'#192234',panel:'#222E43',
     line:'#36445C',accent:'#83AEFF',accentSurface:'#253F66',caption:'#F6F7FA'}
 });
-export function paletteFor(theme){return PALETTES[theme]||PALETTES.warm}
+export function paletteFor(theme){return PALETTES[theme]||PALETTES.midnight}
 export function measureWrapped(ctx,text,maxWidth,maxLines=Infinity){
   const words=String(text||'').replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
   const lines=[];let current='';
@@ -72,16 +72,14 @@ export function editorialTimeline(scene,elapsed,{transition=.48}={}){
   const mix=changed?smoothstep((elapsed-beats[index].time)/transition):1;
   return {current,previous,mix,index,progress:easeOutCubic((elapsed-beats[index].time)/.55)};
 }
+export function titleCardOpacity(elapsed){return elapsed<1.2?1:1-smoothstep((elapsed-1.2)/.4)}
 export function editorialGeometry(width=720,height=1280,{speaker=true}={}){
-  const sx=width/720,sy=height/1280;
-  const scale=rect=>({x:rect.x*sx,y:rect.y*sy,w:rect.w*sx,h:rect.h*sy});
-  return {
-    eyebrow:scale({x:42,y:42,w:636,h:32}),
-    title:scale({x:42,y:93,w:636,h:108}),
-    stage:scale({x:30,y:211,w:660,h:speaker?700:820}),
-    // Larger lecturer crop, anchored over the lower-right edge of the board.
-    speaker:speaker?scale({x:356,y:1008,w:315,h:230}):null,
-    // Transparent floating caption position: NOT a reserved subtitle panel.
-    subtitles:scale({x:54,y:speaker?916:1050,w:612,h:100})
-  };
+ const sx=width/720,sy=height/1280;
+ const scale=r=>({x:r.x*sx,y:r.y*sy,w:r.w*sx,h:r.h*sy});
+ return {
+  title:scale({x:50,y:400,w:620,h:330}),
+  stage:scale({x:18,y:32,w:684,h:speaker?900:1080}),
+  speaker:speaker?scale({x:414,y:1050,w:270,h:190}):null,
+  subtitles:scale({x:36,y:speaker?944:1130,w:648,h:100})
+ };
 }
