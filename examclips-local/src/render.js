@@ -63,7 +63,7 @@ export async function exportClip(media,clip,chunks,{quality='standard',onProgres
      onProgress('Склеиваем исходную звуковую дорожку по выбранным фрагментам...');
      for(let index=0;index<pieces.length;index++){
        const p=pieces[index],duration=p.end-p.start;
-       for await(const raw of new AudioSampleSink(media.audioTrack).samples(p.start,p.end)){
+       for await(const raw of (media.audioSampleSink||new AudioSampleSink(media.audioTrack)).samples(p.start,p.end)){
          if(signal?.aborted){raw.close();throw new DOMException('Stopped','AbortError')}
          let sample=raw;
          try{
