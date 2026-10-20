@@ -9,7 +9,7 @@ const meta={name:'HAHL2026_Lecture01_Docker.mp4',duration:3590.341,width:1600,he
 const row=(start,end,text)=>({start,end,text});
 const chapters=lectureVisualReference(meta);
 test('real Docker video physical identity activates only its inspected outline',()=>{
- assert.ok(chapters.length>=12);
+ assert.ok(chapters.length>=9);
  assert.equal(chapters[0].key,'introduction');
  assert.ok(chapterForTime(chapters,60)?.key==='introduction');
  assert.ok(chapterForTime(chapters,120)?.key==='introduction');

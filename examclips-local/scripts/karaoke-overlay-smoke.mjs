@@ -10,6 +10,8 @@ try{
  const result=await page.evaluate(async()=>{
   const {paintFrame}=await import('/src/composition.js');
   const {captionSequenceAt}=await import('/src/caption-flow.js');
+  const {editorialGeometry}=await import('/src/editorial-motion.js');
+  const captionBox=editorialGeometry().subtitles;
   const source=document.createElement('canvas');source.width=1600;source.height=900;
   const raw=source.getContext('2d');raw.fillStyle='#d4e4f7';raw.fillRect(0,0,1600,900);
   raw.fillStyle='#32415b';raw.fillRect(1340,670,250,225);
@@ -21,7 +23,7 @@ try{
   for(const instant of [null,.2,2.3]){
    paintFrame(canvas,source,1600,900,'hybrid',50,
        instant===null?null:captionSequenceAt(cues,instant),null,3);
-   const ctx=canvas.getContext('2d'),img=ctx.getImageData(55,840,610,110);
+   const ctx=canvas.getContext('2d'),img=ctx.getImageData(captionBox.x,captionBox.y,captionBox.w,captionBox.h);
    outputs.push(Array.from(img.data));
   }
   const difference=(a,b)=>{

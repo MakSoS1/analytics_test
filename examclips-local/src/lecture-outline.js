@@ -13,15 +13,15 @@ const DOCKER_PROFILE=[
  [275,550,'Контейнеры и виртуальные машины','containers-vs-vm'],
  [550,800,'Архитектура Docker, модели образов и слоёв','docker-architecture'],
  [800,1450,'Dockerfile: сборка, образы и производственные практики','dockerfile'],
- [1450,1900,'Жизненный цикл контейнера и health checks','container-lifecycle'],
- [1900,1950,'Dockerfile — возврат к примеру','dockerfile'],
- [1950,2000,'Жизненный цикл — уточнение','container-lifecycle'],
- [2000,2200,'Dockerfile — практические примеры','dockerfile'],
+ // The Dockerfile shown here is a healthcheck/runtime-policy example,
+ // not a new image-building lesson (confirmed against full narration).
+ [1450,2200,'Жизненный цикл, healthcheck и политики перезапуска','container-lifecycle'],
  [2200,2400,'Storage: volumes, bind mounts и statelessness','docker-storage'],
  [2400,3025,'Docker Networking','docker-networking'],
  [3025,3200,'Resource Isolation & Limits','resource-limits'],
- [3200,3350,'Conclusion — итог лекции','recap'],
- [3350,3590.341,'Повтор слайда Docker Networking','docker-networking']
+ [3200,3345,'Conclusion — итог лекции','recap'],
+ [3345,3507,'Вопросы: разделение сетей приложения','questions'],
+ [3507,3590.341,'Рекомендации литературы и завершение занятия','outro']
 
 ];
 function interval(row){return {start:row[0],end:row[1],title:row[2],key:row[3],source:'visual-manually-inspected',confidence:'approximate'};}

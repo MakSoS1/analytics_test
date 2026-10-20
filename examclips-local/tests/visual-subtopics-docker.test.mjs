@@ -29,8 +29,8 @@ const makeRows=()=>{
  }
  return rows.sort((a,b)=>a.start-b.start);
 };
-test('exact 59:50 original has 26 visual cues, not a forced fixed output count',()=>{
- assert.equal(dockerVisualSubtopics(media).length,26);
+test('exact 59:50 original has 25 visual cues, not a forced fixed output count',()=>{
+ assert.equal(dockerVisualSubtopics(media).length,25);
  assert.equal(dockerVisualSubtopics({...media,name:'different-lecture.mp4'}).length,0);
  assert.equal(dockerVisualSubtopics({...media,width:1280}).length,0);
  assert.equal(DOCKER_VISUAL_TOPICS[0].start,275);

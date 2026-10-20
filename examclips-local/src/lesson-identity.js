@@ -97,7 +97,9 @@ function evidence(text,chapterKey){
  const chapter=String(chapterKey||'');
  const rules=RULES[chapter];
  if(rules){
-   const found=rules.filter(([, ,re])=>re.test(corpus));
+   const found=rules.filter(([id, ,re])=>re.test(corpus)&&
+     !(id==='network-userbridge'&&/\b(?:no|without|lack(?:s|ing)?)\s+automatic\s+name\s+resolution/iu.test(corpus)&&
+       !/user[ -]defined|custom\s+bridge|docker\s+network\s+create/iu.test(corpus)));
    // An explicit Dockerfile instruction may appear with multi-stage cache;
    // precedence is distinctive techniques > generic commands.
    if(found.length){
