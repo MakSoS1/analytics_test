@@ -109,3 +109,19 @@ test('ASR line wrapping cannot split an unfinished sentence into another lesson'
  assert.equal(units[1].start,12);
  assert.equal(units[0].text,'A vulnerable library can compromise every container built from it.');
 });
+
+test('partial OCR cannot crop the visible end of a source command',()=>{
+ const width=160,height=90,pixels=new Uint8ClampedArray(width*height*4).fill(255);
+ for(let y=24;y<42;y++)for(let x=10;x<70;x++){
+  const at=(y*width+x)*4;pixels[at]=pixels[at+1]=pixels[at+2]=0;
+ }
+ const lines=[{text:'FROM node',confidence:90,box:{x0:10,y0:24,x1:35,y1:30}},{text:'CMD node',confidence:90,box:{x0:10,y0:34,x1:35,y1:42}}];
+ const scene=makeStoryboard({width,height,duration:30,pixels,lines});
+ assert.ok(scene.panels[0].rect.x+scene.panels[0].rect.w>=70/width);
+});
+
+test('excluding a transcribed closing does not falsely report incomplete ASR',()=>{
+ const rows=[{start:0,end:50,text:'Containers are isolated processes. For example each application has its own network and files, while the host kernel is shared.'},{start:50,end:99,text:'Thank you for your time.'}];
+ const plan=planCompleteTopics(rows,100,{chapters:[{start:0,end:50,title:'Containers',key:'containers-vs-vm'},{start:50,end:100,title:'Closing',key:'outro'}]});
+ assert.equal(plan.summary.incompleteTranscript,false);
+});

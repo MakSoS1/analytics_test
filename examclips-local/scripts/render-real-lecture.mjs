@@ -19,11 +19,11 @@ const page=await browser.newPage({acceptDownloads:true});
 const started=performance.now();
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
 // Freeze this acceptance run while implementation files are edited.
-await page.route('**/@vite/client',route=>route.fulfill({body:'',contentType:'application/javascript'}));
+await page.route('**/@vite/client',route=>route.fulfill({body:`export class ErrorOverlay{};export const createHotContext=()=>({data:{},accept(){},dispose(){},prune(){},on(){},off(){},send(){},invalidate(){}});export const injectQuery=url=>url;export function updateStyle(id,content){let el=document.getElementById(id);if(!el){el=document.createElement('style');el.id=id;document.head.append(el)}el.textContent=content}export function removeStyle(id){document.getElementById(id)?.remove()}`,contentType:'application/javascript'}));
 await page.route('**/acceptance-source.mp4',route=>route.fulfill({path:resolve(video),contentType:'video/mp4'}));
 await page.exposeFunction('nativeOcr',async(base64)=>{
  const file=join(temp,'frame.png');await writeFile(file,Buffer.from(base64,'base64'));
- const {stdout}=await exec('tesseract',[file,'stdout','-l','eng','tsv'],{maxBuffer:8e6});
+ const {stdout}=await exec('tesseract',[file,'stdout','-l','eng','--psm','11','tsv'],{maxBuffer:8e6});
  const grouped=new Map();
  for(const row of stdout.trim().split('\n').slice(1)){
   const c=row.split('\t');if(c[0]!=='5'||!c[11]?.trim()||+c[10]<35)continue;

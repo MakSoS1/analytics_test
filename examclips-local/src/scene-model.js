@@ -91,7 +91,11 @@ export function makeStoryboard({width,height,lines=[],duration=90,chunks=[],spea
         const top=Math.max(.15,Math.min(...matching.map(l=>l.box.y0))/height-.035);
         const right=Math.min(1,Math.max(...matching.map(l=>l.box.x1))/width+.025);
         const bottom=Math.min(.84,Math.max(...matching.map(l=>l.box.y1))/height+.035);
-        r={x:left,y:top,w:right-left,h:bottom-top};
+        // OCR can miss the end of a command. Never shrink horizontal pixel evidence.
+        const safeLeft=Math.min(r.x,left),safeRight=Math.max(r.x+r.w,right);
+        const code=matching.some(l=>/^\s*(?:FROM|WORKDIR|RUN|COPY|CMD|EXPOSE)\s/u.test(l.text));
+        const safeTop=code?Math.min(r.y,top):top,safeBottom=code?Math.max(r.y+r.h,bottom):bottom;
+        r={x:safeLeft,y:safeTop,w:safeRight-safeLeft,h:safeBottom-safeTop};
       }
       const x=Math.min(r.x,...matching.map(l=>l.box.x0/width)),right=Math.max(r.x+r.w,...matching.map(l=>l.box.x1/width));
       return {id:side?'right':'left',label:side?'Пояснения':'Основная часть',rect:{...r,x,w:Math.min(1,right)-x},

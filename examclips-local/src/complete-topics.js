@@ -194,7 +194,7 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[],vis
   const chapter=spokenChapter(row);
   if(['introduction','outro'].includes(chapter?.key)||(beginning>0&&row.end<=beginning)||
     !isEducationalSpeech(row.text)){
-   excluded.push({start:row.start,end:row.end,reason:['introduction','outro'].includes(chapter?.key)?
+   excluded.push({start:row.start,end:row.end,reason:chapter?.key==='outro'?'Завершение занятия и рекомендации литературы':chapter?.key==='introduction'?
      'Вступление/биография/план занятия (визуально подтверждено)':
      'Организационная или неинформативная речь'});
   }else kept.push(row);
@@ -255,5 +255,5 @@ export function planCompleteTopics(chunks,duration,{sceneCuts=[],chapters=[],vis
    nonOverlappingSource:true,
    excludedIntroSeconds:+excluded.filter(x=>x.reason.includes('Вступление'))
     .reduce((n,x)=>n+x.end-x.start,0).toFixed(2),
-   incompleteTranscript:kept.at(-1).end<duration-5}};
+   incompleteTranscript:all.at(-1).end<duration-5}};
 }

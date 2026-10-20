@@ -86,7 +86,7 @@ all platform-length Shorts.
 
 ## Verification scope
 
-155 deterministic tests, production build, Atlas UI/mobile/project/playback
+157 deterministic tests, production build, Atlas UI/mobile/project/playback
 browser checks, and real source exports are required before publication.
 All automatically proposed lessons retain review status. Keyword coverage and
 synthetic tests do not certify pedagogical completeness or ASR accuracy.

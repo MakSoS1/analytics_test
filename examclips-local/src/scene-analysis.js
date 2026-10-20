@@ -20,7 +20,9 @@ async function browserOcr(canvas,lang,onProgress){
     worker=await createWorker(target,1,{logger:message=>{
       if(message.status==='recognizing text'&&message.progress!==undefined)
         onProgress('Распознавание доски: '+Math.round(message.progress*100)+'%');
-    }});language=target;
+    }});
+    await worker.setParameters({tessedit_pageseg_mode:'11'});
+    language=target;
   }
   const out=await worker.recognize(canvas,{}, {blocks:true});
   return {lines:flattenOcr(out.data.blocks||[]),engine:'Tesseract.js'};
