@@ -102,6 +102,15 @@ export function makeStoryboard({width,height,lines=[],duration=90,chunks=[],spea
         text:matching.map(l=>l.text).join(' '),lines:matching.filter(l=>l.confidence>=75).map(l=>l.text),sourceOnly:true};
     });
   }
+  // A long OCR line can expand one panel across the partition. Drop a smaller
+  // region already contained in that source view instead of magnifying its tail.
+  panels=panels.filter((panel,index)=>!panels.some((other,j)=>{
+    if(index===j)return false;
+    const a=panel.rect,b=other.rect,area=a.w*a.h;
+    const overlap=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x))*
+      Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+    return b.w*b.h>area*1.5&&overlap>=area*.95;
+  }));
   const beats=[];
   const count=Math.min(40,Math.max(1,Math.ceil(duration/9)));
   let previous=-1;

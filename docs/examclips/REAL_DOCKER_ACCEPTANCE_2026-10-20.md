@@ -41,6 +41,8 @@ on arbitrary courses. Generic uploads retain the extractive semantic planner.
   length is imposed. Recap and audience questions have explicit labels.
 - No blind left/right alternation. A sparse source-pixel scan locates content;
   blank halves are excluded. Code, formulas and source imagery retain pixels.
+- Smaller source regions contained within a larger code view are suppressed,
+  preventing a duplicated command tail from becoming a second panel.
 - Two source regions stack vertically with an active primary view and context;
   captions and presenter have separate space. Paused previews stop repainting.
 
@@ -86,7 +88,7 @@ all platform-length Shorts.
 
 ## Verification scope
 
-157 deterministic tests and production build passed. Atlas UI/mobile/project/
+158 deterministic tests and production build passed. Atlas UI/mobile/project/
 playback checks, 720p/1080p exports and editorial visual checks passed locally.
 The final real-source run produced 27 MP4 files (720×1280, AAC audio), totalling
 3164.87 seconds, with no browser errors. Scene analysis took 32.28 seconds and

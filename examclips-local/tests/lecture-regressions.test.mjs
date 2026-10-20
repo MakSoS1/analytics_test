@@ -125,3 +125,15 @@ test('excluding a transcribed closing does not falsely report incomplete ASR',()
  const plan=planCompleteTopics(rows,100,{chapters:[{start:0,end:50,title:'Containers',key:'containers-vs-vm'},{start:50,end:100,title:'Closing',key:'outro'}]});
  assert.equal(plan.summary.incompleteTranscript,false);
 });
+
+test('a command crossing the center does not create a second panel of its tail',()=>{
+ const width=160,height=90,pixels=new Uint8ClampedArray(width*height*4).fill(255);
+ for(let y=24;y<60;y++)for(let x=8;x<106;x++){
+  const at=(y*width+x)*4;pixels[at]=pixels[at+1]=pixels[at+2]=0;
+ }
+ const lines=[{text:'FROM node:20',confidence:90,box:{x0:8,y0:24,x1:55,y1:30}},
+ {text:'RUN npm ci --omit=dev && npm cache clean --force',confidence:90,box:{x0:8,y0:48,x1:106,y1:60}}];
+ const scene=makeStoryboard({width,height,duration:30,pixels,lines});
+ assert.equal(scene.panels.length,1);
+ assert.ok(scene.panels[0].rect.x+scene.panels[0].rect.w>=106/width);
+});
