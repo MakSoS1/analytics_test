@@ -1,0 +1,44 @@
+name: ExamClips Local MVP CI
+on:
+  push:
+    branches: [feat/examclips-local-mvp-20261015]
+    paths: ['examclips-local/**', 'docs/superpowers/**', '.github/workflows/examclips-local-mvp.yml']
+  pull_request:
+    paths: ['examclips-local/**', 'docs/superpowers/**', '.github/workflows/examclips-local-mvp.yml']
+  workflow_dispatch:
+jobs:
+  browser-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: examclips-local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - name: Install test codecs
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+      - name: Generate deterministic AV fixture
+        run: |
+          ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=15 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 4 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac test-fixture.mp4
+          printf '1\\n00:00:00,000 --> 00:00:02,000\\nDocker example\\n\\n2\\n00:00:02,000 --> 00:00:04,000\\nNext step\\n' > test-fixture.srt
+      - name: Browser integration test
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/examclips-vite.log 2>&1 &
+          sleep 4
+          npm run smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: examclips-local-dist
+          path: |
+            examclips-local/dist/
+            examclips-local/smoke-ui.png
+            examclips-local/smoke-output.mp4
+          if-no-files-found: error
