@@ -3,7 +3,7 @@ on:
   push:
     branches: [feat/examclips-library-zoom-storyboard-20261017]
     paths:
-      - 'examclips-local/**'
+      - 'apps/examclips/**'
       - '.github/workflows/examclips-gh-pages-branch.yml'
   workflow_dispatch:
 concurrency:
@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '22'
       - name: Build tested frontend as static site
-        working-directory: examclips-local
+        working-directory: apps/examclips
         run: |
           npm install --ignore-scripts --no-audit --no-fund
           npm test
@@ -35,6 +35,6 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: ./examclips-local/dist
+          publish_dir: ./apps/examclips/dist
           force_orphan: true
           enable_jekyll: false
