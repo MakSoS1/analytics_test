@@ -2,7 +2,7 @@ name: ExamClips Storage Regression
 on:
   pull_request:
     paths:
-      - 'examclips-local/**'
+      - 'apps/examclips/**'
       - '.github/workflows/examclips-storage-qa.yml'
   workflow_dispatch:
 jobs:
@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 8
     defaults:
       run:
-        working-directory: examclips-local
+        working-directory: apps/examclips
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
