@@ -1,43 +1,45 @@
-# ExamClips repository organization
+# Реорганизация 24 октября 2026
 
-User-approved scope: keep ExamClips in its separate branch of `analytics_test`.
-Do not merge into, rename, or change `main`; it belongs to another project.
-Implement in this session without subagents.
+## Область изменения
 
-## Design
+Пользователь выбрал отдельную ветку `analytics_test`, а не перенос в `main`
+и не новый репозиторий. Ветка сайта и PR base остаётся
+`feat/examclips-library-zoom-storyboard-20261017`. Домен `examclips.dpdns.org`
+и GitHub Pages сохранены. Основной проект репозитория не переносился.
 
-Use `apps/examclips/` as the single application root. Keep the current public
-domain, source branch and engine behavior. Put current guides next to the app,
-and archive earlier reports/specifications/plans under its `docs/history/`.
-GitHub workflows remain in `.github/workflows/` as GitHub requires, with paths
-updated to the app root. Root README and AGENTS route an agent to the right app
-and branch. Preserve the former root analytics README separately.
+## Карта переноса
 
-## Execution checklist
+| Раньше | Теперь |
+| --- | --- |
+| `examclips-local/` | `apps/examclips/` |
+| `docs/examclips/` | `apps/examclips/docs/history/reports/` |
+| `docs/superpowers/plans/` | `apps/examclips/docs/history/plans/` |
+| `docs/superpowers/specs/` | `apps/examclips/docs/history/specs/` |
+| SQL/Python-текст корневого README | `docs/legacy/ANALYTICS_EXERCISES.md` |
 
-- [x] Move the app and its documentation; preserve source/test contents.
-- [x] Write current README, agent handoff, architecture, development, deployment,
-  quality and troubleshooting guides. Correct the stale editorial skill.
-- [x] Update every ExamClips workflow path; keep publication limited to
-  `feat/examclips-library-zoom-storyboard-20261017` and `gh-pages`.
-- [ ] Validate local Markdown links, stale paths, moved file identity, tests and
-  production build; run full GitHub browser/storage CI.
-- [ ] Merge only into the ExamClips source branch, confirm publication and live
-  HTTPS/UI, and confirm the remote `main` SHA is unchanged.
+Три текущих ExamClips workflow остаются в `.github/workflows/`,
+их working directory, path filters и artifact paths обновлены. Четыре
+специализированных workflow с прежними экспериментальными ветками перенесены
+в `docs/history/workflows/`; их скрипты сохранены в приложении.
 
-## Review focus
+Корневые README/AGENTS маршрутизируют агента в приложение и правильную ветку.
+Текущие инструкции собраны в [индексе документации](../README.md). Исторические
+документы помечены. Editorial skill приведён в соответствие с тёмным фоном,
+одной областью, титульником до 1,6 с и широкой вебкой.
 
-- Runtime source imports and optional local OCR worker resolve after relocation.
-- Workflow filters, working directories and artifact uploads use the new paths.
-- Current guides do not revive Docker-specific planning or obsolete layouts.
-- Historical reports are labeled and cannot be mistaken for current instructions.
-- Main and unrelated project files retain their original contents.
+## Проверки
 
-## Local verification
+- 113 существующих файлов приложения, кроме заменённого README и ignore rules,
+  совпадают с Git blobs до переноса: код, скрипты, тесты и конфигурация не изменены.
+- Исходный аналитический README сохранён побайтно, включая прежние пробелы.
+- Все относительные Markdown-ссылки проверены отдельно от внешних URL.
+- Три активных YAML разобраны парсером; старые пути отсутствуют в активных workflow.
+- 176 unit-тестов и production build с `EXAMCLIPS_BASE=./` прошли из нового каталога.
+- Сборка сохранила прежние имена/хеши JS/CSS/WASM и `CNAME`.
 
-- 100 local Markdown links resolved after relocation.
-- 113 existing app files (excluding replaced README and ignore rules) retain identical Git blob contents.
-- 176 tests passed; relative-base production build passed.
-- Original analytics README preserved byte-for-byte under `docs/legacy/`.
-- Remote `main` before publication: `35812dd0ea2a98203f0f270337d359b3c8bcac08`.
-- Ruling: four workflows tied to obsolete experimental branches are archived; three current app workflows remain active.
+Результаты браузерного CI и live-публикации фиксируются в
+[PR #75](https://github.com/MakSoS1/analytics_test/pull/75) и его Actions checks.
+Дальнейшие проверки публикации: [deployment.md](../deployment.md).
+
+Контрольный SHA `main` до реорганизации:
+`35812dd0ea2a98203f0f270337d359b3c8bcac08`. Он не является базой кода этого сайта.
