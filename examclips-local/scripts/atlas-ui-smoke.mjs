@@ -62,6 +62,8 @@ try{
  await page.locator('#clip-title').fill('Правка перед мгновенным возвратом');
  await page.locator('#back-to-library').click();
  await page.waitForFunction(()=>!document.querySelector('#atlas-library').hidden);
+ // The library opens before its asynchronous IndexedDB read finishes.
+ await page.waitForFunction(()=>document.querySelectorAll('.library-item').length===1);
  assert.equal(await page.locator('.library-item').count(),1);
  await page.screenshot({path:'test-results/atlas-library-saved.png',fullPage:true});
  await page.locator('.library-item-actions button').first().click();

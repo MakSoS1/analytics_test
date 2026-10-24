@@ -25,8 +25,9 @@ jobs:
         run: |
           npm install --ignore-scripts --no-audit --no-fund
           npm test
-          EXAMCLIPS_BASE=/analytics_test/ npm run build
+          EXAMCLIPS_BASE=./ npm run build
           test -f dist/index.html
+          test "$(cat dist/CNAME)" = "examclips.dpdns.org"
           touch dist/.nojekyll
           printf '{"source_commit":"%s","source_branch":"%s","build_time":"%s"}\n' "$GITHUB_SHA" "$GITHUB_REF_NAME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > dist/site-build.json
       - name: Push prebuilt site to isolated gh-pages branch
