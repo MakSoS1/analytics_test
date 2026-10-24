@@ -3,8 +3,8 @@
 > **Вы на ветке сайта нарезки лекций.** Основной проект репозитория находится
 > в `main` и не связан с ExamClips. В `main` этот сайт не переносится.
 
-**Сайт:** https://examclips.dpdns.org/  
-**Исходная и публикационная ветка:** `feat/examclips-library-zoom-storyboard-20261017`  
+**Сайт:** https://examclips.dpdns.org/
+**Исходная и публикационная ветка:** `feat/examclips-library-zoom-storyboard-20261017`
 **Код приложения:** [apps/examclips](apps/examclips/README.md)
 
 Новый агент: начните с [AGENTS.md](AGENTS.md), затем прочитайте

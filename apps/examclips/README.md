@@ -1,8 +1,8 @@
 # ExamClips — лекции в законченные микроуроки
 
-**Рабочий сайт:** https://examclips.dpdns.org/  
-**Репозиторий:** `MakSoS1/analytics_test`  
-**Ветка кода и публикации:** `feat/examclips-library-zoom-storyboard-20261017`  
+**Рабочий сайт:** https://examclips.dpdns.org/
+**Репозиторий:** `MakSoS1/analytics_test`
+**Ветка кода и публикации:** `feat/examclips-library-zoom-storyboard-20261017`
 **Корень приложения:** `apps/examclips/` (ранее `examclips-local/`).
 
 Это самостоятельное Vite SPA. Оно читает выбранное пользователем видео,
