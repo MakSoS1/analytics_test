@@ -1,3 +1,4 @@
+import {assertCameraTrack} from './visual-camera.js';
 /**
  * Private project library. Metadata only, NOT original video bytes.
  * IndexedDB is origin-scoped; users must re-link originals unless they opted
@@ -58,6 +59,7 @@ export function safeProjectSnapshot(snapshot){
   chunks:snapshot.chunks,
   sceneCuts:Array.isArray(snapshot.sceneCuts)?snapshot.sceneCuts:[],
   lectureChapters:Array.isArray(snapshot.lectureChapters)?snapshot.lectureChapters:[],
+  lectureCamera:assertCameraTrack(snapshot.lectureCamera)?snapshot.lectureCamera:null,
   selected:Number.isInteger(snapshot.selected)?snapshot.selected:0,
   activeTab:typeof snapshot.activeTab==='string'?snapshot.activeTab:'timeline',
   view:snapshot.view&&typeof snapshot.view==='object'?snapshot.view:{zoom:1,offset:0},

@@ -1,5 +1,6 @@
 import {makeStoryboard,sourceRect,assertScene} from './scene-model.js';
 import {editorialTimeline,editorialGeometry,fitTypography,suitableOcrLines,paletteFor,titleCardOpacity} from './editorial-motion.js';
+import {cameraAt,withAspect,assertCameraTrack} from './visual-camera.js';
 export const WIDTH=720,HEIGHT=1280;
 function lineWrap(ctx,text,maxWidth){
   const words=text.trim().split(/\s+/),lines=[],current={v:''};
@@ -7,8 +8,9 @@ function lineWrap(ctx,text,maxWidth){
     if(ctx.measureText(next).width>maxWidth&&current.v){lines.push(current.v);current.v=w}else current.v=next}
   if(current.v)lines.push(current.v);return lines.slice(0,4);
 }
-export function paintFrame(canvas,source,width,height,layout,focusX,subtitle='',scene=null,elapsed=0,lessonElapsed=elapsed){
-  if(layout==='hybrid')return paintHybrid(canvas,source,width,height,subtitle,scene,elapsed,lessonElapsed);
+/** view: {camera, sourceTime} — lecture virtual-camera track and absolute source time. */
+export function paintFrame(canvas,source,width,height,layout,focusX,subtitle='',scene=null,elapsed=0,lessonElapsed=elapsed,view=null){
+  if(layout==='hybrid')return paintHybrid(canvas,source,width,height,subtitle,scene,elapsed,lessonElapsed,view);
   subtitle=typeof subtitle==='string'?subtitle:(subtitle?.plain||'');
   const ctx=canvas.getContext('2d'),cw=canvas.width,ch=canvas.height;
   ctx.fillStyle='#09111f';ctx.fillRect(0,0,cw,ch);
@@ -116,7 +118,16 @@ function renderEditorialPanel(ctx,src,sw,sh,panel,stage,palette,{opacity=1,rise=
  }
  ctx.restore();
 }
-export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0,lessonElapsed=elapsed){
+function drawCamera(ctx,src,sw,sh,r,stage){
+ const rect=sourceRect(withAspect(r,stage.w/stage.h,sw,sh),sw,sh);
+ ctx.save();ctx.beginPath();ctx.rect(stage.x,stage.y,stage.w,stage.h);ctx.clip();
+ // Same subdued white as source panels; the crop already has the stage aspect.
+ ctx.filter='brightness(0.88)';
+ if(typeof src.draw==='function')src.draw(ctx,rect.x,rect.y,rect.w,rect.h,stage.x,stage.y,stage.w,stage.h);
+ else ctx.drawImage(src,rect.x,rect.y,rect.w,rect.h,stage.x,stage.y,stage.w,stage.h);
+ ctx.filter='none';ctx.restore();
+}
+export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0,lessonElapsed=elapsed,view=null){
  const ctx=canvas.getContext('2d'),actualWidth=canvas.width,actualHeight=canvas.height;
  // Compose in logical 720x1280 coordinates; vector text draws sharply at any export resolution.
  const width=720,height=1280;
@@ -128,17 +139,24 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0,le
  const t=Math.max(0,elapsed-(chapter?.start||0));
  const director=editorialTimeline(spec,t);
  const theme=scene?.theme||spec.theme||'midnight';
- const p=paletteFor(theme),g=editorialGeometry(width,height,{speaker:!spec.hideSpeaker});
+ // The lecture camera follows what is shown; per-clip panels remain the fallback.
+ const track=view?.camera&&assertCameraTrack(view.camera)?view.camera:null;
+ const cameraRect=track?cameraAt(track,view.sourceTime):null;
+ const speakerRect=!spec.speakerPinned&&cameraRect&&track.speaker?track.speaker:spec.speaker;
+ const p=paletteFor(theme),g=editorialGeometry(width,height,{speaker:!spec.hideSpeaker,compact:!!cameraRect});
  const s=width/720;
  ctx.clearRect(0,0,width,height);
  ctx.fillStyle=p.background;ctx.fillRect(0,0,width,height);
- const currentPanel=spec.panels[director.current]||spec.panels[0];
- // One legible source region per moment. No companion thumbnail or frame chrome.
- if(director.mix<1){
-   renderEditorialPanel(ctx,src,sw,sh,spec.panels[director.previous]||currentPanel,g.stage,p,{opacity:1-director.mix});
+ if(cameraRect)drawCamera(ctx,src,sw,sh,cameraRect,g.stage);
+ else{
+  const currentPanel=spec.panels[director.current]||spec.panels[0];
+  // One legible source region per moment. No companion thumbnail or frame chrome.
+  if(director.mix<1){
+    renderEditorialPanel(ctx,src,sw,sh,spec.panels[director.previous]||currentPanel,g.stage,p,{opacity:1-director.mix});
+  }
+  renderEditorialPanel(ctx,src,sw,sh,currentPanel,g.stage,p,{opacity:director.mix,reveal:1});
  }
- renderEditorialPanel(ctx,src,sw,sh,currentPanel,g.stage,p,{opacity:director.mix,reveal:1});
- if(g.speaker)crop(ctx,src,spec.speaker,g.speaker.x,g.speaker.y,g.speaker.w,g.speaker.h,sw,sh,true);
+ if(g.speaker)crop(ctx,src,speakerRect,g.speaker.x,g.speaker.y,g.speaker.w,g.speaker.h,sw,sh,true);
  // Reels-style transparent karaoke captions: no box, no permanently reserved space.
  // Draw only words already spoken, 2-4 at a time, with a subtle pop/highlight.
  const cap=subtitle&&typeof subtitle==='object'?subtitle:null;

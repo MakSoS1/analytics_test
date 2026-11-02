@@ -8,7 +8,7 @@ import {sourceSegments,storyDuration} from './selective-stories.js';
  * in the chosen order, and both video and PCM audio are re-timestamped onto
  * a continuous destination timeline. No cloud rendering and no silent gaps.
  */
-export async function exportClip(media,clip,chunks,{quality='standard',onProgress=()=>{},signal,writable=null}={}){
+export async function exportClip(media,clip,chunks,{quality='standard',onProgress=()=>{},signal,writable=null,camera=null}={}){
  const high=quality==='high',fps=high?30:15;
  const width=high?1080:WIDTH,height=high?1920:HEIGHT;
  const pieces=sourceSegments(clip),total=storyDuration(clip);
@@ -46,7 +46,8 @@ export async function exportClip(media,clip,chunks,{quality='standard',onProgres
        try{
          paintFrame(canvas,frame,frame.displayWidth,frame.displayHeight,
            clip.layout,clip.focusX,captionSequenceAt(chunks,times[pos-offset]),
-           clip.scenes?.[index]||clip.scene||{title:clip.title},pos/fps,videoOffset+pos/fps);
+           clip.scenes?.[index]||clip.scene||{title:clip.title},pos/fps,videoOffset+pos/fps,
+           {camera,sourceTime:times[pos-offset]});
          // Continuous output time across disjoint parts; no 300s silent gap.
          const pts=videoOffset+pos/fps;
          const frameDuration=Math.max(.00001,Math.min(1/fps,videoOffset+duration-pts));

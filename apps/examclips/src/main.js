@@ -18,6 +18,8 @@ import {buildVerifiedLessonScreenplays,storyboardReadyForRendering} from './less
 import {renderMicrotopicCatalog,renderMicrotopicDetail} from './microtopic-catalog.js';
 import {renderLectureCoverage} from './coverage-inspection.js';
 import {indexLectureSlides} from './slide-chapter-index.js';
+import {indexLectureCamera} from './lecture-camera.js';
+import {assertCameraTrack} from './visual-camera.js';
 import {saveLibraryProject,listLibraryProjects,getLibraryProject,deleteLibraryProject,
  pickFileMetadata,sameVideoFile,cacheSmallOriginal,getCachedOriginal,deleteCachedOriginal,
  safeProjectSnapshot} from './project-library.js';
@@ -396,7 +398,8 @@ async function prepareMicrotopicThumbnails(){
      const source=document.createElement('canvas');source.width=640;source.height=Math.round(640*input.height/input.width);
      sample.draw(source.getContext('2d'),0,0,source.width,source.height);
      const canvas=document.createElement('canvas');canvas.width=WIDTH;canvas.height=HEIGHT;
-     paintFrame(canvas,source,source.width,source.height,clip.layout||'hybrid',clip.focusX??50,null,clip.scene||null,0);
+     paintFrame(canvas,source,source.width,source.height,clip.layout||'hybrid',clip.focusX??50,null,clip.scene||null,0,0,
+       {camera:lectureCamera,sourceTime:at});
      topicThumbnails.set(clip.id,canvas.toDataURL('image/jpeg',.76));
    }catch(err){if(input!==media)return}
    finally{sample?.close()}
@@ -586,6 +589,7 @@ function initMvpEvents(){
 
 let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],lectureChapters=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
 let chapterScanPending=false,chapterScanAttempted=false,chapterScanAbort=null;
+let lectureCamera=null,cameraScanPending=false,cameraScanAbort=null;
 
 const LIBRARY_LAST='examclips-current-project-id';
 const makeId=()=>crypto.randomUUID?.()||('project-'+Date.now()+'-'+Math.random().toString(36).slice(2));
@@ -664,7 +668,7 @@ function navigateAtlas(direction){
 }
 function applySnapshot(raw){
  const p=safeProjectSnapshot(raw),duration=projectDuration();
- chunks=p.chunks;sceneCuts=p.sceneCuts;lectureChapters=p.lectureChapters;
+ chunks=p.chunks;sceneCuts=p.sceneCuts;lectureChapters=p.lectureChapters;lectureCamera=p.lectureCamera;
  clips=p.clips.filter(c=>validRange(c.start,c.end,duration));
  selected=Math.max(0,Math.min(clips.length-1,p.selected||0));
  timelineView={...p.view};catalogScroll=p.ui.catalogScroll;
@@ -677,10 +681,11 @@ function applySnapshot(raw){
  sync();
  const offset=timelineView.offset;
  requestAnimationFrame(()=>{$('timeline-viewport').scrollLeft=offset*$('timeline-canvas').scrollWidth;if(!microtopicDetailOpen&&activeEditorTab==='clip')window.scrollTo(0,catalogScroll);});
+ scheduleCameraScan();
 }
 function buildCurrentSnapshot(){
  return safeProjectSnapshot({
-  duration:projectDuration(),clips,chunks,sceneCuts,lectureChapters,selected,
+  duration:projectDuration(),clips,chunks,sceneCuts,lectureChapters,lectureCamera,selected,
   activeTab:activeEditorTab,view:{zoom:timelineView.zoom,
     offset:activeEditorTab==='timeline'?$('timeline-viewport').scrollLeft/Math.max(1,$('timeline-canvas').scrollWidth):timelineView.offset},
   settings:{language:$('language').value,asrModel:$('asr-model').value,asrLimit:$('asr-limit').value,ocrEngine:$('ocr-engine').value,outputQuality:$('output-quality').value},
@@ -817,6 +822,7 @@ async function backToLibrary(){
   currentSourceHandle=null;pendingLibraryEntry=null;chunks=[];clips=[];
   pendingSrtChunks=null;projectToRestore=null;rangeSelection=null;catalogScroll=0;microtopicDetailOpen=false;playbackMode='source';catalogPlayback=null;
   clearFinishedVideo();chapterScanAbort?.abort();chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();lectureChapters=[];
+  cameraScanAbort?.abort();lectureCamera=null;
   sceneCuts=[];selected=0;$('video-file').value='';$('srt-file').value='';
   $('transcript').value='';$('file-note').textContent='Выберите другую лекцию или откройте проект из истории.';
   $('player').removeAttribute('src');$('player').load();timelineView={zoom:1,offset:0};
@@ -1173,6 +1179,7 @@ async function selectFile(file){
   media=opened;opened=null;detachedDuration=media.duration;
   originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
   clearFinishedVideo();sourceFile=file;sceneCuts=[];lectureChapters=[];chapterScanAbort?.abort();
+  cameraScanAbort?.abort();lectureCamera=null;
   chapterScanPending=false;chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();
   microtopicDetailOpen=false;catalogPlayback=null;playbackMode='source';rangeSelection=null;pendingSrtChunks=null;
   generatedQuizzes.clear();quizSelections.clear();
@@ -1288,6 +1295,7 @@ function proposeTopics(){
  sync();
  prepareMicrotopicThumbnails().catch(()=>{});
  scheduleAutoChapterAnalysis();
+ scheduleCameraScan();
 }
 async function scanLectureStructure({automatic=false}={}){
  if(!media||chapterScanPending)return;
@@ -1321,7 +1329,36 @@ async function scanLectureStructure({automatic=false}={}){
      status('Заголовки слайдов распознаны недостаточно надёжно. Сохраняю анализ речи без выдуманных глав.');
    }
  }catch(e){if(e.name==='AbortError')status('Анализ структуры отменён');else status('Анализ слайдов недоступен: '+e.message)}
- finally{chapterScanPending=false;chapterScanAbort=null;if(!automatic)setBusy(false)}
+ finally{chapterScanPending=false;chapterScanAbort=null;if(!automatic)setBusy(false);scheduleCameraScan()}
+}
+/** Virtual camera for the whole lecture: one local background pass, stored in the project. */
+function cameraCovers(track,parts){
+ return assertCameraTrack(track)&&parts.every(p=>(track.ranges||[]).some(r=>r.start<=p.start+.5&&r.end>=p.end-1.5));
+}
+function scheduleCameraScan(){
+ if(!media||cameraScanPending||chapterScanPending||cameraCovers(lectureCamera,[{start:0,end:media.duration}]))return;
+ setTimeout(()=>{if(media&&!chapterScanPending)scanLectureCamera().catch(()=>{})},900);
+}
+async function scanLectureCamera(){
+ if(!media||cameraScanPending)return;
+ const original=media;
+ cameraScanPending=true;cameraScanAbort=new AbortController();
+ try{
+   const track=await indexLectureCamera(original,{signal:cameraScanAbort.signal,
+     onProgress:message=>{if(original===media&&!busy)status(message)}});
+   if(original!==media)return;
+   lectureCamera=track;previewDirty=true;topicThumbnails.clear();
+   scheduleProjectSave();
+   prepareMicrotopicThumbnails().catch(()=>{});
+   status('Виртуальная камера готова: '+track.keys.length+' планов, '+(track.speaker?'окно лектора найдено':'окно лектора не найдено')+'. Проверьте кадр в предпросмотре.');
+ }catch(e){if(e.name!=='AbortError')status('Камера не построена: '+e.message+'. Используется прежняя композиция.')}
+ finally{cameraScanPending=false;cameraScanAbort=null}
+}
+async function cameraForExport(clip,signal,onProgress){
+ const parts=sourceSegments(clip);
+ if(cameraCovers(lectureCamera,parts))return lectureCamera;
+ // The background pass is not finished: index only this microtopic's ranges.
+ return indexLectureCamera(media,{ranges:parts,signal,onProgress}).catch(e=>{if(e.name==='AbortError')throw e;return null});
 }
 function scheduleAutoChapterAnalysis(){
  if(chapterScanAttempted||chapterScanPending||!media||!chunks.length||
@@ -1496,6 +1533,8 @@ $('speaker-preset').onchange=()=>{
  const scenes=[c.scene,...(c.scene.chapters||[]).map(ch=>ch.scene),...(c.scenes||[])];
  for(const spec of scenes){
    if(speakerPresets[c.speakerPreset])spec.speaker={...speakerPresets[c.speakerPreset]};
+   // A manual preset overrides the detected webcam window of the lecture camera.
+   spec.speakerPinned=Boolean(speakerPresets[c.speakerPreset]);
    spec.hideSpeaker=c.speakerPreset==='none';
  }
  invalidateClip(c);sync();
@@ -1553,7 +1592,8 @@ $('export-all').onclick=async()=>{
      const handle=await dir.getFileHandle(name,{create:true});
      const writable=await handle.createWritable();
      try{
-       await exportClip(media,clip,chunks,{quality:$('output-quality').value,signal:abort.signal,writable,
+       const camera=await cameraForExport(clip,abort.signal,status);
+       await exportClip(media,clip,chunks,{quality:$('output-quality').value,signal:abort.signal,writable,camera,
          onProgress:m=>{
            const msg=(exported+1)+'/'+work.length+' · '+m;
            status(msg);
@@ -1592,8 +1632,9 @@ $('export').onclick=async()=>{
   abort=new AbortController();setBusy(true);
   try{
     showOperation('composition',0,'Кодируем '+Math.ceil(storyDuration(c)/60)+' мин оригинального видео…');
+    const camera=await cameraForExport(c,abort.signal,msg=>showOperation('composition',null,msg));
     const blob=await exportClip(media,c,chunks,{
-      quality:$('output-quality').value,writable,signal:abort.signal,
+      quality:$('output-quality').value,writable,signal:abort.signal,camera,
       onProgress:msg=>{
         status(msg);
         const match=String(msg).match(/Видео\s+(\d+)\/(\d+)\s+кадров/);
@@ -1625,7 +1666,8 @@ function loop(){
     paintFrame($('preview'),video,video.videoWidth,video.videoHeight,c.layout,c.focusX,caption,
       c.scenes?.[Math.max(0,index)]||c.scene||{title:c.title},
       Math.max(0,video.currentTime-(activePiece?.start||0)),
-      sourceSegments(c).slice(0,Math.max(0,index)).reduce((n,p)=>n+p.end-p.start,0)+Math.max(0,video.currentTime-(activePiece?.start||0)));
+      sourceSegments(c).slice(0,Math.max(0,index)).reduce((n,p)=>n+p.end-p.start,0)+Math.max(0,video.currentTime-(activePiece?.start||0)),
+      {camera:lectureCamera,sourceTime:video.currentTime});
     if(activeEditorTab==='clip'&&$('microtopic-preview'))
       $('microtopic-preview').getContext('2d').drawImage($('preview'),0,0,720,1280);
    }catch{}
