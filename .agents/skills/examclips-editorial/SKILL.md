@@ -1,32 +1,48 @@
 ---
 name: examclips-editorial
-description: Compose and review source-faithful vertical lecture shorts with mobile typography, purposeful motion and local rendering.
+description: Use when composing or reviewing source-faithful vertical lecture videos in the ExamClips branch of MakSoS1/analytics_test.
 ---
-# ExamClips Editorial Motion Skill
+# ExamClips editorial reference
 
-Produce polished 9:16 education videos with a separate lecturer layer. Do not paste a miniature 16:9 slide into the portrait canvas.
+Read `apps/examclips/AGENTS.md` and `apps/examclips/docs/quality.md` first.
+Work in the ExamClips source branch, not `main`. This is the lecture-clipping
+site at examclips.dpdns.org, not forgeofeducation.ru.
 
-Research:
-- https://github.com/remotion-dev/skills (timing, visual QA, media, captions, measuring text)
-- https://github.com/Liamrjohnston/remotion-motion-graphics-skill (clarity, purposeful choreography, real assets)
-- https://github.com/gitethanwoo/video-editing (editorial analysis and render verification)
+## Current visual contract
 
-## Rules
-1. Actual lesson imagery, titles, diagrams, facts and sound must come from user-selected input; do not fabricate technical data.
-2. One primary visual idea per moment. Respect safe zones for captions and presenter. Reserve visually separate hero and bottom inset.
-3. Fit measured text to width AND height. Headlines 34-57px; body 23-36px for 720x1280. Handle unbreakable terms and display at most one coherent thought per beat.
-4. OCR is fallible. Reflow only high-confidence text; use original pixels for ambiguous formulas, topology diagrams and unknown layout.
-5. Video animations are frame-time deterministic. Use 0.48s eased crossfades for meaningfully changed focus and restrained line reveal. Never use CSS transitions or arbitrary decorative shakes.
-6. Treat captions separately from explanatory data. Page long captions into readable short cues without rewriting or fabricating words.
-7. Presenter stays in a compact independent crop, with aspect-preserving cover, optional manual location and hide button.
-8. Default warm white academic editorial style. Optional restrained dark background, single blue accent, zero neon or decorative gradients.
-9. Same renderer powers live preview and final WebCodecs MP4. Private lecture data never goes to public CI or cloud inference.
-10. QA on actual rendered stills: first/current beat, next beat, alternate theme. Check no clipping, duplicate text, tiny source images, presenter distortion, or caption collision. Run ffprobe on final video.
-11. Do not claim artistic/pedagogical quality proven by synthetic tests. Test with an authorized real lecture and manual visual review.
+- Default restrained dark canvas. Preserve original pixels for diagrams, code,
+  formulas and uncertain OCR. Do not redraw uncertain technical information.
+- One primary source region per moment, large enough to read on a phone.
+  Change focus with the explanation. Do not alternate arbitrary blank regions.
+- A centered opening title finishes at 1.6 seconds of continuous lesson time.
+  Do not keep a permanent heading, badge, counter or decorative frame.
+- Presenter spans the content width below captions, with natural 16:9 geometry.
+  Current 720x1280 geometry: main x18/y32/w684/h736, captions y776/h100,
+  presenter x18/y884/w684/h384. Check `editorialGeometry()` before changing it.
+- Keep captions separate from teaching material and presenter. Word reveals
+  follow real timestamps when available; phrase-level SRT is an approximation.
+- Animation is deterministic by frame/lesson time. Preview and MP4 use the same
+  compositor. Title time must not restart at a noncontiguous EDL cut.
 
-## Code ownership
-Editorial primitives: examclips-local/src/editorial-motion.js
-Renderer: examclips-local/src/composition.js
-Time/scene: examclips-local/src/scene-model.js
-Browser export: examclips-local/src/render.js
-Tests: examclips-local/tests/editorial-motion.test.mjs and scripts/editorial-visual-smoke.mjs
+## Meaning and verification
+
+Use original speech, evidence and sound. Keep setup, example and conclusion;
+review boundaries on arbitrary subjects, not only Docker. Proposed lessons
+remain reviewable. No fixed output count or maximum duration may truncate an
+explanation. Full-lecture timing targets need measurements on the target device.
+
+For visual changes, inspect rendered stills at the title, after the title,
+a focus change and an EDL cut; check tiny text, clipping, duplicated source,
+caption collision and camera distortion/motion. Check the final MP4 streams,
+duration and audio synchronization. Synthetic tests do not certify teaching
+quality. User media is not uploaded to public CI or cloud inference.
+
+## Code map (repository-relative)
+
+- `apps/examclips/src/editorial-motion.js`: geometry, title timing, palette.
+- `apps/examclips/src/composition.js`: preview/export painting.
+- `apps/examclips/src/scene-model.js`: source regions and scene timing.
+- `apps/examclips/src/render.js`: browser MP4/audio export.
+- `apps/examclips/tests/single-focus.test.mjs`: layout/title contract.
+- `apps/examclips/scripts/single-focus-smoke.mjs`: browser rendering regression.
+- `apps/examclips/scripts/editorial-visual-smoke.mjs`: rendered visual samples.
