@@ -17,10 +17,13 @@ Use `npm ci --ignore-scripts --no-audit --no-fund`, `npm test`, and
 `EXAMCLIPS_BASE=./ npm run build`. Browser checks and prerequisites are in
 [docs/development.md](docs/development.md).
 
-- Current planner: `src/general-topics.js`; `main.js` imports it under the
-  local alias `planCompleteTopics`. Do not mistake the alias for the legacy file.
+- Current planner: `src/general-topics.js` with discourse roles in
+  `src/discourse-cues.js`; `main.js` imports it under the local alias
+  `planCompleteTopics`. Do not mistake the alias for the legacy file. Measure planner
+  changes with `scripts/evaluate-topic-plan.mjs` against a manual topic map.
 - Sentence/word boundaries: `src/speech-boundaries.js`, `src/segments.js`.
-- Layout: `src/composition.js`, `src/editorial-motion.js`, `src/scene-model.js`.
+- Layout: `src/composition.js`, `src/editorial-motion.js`, `src/scene-model.js`;
+  lecture virtual camera: `src/visual-camera.js` (pure), `src/lecture-camera.js`.
 - Decode compatibility: `src/audio-compat.js`, `src/media.js`; export: `src/render.js`.
 - App state and local project storage: `src/main.js`, `src/project-library.js`.
 
