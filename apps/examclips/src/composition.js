@@ -119,12 +119,14 @@ function renderEditorialPanel(ctx,src,sw,sh,panel,stage,palette,{opacity=1,rise=
  ctx.restore();
 }
 function drawCamera(ctx,src,sw,sh,r,stage){
- const rect=sourceRect(withAspect(r,stage.w/stage.h,sw,sh),sw,sh);
+ // A "top" shot is wider than the stage (content above the slide's webcam tile):
+ // keep its full width, pin it to the top and leave the background below.
+ const rect=sourceRect(r.fit==='top'?r:withAspect(r,stage.w/stage.h,sw,sh),sw,sh);
+ const dh=r.fit==='top'?Math.min(stage.h,stage.w*rect.h/rect.w):stage.h;
  ctx.save();ctx.beginPath();ctx.rect(stage.x,stage.y,stage.w,stage.h);ctx.clip();
- // Same subdued white as source panels; the crop already has the stage aspect.
  ctx.filter='brightness(0.88)';
- if(typeof src.draw==='function')src.draw(ctx,rect.x,rect.y,rect.w,rect.h,stage.x,stage.y,stage.w,stage.h);
- else ctx.drawImage(src,rect.x,rect.y,rect.w,rect.h,stage.x,stage.y,stage.w,stage.h);
+ if(typeof src.draw==='function')src.draw(ctx,rect.x,rect.y,rect.w,rect.h,stage.x,stage.y,stage.w,dh);
+ else ctx.drawImage(src,rect.x,rect.y,rect.w,rect.h,stage.x,stage.y,stage.w,dh);
  ctx.filter='none';ctx.restore();
 }
 export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0,lessonElapsed=elapsed,view=null){
@@ -143,7 +145,8 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0,le
  const track=view?.camera&&assertCameraTrack(view.camera)?view.camera:null;
  const cameraRect=track?cameraAt(track,view.sourceTime):null;
  const speakerRect=!spec.speakerPinned&&cameraRect&&track.speaker?track.speaker:spec.speaker;
- const p=paletteFor(theme),g=editorialGeometry(width,height,{speaker:!spec.hideSpeaker,compact:!!cameraRect});
+ const speakerAspect=speakerRect?(speakerRect.w*sw)/(speakerRect.h*sh):null;
+ const p=paletteFor(theme),g=editorialGeometry(width,height,{speaker:!spec.hideSpeaker,compact:!!cameraRect,speakerAspect});
  const s=width/720;
  ctx.clearRect(0,0,width,height);
  ctx.fillStyle=p.background;ctx.fillRect(0,0,width,height);
@@ -157,6 +160,12 @@ export function paintHybrid(canvas,src,sw,sh,subtitle='',scene=null,elapsed=0,le
   renderEditorialPanel(ctx,src,sw,sh,currentPanel,g.stage,p,{opacity:director.mix,reveal:1});
  }
  if(g.speaker)crop(ctx,src,speakerRect,g.speaker.x,g.speaker.y,g.speaker.w,g.speaker.h,sw,sh,true);
+ // Preview only: say that the vertical framing is still being prepared.
+ if(!cameraRect&&view?.pending){
+  ctx.save();ctx.fillStyle='#000000b0';roundBox(ctx,g.stage.x+18,g.stage.y+18,330,46,12);ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='600 22px system-ui, sans-serif';ctx.textBaseline='middle';ctx.textAlign='left';
+  ctx.fillText('Готовим вертикальный кадр…',g.stage.x+34,g.stage.y+41);ctx.restore();
+ }
  // Reels-style transparent karaoke captions: no box, no permanently reserved space.
  // Draw only words already spoken, 2-4 at a time, with a subtle pop/highlight.
  const cap=subtitle&&typeof subtitle==='object'?subtitle:null;

@@ -73,16 +73,35 @@ export function editorialTimeline(scene,elapsed,{transition=.48}={}){
   return {current,previous,mix,index,progress:easeOutCubic((elapsed-beats[index].time)/.55)};
 }
 export function titleCardOpacity(elapsed){return elapsed<1.2?1:1-smoothstep((elapsed-1.2)/.4)}
-export function editorialGeometry(width=720,height=1280,{speaker=true,compact=false}={}){
+/** Presenter strip that shows the WHOLE webcam tile at content width (no crop). */
+export function presenterHeight(speakerAspect){
+ const aspect=Number.isFinite(speakerAspect)&&speakerAspect>0?speakerAspect:16/9;
+ return Math.round(Math.min(440,Math.max(250,684/aspect)));
+}
+/** Stage aspect left for the slide camera above captions and the presenter strip. */
+export function cameraStageAspect(speakerAspect,{speaker=true}={}){
+ const g=editorialGeometry(720,1280,{speaker,compact:true,speakerAspect});
+ return g.stage.w/g.stage.h;
+}
+export function editorialGeometry(width=720,height=1280,{speaker=true,compact=false,speakerAspect=null}={}){
  const sx=width/720,sy=height/1280;
  const scale=r=>({x:r.x*sx,y:r.y*sy,w:r.w*sx,h:r.h*sy});
- // Compact presenter strip for small webcam tiles: still content-wide, but
- // less upscaled and leaves a taller stage for the virtual camera.
- if(speaker&&compact)return {
+ // Camera layout: the presenter strip keeps the webcam's own proportions,
+ // captions sit above it and the slide camera takes the remaining height.
+ if(speaker&&compact){
+  const h=presenterHeight(speakerAspect),top=1280-12-h;
+  return {
+   title:scale({x:50,y:400,w:620,h:330}),
+   stage:scale({x:18,y:32,w:684,h:top-104-32}),
+   speaker:scale({x:18,y:top,w:684,h}),
+   subtitles:scale({x:36,y:top-100,w:648,h:100})
+  };
+ }
+ if(compact)return {
   title:scale({x:50,y:400,w:620,h:330}),
-  stage:scale({x:18,y:32,w:684,h:820}),
-  speaker:scale({x:18,y:968,w:684,h:300}),
-  subtitles:scale({x:36,y:860,w:648,h:100})
+  stage:scale({x:18,y:32,w:684,h:1080}),
+  speaker:null,
+  subtitles:scale({x:36,y:1130,w:648,h:100})
  };
  return {
   title:scale({x:50,y:400,w:620,h:330}),

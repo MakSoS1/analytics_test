@@ -590,6 +590,8 @@ function initMvpEvents(){
 let media=null,sourceFile=null,originalUrl=null,clips=[],chunks=[],sceneCuts=[],lectureChapters=[],selected=0,busy=false,abort=null,previewRaf=0,projectToRestore=null;
 let chapterScanPending=false,chapterScanAttempted=false,chapterScanAbort=null;
 let lectureCamera=null,cameraScanPending=false,cameraScanAbort=null;
+// Camera for the opened microtopic while the whole-lecture pass is not ready.
+const clipCameras=new Map();let clipCameraPending=null,clipCameraKey='',clipCameraAbort=null;
 
 const LIBRARY_LAST='examclips-current-project-id';
 const makeId=()=>crypto.randomUUID?.()||('project-'+Date.now()+'-'+Math.random().toString(36).slice(2));
@@ -822,7 +824,7 @@ async function backToLibrary(){
   currentSourceHandle=null;pendingLibraryEntry=null;chunks=[];clips=[];
   pendingSrtChunks=null;projectToRestore=null;rangeSelection=null;catalogScroll=0;microtopicDetailOpen=false;playbackMode='source';catalogPlayback=null;
   clearFinishedVideo();chapterScanAbort?.abort();chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();lectureChapters=[];
-  cameraScanAbort?.abort();lectureCamera=null;
+  cameraScanAbort?.abort();lectureCamera=null;clipCameras.clear();
   sceneCuts=[];selected=0;$('video-file').value='';$('srt-file').value='';
   $('transcript').value='';$('file-note').textContent='Выберите другую лекцию или откройте проект из истории.';
   $('player').removeAttribute('src');$('player').load();timelineView={zoom:1,offset:0};
@@ -1179,7 +1181,7 @@ async function selectFile(file){
   media=opened;opened=null;detachedDuration=media.duration;
   originalUrl=URL.createObjectURL(file);$('player').src=originalUrl;
   clearFinishedVideo();sourceFile=file;sceneCuts=[];lectureChapters=[];chapterScanAbort?.abort();
-  cameraScanAbort?.abort();lectureCamera=null;
+  cameraScanAbort?.abort();lectureCamera=null;clipCameras.clear();
   chapterScanPending=false;chapterScanAttempted=false;thumbnailGeneration++;topicThumbnails.clear();
   microtopicDetailOpen=false;catalogPlayback=null;playbackMode='source';rangeSelection=null;pendingSrtChunks=null;
   generatedQuizzes.clear();quizSelections.clear();
@@ -1354,9 +1356,27 @@ async function scanLectureCamera(){
  }catch(e){if(e.name!=='AbortError')status('Камера не построена: '+e.message+'. Используется прежняя композиция.')}
  finally{cameraScanPending=false;cameraScanAbort=null}
 }
+function previewCamera(clip){
+ const parts=sourceSegments(clip),key=JSON.stringify(parts.map(p=>[+p.start.toFixed(2),+p.end.toFixed(2)]));
+ if(cameraCovers(lectureCamera,parts))return lectureCamera;
+ if(clipCameras.has(key))return clipCameras.get(key);
+ // Only the opened microtopic matters: drop work for one the user left.
+ if(clipCameraPending&&clipCameraKey!==key){clipCameraAbort?.abort();clipCameraPending=null}
+ if(!clipCameraPending&&media){
+  const original=media,abort=new AbortController();
+  clipCameraKey=key;clipCameraAbort=abort;
+  const job=clipCameraPending=indexLectureCamera(original,{ranges:parts,signal:abort.signal,
+   onProgress:m=>{if(!busy)status(m.replace('Камера:','Камера ролика:'))}})
+   .then(track=>{if(original===media){clipCameras.set(key,track);previewDirty=true}})
+   .catch(()=>{}).finally(()=>{if(clipCameraPending===job)clipCameraPending=null});
+ }
+ return null;
+}
 async function cameraForExport(clip,signal,onProgress){
  const parts=sourceSegments(clip);
  if(cameraCovers(lectureCamera,parts))return lectureCamera;
+ const key=JSON.stringify(parts.map(p=>[+p.start.toFixed(2),+p.end.toFixed(2)]));
+ if(clipCameras.has(key))return clipCameras.get(key);
  // The background pass is not finished: index only this microtopic's ranges.
  return indexLectureCamera(media,{ranges:parts,signal,onProgress}).catch(e=>{if(e.name==='AbortError')throw e;return null});
 }
@@ -1667,7 +1687,7 @@ function loop(){
       c.scenes?.[Math.max(0,index)]||c.scene||{title:c.title},
       Math.max(0,video.currentTime-(activePiece?.start||0)),
       sourceSegments(c).slice(0,Math.max(0,index)).reduce((n,p)=>n+p.end-p.start,0)+Math.max(0,video.currentTime-(activePiece?.start||0)),
-      {camera:lectureCamera,sourceTime:video.currentTime});
+      {camera:previewCamera(c),sourceTime:video.currentTime,pending:!!clipCameraPending});
     if(activeEditorTab==='clip'&&$('microtopic-preview'))
       $('microtopic-preview').getContext('2d').drawImage($('preview'),0,0,720,1280);
    }catch{}

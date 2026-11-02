@@ -29,14 +29,21 @@ async function* framesAt(media,times,{canvas,ctx},signal){
  */
 export async function indexLectureCamera(media,{ranges=null,step=1,signal,onProgress=()=>{}}={}){
  if(!media?.videoSink||!(media.duration>0))throw Error('No video samples');
- const parts=(ranges?.length?ranges:[{start:0,end:media.duration}])
-  .map(r=>({start:Math.max(0,r.start),end:Math.min(media.duration-.05,r.end)})).filter(r=>r.end>r.start);
+ // A microtopic is many speech pieces with short pauses cut out; the picture is
+ // continuous across them, so index merged spans instead of resetting at each pause.
+ const parts=[];
+ for(const r of (ranges?.length?ranges:[{start:0,end:media.duration}])
+  .map(r=>({start:Math.max(0,r.start),end:Math.min(media.duration-.05,r.end)})).filter(r=>r.end>r.start)
+  .sort((a,b)=>a.start-b.start)){
+  const last=parts.at(-1);
+  if(last&&r.start-last.end<12)last.end=Math.max(last.end,r.end);else parts.push({...r});
+ }
  const surface=analysisCanvas(media),w=surface.canvas.width,h=surface.canvas.height;
  const total=parts.reduce((n,r)=>n+r.end-r.start,0);
  // Webcam: persistent motion between frame pairs ~0.4 s apart across the lecture.
  onProgress('Камера: ищем окно лектора');
  const probes=[];
- const count=Math.min(40,Math.max(6,Math.round(total/20)));
+ const count=Math.min(40,Math.max(24,Math.round(total/20)));
  for(let i=0;i<count;i++){
   // Map an offset on the concatenated ranges back to source time.
   let rest=(i+.5)*total/count,part=parts.at(-1);
