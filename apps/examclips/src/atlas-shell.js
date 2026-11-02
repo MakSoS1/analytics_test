@@ -45,7 +45,7 @@ export function mountAtlasShell(root,{getState,onLibrary,onTab,onStep,onRangeSel
  $('import-srt').textContent='Выбрать готовые субтитры SRT';
  confirmStep.append(root.querySelector('.workflow-config-actions'));
  $('workflow-srt').textContent='Выбрать или заменить SRT';
- const analysis=element('section','atlas-analysis-panel','<h3>Анализ лекции</h3><p>Повторное распознавание использует сохранённые окна Whisper. Поиск тем использует текущую расшифровку.</p><button type="button" id="atlas-analysis-settings">Настройки распознавания</button><button type="button" id="atlas-reimport-srt">Импортировать другой SRT</button>');
+ const analysis=element('section','atlas-analysis-panel','<h3>Анализ лекции</h3><p>Повторное распознавание использует сохранённые окна расшифровки. Поиск тем использует текущую расшифровку.</p><button type="button" id="atlas-analysis-settings">Настройки распознавания</button><button type="button" id="atlas-reimport-srt">Импортировать другой SRT</button>');
  analysis.id='atlas-analysis-panel';
  analysis.append($('transcribe'),$('forget-asr'),sidebar.querySelector('.topic-settings'));
  $('pane-captions').append(analysis);
@@ -128,7 +128,7 @@ export function mountAtlasShell(root,{getState,onLibrary,onTab,onStep,onRangeSel
 
  let step=1;
  function summary(){
-  const fields=[['Лекция',getState().title],['Язык',$('language').selectedOptions[0].textContent],['Модель',$('asr-model').selectedOptions[0].textContent],['Анализ',$('asr-limit').selectedOptions[0].textContent],['Источник речи',getState().pendingSrt?'Готовые субтитры SRT':'Распознавание Whisper на устройстве']];
+  const fields=[['Лекция',getState().title],['Язык',$('language').selectedOptions[0].textContent],['Модель','NVIDIA Parakeet TDT 0.6B v3'],['Анализ',$('asr-limit').selectedOptions[0].textContent],['Источник речи',getState().pendingSrt?'Готовые субтитры SRT':'Распознавание речи на устройстве']];
   const list=element('dl','atlas-summary-list');
   for(const [label,value] of fields){const row=element('div','');const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;row.append(dt,dd);list.append(row)}
   $('wizard-summary').replaceChildren(list);

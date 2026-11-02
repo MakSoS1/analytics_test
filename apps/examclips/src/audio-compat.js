@@ -1,7 +1,7 @@
 import {AudioBufferSink,AudioSampleSink,AudioSample,EncodedPacketSink,EncodedAudioPacketSource,Output,AdtsOutputFormat,BufferTarget} from 'mediabunny';
 
 // Some Chromium derivatives report AAC support but reject configure(). Probe a
-// real sample before loading Whisper. Web Audio uses a separate decoder path.
+// real sample before loading the speech model. Web Audio uses a separate decoder path.
 export async function compatibleAudio(track){
  if(!track)return {audioSink:null,audioSampleSink:null,audioDecoding:'none'};
  const native=new AudioBufferSink(track);

@@ -75,7 +75,7 @@ FFmpeg. Прохождение синтетического теста не до
 
 Это отдельный диагностический путь, а не измерение browser WASM ASR.
 Нужны Python, FFmpeg; для render acceptance также Chrome и Tesseract с English.
-В отдельном окружении установите `faster-whisper==1.2.1`.
+Для нативного эталона (не используется сайтом) в отдельном окружении установите `faster-whisper==1.2.1`.
 
 ```sh
 python scripts/transcribe-private-lecture.py --video /path/lecture.mp4 --out /path/results/asr --model small --language auto --threads 4

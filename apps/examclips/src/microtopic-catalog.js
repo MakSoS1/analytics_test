@@ -51,7 +51,7 @@ function seekTime(start,onSeek,{end}={}){
 }
 function evidenceLines(cell,items,formatter,{preview=3,label='Показать все',onSeek}={}){
  if(!items.length){
-   cell.append(el('p','catalog-empty','Расшифровка пока отсутствует — импортируйте SRT или запустите Whisper.'));
+   cell.append(el('p','catalog-empty','Расшифровка пока отсутствует — импортируйте SRT или запустите распознавание.'));
    return;
  }
  const put=(parent,lines)=>{
@@ -208,7 +208,7 @@ export function renderMicrotopicDetail(container,clip,chunks,{onSeek}={}){
  const summary=Array.isArray(clip.screenplay?.summary)?clip.screenplay.summary:[];
  if(!summary.length)script.append(el('p','catalog-empty',topic.spoken.length
   ?'Сценарий ещё не подготовлен. Исходные реплики доступны в расшифровке ниже.'
-  :'Для сценария нужна расшифровка лекции. Импортируйте SRT или запустите Whisper.'));
+  :'Для сценария нужна расшифровка лекции. Импортируйте SRT или запустите распознавание.'));
  const proofs=[],seen=new Set();
  for(const item of summary){
    const row=el('article','microtopic-summary-item');

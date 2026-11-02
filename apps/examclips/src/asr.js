@@ -2,33 +2,28 @@ import {mono16k} from './media.js';
 import {isSilent} from './audio-utils.js';
 import {normalizeCheckpoint,remainingWindows} from './asr-checkpoint.js';
 import {packWordEvents} from './word-align.js';
-// First use of this module downloads the Whisper model from Hugging Face.
-// Media/audio remains local: the ASR pipeline receives only Float32Arrays.
-let transcriber=null,deviceName=null,activeModel=null,wordTimestampSupported=true;
-const MODEL_IDS={tiny:'onnx-community/whisper-tiny',base:'onnx-community/whisper-base'};
-export async function getTranscriber(onProgress=()=>{},model='tiny'){
-  const modelId=MODEL_IDS[model];
-  if(!modelId)throw Error('Неизвестная модель распознавания речи');
-  if(transcriber&&activeModel===modelId)return {transcriber,deviceName};
-  if(transcriber){try{await transcriber.dispose?.()}catch{}transcriber=null;deviceName=null}
-  const {pipeline,env}=await import('@huggingface/transformers');
-  env.allowRemoteModels=true;
-  // navigator.gpu can exist in software/headless browsers with no usable adapter.
-  const webgpu=!!(await navigator.gpu?.requestAdapter().catch(()=>null));
-  let last;
-  for(const device of webgpu?['webgpu','wasm']:['wasm']){
-    try{
-      onProgress('Загрузка '+modelId+' ('+device+'). При первом запуске скачиваются веса модели.');
-      transcriber=await pipeline('automatic-speech-recognition',modelId,{
-        device,progress_callback:e=>{if(e.status==='progress'&&e.progress!==undefined)onProgress(`Модель: ${Math.round(e.progress)}%`)}
-      });
-      deviceName=device;activeModel=modelId;return {transcriber,deviceName}
-    }catch(e){last=e;onProgress('Режим '+device+' недоступен: '+e.message)}
-  }
-  throw last||Error('ASR unavailable');
+// One speech model for every lecture: NVIDIA Parakeet TDT 0.6B v3 (25 European
+// languages incl. Russian and English, measured word timestamps). The first run
+// downloads the weights from Hugging Face; audio stays local as Float32Arrays.
+export const ASR_MODEL='parakeet-tdt-0.6b-v3';
+export const ASR_MODEL_LABEL='NVIDIA Parakeet TDT 0.6B v3';
+let transcriber=null,deviceName=null;
+export async function getTranscriber(onProgress=()=>{}){
+  if(transcriber)return {transcriber,deviceName};
+  const [{fromHub},ort,{default:wasm}]=await Promise.all([import('parakeet.js'),import('onnxruntime-web'),
+    import('onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?url')]);
+  // Serve the ONNX Runtime binary from this site instead of a public CDN.
+  ort.env.wasm.wasmPaths={wasm:new URL(wasm,location.href).href};
+  const progress=({loaded,total,file})=>{if(total>0)onProgress('Модель распознавания ('+file+'): '+Math.round(loaded/total*100)+'%')};
+  // WASM with the int8 encoder (0.67 GB) everywhere: the fp16 WebGPU encoder (1.2 GB)
+  // fails to allocate its session in Chrome, and fp32 would be a 2.4 GB download.
+  onProgress('Загрузка '+ASR_MODEL_LABEL+'. При первом запуске один раз скачивается около 0,7 ГБ, затем модель хранится в браузере.');
+  transcriber=await fromHub(ASR_MODEL,{backend:'wasm',encoderQuant:'int8',decoderQuant:'int8',progress});
+  deviceName='wasm';
+  return {transcriber,deviceName};
 }
 export async function transcribe(media,{
- limit=Infinity,language='auto',model='tiny',onProgress=()=>{},signal,
+ limit=Infinity,onProgress=()=>{},signal,
  resume=null,onCheckpoint=async()=>{}
 }={}){
  const until=Math.min(media.duration,limit);
@@ -40,43 +35,18 @@ export async function transcribe(media,{
   onProgress('Все запрошенные аудиоокна уже распознаны из локального кэша.');
   return chunks.sort((a,b)=>a.start-b.start);
  }
- const {transcriber:t}=await getTranscriber(onProgress,model);
+ const {transcriber:t}=await getTranscriber(onProgress);
  for(const start of pending){
    if(signal?.aborted)throw new DOMException('Stopped','AbortError');
    const end=Math.min(until,start+30);
-   onProgress('Whisper: '+Math.round(start)+'/'+Math.round(until)+' с (из кэша: '+done.size+' блоков)');
+   onProgress('Распознавание: '+Math.round(start)+'/'+Math.round(until)+' с (из кэша: '+done.size+' блоков)');
    const pcm=await mono16k(media.audioSink,start,end);
    if(!isSilent(pcm)){
-     const opts={return_timestamps:wordTimestampSupported?'word':true,task:'transcribe'};
-     if(language!=='auto')opts.language=language;
-     let result;
-     try{result=await t(pcm,opts)}
-     catch(err){
-       if(!wordTimestampSupported)throw err;
-       // Certain ONNX Whisper variants do not support cross-attention word alignment.
-       // Fall back to phrase timing, transparently estimating word placements later.
-       wordTimestampSupported=false;
-       onProgress('Слова по отдельности недоступны; продолжаю с таймкодами фраз.');
-       result=await t(pcm,{...opts,return_timestamps:true});
-     }
-     if(result?.chunks?.length){
-       const isWordOutput=wordTimestampSupported&&opts.return_timestamps==='word'&&
-         result.chunks.length>=2&&result.chunks.every(item=>
-           String(item.text||'').trim().split(/\s+/).length<=2);
-       if(isWordOutput){
-         chunks.push(...packWordEvents(result.chunks,start,end));
-       }else{
-         for(const item of result.chunks){
-           if(!item.text?.trim())continue;
-           const a=Array.isArray(item.timestamp)?item.timestamp:[0,end-start];
-           const from=Math.min(end,start+Math.max(0,a[0]||0));
-           const to=Math.min(end,start+(a[1]??end-start));
-           if(to>from)chunks.push({start:from,end:to,text:item.text.trim()});
-         }
-       }
-     }else if(result?.text?.trim()){
-       chunks.push({start,end,text:result.text.trim()});
-     }
+     // Parakeet detects the language itself and measures every word's time.
+     const result=await t.transcribe(pcm,16000,{returnTimestamps:true});
+     const words=(result?.words||[]).map(w=>({text:w.text,timestamp:[w.start_time,w.end_time]}));
+     if(words.length)chunks.push(...packWordEvents(words,start,end));
+     else if(result?.utterance_text?.trim())chunks.push({start,end,text:result.utterance_text.trim()});
    }else onProgress('Тишина '+Math.round(start)+'–'+Math.round(end)+' с');
    done.add(start);
    chunks=chunks.sort((a,b)=>a.start-b.start);

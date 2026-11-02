@@ -1,4 +1,4 @@
-/** Conservative silence detector. Avoid Whisper hallucinations from digitally blank audio.
+/** Conservative silence detector. Skip digitally blank audio before speech recognition.
  * Extremely quiet, but non-zero, speech is deliberately NOT aggressively rejected.
  */
 export function isSilent(pcm, rmsThreshold=0.00012, peakThreshold=0.0008){

@@ -1,4 +1,4 @@
-/** Group local Whisper word-timestamp events into short, correctly timed clauses.
+/** Group local ASR word-timestamp events into short, correctly timed clauses.
  * This keeps semantic segmenter input sane while providing precise word arrays for captions.
  */
 export function packWordEvents(items,base,end){
