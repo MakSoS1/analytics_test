@@ -2,6 +2,7 @@
 // what the lecturer shows (new slide content, reveals, typing, pointer work).
 // Pure pixel heuristics on downscaled RGBA frames: no network, no model.
 // Coordinates in the track are normalized to the source frame.
+import {cameraStageAspect} from './editorial-motion.js';
 export const ANALYSIS_WIDTH=640;
 // Stage of the editorial layout with a compact presenter strip (see editorialGeometry).
 export const STAGE={w:684,h:820};
@@ -193,6 +194,9 @@ export function contentBlocks(rgba,w,h,{exclude=[],titleBand=.17}={}){
  // The slide heading and logos are not what the lecturer explains.
  const body=blocks.filter(b=>b.y+b.h>titleBand+.02);
  if(body.length)blocks=body;
+ // Tiny isolated marks (window buttons, icons) are not content when real blocks exist.
+ const real=blocks.filter(b=>area(b)>=.003);
+ if(real.length)blocks=real;
  const column=b=>Math.floor((b.x+b.w*.1)*3);
  return blocks.sort((a,b)=>column(a)-column(b)||a.y-b.y);
 }
@@ -220,9 +224,9 @@ export function changeRegion(prev,cur,w,h,{exclude=[],threshold=40}={}){
  * whole box when it can be read, otherwise returns a left→right pan pair.
  */
 export function frameContent(box,{sourceWidth,sourceHeight,aspect=STAGE.w/STAGE.h,stageWidth=STAGE.w,
-  minZoom=.8,maxZoom=2.1,pad=.022}={}){
+  minZoom=.75,maxZoom=1.45,pad=.035,avoid=null,band=.185}={}){
  const W=sourceWidth,H=sourceHeight;
- let x0=(box.x-pad*.6)*W,x1=(box.x+box.w+pad*.6)*W,y0=(box.y-pad)*H,y1=(box.y+box.h+pad)*H;
+ let x0=(box.x-pad)*W,x1=(box.x+box.w+pad)*W,y0=(box.y-pad)*H,y1=(box.y+box.h+pad)*H;
  let bw=x1-x0,bh=y1-y0,cx=(x0+x1)/2,cy=(y0+y1)/2;
  let cw=Math.max(bw,bh*aspect);
  cw=clamp(cw,stageWidth/maxZoom,stageWidth/minZoom);
@@ -230,14 +234,42 @@ export function frameContent(box,{sourceWidth,sourceHeight,aspect=STAGE.w/STAGE.
  // A vertical crop of a landscape source is bounded by its height.
  if(ch>H){ch=H;cw=ch*aspect}
  if(cw>W){cw=W;ch=Math.min(H,cw/aspect)}
+ const blockTop=Math.max(0,y0);
  const place=(centerX)=>{
-  const x=clamp(centerX-cw/2,0,W-cw);
-  // Reading starts at the top of the content: a small margin above it keeps
-  // neighbouring headings and logos out instead of centring into them.
-  const y=clamp(y0-ch*.06,0,H-ch);
-  return rect(x/W,y/H,cw/W,ch/H);
+  let w=cw,h=ch,x=clamp(centerX-w/2,0,W-w);
+  // Reading starts at the top of the content. Never show a sliver of the slide
+  // heading: start below the heading band unless the content itself is in it.
+  let y=y0-h*.06;
+  // Content that continues below the heading band is framed without the heading.
+  // (A full-slide picture that starts at the top edge keeps its top.)
+  const minTop=box.y>=band-.08&&box.y+box.h>band+.05?band*H:0;
+  if(y<minTop)y=minTop;
+  y=clamp(y,0,H-h);
+  // A tall shot pushed up by the slide's bottom edge must not climb into the
+  // heading again: start below it and keep the full width (pinned to the top).
+  let pinned=false;
+  if(y<minTop){y=minTop;h=H-minTop;pinned=true}
+  // Keep the slide's own webcam tile out of the shot: it is already shown below.
+  if(avoid){
+   const ax=avoid.x*W,ay=avoid.y*H,inside=()=>x+w>ax&&y+h>ay;
+   if(inside()&&ay-h>=minTop&&ay-h<=blockTop)y=ay-h;
+   // Sideways only when the whole block stays left of the tile.
+   if(inside()&&x1<=ax&&ax-w>=0&&ax-w<=Math.max(0,x0))x=ax-w;
+   if(inside()&&ay>y+60){
+    const nh=ay-y,nw=nh*aspect;
+    if(nw>=Math.min(bw,W)){w=nw;h=nh;x=clamp(centerX-w/2,0,W-w)}
+    else{
+     // Content runs above the tile: keep its full width and stop at the tile;
+     // the composer pins this shot to the top of the stage.
+     w=Math.min(W,Math.max(bw,w*.5));h=nh;x=clamp(centerX-w/2,0,W-w);
+     return {...rect(x/W,y/H,w/W,h/H),fit:'top'};
+    }
+   }
+  }
+  return pinned?{...rect(x/W,y/H,w/W,h/H),fit:'top'}:rect(x/W,y/H,w/W,h/H);
  };
- if(bw>cw*1.12)return {rect:place(x0+cw/2),pan:place(x1-cw/2),zoom:stageWidth/cw};
+ // Anything wider than the shot is panned across, never silently cut off.
+ if(bw>cw*1.02)return {rect:place(x0+cw/2),pan:place(x1-cw/2),zoom:stageWidth/cw};
  return {rect:place(cx),pan:null,zoom:stageWidth/cw};
 }
 /** Crop with the requested aspect around the same centre, for another stage size. */
@@ -259,15 +291,18 @@ export function cameraAt(track,time){
  if(i<0)return keys[0].rect;
  const k=keys[i],prev=keys[i-1];
  if(!prev||time>=k.end||k.end<=k.start)return k.rect;
+ if(k.rect.fit||prev.rect.fit)return {...interpolated(prev.rect,k.rect,k,time),fit:k.rect.fit||prev.rect.fit};
+ return interpolated(prev.rect,k.rect,k,time);
+}
+function interpolated(a,b,k,time){
  const raw=(time-k.start)/(k.end-k.start),t=k.motion==='pan'?raw:easeInOut(raw);
- const a=prev.rect,b=k.rect;
  // Interpolate zoom geometrically so a push-in feels uniform.
  const w=a.w*Math.pow(b.w/a.w,t),h=a.h*Math.pow(b.h/a.h,t);
  const cx=(a.x+a.w/2)+((b.x+b.w/2)-(a.x+a.w/2))*t,cy=(a.y+a.h/2)+((b.y+b.h/2)-(a.y+a.h/2))*t;
  return rect(cx-w/2,cy-h/2,w,h);
 }
 export function assertCameraTrack(track){
- if(!track||track.version!==1||!Array.isArray(track.keys)||!(track.source?.width>0&&track.source?.height>0))return false;
+ if(!track||track.version!==2||!Array.isArray(track.keys)||!(track.source?.width>0&&track.source?.height>0))return false;
  const ok=r=>r&&[r.x,r.y,r.w,r.h].every(Number.isFinite)&&r.w>0&&r.h>0&&r.x>=-1e-6&&r.y>=-1e-6&&r.x+r.w<=1.001&&r.y+r.h<=1.001;
  if(track.speaker&&!ok(track.speaker))return false;
  let last=-Infinity;
@@ -322,8 +357,14 @@ export function detectWebcam(pairs,w,h,{threshold=24,minActivity=.12}={}){
  const right=x1>=w-3?{pick:w,found:true}:snap(x1,x1+1,Math.min(w-1,x1+reachX),p=>edge(p,y0,y1,false));
  const top=y0<=2?{pick:0,found:true}:snap(y0,Math.max(1,y0-reachY),y0,p=>edge(p,x0,x1,true));
  const bottom=y1>=h-3?{pick:h,found:true}:snap(y1,y1+1,Math.min(h-1,y1+reachY),p=>edge(p,x0,x1,true));
- const bx0=left.found?left.pick:Math.max(0,x0-4),bx1=right.found?right.pick:Math.min(w,x1+5);
- const by0=top.found?top.pick:Math.max(0,y0-4),by1=bottom.found?bottom.pick:Math.min(h,y1+5);
+ // Call tiles sit in a corner: an edge not found near the frame border runs to it.
+ const near=(gap,size)=>gap<size*.08;
+ const bx0=left.found?left.pick:near(x0,w)?0:Math.max(0,x0-4);
+ const bx1=right.found?right.pick:near(w-1-x1,w)?w:Math.min(w,x1+5);
+ let by0=top.found?top.pick:Math.max(0,y0-4);
+ const by1=bottom.found?bottom.pick:near(h-1-y1,h)?h:Math.min(h,y1+5);
+ // Motion covers the face and shoulders, not the tile: complete a too-flat box to a call-tile shape.
+ if(!top.found&&(bx1-bx0)/(by1-by0)>2)by0=Math.max(0,Math.round(by1-(bx1-bx0)/1.78));
  const box=rect(bx0/w,by0/h,(bx1-bx0)/w,(by1-by0)/h);
  if(area(box)>.3)return null;
  // Inset by a pixel so the overlay's own frame line is not drawn.
@@ -339,7 +380,9 @@ const MIN_HOLD=1.6,MOVE=.75,DWELL=6;
  * without changes the camera dwells on blocks in reading order.
  */
 export function createCameraIndexer({width,height,sourceWidth,sourceHeight,speaker=null,
-  aspect=STAGE.w/STAGE.h,stageWidth=STAGE.w}={}){
+  aspect=null,stageWidth=STAGE.w}={}){
+ // Plan for the stage the composer will actually draw (it depends on the webcam shape).
+ aspect=aspect||cameraStageAspect(speaker?(speaker.w*sourceWidth)/(speaker.h*sourceHeight):null,{speaker:!!speaker});
  if(!(width>0&&height>0&&sourceWidth>0&&sourceHeight>0))throw Error('Invalid camera indexer dimensions');
  // Conference tiles grow or are replaced (another speaker during Q&A): keep a
  // generous zone around the presenter out of content and change analysis.
@@ -347,7 +390,8 @@ export function createCameraIndexer({width,height,sourceWidth,sourceHeight,speak
   speaker.w*2,speaker.h*2);
  const exclude=zone?[zone]:[];
  const states=[];let prev=null,state=null,pendingBlocks=false;
- const frameOpts={sourceWidth,sourceHeight,aspect,stageWidth};
+ const avoid=speaker&&rect(Math.max(0,speaker.x-.015),Math.max(0,speaker.y-.02),speaker.w+.03,speaker.h+.04);
+ const frameOpts={sourceWidth,sourceHeight,aspect,stageWidth,avoid};
  const blocksOf=rgba=>contentBlocks(rgba,width,height,{exclude});
  function open(time,rgba,stable){
   state={start:time,end:time,blocks:blocksOf(rgba),events:[]};states.push(state);pendingBlocks=!stable;
@@ -368,7 +412,7 @@ export function createCameraIndexer({width,height,sourceWidth,sourceHeight,speak
   cut(){prev=null},
   finish(duration){
    if(state&&Number.isFinite(duration))state.end=Math.max(state.end,duration);
-   return {version:1,source:{width:sourceWidth,height:sourceHeight},speaker,
+   return {version:2,source:{width:sourceWidth,height:sourceHeight},speaker,
     stage:{aspect},keys:planKeys(states,frameOpts),method:'pixel-reveal-camera'};
   }
  };
@@ -425,8 +469,11 @@ function planKeys(states,opts){
  };
  let shown=null;
  const show=(start,end,box,first)=>{
-  // Another change inside the block already on screen keeps the current shot.
-  if(!first&&shown&&iou(shown,box)>.75)return;
+  // Another change inside the block already on screen keeps the current shot,
+  // unless the reveal widened the content beyond it.
+  const last=keys.at(-1)?.rect;
+  const fits=last&&box.x>=last.x-.005&&box.x+box.w<=last.x+last.w+.005&&box.y+box.h<=last.y+last.h+.005;
+  if(!first&&shown&&iou(shown,box)>.75&&fits)return;
   shown=box;
   const f=frameContent(box,opts);
   add(start,f.rect,{cut:first});

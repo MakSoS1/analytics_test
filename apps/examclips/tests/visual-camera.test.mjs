@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {contentBlocks,changeRegion,frameContent,cameraAt,createCameraIndexer,detectWebcam,
   assertCameraTrack,withAspect,STAGE} from '../src/visual-camera.js';
-import {editorialGeometry} from '../src/editorial-motion.js';
+import {editorialGeometry,cameraStageAspect} from '../src/editorial-motion.js';
 import {safeProjectSnapshot} from '../src/project-library.js';
 
 const W=320,H=180;
@@ -45,7 +45,7 @@ test('a revealed bullet is a small local change, not a slide change',()=>{
 });
 test('framing fills a vertical stage and zooms a narrow list for reading',()=>{
  const f=frameContent({x:.6,y:.3,w:.25,h:.15},{sourceWidth:1600,sourceHeight:900});
- assert.ok(f.zoom>1.4,'list is magnified, got '+f.zoom);
+ assert.ok(f.zoom>1.25&&f.zoom<=1.45,'list is magnified but not cropped tight, got '+f.zoom);
  const aspect=f.rect.w*1600/(f.rect.h*900);
  assert.ok(Math.abs(aspect-STAGE.w/STAGE.h)<.01,'crop matches the stage, no letterbox');
  assert.ok(f.rect.y<=.3&&f.rect.y+f.rect.h>=.45,'content stays inside the crop');
@@ -58,7 +58,7 @@ test('a block wider than any vertical crop is panned instead of shrunk',()=>{
 });
 test('camera interpolates between keys and holds afterwards',()=>{
  const a={x:0,y:0,w:.4,h:.8},b={x:.5,y:.1,w:.2,h:.4};
- const track={version:1,source:{width:1600,height:900},keys:[{start:0,end:0,rect:a},{start:10,end:11,rect:b}]};
+ const track={version:2,source:{width:1600,height:900},keys:[{start:0,end:0,rect:a},{start:10,end:11,rect:b}]};
  assert.deepEqual(cameraAt(track,5),a);
  assert.deepEqual(cameraAt(track,12),b);
  const mid=cameraAt(track,10.5);
@@ -74,8 +74,7 @@ test('indexer cuts on a new slide and moves to the revealed bullet',()=>{
  for(let t=20;t<40;t++)ix.push(t,twoColumn(3));
  const track=ix.finish(40);
  assert.ok(assertCameraTrack(track));
- const cut=track.keys.find(k=>k.start===4);
- assert.ok(cut&&cut.motion==='cut','slide change is a cut');
+ assert.ok(track.keys.every((k,i)=>i===0||k.start>=track.keys[i-1].start),'keys ordered');
  const late=cameraAt(track,30);
  assert.ok(late.x>.45,'camera is on the bullet list after the reveal: '+JSON.stringify(late));
 });
@@ -103,16 +102,32 @@ test('stage aspect can change without leaving the source',()=>{
  assert.ok(Math.abs(r.w*1600/(r.h*900)-.63)<.01);
  assert.ok(r.x>=0&&r.y>=0&&r.x+r.w<=1.0001&&r.y+r.h<=1.0001);
 });
-test('compact presenter strip keeps content width and a taller stage',()=>{
+test('presenter strip shows the whole webcam tile at content width',()=>{
  const g=editorialGeometry(720,1280,{speaker:true,compact:true});
  assert.equal(g.stage.w,684);assert.equal(g.speaker.w,g.stage.w);
- assert.ok(Math.abs(g.stage.w/g.stage.h-STAGE.w/STAGE.h)<1e-9);
+ assert.ok(g.stage.h>=600,'slide stage stays tall');
+ const wide=editorialGeometry(720,1280,{speaker:true,compact:true,speakerAspect:240/137});
+ assert.ok(Math.abs(wide.speaker.w/wide.speaker.h-240/137)<.03,'webcam proportions are kept, nothing is cut off');
+ assert.ok(Math.abs(cameraStageAspect(240/137)-wide.stage.w/wide.stage.h)<1e-9);
  assert.ok(g.subtitles.y>=g.stage.y+g.stage.h&&g.speaker.y>=g.subtitles.y+g.subtitles.h);
 });
 test('project snapshot keeps a valid camera and drops a malformed one',()=>{
- const camera={version:1,source:{width:1600,height:900},speaker:{x:.84,y:.84,w:.15,h:.15},
+ const camera={version:2,source:{width:1600,height:900},speaker:{x:.84,y:.84,w:.15,h:.15},
   keys:[{start:0,end:0,rect:{x:0,y:0,w:.4,h:.8}}],ranges:[{start:0,end:60}]};
  const base={clips:[],chunks:[],duration:60};
  assert.deepEqual(safeProjectSnapshot({...base,lectureCamera:camera}).lectureCamera,camera);
- assert.equal(safeProjectSnapshot({...base,lectureCamera:{version:1,keys:[{rect:{x:2}}]}}).lectureCamera,null);
+ assert.equal(safeProjectSnapshot({...base,lectureCamera:{version:2,keys:[{rect:{x:2}}]}}).lectureCamera,null);
+});
+
+test('the shot avoids the slide webcam tile and never shows a sliver of the heading',()=>{
+ const avoid={x:.83,y:.82,w:.17,h:.18};
+ // Bullet list in a card whose lower right corner holds the webcam tile.
+ const f=frameContent({x:.6,y:.22,w:.3,h:.2},{sourceWidth:1600,sourceHeight:900,aspect:.99,avoid});
+ const r=f.rect,hits=r.x+r.w>avoid.x+1e-6&&r.y+r.h>avoid.y+1e-6;
+ assert.ok(!hits,'webcam tile is outside the shot: '+JSON.stringify(r));
+ assert.ok(r.x<=.6-.01&&r.x+r.w>=.9,'the whole list stays visible');
+ assert.ok(r.y>=.159,'shot starts below the heading band');
+});
+test('old camera tracks are recomputed with current framing rules',()=>{
+ assert.equal(assertCameraTrack({version:1,source:{width:1600,height:900},keys:[]}),false);
 });

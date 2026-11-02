@@ -23,9 +23,10 @@ try{
   const ctx=document.querySelector('#preview').getContext('2d'),original=ctx.clearRect.bind(ctx);
   window.pausedDraws=0;ctx.clearRect=(...args)=>{window.pausedDraws++;return original(...args)};
  });
- await page.waitForTimeout(300);
+ // The vertical camera for this clip arrives once and redraws once; measure after it settles.
+ await page.waitForTimeout(2500);
  const pausedBefore=await page.evaluate(()=>window.pausedDraws);
- await page.waitForTimeout(300);
+ await page.waitForTimeout(600);
  assert.equal(await page.evaluate(()=>window.pausedDraws),pausedBefore,'Paused preview must not redraw continuously');
  await page.locator('#player').evaluate(video=>{video.pause();video.currentTime=2.6});
  await page.locator('#atlas-play').click();
