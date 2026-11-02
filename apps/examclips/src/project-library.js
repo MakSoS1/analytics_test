@@ -41,7 +41,6 @@ const allowedSetting=(value,choices,fallback)=>choices.includes(value)?value:fal
 function snapshotSettings(settings){
  return {
   language:allowedSetting(settings?.language,['auto','ru','en'],'auto'),
-  asrModel:allowedSetting(settings?.asrModel,['tiny','base'],'tiny'),
   asrLimit:allowedSetting(settings?.asrLimit,['all','300','900'],'all'),
   ocrEngine:allowedSetting(settings?.ocrEngine,['auto','tesseract','rapid'],'auto'),
   outputQuality:allowedSetting(settings?.outputQuality,['standard','high'],'standard')

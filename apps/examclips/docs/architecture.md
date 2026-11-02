@@ -10,7 +10,11 @@ ExamClips — статическое Vite SPA на JavaScript/CSS, без обя
 1. Пользователь выбирает локальное видео. `media.js` открывает контейнер через
    Mediabunny. `audio-compat.js` проверяет фактическое декодирование звука;
    для проблемного AAC доступен Web Audio/ADTS fallback порциями до 30 секунд.
-2. `asr.js` получает аудио и выполняет Whisper через Transformers.js на устройстве.
+2. `asr.js` получает аудио и распознаёт его на устройстве одной моделью без выбора —
+   NVIDIA Parakeet TDT 0.6B v3 через `parakeet.js` и ONNX Runtime Web (WASM, int8-энкодер,
+   около 0,7 ГБ, кэш в IndexedDB). Модель сама определяет язык (25 европейских, включая
+   русский и английский) и возвращает измеренные таймкоды слов. Бинарник ONNX Runtime
+   отдаётся самим сайтом; снаружи загружаются только веса с Hugging Face.
    `asr-checkpoint.js` хранит прогресс. Альтернатива — импорт SRT или проект JSON.
 3. `slide-cuts.js` и `slide-chapter-index.js` находят репрезентативные изменения
    изображения; OCR извлекает текст/геометрию. Это не покадровый OCR всей лекции.
@@ -49,7 +53,7 @@ ExamClips — статическое Vite SPA на JavaScript/CSS, без обя
 | Стили интерфейса | `styles.css`, `atlas.css`, `atlas-catalog.css` |
 | Текущий общий планировщик | `general-topics.js`, `speech-boundaries.js`, `topic-editorial-guardrails.js` |
 | Нормализация речи, временные сегменты | `segments.js`, `word-align.js`, `selective-stories.js` |
-| Whisper, тихое аудио, кэш распознавания | `asr.js`, `audio-utils.js`, `asr-checkpoint.js` |
+| Распознавание речи (Parakeet), тихое аудио, кэш распознавания | `asr.js`, `audio-utils.js`, `asr-checkpoint.js` |
 | Контейнер, кадры, совместимость AAC | `media.js`, `audio-compat.js` |
 | Слайды, OCR, визуальные области, вебка | `slide-cuts.js`, `slide-chapter-index.js`, `slide-context.js`, `scene-analysis.js`, `speaker-motion.js` |
 | Виртуальная камера: блоки, раскрытия, кадрирование, окно лектора | `visual-camera.js` (чистые функции), `lecture-camera.js` (декодирование) |

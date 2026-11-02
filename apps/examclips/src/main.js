@@ -4,7 +4,7 @@ import {findRangeTopics,manualRangeClip,coverageSpans} from './atlas-range.js';
 import {renderAtlasPanels,updateAtlasPlayhead} from './atlas-panels.js';
 import {quizForClip,gradeQuiz,toQuizJson} from './quiz.js';
 import {openMedia} from './media.js';
-import {transcribe} from './asr.js';
+import {transcribe,ASR_MODEL,ASR_MODEL_LABEL} from './asr.js';
 import {buildClips,parseSrt,toSrt,validRange,timecode,textAt} from './segments.js';
 import {paintFrame,WIDTH,HEIGHT} from './composition.js';
 import {exportClip} from './render.js';
@@ -73,19 +73,15 @@ root.innerHTML=`
  <button id="remember-video" type="button" class="remember-video" hidden>Запомнить доступ к исходному файлу</button>
     <div class="settings config-group">
       <div class="heading">1. Расшифровка</div>
-      <details class="detail-settings"><summary>Язык и параметры Whisper</summary><div class="detail-body">
-      <label>Распознавание речи<select id="language"><option value="auto">Авто (RU / EN)</option><option value="ru">Русский</option><option value="en">English</option></select></label>
-      <label>Размер локальной модели<select id="asr-model">
-        <option value="tiny">Whisper Tiny — быстрый режим</option>
-        <option value="base">Whisper Base — качественнее, требует больше ресурсов</option>
-      </select></label>
+      <details class="detail-settings"><summary>Язык и объём распознавания</summary><div class="detail-body">
+      <label>Язык лекции<select id="language"><option value="auto">Авто (RU / EN)</option><option value="ru">Русский</option><option value="en">English</option></select></label>
       <label>Объём для распознавания<select id="asr-limit"><option value="all" selected>Вся лекция — полный анализ микротем</option><option value="300">Первые 5 минут — быстрая проба</option><option value="900">Первые 15 минут — проба</option></select></label>
       </div></details>
       <button class="primary" id="transcribe" disabled>✦ Распознать лекцию локально</button>
       <button id="forget-asr" disabled>Удалить сохранённую расшифровку из кэша</button>
       <button id="import-srt" disabled>Импорт SRT (без AI)</button>
       <input type="file" accept=".srt,text/plain" id="srt-file" hidden>
-      <p class="hint">При первом запуске выбранной Whisper скачиваются веса модели (Tiny или Base). Полная обработка часовой лекции может быть долгой на слабом ПК; для проверки выберите первые 5 минут. Видеоданные не загружаются в облако.</p>
+      <p class="hint">Речь распознаёт NVIDIA Parakeet TDT 0.6B v3: русский, английский и ещё 23 европейских языка, язык определяется сам. При первом запуске один раз скачивается модель (около 0,7 ГБ), затем она хранится в браузере. Полная обработка часовой лекции может быть долгой на слабом ПК; для проверки выберите первые 5 минут. Видеоданные не загружаются в облако.</p>
     </div>
     <div class="settings topic-settings">
   <div class="heading">2. Найти микротемы</div>
@@ -107,7 +103,7 @@ root.innerHTML=`
         <button class="primary" id="workflow-start" disabled>Обработать лекцию →</button>
         <button id="workflow-srt" disabled>Использовать готовые субтитры (SRT)</button>
       </div>
-      <p class="hint">Видео останется на этом устройстве. Модели Whisper могут скачиваться при первом запуске.</p>
+      <p class="hint">Видео останется на этом устройстве. Модель распознавания речи скачивается один раз при первом запуске.</p>
     </div>
     <section id="processing-panel" class="processing-panel" aria-label="Текущий ход анализа" hidden>
       <div class="processing-header"><div><span class="eyebrow" id="processing-step-label">ЭТАП 1 ИЗ 4</span>
@@ -124,7 +120,7 @@ root.innerHTML=`
     </section>
     <div class="journey" aria-label="Этапы обработки">
       <div class="journey-step" id="journey-upload"><div class="journey-number">1</div><div><b>Лекция</b><small id="journey-upload-state">Выберите файл</small></div></div>
-      <div class="journey-step" id="journey-transcript"><div class="journey-number">2</div><div><b>Транскрипция</b><small id="journey-transcript-state">Whisper / SRT</small></div></div>
+      <div class="journey-step" id="journey-transcript"><div class="journey-number">2</div><div><b>Транскрипция</b><small id="journey-transcript-state">Распознавание / SRT</small></div></div>
       <div class="journey-step" id="journey-topics"><div class="journey-number">3</div><div><b>Микротемы</b><small id="journey-topics-state">Полные объяснения</small></div></div>
       <div class="journey-step" id="journey-output"><div class="journey-number">4</div><div><b>Ролики + тесты</b><small>Экспорт на устройство</small></div></div>
     </div>
@@ -182,7 +178,7 @@ root.innerHTML=`
         <div class="divider"></div>
         <div class="panel-title"><b>Транскрипт и субтитры</b><button class="plain" id="save-srt" disabled>Скачать SRT</button></div>
         <textarea id="transcript" rows="7" placeholder="Здесь появятся субтитры с таймкодами. Можно импортировать готовый SRT." disabled></textarea>
-        <p class="hint">Автоматические таймкоды Whisper могут быть приблизительными; проверьте перед публикацией.</p>
+        <p class="hint">Автоматическая расшифровка может содержать ошибки; проверьте перед публикацией.</p>
         <div class="panel-title"><b>Проект</b><button class="plain" id="save-project" disabled>Сохранить JSON</button></div>
         <p class="hint">Проект хранит разметку, но не само видео: при повторном открытии понадобится выбрать исходный файл.</p>
         <button id="load-project">Открыть проект JSON</button><input id="project-file" type="file" accept=".json,application/json" hidden>
@@ -559,7 +555,7 @@ function initMvpEvents(){
  document.querySelectorAll('[data-editor-tab]').forEach(button=>{
    button.addEventListener('click',()=>setEditorTab(button.dataset.editorTab));
  });
- for(const id of ['language','asr-model','asr-limit','ocr-engine','output-quality'])$(id).addEventListener('change',()=>{scheduleProjectSave();refreshAtlas()});
+ for(const id of ['language','asr-limit','ocr-engine','output-quality'])$(id).addEventListener('change',()=>{scheduleProjectSave();refreshAtlas()});
   if(!isLocalDesktop){
    const opt=$('ocr-engine').querySelector('option[value="rapid"]');if(opt)opt.disabled=true;
    $('ocr-engine').value='tesseract';
@@ -674,7 +670,7 @@ function applySnapshot(raw){
  clips=p.clips.filter(c=>validRange(c.start,c.end,duration));
  selected=Math.max(0,Math.min(clips.length-1,p.selected||0));
  timelineView={...p.view};catalogScroll=p.ui.catalogScroll;
- for(const [id,key] of [['language','language'],['asr-model','asrModel'],['asr-limit','asrLimit'],['ocr-engine','ocrEngine'],['output-quality','outputQuality']])$(id).value=p.settings[key];
+ for(const [id,key] of [['language','language'],['asr-limit','asrLimit'],['ocr-engine','ocrEngine'],['output-quality','outputQuality']])$(id).value=p.settings[key];
  if(!isLocalDesktop&&$('ocr-engine').value==='rapid')$('ocr-engine').value='tesseract';
  $('transcript').value=toSrt(chunks);
  setPhase(!media||chunks.length||clips.some(c=>c.id!=='draft-1')?'results':'configure');
@@ -690,7 +686,7 @@ function buildCurrentSnapshot(){
   duration:projectDuration(),clips,chunks,sceneCuts,lectureChapters,lectureCamera,selected,
   activeTab:activeEditorTab,view:{zoom:timelineView.zoom,
     offset:activeEditorTab==='timeline'?$('timeline-viewport').scrollLeft/Math.max(1,$('timeline-canvas').scrollWidth):timelineView.offset},
-  settings:{language:$('language').value,asrModel:$('asr-model').value,asrLimit:$('asr-limit').value,ocrEngine:$('ocr-engine').value,outputQuality:$('output-quality').value},
+  settings:{language:$('language').value,asrLimit:$('asr-limit').value,ocrEngine:$('ocr-engine').value,outputQuality:$('output-quality').value},
   ui:{detailOpen:microtopicDetailOpen,catalogScroll:microtopicDetailOpen?catalogScroll:window.scrollY}
  });
 }
@@ -1123,7 +1119,7 @@ function renderMicrotopics(){
 }
 function renderClips(){
   const holder=$('clips');holder.replaceChildren();
-  if(!clips.length){holder.textContent='Нет клипов. Импортируйте SRT или запустите Whisper.';renderMicrotopics();enable();return}
+  if(!clips.length){holder.textContent='Нет клипов. Импортируйте SRT или запустите распознавание.';renderMicrotopics();enable();return}
   clips.forEach((clip,i)=>{
     const btn=document.createElement('button');btn.className='clip'+(i===selected?' active':'');
     const n=document.createElement('span');n.className='clip-num';n.textContent=String(i+1).padStart(2,'0');
@@ -1224,20 +1220,20 @@ $('transcribe').onclick=async()=>{
   if(!media||busy)return;
   if(clips.some(c=>c.id!=='draft-1')&&!confirmReanalysis())return;
   abort=new AbortController();setBusy(true);
-  setPhase('processing');showOperation('prepare',null,'Подготавливаем Whisper…',{standalone:true});
+  setPhase('processing');showOperation('prepare',null,'Подготавливаем распознавание речи…',{standalone:true});
   let key=null;
   try{
     const limit=$('asr-limit').value==='all'?Infinity:Number($('asr-limit').value);
-    key=await checkpointKey(sourceFile,$('language').value+':'+$('asr-model').value);
+    key=await checkpointKey(sourceFile,ASR_MODEL);
     const previous=await loadCheckpoint(key,media.duration).catch(()=>null);
     if(previous?.completedWindows.length)status('Продолжаю распознавание: сохранено '+previous.completedWindows.length+' окон по 30 секунд.');
-    chunks=await transcribe(media,{limit,language:$('language').value,
+    chunks=await transcribe(media,{limit,
       onProgress:msg=>{
         status(msg);
-        const m=String(msg).match(/Whisper:\s*(\d+)\s*\/\s*(\d+)\s*с/);
+        const m=String(msg).match(/Распознавание:\s*(\d+)\s*\/\s*(\d+)\s*с/);
         if(m)showOperation('asr',100*Number(m[1])/Math.max(1,Number(m[2])),msg);
         else showOperation('prepare',null,msg);
-      },signal:abort.signal,model:$('asr-model').value,resume:previous,
+      },signal:abort.signal,resume:previous,
       onCheckpoint:async checkpoint=>saveCheckpoint(key,checkpoint)});
     if(!chunks.length)throw Error('Распознавание не вернуло речи. Попробуйте SRT или проверьте звук.');
     showOperation('topics',null,'Ищем законченные мысли в транскрипте…');
@@ -1256,9 +1252,9 @@ $('transcribe').onclick=async()=>{
 $('forget-asr').onclick=async()=>{
   if(!sourceFile)return;
   try{
-    const key=await checkpointKey(sourceFile,$('language').value+':'+$('asr-model').value);
+    const key=await checkpointKey(sourceFile,ASR_MODEL);
     await deleteCheckpoint(key);
-    status('Локальный кэш Whisper удалён. Уже импортированные/отредактированные субтитры не изменены.');
+    status('Локальный кэш распознавания удалён. Уже импортированные/отредактированные субтитры не изменены.');
   }catch(e){error(e)}
 };
 

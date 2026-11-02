@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {safeProjectSnapshot} from '../src/project-library.js';
 
-const defaults={language:'auto',asrModel:'tiny',asrLimit:'all',ocrEngine:'auto',outputQuality:'standard'};
+const defaults={language:'auto',asrLimit:'all',ocrEngine:'auto',outputQuality:'standard'};
 const legacy=()=>({
  schema:1,duration:300,
  clips:[{id:'saved-topic',title:'Сохранённая правка',status:'approved',
@@ -25,7 +25,7 @@ test('legacy snapshots retain existing data and receive safe UI and setting defa
 });
 
 test('extended snapshots round-trip allowed settings and navigation without sharing edited objects',()=>{
- const original={...legacy(),settings:{language:'ru',asrModel:'base',asrLimit:'900',
+ const original={...legacy(),settings:{language:'ru',asrLimit:'900',
   ocrEngine:'rapid',outputQuality:'high'},ui:{detailOpen:true,catalogScroll:1420.5}};
  const snapshot=safeProjectSnapshot(original);
  assert.deepEqual(snapshot.settings,original.settings);

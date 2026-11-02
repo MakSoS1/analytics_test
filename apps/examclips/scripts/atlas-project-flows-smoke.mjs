@@ -47,7 +47,7 @@ try{
  assert.deepEqual(searched.clips[0],original,'Range search must preserve edited title, approval, source order and intervals exactly');
  assert.equal(searched.clips[1].candidate,true);
  assert.equal(searched.clips[1].start,60);assert.equal(searched.clips[1].end,120);
- assert.equal(searched.settings.language,'ru');assert.equal(searched.settings.asrModel,'base');
+ assert.equal(searched.settings.language,'ru');
  assert.equal(searched.settings.outputQuality,'high');
  await page.locator('.top-navigation [data-editor-tab="clip"]').click();
  await page.locator('.microtopic-card[data-topic-index="1"]').click();
