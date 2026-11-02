@@ -1,0 +1,1 @@
+var e=new URL(`ort-wasm-simd-threaded.jsep-6MnTkKum.wasm`,import.meta.url).href;export{e as default};
