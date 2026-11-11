@@ -90,6 +90,9 @@ def operate(before,destination,case_directory,evidence_directory,timeout_seconds
             raise ValueError('NATIVE_SAVE_DIALOG_NOT_FOCUSED')
         # XTest input goes to the active real window, not a synthetic browser API.
         command(['xdotool','key','--clearmodifiers','ctrl+l'])
+        # This GTK save dialog selects only the basename after Ctrl+L; replace
+        # the full Name entry, including its existing .mp4 extension.
+        command(['xdotool','key','--clearmodifiers','ctrl+a'])
         command(['xdotool','type','--clearmodifiers','--delay','1',str(target)])
         capture(evidence/'02-native-save-path.png')
         command(['xdotool','key','--clearmodifiers','Return'])
