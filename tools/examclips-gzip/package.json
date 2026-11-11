@@ -1,0 +1,10 @@
+{
+  "name": "examclips-public-gzip-helper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fflate": "0.8.2",
+    "esbuild": "0.28.2"
+  }
+}

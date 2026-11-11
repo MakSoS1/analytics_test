@@ -1,0 +1,31 @@
+name: ExamClips public gzip interoperability helper
+'on':
+  push:
+    branches: [qa/examclips-audit-2026-11-11]
+    paths:
+      - .github/workflows/examclips-public-gzip.yml
+      - tools/examclips-gzip/run-request.json
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  verify-public-helper:
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned public compression and bundler packages without scripts
+        working-directory: tools/examclips-gzip
+        run: npm install --ignore-scripts --include=optional --no-audit --no-fund
+      - name: Verify package integrity, restricted V8 and Node interoperability before publication
+        working-directory: tools/examclips-gzip
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEBUG: ''
+        run: node build-verify-publish.mjs
