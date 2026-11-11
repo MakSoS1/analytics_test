@@ -62,3 +62,7 @@
 ## Execution ledger
 
 Ruling: the local executor is unavailable, so existing isolated QA branch/API leases replace local worktree scripts. No main-branch or production mutation is authorized. Public code is reviewed and tested remotely before private input.
+
+- Pure protocol regression checks: baseline failed with missing requireIdentity, implementation passed in V8; the same public test file will run in Node on Actions.
+- Review finding: primary evidence includes selected-manifest.json at archive root. A real-layout regression has been added before the extraction allowance; the first public-only Actions test run is expected to expose this failure. No private handoff is permitted before correction.
+- Review finding: mapped diagnostics must use each exact pre-export project. The initial existing-helper wrapper is not approved for mapped quality claims; it will be replaced before private inspection.

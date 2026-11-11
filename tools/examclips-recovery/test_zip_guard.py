@@ -8,6 +8,8 @@ def archive(names):
 class GuardTests(unittest.TestCase):
     def test_valid_case(self):
         with archive(['run.json','rul01/result.json']) as z:self.assertEqual(len(checked_members(z,'rul01')),2)
+    def test_real_primary_layout(self):
+        with archive(['run.json','selected-manifest.json','rul01/result.json']) as z:self.assertEqual(len(checked_members(z,'rul01')),3)
     def test_traversal(self):
         for name in ['../key','/tmp/key','rul01/../../key','rul01\\key']:
             with self.subTest(name=name),archive([name]) as z,self.assertRaises(ValueError):checked_members(z,'rul01')

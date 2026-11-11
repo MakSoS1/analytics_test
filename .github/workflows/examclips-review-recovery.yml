@@ -1,0 +1,55 @@
+name: ExamClips private review recovery
+'on':
+  push:
+    branches: [qa/examclips-audit-2026-11-11]
+    paths:
+      - .github/workflows/examclips-review-recovery.yml
+      - tools/examclips-recovery/run-request.json
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: examclips-private-review-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  review:
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
+    name: Review recovery ${{ matrix.lane }}
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        lane: [root,ru,en]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    env:
+      RECOVERY_LANE: ${{ matrix.lane }}
+      DEBUG: ''
+      NODE_OPTIONS: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build and test the public cryptographic client and evidence guards
+        timeout-minutes: 10
+        working-directory: tools/examclips-recovery
+        run: |
+          npm install --ignore-scripts --include=optional --no-audit --no-fund
+          node build-client.mjs
+          node test-client.mjs
+          node test-protocol.mjs
+          python3 test_zip_guard.py
+          node --check bridge.mjs
+          node --check ingest.mjs
+          python3 -m py_compile media.py zip_guard.py
+          python3 -m pip install --quiet Pillow numpy
+          ffmpeg -version | head -1
+      - name: Authenticate prior artifacts and serve encrypted bounded review assets
+        timeout-minutes: 325
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/examclips-recovery/bridge.mjs

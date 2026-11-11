@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "reason": "Resume already authorized long20 review after local executor outage",
+  "createdAt": "2026-11-11T22:10:00Z",
+  "primaryCases": 20,
+  "supplementaryCases": 1
+}

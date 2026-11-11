@@ -187,6 +187,7 @@ async function main(){
  while(Date.now()<deadline){
   const request=await readPublic(prefix+'/request.json');
   if(!request||request.sequence<=sequence){await pause(5000);continue;}
+  if(!Number.isSafeInteger(request.sequence)||request.sequence!==sequence+1){await pause(5000);continue;}
   try{
    validateRequest(request,identity.caseId,sequence+1);
    const result=await operation(request);sequence=request.sequence;
