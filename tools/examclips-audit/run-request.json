@@ -1,14 +1,7 @@
 {
   "version": 1,
-  "request_id": "2026-11-11-long20-parallel-remaining8",
+  "request_id": "2026-11-11-long20-rul06-runner-recovery",
   "case_ids": [
-    "enl05",
-    "enl10",
-    "rul07",
-    "enl02",
-    "enl06",
-    "enl09",
-    "rul03",
-    "enl04"
+    "rul06"
   ]
 }
