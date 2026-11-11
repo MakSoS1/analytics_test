@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "algorithm": "AES-256-GCM+RSA-OAEP-SHA256",
+  "keySha256": "cf5c919a23087679114501e66097a60f53ca71fcf72c7433d69ad21fa9d93b9a",
+  "context": {
+    "purpose": "credentials",
+    "repository": "MakSoS1/analytics_test",
+    "branch": "qa/examclips-audit-2026-11-11",
+    "runId": "43072118904",
+    "runAttempt": "1",
+    "caseId": "en06"
+  },
+  "wrappedKey": "Abl/opjeDbaJFm4NAsyKCjrptliZ+AS8U/H4hfz3sZYL+qXJZAXY4qqJSKo0wq1C/I52C05hJT91UwQmYProIFvoR3aU2/zqTkQtaMMh0blWmnLuZK8qE8ckKuUP3Icb4fJugdSx1svKe45VMx8bu+Zyz4+iWIlxzp2viJdcTIYPPUafoW33mJBSyCydCqqzai9BnmMCr7VIZg1Th9RIV0SuDNDAoinGcSMQ+Jb69FKd6zF/5xvsukWYahuGXedsoMCm/Sz8APYD7TUeyi4wg9ewr7PghB6Phy6nDE2jh20ygjxHJcF7fIV0vGOVYO5uIHt5LFI4WKU4CPi74QDh9eSMGBQOjIxRf0K8R0z0c1R5RC/Fma9A8C5alMF3PJNttPiEox3kEgA/T10NdZ2Bdutv9zp3sHd0xM1YB+yRjVXYI+V20AtUuUWtvo+/G2UD2KL1gylU43eC9sbgWB8CF/3+VIG5Z4xPnlo7bhx0IDt+v3tLu1ChsF1vtn5fRqSaoiCaC89MJbL7bljgjOL99FPYAYRFYTEz1w+tWZ3DrgJGB2tik+3PMti58YPu9O2UUARgA7astcRsOTbAOAbpWeD4WBjsLo+xkYm2Fz1GnYlufy/dffFx3dQzQOicS9Y1kYNvr0L/VSPrRzIuBOWb2h7wIBzSjbkC7E8OB2WIX1U=",
+  "iv": "H4jqSwUGLz0WW08P",
+  "tag": "1dbBBb+wrKOLEfW5RteL5Q==",
+  "ciphertext": "7t6joEWCBfs94lVlz4z6Hxe1+sL1ma7K4L/2J5tjC1x6n2j6mvaFYVdFMkIK8J4="
+}
