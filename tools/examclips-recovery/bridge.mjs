@@ -9,6 +9,7 @@ import {spawn} from 'node:child_process';
 import {open,seal,keyHash} from '../examclips-audit/crypto.mjs';
 import {REPO,BRANCH,ROSTERS,requireIdentity,validateRequest,targetFor,canonical,safeRelative,acceptableSequence,allowedReference} from './protocol.mjs';
 import {ingestCase} from './ingest.mjs';
+import {createPublicInputReader} from './public-input.mjs';
 const HERE=dirname(fileURLToPath(import.meta.url)),identity=requireIdentity(process.env);
 const prefix='.audit-recovery/'+identity.runId+'/'+identity.runAttempt+'/'+identity.caseId;
 const privateRoot=join(process.env.RUNNER_TEMP,'examclips-review-'+identity.runId+'-'+identity.runAttempt+'-'+identity.caseId);
@@ -24,13 +25,9 @@ async function gh(path,options={}){
  if(!response.ok){const e=Error('GITHUB_HTTP_'+response.status);e.status=response.status;throw e;}
  return response.status===204?null:response.json();
 }
-async function readPublic(path){
- const response=await fetch('https://raw.githubusercontent.com/'+REPO+'/'+BRANCH+'/'+path+'?recoveryPoll='+Date.now(),{signal:AbortSignal.timeout(30000),cache:'no-store'});
- if(response.status===404)return null;
- if(!response.ok)throw Error('PUBLIC_READ_HTTP_'+response.status);
- const text=await response.text();if(text.length>4*1024**2)throw Error('PUBLIC_INPUT_TOO_LARGE');
- return JSON.parse(text);
-}
+const readPublic=createPublicInputReader({repository:REPO,branch:BRANCH,prefix,token,
+ onObservation:value=>{if(value.status!==304)console.log('RECOVERY_INPUT_TRANSPORT '+JSON.stringify(value));}
+});
 async function publish(entries,message){
  for(const entry of entries)if(!entry.path.startsWith(prefix+'/'))throw Error('PUBLIC_OUTPUT_PATH_ESCAPE');
  const prepared=[];
@@ -218,6 +215,7 @@ async function main(){
   if(!acceptableSequence(sequence,request.sequence)){await pause(5000);continue;}
   try{
    validateRequest(request,identity.caseId,sequence+1);
+   console.log('REVIEW_REQUEST_ACCEPTED '+JSON.stringify({lane:identity.caseId,sequence:request.sequence,operation:request.operation,key:request.key??null,at:new Date().toISOString()}));
    const result=await operation(request);sequence=request.sequence;
    await reply(sequence,result);
    if(request.operation==='finish')break;
