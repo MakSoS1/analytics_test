@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "repository": "MakSoS1/analytics_test",
+  "branch": "qa/examclips-audit-2026-11-11",
+  "runId": "43112851550",
+  "runAttempt": "1",
+  "caseId": "root",
+  "purpose": "review-recovery-input",
+  "sourceCommit": "62c39cbdb3ae63810e0042d240f26b6992f78c1d",
+  "createdAt": "2026-11-11T22:34:48.106Z",
+  "expiresAt": "2026-11-11T23:19:48.106Z",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA8G+BrVcfR5+PntxkdGSs\nAKmbH1lgWcI/dtk+2mZc6J/udDALZWdB+Iqe9+9ExsRLNxeLOTQIs4Mp9f5G+8JX\niZzsR72u+/jxemb9Ieae/PsWjd8ddMPMjnO20UCv9J9GbJpFbB+x1t1GF2b8+Yui\nhwJD9xAD2Ju6TmBxB2dDdMDVmo3xXCerRf2gPAFMvkx//SxkH/PkBjBIJU2m4VEi\n6CluM9AGGcjkl+Vu9cZk7EQxc9oM0Br0xl8tztunID/Ppw2kFZk4g9/jlqR5gO2x\ngTVc9GfRdKyr6lVwMsjG0TJtL9SodSEQBMSVzIfi54+zU8UXgqExfA3+VLefWvO0\nPqAlstwXWykZTkBbw+fXKTEUnR2zkxG2B73hvjVbX5YkUxtJygIvc3ZeFXjimCtJ\nXYTMw/J0RoC+jWMdaa8iozWZ9QB4t1p2WrHReH+0X6+EhWEzsRbyBB1++nG5k5+i\nuqkFCrBCMvYMVBh8uRk9TtDyw71RO9hf1efv5DPtZVjJbJQyWtmHQUydSx4Vgffh\nxaowxqk58Sq5e9+92ZpgMzlOJuUIBzEIcBmvAO4xOff6dlP++Xyj4gKnQL+Z3VQG\nuqxVlpIStXtcId2FmkjBwzbJopMJuDDhMAZfUIK3YbADKkHrfqgGr/xKjQK/51zQ\nqr8dompGcgW9XeYd7Ipwal0CAwEAAQ==\n-----END PUBLIC KEY-----\n",
+  "keySha256": "54377b07861b74ad6de19bf8b5cc474062f4e4ad83ff1834b1da7b866322bf47",
+  "bundleSha256": "cf7c239c8538e5e81242d57536a5a9d9479a294444bf8eb4eb9e6d880ab925a4",
+  "roster": [
+    {
+      "key": "native-rul01",
+      "id": "rul01",
+      "runId": "43105345959",
+      "jobId": 130807173816,
+      "native": true
+    },
+    {
+      "key": "rul01",
+      "id": "rul01",
+      "runId": "43090979122",
+      "jobId": 130767713526
+    },
+    {
+      "key": "rul02",
+      "id": "rul02",
+      "runId": "43091902972",
+      "jobId": 130770887715
+    },
+    {
+      "key": "rul06",
+      "id": "rul06",
+      "runId": "43100076969",
+      "jobId": 130792293298
+    },
+    {
+      "key": "enl01",
+      "id": "enl01",
+      "runId": "43090979122",
+      "jobId": 130767713525
+    },
+    {
+      "key": "enl04",
+      "id": "enl04",
+      "runId": "43098721850",
+      "jobId": 130784495038
+    }
+  ],
+  "fixture": {
+    "fixture": "examclips-review-bridge",
+    "bytes": [
+      0,
+      1,
+      127,
+      128,
+      255
+    ],
+    "version": 1
+  }
+}
