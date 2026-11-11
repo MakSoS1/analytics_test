@@ -3,13 +3,240 @@
   "cases": [
     {
       "id": "ru01",
-      "platform": "rutube",
-      "video_id": "355c2e92217e3c798a706ecc4ccaf585",
-      "source_url": "https://rutube.ru/video/355c2e92217e3c798a706ecc4ccaf585/",
       "title": "СИЛЬНЫЙ И СЛАБЫЙ ЭЛЕКТРОЛИТ",
+      "source_url": "https://rutube.ru/video/355c2e92217e3c798a706ecc4ccaf585/",
       "language": "ru",
       "duration_sec": 929.0,
-      "max_height": 480
+      "platform": "rutube",
+      "max_height": 480,
+      "video_id": "355c2e92217e3c798a706ecc4ccaf585"
+    },
+    {
+      "id": "ru02",
+      "title": "ЧИСЛА ПЕРЕНОСА",
+      "source_url": "https://rutube.ru/video/f5e23732d586f3c464f7627336b6fb73/",
+      "language": "ru",
+      "duration_sec": 888.76,
+      "platform": "rutube",
+      "max_height": 480,
+      "video_id": "f5e23732d586f3c464f7627336b6fb73"
+    },
+    {
+      "id": "ru03",
+      "title": "Уроки Python с нуля / #7 – Списки (list). Функции и их методы",
+      "source_url": "https://rutube.ru/video/8f99eedf6e3aa21d8f37ef07acf34567/",
+      "language": "ru",
+      "duration_sec": 1602.57161,
+      "platform": "rutube",
+      "max_height": 480,
+      "video_id": "8f99eedf6e3aa21d8f37ef07acf34567"
+    },
+    {
+      "id": "ru04",
+      "title": "Лекция 5. Итерируемые объекты. Списки. Циклы for",
+      "source_url": "https://teach-in.ru/lecture/2022-03-23-Migacheva",
+      "language": "ru",
+      "duration_sec": 3275.05,
+      "platform": "direct",
+      "max_height": 480,
+      "download_url": "https://storage.teach-in.ru/video/f/4/f45wxeaf41/sd.mp4"
+    },
+    {
+      "id": "ru05",
+      "title": "Лекция 1. Введение — Производство изотопов и ядерная медицина",
+      "source_url": "https://teach-in.ru/lecture/2019-02-08-Badun",
+      "language": "ru",
+      "duration_sec": 3512.17,
+      "platform": "direct",
+      "max_height": 480,
+      "download_url": "https://storage.teach-in.ru/video/p/o/popjt2pwru/sd.mp4"
+    },
+    {
+      "id": "ru06",
+      "title": "Теория узлов – Тимур Насыбуллов | Лекции по математике",
+      "source_url": "https://rutube.ru/video/9a2fcbe5449a6c61a1cc811df38295ab/",
+      "language": "ru",
+      "duration_sec": 657.52,
+      "platform": "rutube",
+      "max_height": 480,
+      "video_id": "9a2fcbe5449a6c61a1cc811df38295ab"
+    },
+    {
+      "id": "ru07",
+      "title": "Нейрогастрономия – Анна Хоружая | Лекции по медицине | Научпоп",
+      "source_url": "https://rutube.ru/video/6ae3aa9a87cd109b51089e52629961ef/",
+      "language": "ru",
+      "duration_sec": 1137.4,
+      "platform": "rutube",
+      "max_height": 480,
+      "video_id": "6ae3aa9a87cd109b51089e52629961ef"
+    },
+    {
+      "id": "ru08",
+      "title": "Уникальное солёное озеро Маныч-Гудило на Юге России – Алексей Клещенков | География России",
+      "source_url": "https://rutube.ru/video/ed3c8ee7d38f09b80ce74e882408f032/",
+      "language": "ru",
+      "duration_sec": 1683.72,
+      "platform": "rutube",
+      "max_height": 480,
+      "video_id": "ed3c8ee7d38f09b80ce74e882408f032"
+    },
+    {
+      "id": "ru09",
+      "title": "Актёры и холодное оружие – Николай Асламов | История фехтования и HEMA",
+      "source_url": "https://rutube.ru/video/b135dfea5a3d42700137d133c6b4482a/",
+      "language": "ru",
+      "duration_sec": 816.68,
+      "platform": "rutube",
+      "max_height": 480,
+      "video_id": "b135dfea5a3d42700137d133c6b4482a"
+    },
+    {
+      "id": "ru10",
+      "title": "Античастицы",
+      "source_url": "https://teach-in.ru/shorts/2025-07-18-Kapitonov-2",
+      "language": "ru",
+      "duration_sec": 600.64,
+      "platform": "direct",
+      "max_height": 480,
+      "download_url": "https://storage.teach-in.ru/video/3/n/3nepwncmah/sd.mp4"
+    },
+    {
+      "id": "ru11",
+      "title": "Адроны",
+      "source_url": "https://teach-in.ru/shorts/2025-07-18-Kapitonov-1",
+      "language": "ru",
+      "duration_sec": 850.325,
+      "platform": "direct",
+      "max_height": 480,
+      "download_url": "https://storage.teach-in.ru/video/s/x/sxfr01bm2v/sd.mp4"
+    },
+    {
+      "id": "ru12",
+      "title": "Лекция 4. Мезозойская и кайнозойская эры. Земля при динозаврах и без них",
+      "source_url": "https://teach-in.ru/lecture/2022-04-16-Tesakova",
+      "language": "ru",
+      "duration_sec": 3806.293,
+      "platform": "direct",
+      "max_height": 480,
+      "download_url": "https://storage.teach-in.ru/video/h/n/hncweiiipb/sd.mp4"
+    },
+    {
+      "id": "en01",
+      "title": "Lecture 1: The geometry of linear equations",
+      "source_url": "https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/resources/lecture-1-the-geometry-of-linear-equations/",
+      "language": "en",
+      "duration_sec": 2388.842,
+      "platform": "direct",
+      "download_url": "https://archive.org/download/MIT18.06S05_MP4/01.mp4"
+    },
+    {
+      "id": "en02",
+      "title": "Lecture 1: What is Computation?",
+      "source_url": "https://ocw.mit.edu/courses/6-0001-introduction-to-computer-science-and-programming-in-python-fall-2016/resources/lecture-1-what-is-computation/",
+      "language": "en",
+      "duration_sec": 2585.964,
+      "platform": "direct",
+      "download_url": "https://archive.org/download/MIT6.0001F16/MIT6_0001F16_Lecture_01_300k.mp4"
+    },
+    {
+      "id": "en03",
+      "title": "Lecture 1: Periodic Oscillations, Harmonic Oscillators",
+      "source_url": "https://ocw.mit.edu/courses/8-03sc-physics-iii-vibrations-and-waves-fall-2016/pages/part-i-mechanical-vibrations-and-waves/lecture-1/",
+      "language": "en",
+      "duration_sec": 3427.157333,
+      "platform": "direct",
+      "download_url": "https://archive.org/download/MIT8.03SCF16/MIT8_03SCF16_lec01_300k.mp4"
+    },
+    {
+      "id": "en04",
+      "title": "Lecture 1 - Introduction",
+      "source_url": "https://oyc.yale.edu/psychology/psyc-110/lecture-1",
+      "language": "en",
+      "duration_sec": 1776.876877,
+      "platform": "direct",
+      "download_url": "https://openmedia.yale.edu/projects/courses/spring07/psyc110/iphone/psyc110_01_011707.m4v"
+    },
+    {
+      "id": "en05",
+      "title": "How language shapes the way we think",
+      "source_url": "https://www.ted.com/talks/lera_boroditsky_how_language_shapes_the_way_we_think",
+      "language": "en",
+      "duration_sec": 842.928095,
+      "platform": "direct",
+      "download_url": "https://py.tedcdn.com/consus/projects/00/31/13/005/products/2017w-lera-boroditsky-005-fallback-5debf8591b59068eb265f9823ccd563c-1200k.mp4"
+    },
+    {
+      "id": "en06",
+      "title": "The best stats you've ever seen",
+      "source_url": "https://www.ted.com/talks/hans_rosling_the_best_stats_you_ve_ever_seen",
+      "language": "en",
+      "duration_sec": 1172.909569,
+      "platform": "direct",
+      "download_url": "https://py.tedcdn.com/consus/projects/00/12/55/005/products/2006-hans-rosling-005-fallback-c3d98a9ebcba77e543774e749251147a-1200k.mp4"
+    },
+    {
+      "id": "en07",
+      "title": "The beautiful math behind the world's ugliest music",
+      "source_url": "https://www.ted.com/talks/scott_rickard_the_beautiful_math_behind_the_world_s_ugliest_music",
+      "language": "en",
+      "duration_sec": 574.309478,
+      "platform": "direct",
+      "download_url": "https://py.tedcdn.com/consus/projects/00/35/74/001/products/2011x-scott-rickard-001-fallback-31567e77b66820ab70550237e067ad3f-1200k.mp4"
+    },
+    {
+      "id": "en08",
+      "title": "A robot that runs and swims like a salamander",
+      "source_url": "https://www.ted.com/talks/auke_ijspeert_a_robot_that_runs_and_swims_like_a_salamander",
+      "language": "en",
+      "duration_sec": 840.559365,
+      "platform": "direct",
+      "download_url": "https://py.tedcdn.com/consus/projects/00/25/66/007/products/2015g-auke-ijspeert-007-fallback-acc9278b6bbac7532f73302f2646c8aa-1200k.mp4"
+    },
+    {
+      "id": "en09",
+      "title": "The thrilling potential of SixthSense technology",
+      "source_url": "https://www.ted.com/talks/pranav_mistry_the_thrilling_potential_of_sixthsense_technology",
+      "language": "en",
+      "duration_sec": 813.763537,
+      "platform": "direct",
+      "download_url": "https://py.tedcdn.com/consus/projects/00/20/18/011/products/2009i-pranav-mistry-011-fallback-a5e869d8cd949213d8fa19bb90f5c0f5-1200k.mp4"
+    },
+    {
+      "id": "en10",
+      "title": "How to speak so that people want to listen",
+      "source_url": "https://www.ted.com/talks/julian_treasure_how_to_speak_so_that_people_want_to_listen",
+      "language": "en",
+      "duration_sec": 584.303946,
+      "platform": "direct",
+      "download_url": "https://py.tedcdn.com/consus/projects/00/18/95/006/products/2013g-julian-treasure-006-fallback-ac29472c1ff8963e8846a172e4f27d3d-1200k.mp4"
+    },
+    {
+      "id": "en11",
+      "title": "What ants teach us about the brain, cancer and the Internet",
+      "source_url": "https://www.ted.com/talks/deborah_gordon_what_ants_teach_us_about_the_brain_cancer_and_the_internet",
+      "language": "en",
+      "duration_sec": 835.822766,
+      "platform": "direct",
+      "download_url": "https://py.tedcdn.com/consus/projects/00/16/02/005/products/2014-deborah-gordon-005-fallback-69a0ed0f819eec60979b2f19c1a26166-1200k.mp4"
+    },
+    {
+      "id": "en12",
+      "title": "The history of our world in 18 minutes",
+      "source_url": "https://www.ted.com/talks/david_christian_the_history_of_our_world_in_18_minutes",
+      "language": "en",
+      "duration_sec": 1043.246621,
+      "platform": "direct",
+      "download_url": "https://py.tedcdn.com/consus/projects/00/08/21/011/products/2011-david-christian-011-fallback-b6d82f8eaf27123515678867fdd60d91-1200k.mp4"
+    },
+    {
+      "id": "en13",
+      "title": "How not to be ignorant about the world",
+      "source_url": "https://www.ted.com/talks/hans_and_ola_rosling_how_not_to_be_ignorant_about_the_world",
+      "language": "en",
+      "duration_sec": 1135.668209,
+      "platform": "direct",
+      "download_url": "https://py.tedcdn.com/consus/projects/00/37/01/007/products/2014s-hans-and-ola-rosling-007-fallback-4716ed7bb26ee18505b739ca2c3f5768-1200k.mp4"
     }
   ]
 }
