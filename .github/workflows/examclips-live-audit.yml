@@ -14,7 +14,7 @@ permissions:
 jobs:
   live-audit:
     if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 330
     steps:
       - name: Initialize runner-private audit paths
@@ -41,13 +41,52 @@ jobs:
         run: |
           node --test tools/examclips-audit/crypto.test.mjs
           openssl pkey -pubin -in tools/examclips-audit/evidence-recipient.pub.pem -noout
-      - name: Install official Playwright Chrome and public media tools
+      - name: Install Playwright and prepare verified browser and media tools
         run: |
           npm --prefix tools/examclips-audit install --ignore-scripts --no-audit --no-fund
-          cd tools/examclips-audit
-          npx playwright install --with-deps chrome
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
+          python3 - <<'PY'
+          import json, os, pathlib, shutil, subprocess
+          binaries = {
+              "Chrome": shutil.which("google-chrome") or shutil.which("google-chrome-stable"),
+              "FFmpeg": shutil.which("ffmpeg"),
+              "FFprobe": shutil.which("ffprobe"),
+          }
+          if not binaries["Chrome"]:
+              raise SystemExit("The runner's preinstalled official Chrome is missing. No apt or browser installation was attempted.")
+          packages = {
+              "FFmpeg": ("@ffmpeg-installer/linux-x64", "4.1.0", "ffmpeg", "sha512-Y5BWhGLU/WpQjOArNIgXD3z5mxxdV8c41C+U15nsE5yF8tVcdCGet5zPs5Zy3Ta6bU7haGpIzryutqCGQA/W8A=="),
+              "FFprobe": ("@ffprobe-installer/linux-x64", "5.2.0", "ffprobe", "sha512-D3UeqTLYPNs7pBWPLUYGehPdRVqU8eACox4OZy3pZUZatxye2YKlvBwEfaLdL1v2Z4FOAlLUhms0kY8m8kqSRA=="),
+          }
+          missing = [name for name in packages if not binaries[name]]
+          if missing:
+              media_dir = pathlib.Path(os.environ["AUDIT_ROOT"]) / "media-tools"
+              media_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
+              dependencies = {packages[name][0]: packages[name][1] for name in missing}
+              (media_dir / "package.json").write_text(json.dumps({"name": "examclips-audit-media-tools", "version": "1.0.0", "private": True, "dependencies": dependencies}), encoding="utf-8")
+              subprocess.run(["npm", "--prefix", str(media_dir), "install", "--ignore-scripts", "--no-audit", "--no-fund", "--package-lock=true", "--registry=https://registry.npmjs.org"], check=True, timeout=180)
+              lock = json.loads((media_dir / "package-lock.json").read_text(encoding="utf-8"))
+              bin_dir = media_dir / "bin"
+              bin_dir.mkdir(mode=0o700, exist_ok=True)
+              for name in missing:
+                  package, version, executable, integrity = packages[name]
+                  metadata = lock.get("packages", {}).get("node_modules/" + package, {})
+                  if metadata.get("version") != version or metadata.get("integrity") != integrity:
+                      raise SystemExit("Pinned package integrity mismatch for " + package)
+                  target = media_dir / "node_modules" / package / executable
+                  if not target.is_file():
+                      raise SystemExit("Verified package has no expected executable: " + package)
+                  target.chmod(target.stat().st_mode | 0o111)
+                  link = bin_dir / executable
+                  link.symlink_to(target)
+                  binaries[name] = str(link)
+              with open(os.environ["GITHUB_PATH"], "a", encoding="utf-8") as path_file:
+                  path_file.write(str(bin_dir) + "\n")
+              print("Provisioned missing media tools from pinned npm packages with verified integrity; install scripts were disabled.")
+          for name, path in binaries.items():
+              flag = "--version" if name == "Chrome" else "-version"
+              result = subprocess.run([path, flag], check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=15)
+              print(name + ": " + result.stdout.splitlines()[0])
+          PY
       - id: handoff
         name: Publish ephemeral key and wait for encrypted real-site login
         env:
