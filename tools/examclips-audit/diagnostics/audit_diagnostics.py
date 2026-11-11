@@ -52,6 +52,30 @@ def ceilq(value):
     return -(-value.numerator // value.denominator)
 
 
+def balanced_sum(terms):
+    """Avoid FFmpeg expression parser depth limits from a long flat sum."""
+    terms = list(terms)
+    if not terms:
+        return '0'
+    while len(terms) > 1:
+        terms = ['(' + terms[i] + '+' + terms[i+1] + ')' if i+1 < len(terms) else terms[i]
+                 for i in range(0, len(terms), 2)]
+    return terms[0]
+
+
+def decode_outcome(returncode, timed_out, log):
+    if returncode == 0 and not timed_out:
+        return {'ok': True, 'status': 'completed'}
+    if timed_out:
+        return {'ok': None, 'status': 'incomplete_timeout'}
+    if returncode is not None and returncode < 0:
+        return {'ok': None, 'status': 'incomplete_process_terminated'}
+    setup_markers = ('Error initializing filters', 'Error parsing global options', 'Error while parsing expression')
+    if 'Output #0' not in log and any(marker in log for marker in setup_markers):
+        return {'ok': None, 'status': 'diagnostic_initialization_failed'}
+    return {'ok': False, 'status': 'decode_failed'}
+
+
 def finite(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
@@ -308,7 +332,61 @@ def parse_showinfo(log, fallback_time_base):
     return frames, time_base
 
 
-def decode_and_sample(path, outdir, requested_times, data=None, thumbnail_width=480):
+def parse_scene_screening(path, time_base, origin, max_candidates=64):
+    """Keep every raw per-frame metric; ranking only prioritizes visual review."""
+    path = Path(path)
+    records, current = [], None
+    if path.exists():
+        for line in path.read_text(errors='replace').splitlines():
+            match = re.match(r'frame:\s*(\d+)\s+pts:\s*(-?\d+)\s+pts_time:', line)
+            if match:
+                if current is not None:
+                    records.append(current)
+                pts = int(match.group(2))
+                time = pts*q(time_base)-q(origin)
+                current = {'frame_index': int(match.group(1)), 'pts': pts, 'time_base': str(time_base),
+                           'output_time_exact': str(time), 'output_time_sec': float(time)}
+            elif current is not None and '=' in line:
+                key, value = line.split('=', 1)
+                if key in ('lavfi.scd.mafd', 'lavfi.scd.score'):
+                    current['mean_absolute_frame_difference' if key.endswith('.mafd') else 'scene_score'] = float(value)
+                elif key == 'lavfi.scd.time':
+                    current['ffmpeg_threshold_marker'] = value
+        if current is not None:
+            records.append(current)
+    jsonl = path.with_name('scene-frame-scores.jsonl')
+    with jsonl.open('w') as stream:
+        for item in records:
+            stream.write(json.dumps(item, ensure_ascii=False) + '\n')
+    peaks = {}
+    for metric in ('scene_score', 'mean_absolute_frame_difference'):
+        for index, item in enumerate(records):
+            value = item.get(metric, 0)
+            left = records[index-1].get(metric, 0) if index else 0
+            right = records[index+1].get(metric, 0) if index+1 < len(records) else 0
+            if value > 0 and value >= left and value >= right and (value > left or value > right):
+                entry = peaks.setdefault(index, {**item, 'reasons': []})
+                entry['reasons'].append('local_peak_' + metric)
+    ordered = sorted(peaks.values(), key=lambda item: max(item.get('scene_score', 0), item.get('mean_absolute_frame_difference', 0)), reverse=True)
+    selected = []
+    for item in ordered:
+        if all(abs(item['output_time_sec']-prior['output_time_sec']) >= .5 for prior in selected):
+            selected.append(item)
+        if len(selected) >= max_candidates:
+            break
+    for rank, item in enumerate(selected, 1):
+        item['review_priority_rank'] = rank
+    return {'status': 'raw_per_frame_screening' if records else 'no_scene_metadata', 'frame_count': len(records),
+            'all_frame_scores_file': jsonl.name, 'raw_metadata_file': path.name, 'candidates': selected,
+            'candidate_count': len(selected), 'local_peak_count': len(peaks), 'maximum_candidates': max_candidates,
+            'minimum_candidate_separation_sec': .5,
+            'method': 'Downscaled 160-pixel-wide grayscale frames; FFmpeg scdet MAFD and scene score recorded in an additional branch of the same full-decode pass.',
+            'ranking_policy': 'Nonzero local peaks in either metric, descending maximum raw metric, separated by at least 0.5 seconds. All raw frames remain available.',
+            'limitation': 'Screening candidates only. Source cuts, slides, captions, speaker motion, crop motion and compression can all contribute. No score confirms a visual defect or attributes motion to the app.',
+            'quality_verdict': None}
+
+
+def decode_and_sample(path, outdir, requested_times, data=None, thumbnail_width=None):
     path, outdir = Path(path).resolve(), Path(outdir).resolve()
     outdir.mkdir(parents=True, exist_ok=True)
     data = data or probe(path)
@@ -317,15 +395,22 @@ def decode_and_sample(path, outdir, requested_times, data=None, thumbnail_width=
     thresholds = sorted({ceilq((t + origin) / time_base) for t in requests})
     if not thresholds:
         thresholds = [ceilq(origin / time_base)]
-    conditions = '+'.join('gte(pts,{0})*lt(prev_pts,{0})'.format(t) for t in thresholds)
-    expression = 'if(isnan(prev_pts),gte(pts,{0}),{1})'.format(thresholds[0], conditions)
+    conditions = balanced_sum('gte(pts,{0})*lt(prev_pts,{0})'.format(t) for t in thresholds)
+    expression = 'if(isnan(prev_pts),gte(pts,{0}),gt({1},0))'.format(thresholds[0], conditions)
     filter_script = outdir / 'sampling-filter.ffscript'
-    filter_script.write_text("[0:v:0]select='" + expression + "',showinfo,scale=w='min(" + str(thumbnail_width) + ",iw)':h=-2[samples]\n")
+    scene_path = outdir/'scene-metadata.log'
+    if scene_path.exists():
+        scene_path.unlink()
+    escaped_scene = str(scene_path).replace('\\', '\\\\').replace(':', '\\:').replace("'", "'\\''")
+    scale = ",scale=w='min(" + str(thumbnail_width) + ",iw)':h=-2" if thumbnail_width else ''
+    filter_script.write_text("[0:v:0]split=2[for_samples][for_screen];\n[for_samples]select='" + expression
+                             + "',showinfo" + scale + "[samples];\n[for_screen]scale=160:-2,format=gray,scdet=threshold=10,metadata=mode=print:file='"
+                             + escaped_scene + "'[screen]\n")
     log_path = outdir / 'full-decode.log'
     pattern = str(outdir / 'sample-%06d.jpg')
     command = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'info', '-xerror', '-err_detect', 'explode',
                '-threads', '1', '-copyts', '-protocol_whitelist', 'file,pipe', '-i', str(path),
-               '-filter_complex_script', str(filter_script), '-map', '0:v?', '-map', '0:a?',
+               '-filter_complex_script', str(filter_script), '-map', '0:v?', '-map', '0:a?', '-map', '[screen]',
                '-c:v', 'wrapped_avframe', '-c:a', 'pcm_s16le', '-f', 'null', '-',
                '-map', '[samples]', '-fps_mode', 'passthrough', '-c:v', 'mjpeg', '-threads:v', '1', '-q:v', '3', '-y', pattern]
     timed_out = False
@@ -361,7 +446,9 @@ def decode_and_sample(path, outdir, requested_times, data=None, thumbnail_width=
     return {'probe': data, 'clock_origin_sec': float(origin), 'clock_origin_exact': str(origin),
             'input_video_time_base': str(time_base), 'observed_filter_time_base': str(actual_base),
             'time_base_mismatch': actual_base != time_base,
-            'full_decode': {'ok': code == 0 and not timed_out, 'returncode': code, 'timed_out': timed_out,
+            'sample_image_resolution_policy': 'Native decoded dimensions' if not thumbnail_width else 'Width limited to '+str(thumbnail_width),
+            'scene_screening': parse_scene_screening(scene_path, time_base, origin),
+            'full_decode': {**decode_outcome(code, timed_out, log), 'returncode': code, 'timed_out': timed_out,
                             'scope': 'All video and audio streams decoded to null; sample selection is a separate output of the same full pass.',
                             'command': command, 'log_file': log_path.name,
                             'failure_tail': log[-6000:] if code != 0 or timed_out else None},
@@ -378,7 +465,7 @@ def source_frame(path, outdir, source_time, data):
     if filename.exists() and record_file.exists():
         return read_json(record_file)
     threshold = ceilq((source_time + origin) / time_base)
-    expression = "select='gte(pts," + str(threshold) + ")',showinfo,scale=w='min(640,iw)':h=-2"
+    expression = "select='gte(pts," + str(threshold) + ")',showinfo"
     command = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'info', '-threads', '1', '-copyts',
                '-ss', '%.9f' % float(max(q(0), source_time - 1)), '-protocol_whitelist', 'file,pipe', '-i', str(path),
                '-map', '0:v:0', '-an', '-sn', '-dn', '-vf', expression, '-frames:v', '1', '-threads:v', '1', '-q:v', '3', '-y', str(filename)]
@@ -667,8 +754,19 @@ def inspect_case(case_dir, source_path=None, interval=12.5, audio_check=False, o
             report.update(probe=data, output_clock_origin_exact=decoded['clock_origin_exact'],
                           full_decode=decoded['full_decode'], frame_clock={'input_time_base': decoded['input_video_time_base'],
                                                                        'observed_time_base': decoded['observed_filter_time_base'],
-                                                                       'mismatch': decoded['time_base_mismatch']})
+                                                                       'mismatch': decoded['time_base_mismatch']},
+                          sample_image_resolution_policy=decoded['sample_image_resolution_policy'], scene_screening=decoded['scene_screening'])
             report['full_decode']['log_file'] = 'frames/' + report['full_decode']['log_file']
+            if report['full_decode']['status'] == 'diagnostic_initialization_failed':
+                report['diagnostic_error'] = 'FFmpeg diagnostic filter initialization failed before decoding; no media-corruption verdict is established.'
+            for field in ('all_frame_scores_file', 'raw_metadata_file'):
+                report['scene_screening'][field] = 'frames/' + report['scene_screening'][field]
+            for candidate in report['scene_screening']['candidates']:
+                mapping = map_output(primary_edl, q(candidate['output_time_exact']))
+                if mapping:
+                    candidate['mapped_source_time_exact'] = str(mapping['source_time'])
+                    candidate['mapped_source_time_sec'] = float(mapping['source_time'])
+                    candidate['piece_index'] = mapping['piece_index']
             report['saved_camera']['event_measurements'] = events
             plan_by_time = {p['requested_output_time_exact']: p for p in plans}
             for sample in decoded['requests']:

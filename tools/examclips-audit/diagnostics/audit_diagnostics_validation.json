@@ -1,8 +1,8 @@
 {
-  "scope": "Technical fixtures only; no real ExamClips export was used in these helper tests.",
+  "scope": "Validation record separates constructed technical fixtures from the explicitly identified real EN07 export verification. No quality verdict is implied.",
   "unit_tests": {
-    "count": 13,
-    "passed": 13,
+    "count": 16,
+    "passed": 16,
     "command": [
       "python",
       "-m",
@@ -23,13 +23,47 @@
       0,
       0
     ],
-    "audio_interpretation": "Only confirms this constructed waveform fixture; not an A/V sync assertion for application exports."
+    "audio_interpretation": "Only confirms this constructed waveform fixture; not an A/V sync assertion for application exports.",
+    "diagnostics_directory": "/workspace/shared/examclips-audit/helper_validation_fixture/diagnostics-v2",
+    "scene_frames_recorded": 31,
+    "native_resolution_images": true
   },
   "corrupted_fixture": {
     "case": "/workspace/shared/examclips-audit/helper_corruption_fixture",
     "probe_advertised_duration_sec": 2.066667,
     "full_decode_ok": false,
-    "helper_exit_code": 1
+    "helper_exit_code": 1,
+    "diagnostics_directory": "/workspace/shared/examclips-audit/helper_corruption_fixture/diagnostics-v2"
   },
-  "current_helper_sha256": "70ca6e0348775ddb65403e6800aaa424b100db67454026c299992bd1047f4bc0"
+  "current_helper_sha256": "76d9733ea2d41725823770fb98970864b87b755d4633864d46ead3083abfb487",
+  "scene_screening_fixture": {
+    "scope": "Synthetic color transition only, not a site export",
+    "known_transition_sec": 0.6,
+    "detected_candidate_sec": 0.6,
+    "all_frames_recorded": 12,
+    "jpeg_requests": 1,
+    "full_decode_pass_count": 1,
+    "quality_verdict": null
+  },
+  "large_sample_plan_regression": {
+    "request_counts": [
+      212,
+      600
+    ],
+    "frames_per_fixture": 12,
+    "known_exact_sample_sec": 0.8,
+    "full_decode_and_pts_checks": "passed",
+    "fix": "Balanced select-expression tree; explicit boolean result avoids linear expression depth."
+  },
+  "first_real_export_verification": {
+    "case_id": "en07",
+    "case_directory": "/workspace/shared/examclips-audit/runs/43072118904/en07/evidence/en07",
+    "full_decode_status": "completed",
+    "full_decode_ok": true,
+    "sample_requests": 212,
+    "scene_frames": 6820,
+    "helper_initialization_failure_preserved": "/workspace/shared/examclips-audit/runs/43072118904/en07/evidence/en07/diagnostics/helper-issues/large-select-expression",
+    "initial_failure_is_application_defect": false,
+    "quality_verdict": null
+  }
 }

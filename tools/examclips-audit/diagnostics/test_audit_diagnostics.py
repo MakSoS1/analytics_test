@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 
 from audit_diagnostics import (q, build_edl, map_output, map_source, camera_at,
-                               validate_camera, correlate_audio, decode_and_sample)
+                               validate_camera, correlate_audio, decode_and_sample, decode_outcome)
 
 
 def track(keys, **extra):
@@ -91,6 +91,14 @@ class AudioTests(unittest.TestCase):
         self.assertIsNone(evidence['best_offset_sec'])
 
 
+class DiagnosticFailureTests(unittest.TestCase):
+    def test_real_filter_initialization_failure_is_not_a_media_decode_verdict(self):
+        log = '[AVFilterGraph] Error initializing filters\nError parsing global options: Invalid argument\n'
+        result = decode_outcome(234, False, log)
+        self.assertEqual(result['status'], 'diagnostic_initialization_failed')
+        self.assertIsNone(result['ok'])
+
+
 @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg tools required')
 class DecodeTimestampTest(unittest.TestCase):
     def test_exact_eight_tenths_frame_is_not_skipped(self):
@@ -101,6 +109,36 @@ class DecodeTimestampTest(unittest.TestCase):
             report = decode_and_sample(video, root / 'samples', [q('.8')])
             self.assertTrue(report['full_decode']['ok'], report['full_decode'])
             self.assertEqual(q(report['requests'][0]['actual_output_time_exact']), q('.8'))
+
+    def test_scene_screening_finds_actual_output_cut_in_same_pass(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            video = root / 'synthetic-cut.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:r=10:d=0.6',
+                            '-f', 'lavfi', '-i', 'color=c=white:s=160x90:r=10:d=0.6',
+                            '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[v]', '-map', '[v]',
+                            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-y', str(video)], check=True)
+            report = decode_and_sample(video, root / 'samples', [q(0)])
+            self.assertTrue(report['full_decode']['ok'])
+            self.assertEqual(report['scene_screening']['frame_count'], 12)
+            self.assertTrue(any(q(c['output_time_exact']) == q('.6') for c in report['scene_screening']['candidates']))
+
+    def test_large_sample_plans_keep_exact_pts_and_decode_all_frames(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            video = root / 'many-requests.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:r=10:d=1.2',
+                            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-y', str(video)], check=True)
+            for count in (212, 600):
+                with self.subTest(request_count=count):
+                    times = [q(i)*q('1.19')/count for i in range(count)]
+                    times[-1] = q('.8')
+                    report = decode_and_sample(video, root/str(count), times)
+                    self.assertTrue(report['full_decode']['ok'], report['full_decode']['failure_tail'])
+                    self.assertEqual(report['scene_screening']['frame_count'], 12)
+                    self.assertEqual(len(report['requests']), len(set(times)))
+                    exact_sample = next(r for r in report['requests'] if q(r['requested_output_time_exact']) == q('.8'))
+                    self.assertEqual(q(exact_sample['actual_output_time_exact']), q('.8'))
 
 
 if __name__ == '__main__':
