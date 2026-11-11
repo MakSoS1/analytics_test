@@ -1,1 +1,1 @@
-{"sequence":4,"operation":"diagnostics-status","key":"enl04"}
+{"sequence":5,"operation":"files","key":"enl04","paths":["enl04/recovery-diagnostics/diagnostics.json","enl04/recovery-diagnostics/source-navigation.json","enl04/recovery-diagnostics/clip-001/diagnostics.json","enl04/recovery-diagnostics/clip-013/diagnostics.json","enl04/recovery-diagnostics/clip-017/diagnostics.json","enl04/recovery-diagnostics/clip-018/diagnostics.json"]}
