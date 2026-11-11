@@ -16,11 +16,21 @@ jobs:
     if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
     runs-on: ubuntu-latest
     timeout-minutes: 330
-    env:
-      AUDIT_ROOT: ${{ runner.temp }}/examclips-live-audit
-      AUDIT_OUT: ${{ runner.temp }}/examclips-live-evidence
-      AUDIT_ARTIFACT: ${{ runner.temp }}/examclips-encrypted-artifact
     steps:
+      - name: Initialize runner-private audit paths
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          base = pathlib.Path(os.environ["RUNNER_TEMP"])
+          paths = {
+              "AUDIT_ROOT": base / "examclips-live-audit",
+              "AUDIT_OUT": base / "examclips-live-evidence",
+              "AUDIT_ARTIFACT": base / "examclips-encrypted-artifact",
+          }
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              for name, path in paths.items():
+                  env_file.write(f"{name}={path}\n")
+          PY
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
