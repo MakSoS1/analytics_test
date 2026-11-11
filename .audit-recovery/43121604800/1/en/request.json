@@ -1,1 +1,1 @@
-{"sequence":3,"operation":"files","key":"enl07","paths":["enl07/result.json","enl07/microtopics.json","enl07/transcript.srt","run.json","enl07/clip-001-frame-2.png","enl07/clip-006-frame-2.png","enl07/clip-011-frame-2.png","enl07/clip-016-frame-2.png","enl07/clip-021-frame-2.png","enl07/clip-026-frame-2.png","enl07/clip-031-frame-2.png","enl07/clip-034-frame-2.png"]}
+{"sequence":4,"operation":"reference","key":"enl07","url":"https://av.tib.eu/api/v0/videos/63464/transcription/601246"}
