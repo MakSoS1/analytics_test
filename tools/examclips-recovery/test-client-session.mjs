@@ -179,6 +179,18 @@ put('headerGrant', { ...hostile, headers: { Authorization: 'fixture' } });
 expectCode('S.parseGrants(grantA,headerGrant,"libfile_fixture_key","libfile_fixture_entropy")', 'SAS_HEADERS_NOT_SUPPORTED');
 put('repeatedSig', { ...hostile, download_url: hostile.download_url + '&sig=x' });
 expectCode('S.parseGrants(grantA,repeatedSig,"libfile_fixture_key","libfile_fixture_entropy")', 'SAS_DUPLICATE_QUERY_FIELD');
+const proxyA = grant('libfile_fixture_key', 1, 'key');
+const proxyB = grant('libfile_fixture_entropy', 2, 'report');
+proxyA.download_url = proxyA.download_url.replace('fixture.blob.core.windows.net', 'sdmntprukwest.oaiusercontent.com');
+proxyB.download_url = proxyB.download_url.replace('fixture.blob.core.windows.net', 'sdmntprcentralus.oaiusercontent.com');
+put('proxyA', proxyA); put('proxyB', proxyB);
+assert.equal(evaluate('S.parseGrants(proxyA,proxyB,"libfile_fixture_key","libfile_fixture_entropy").entropy32[0]'), 2);
+put('proxySpoof', { ...proxyB, download_url: proxyB.download_url.replace('sdmntprcentralus.oaiusercontent.com', 'sdmntprcentralus.oaiusercontent.com.evil.test') });
+expectCode('S.parseGrants(proxyA,proxySpoof,"libfile_fixture_key","libfile_fixture_entropy")', 'SAS_AZURE_HTTPS_REQUIRED');
+put('proxyPrefixSpoof', { ...proxyB, download_url: proxyB.download_url.replace('sdmntprcentralus.oaiusercontent.com', 'evilsdmntprcentralus.oaiusercontent.com') });
+expectCode('S.parseGrants(proxyA,proxyPrefixSpoof,"libfile_fixture_key","libfile_fixture_entropy")', 'SAS_AZURE_HTTPS_REQUIRED');
+put('proxyHttp', { ...proxyB, download_url: proxyB.download_url.replace('https:', 'http:') });
+expectCode('S.parseGrants(proxyA,proxyHttp,"libfile_fixture_key","libfile_fixture_entropy")', 'SAS_AZURE_HTTPS_REQUIRED');
 const absentGlobals = result('Object.fromEntries(["crypto","Buffer","TextEncoder","URL","process","require"].map(k => [k,typeof globalThis[k]]))');
 for (const value of Object.values(absentGlobals)) assert.equal(value, 'undefined');
 console.log(JSON.stringify({

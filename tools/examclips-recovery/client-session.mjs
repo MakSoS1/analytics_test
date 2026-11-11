@@ -361,7 +361,7 @@ function sasGrant(transfer, expectedId, now) {
     }
   }
   const match = transfer.download_url.match(
-    /^https:\/\/([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.blob\.core\.windows\.net)(\/[^?#\s\\]+)\?([^#\s]+)$/
+    /^https:\/\/((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.blob\.core\.windows\.net)|(?:sdmntpr[a-z0-9-]+\.oaiusercontent\.com))(\/[^?#\s\\]+)\?([^#\s]+)$/
   );
   if (!match) fail('SAS_AZURE_HTTPS_REQUIRED');
   let path;

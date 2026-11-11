@@ -106,7 +106,8 @@ The utility contains no private values, real grants or real reply keys.
   a packet is capped at 12 MiB and 12 distinct paths.
 - parseGrants(transferA, transferB, expectedA, expectedB, now = Date.now())
   requires different exact Library IDs and distinct blob resources/signatures,
-  HTTPS Azure blob hosts, sr=b, sp=r, user-delegation fields, no extra headers,
+  HTTPS Azure blob hosts or official sdmntpr*.oaiusercontent.com Library hosts,
+  sr=b, sp=r, user-delegation fields, no extra headers,
   live grants, and canonical 32-byte decoded signatures. It returns the full
   unchanged A transfer, entropy32 from B, and expiry times. The caller must keep
   B private and unused and must never print or transmit B or entropy32.
