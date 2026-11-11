@@ -48,7 +48,8 @@ def choose_dialog(before,after):
     chrome={str(w['id']) for w in before if re.search(r'chrome|chromium',w.get('class',''),re.I)}
     matches=[w for w in after if str(w['id']) not in known
              and re.search(r'chrome|chromium',w.get('class',''),re.I)
-             and re.search(r'save|сохран',w.get('name',''),re.I)
+             and (re.search(r'save|сохран',w.get('name',''),re.I)
+                  or w.get('name','')=='Warning: this site can see edits you make')
              and (w.get('dialog') or str(w.get('transient_for')) in chrome)]
     if len(matches)>1: raise ValueError('AMBIGUOUS_SAVE_DIALOG')
     return matches[0] if matches else None
@@ -77,7 +78,8 @@ def operate(before,destination,case_directory,evidence_directory,timeout_seconds
     save()
     try:
         while time.monotonic()<deadline:
-            observed=snapshot();dialog=choose_dialog(before,observed)
+            observed=snapshot();record['last_observed_windows']=observed
+            dialog=choose_dialog(before,observed)
             if dialog:break
             time.sleep(.4)
         if not dialog:raise ValueError('NATIVE_SAVE_DIALOG_NOT_OBSERVED')

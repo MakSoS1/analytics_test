@@ -23,6 +23,14 @@ class NativeDialogTests(unittest.TestCase):
         after=[{'id':str(i),'name':'Save File','class':'google-chrome','dialog':True,'transient_for':'100'} for i in (200,300)]
         with self.assertRaisesRegex(ValueError,'AMBIGUOUS_SAVE_DIALOG'):m.choose_dialog(before,after)
 
+    def test_recognizes_observed_chrome_file_access_warning_title(self):
+        m=self.module();before=[{'id':'100','name':'Native picker preflight - Google Chrome','class':'google-chrome'}]
+        dialog={'id':'300','name':'Warning: this site can see edits you make','class':'google-chrome','dialog':True,'transient_for':'100'}
+        self.assertEqual(m.choose_dialog(before,before+[dialog]),dialog)
+        self.assertIsNone(m.choose_dialog(before,before+[dict(dialog,**{'class':'unrelated-app'})]))
+        self.assertIsNone(m.choose_dialog(before,before+[dict(dialog,dialog=False,transient_for=None)]))
+        self.assertIsNone(m.choose_dialog(before,before+[dict(dialog,name='Warning: unrelated browser message')]))
+
     def test_destination_must_be_new_and_inside_the_owned_case_directory(self):
         m=self.module()
         with tempfile.TemporaryDirectory() as directory:
