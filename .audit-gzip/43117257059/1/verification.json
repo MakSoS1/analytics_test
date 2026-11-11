@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "purpose": "public_gzip_interoperability_helper",
+  "privateInputsUsed": false,
+  "corpusCountIncrement": 0,
+  "repository": "MakSoS1/analytics_test",
+  "branch": "qa/examclips-audit-2026-11-11",
+  "runId": "43117257059",
+  "runAttempt": "1",
+  "sourceCommit": "c61561e29614707619cb9d162fd39af10f77ba75",
+  "createdAt": "2026-11-11T23:06:58.449Z",
+  "package": {
+    "name": "fflate",
+    "version": "0.8.2",
+    "integrity": "sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==",
+    "tarballSha256": "61fd5061e2fc8e5e3e3129f7f2fec7bd78a313e1bf4becbf1cc1cc9998d141dc",
+    "sourceRepository": "https://github.com/101arrowz/fflate",
+    "sourceTag": "v0.8.2",
+    "sourceCommit": "d3243651cb142e3e04f3e4bc037b9e985878f444",
+    "upstreamSourceGitBlobSha": "4ebb37293b8a593f0a45f62092d4959c06956259",
+    "installedBrowserSourceSha256": "8cc1f687e0159e977addb6b85e274dbd11e622cf151f4fcb7b85d49622ea43e7"
+  },
+  "bundler": {
+    "name": "esbuild",
+    "version": "0.28.2"
+  },
+  "exports": [
+    "gzipSync",
+    "gunzipSync"
+  ],
+  "gzipOptions": {
+    "level": 6,
+    "mtime": 0
+  },
+  "bundleBytes": 9762,
+  "bundleSha256": "0d5868ffba14f46f52729fdca6efaa5b264499c90d1859ecfc3b3122b9edcbad",
+  "bundleGitBlobSha": "4556126a46fbba8c6b5e60c4adbf47b52edfe7f8",
+  "sandboxMissingGlobals": [
+    "Buffer",
+    "process",
+    "require",
+    "Worker",
+    "fetch",
+    "TextEncoder",
+    "TextDecoder",
+    "CompressionStream",
+    "DecompressionStream",
+    "URL",
+    "Blob",
+    "window",
+    "document",
+    "self"
+  ],
+  "fixtures": [
+    {
+      "name": "empty",
+      "plainBytes": 0,
+      "compressedBytes": 20,
+      "plainSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compressedSha256": "59869db34853933b239f1e2219cf7d431da006aa919635478511fabbfc8849d2",
+      "elapsedMs": 2,
+      "nodeDecodesBundle": true,
+      "bundleDecodesNode": true,
+      "deterministicMtimeZero": true
+    },
+    {
+      "name": "unicode",
+      "plainBytes": 48000,
+      "compressedBytes": 230,
+      "plainSha256": "c00f830df3b517b9ca677de0974a98d2df00bfcd452a5d713f3093d482af25fb",
+      "compressedSha256": "7bd108b6c13680505aa60c09ea17738fb8f169c361006aa2a29753de18def99b",
+      "elapsedMs": 16,
+      "nodeDecodesBundle": true,
+      "bundleDecodesNode": true,
+      "deterministicMtimeZero": true
+    },
+    {
+      "name": "binary",
+      "plainBytes": 1048576,
+      "compressedBytes": 1048809,
+      "plainSha256": "b9a56eb486a3f0de877bfc5063efc387683db561edd38f0273fcc3078153980a",
+      "compressedSha256": "2be03b36b8cd65ca2701dd99d335b3057039db2abcfd31a58bc3716b19005cb2",
+      "elapsedMs": 181,
+      "nodeDecodesBundle": true,
+      "bundleDecodesNode": true,
+      "deterministicMtimeZero": true
+    },
+    {
+      "name": "repetitive_multi_mb_json",
+      "plainBytes": 5262310,
+      "compressedBytes": 224261,
+      "plainSha256": "3e22dcee2f4004852db77fcc27552efff00302bcce76f02f6f13f56cecc0fdc6",
+      "compressedSha256": "68c3e0b4af8007de3e7f10f8883b9c1cec144dd6fc4c6638d2ac0ebb0c717930",
+      "elapsedMs": 454,
+      "nodeDecodesBundle": true,
+      "bundleDecodesNode": true,
+      "deterministicMtimeZero": true
+    }
+  ],
+  "status": "passed"
+}
