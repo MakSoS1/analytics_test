@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "reason": "Retry public recovery gates after portable RFC4648 codec correction",
-  "createdAt": "2026-11-11T22:34:00Z",
+  "reason": "Install actual media decoders before non-skipping VFR and source-frame recovery checks",
+  "createdAt": "2026-11-11T22:34:02.378Z",
   "primaryCases": 20,
   "supplementaryCases": 1,
-  "previousRecoveryRun": 43112079691
+  "previousRecoveryRun": 43112602097
 }
