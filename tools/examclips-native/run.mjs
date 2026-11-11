@@ -95,7 +95,7 @@ async function saveProject(name){
 async function selectClip(index){
   await closeDetail();await page.locator('.top-navigation [data-editor-tab="clip"]').click({timeout:10000});
   await page.locator('.microtopic-card[data-topic-index="'+index+'"] .microtopic-card-title').click({timeout:10000});
-  await page.locator('#export').waitFor({state:'visible',timeout:10000});
+  await page.locator('#atlas-export-clip').waitFor({state:'visible',timeout:10000});
   if(!await page.locator('#export').isEnabled())throw Error('SELECTED_EXPORT_DISABLED');
 }
 async function capabilities(){return page.evaluate(()=>({secureContext:isSecureContext,crossOriginIsolated,
@@ -158,7 +158,7 @@ try{
   result.testStage='native_save_dialog';await persist();
   const target=join(dir,'native-clip.mp4'),dialogPromise=command('python3',[join(HERE,'native-dialog.py'),'operate','--before',windowSnapshot,'--target',target,
     '--case-dir',dir,'--evidence-dir',ui,'--timeout','90'],120000,'NATIVE_SAVE_DIALOG_FAILED');dialogPromise.catch(()=>{});
-  await page.locator('#export').click({timeout:15000});await dialogPromise;
+  await page.locator('#atlas-export-clip').click({timeout:15000});await dialogPromise;
   result.nativeDialog=JSON.parse(await readFile(join(ui,'native-dialog.json'),'utf8'));
   result.completionChecks.nativePickerObserved=result.nativeDialog.status==='native_save_dialog_closed';
   result.testStage='native_stream_encoding';await persist();let observedComplete=false;
