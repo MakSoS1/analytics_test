@@ -1,0 +1,18 @@
+import {requireIdentity,safeRelative,targetFor,validateRequest,ROSTERS} from './protocol.mjs';
+const assert=(v,m)=>{if(!v)throw Error(m);};
+const rejects=(f,m)=>{let failed=false;try{f();}catch{failed=true;}assert(failed,m);};
+assert(requireIdentity({GITHUB_REPOSITORY:'MakSoS1/analytics_test',GITHUB_REF_NAME:'qa/examclips-audit-2026-11-11',GITHUB_RUN_ID:'123',GITHUB_RUN_ATTEMPT:'1',RECOVERY_LANE:'root'}).caseId==='root','identity');
+rejects(()=>requireIdentity({GITHUB_REPOSITORY:'other/repo'}),'wrong repository accepted');
+for(const p of ['../key.pem','/tmp/key.pem','a/../key.pem','a\\b','a//b','x\0y'])rejects(()=>safeRelative(p),'unsafe path accepted');
+assert(safeRelative('rul01/result.json')==='rul01/result.json','valid path');
+rejects(()=>targetFor('root','rul03'),'foreign assigned case accepted');
+assert(targetFor('root','rul06').runId==='43100076969','interrupted RUL06 chosen');
+assert(targetFor('en','enl05').runId==='43091902972','uncredentialed duplicate EN05 chosen');
+rejects(()=>validateRequest({sequence:2,operation:'inventory',key:'rul01'},'root',1),'replay accepted');
+rejects(()=>validateRequest({sequence:1,operation:'files',key:'rul01',paths:['rul01/clip-001.mp4']},'root',1),'large raw media accepted');
+rejects(()=>validateRequest({sequence:1,operation:'frame',key:'rul01',path:'../key.pem',seconds:1},'root',1),'private file frame accepted');
+rejects(()=>validateRequest({sequence:1,operation:'frame',key:'rul01',path:'original-source.mp4',seconds:NaN},'root',1),'invalid time accepted');
+assert(validateRequest({sequence:1,operation:'files',key:'rul01',paths:['rul01/result.json']},'root',1).key==='rul01','valid request rejected');
+const primary=Object.values(ROSTERS).flat().filter(x=>!x.native);
+assert(primary.length===20&&new Set(primary.map(x=>x.key)).size===20,'corpus identity drift');
+console.log(JSON.stringify({protocolTests:'passed',uniquePrimaryCases:20,supplementaryCases:1}));

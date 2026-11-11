@@ -1,0 +1,9 @@
+# ExamClips analysis recovery
+
+Recover actual evidence from the already authorized twenty full lectures after the local execution environment became unavailable. Use only the existing isolated QA branch and GitHub Actions. Do not rerun the site, change production, expose credentials, or count supplementary probes in the corpus.
+
+Three isolated review lanes retain the chosen original run/job map. A runner publishes an ephemeral RSA4096 public key and a pinned browser crypto bundle. Public known-answer and interoperability tests must succeed before private materialization input. The authorized backup key is delivered through the current Library materialization helpers, with the complete transfer object, inside RSA-OAEP-SHA256/AES-256-GCM. No private recovery key enters public Git history or logs. The client derives independent materials through HKDF-SHA256 from a separately held private resource-scoped SAS HMAC signature; unsupported schemes or shared signatures stop the route. That second grant never leaves the client.
+
+Every original multipart artifact must pass GitHub ZIP SHA256, part and concatenation hashes, exact run/attempt/case/context binding, GCM authentication and safe ZIP-member checks before inspection. Review assets remain encrypted under a separate lane reply key. Requests only address the allowlisted selected case and contained review files. Media analysis retains exact timestamps, source/output pairs, decode results and explicit sampling limits. Human quality verdicts remain separate from automated checks.
+
+No unique evidence is destroyed: original encrypted Actions artifacts remain the authoritative recovery source. Runner-local transport may be removed after verification. Native supplementary browser images are internal only. Final user reports contain only appropriate lecture evidence and clearly identify unfinished checks.
