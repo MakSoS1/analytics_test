@@ -1,1 +1,1 @@
-{"sequence":1,"operation":"ingest","key":"native-rul01"}
+{"sequence":2,"operation":"files","key":"native-rul01","paths":["rul01/result.json","run.json","rul01/progress.jsonl","rul01/native-picker-preflight.json","rul01/source.json"]}
