@@ -1,0 +1,35 @@
+{
+  "scope": "Technical fixtures only; no real ExamClips export was used in these helper tests.",
+  "unit_tests": {
+    "count": 13,
+    "passed": 13,
+    "command": [
+      "python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "/workspace/shared/examclips-audit",
+      "-p",
+      "test_audit_diagnostics.py"
+    ]
+  },
+  "paired_source_fixture": {
+    "case": "/workspace/shared/examclips-audit/helper_validation_fixture",
+    "full_decode": true,
+    "source_timestamps_checked": true,
+    "contact_sheet_visually_checked": true,
+    "audio_raw_offsets_sec": [
+      0,
+      0
+    ],
+    "audio_interpretation": "Only confirms this constructed waveform fixture; not an A/V sync assertion for application exports."
+  },
+  "corrupted_fixture": {
+    "case": "/workspace/shared/examclips-audit/helper_corruption_fixture",
+    "probe_advertised_duration_sec": 2.066667,
+    "full_decode_ok": false,
+    "helper_exit_code": 1
+  },
+  "current_helper_sha256": "70ca6e0348775ddb65403e6800aaa424b100db67454026c299992bd1047f4bc0"
+}
