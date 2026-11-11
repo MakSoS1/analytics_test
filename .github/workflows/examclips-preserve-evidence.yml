@@ -1,0 +1,34 @@
+name: Preserve encrypted ExamClips audit evidence
+
+'on':
+  push:
+    branches:
+      - qa/examclips-audit-2026-11-11
+    paths:
+      - .github/workflows/examclips-preserve-evidence.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  preserve:
+    if: github.repository == 'MakSoS1/analytics_test'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Retrieve the already encrypted TED pilot evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: examclips-live-encrypted-43064500885-1
+          run-id: 43064500885
+          github-token: ${{ github.token }}
+          path: encrypted-evidence
+      - name: Retain the encrypted evidence for thirty days
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-encrypted-preserved-ted-pilot
+          path: encrypted-evidence/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
