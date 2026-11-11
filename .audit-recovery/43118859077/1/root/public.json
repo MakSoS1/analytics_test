@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "repository": "MakSoS1/analytics_test",
+  "branch": "qa/examclips-audit-2026-11-11",
+  "runId": "43118859077",
+  "runAttempt": "1",
+  "caseId": "root",
+  "purpose": "review-recovery-input",
+  "sourceCommit": "631326b8f43704c250b3e655ee0047129969c4cc",
+  "createdAt": "2026-11-11T23:19:59.531Z",
+  "expiresAt": "2026-11-12T00:04:59.532Z",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAvRV39OJVN/2Bz7kdBNll\nvW/J7qtAom5Cb2nUZIqiAokeY92A3w+4XeP8WSt+8XO4p7o2DRzrfaJ3LjWTF3CN\nq2U/aiV8fG5v41TJDAqu9QOLDy6Wk5SEN7Ap02hSM1G79+M446NpBeLpcazQSuJG\nIMUulsIghHjdhpL/lTwfbUNfPc4/SOy7NTQRMHzC74c/HLiHooSTZSh1pNQLpkZW\n6UeI7ZUKWWWRWHYhsDRArxFLMd8N1VzvMiDw+6ATdNaCs9DwvSINTqDzoiB07sLU\nrzCPVtDH0k8mGhaoybdZRVlgoSKPq7VMV4ctT2R2AUNvbLUGrIVWjP8QOwBpOhb2\nVPgl9BXxoOZeywt0PG6jB+HBHJ+Vl7HqWFT+TpOKygP51twUe0QIZkmuR99OHmRR\no+k4ylxY115EwkVp4lBRkg7r1Scv5wM6vGj5cFAjv5S4KMtVB0YzC/NjnGMiFpGA\nWPg3nd5tlyWnxSrJp7hDkgKM9kIxDraDZetA/XBchL2ksPlQqy0azAjDeOiFyDFN\nokC50+Wwd19oZOpOTMOcvs/DgEhvPAvxinScAmSPNDO4yVxU7yMECugkZBxBgA0U\n7xr5huf8Y1232m5ct/K5zA37d37qe6eSFl3kuZN0OeChKxB8SWr3bD8YTA5BBNR3\n8E9WjnlUOUYt16C/AxbnhN0CAwEAAQ==\n-----END PUBLIC KEY-----\n",
+  "keySha256": "615c9f9a0b672814374063519e279ddfbfb7e4ddc7e6ce725349abcb738a1b83",
+  "bundleSha256": "cf7c239c8538e5e81242d57536a5a9d9479a294444bf8eb4eb9e6d880ab925a4",
+  "roster": [
+    {
+      "key": "native-rul01",
+      "id": "rul01",
+      "runId": "43116421328",
+      "jobId": 130845540911,
+      "native": true,
+      "artifactPins": [
+        {
+          "id": 13898898668,
+          "bytes": 148916917,
+          "digest": "sha256:4e20c0a2e1db2b36636b51c8aca84ade52b35caf857c4efdef86c77d4e01f5a5"
+        }
+      ]
+    }
+  ],
+  "fixture": {
+    "fixture": "examclips-review-bridge",
+    "bytes": [
+      0,
+      1,
+      127,
+      128,
+      255
+    ],
+    "version": 1
+  }
+}
