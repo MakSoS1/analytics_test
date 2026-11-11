@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "repository": "MakSoS1/analytics_test",
+  "branch": "qa/examclips-audit-2026-11-11",
+  "runId": "43115610151",
+  "runAttempt": "1",
+  "caseId": "ru",
+  "purpose": "review-recovery-input",
+  "sourceCommit": "4c9629cac666ec522292411ac6a892a39fc0f53c",
+  "createdAt": "2026-11-11T22:55:13.405Z",
+  "expiresAt": "2026-11-11T23:40:13.405Z",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAtpDMprHCYZeQO4LMFFEE\nF4f7Eorfy4cHUwUx+QrRob/BEZFma15olEwyvAKEKCtS1QX/yzKjvplALParFric\nuPz8ftMnGsbOR8w8ymuFNMj2/BgMXL9bK2ma8rsJEV35W5SIaWIC8kBH+9TB+X9x\n1u7loodhQq5IsJTo/03e9Txwxq+1Az8mBIW3VSmkZsLAK8+7hr8rDXejeH5btE32\n8TUwcx+VHXhqluKoS9BP54XMhQw4boiOxliBtxuTgdZTBpkLkOtviuwTd8XPWnAf\n2SiYqeLpiOqFSz8qHGNEaBOvznwZlCXKN6c4VSsTVMbZNdi7+6smrKIQNFr8DU1D\nKN4zIU2Ga6thRsLbxonqqt+CZtgEkDim4FQFH4WEDdxoDzCbdX1Y38grQOxcEwq+\nanwQw06jamdQbB+/pRPjtFR/SP9/JQG/Blk4K2wPQ4CqiOdgZFWx/LtdWrQIohkt\nA/P+/VHNRsmuufNxOnSr2Eaxh1nETFYuxk79gO61IG22nXsPkyqtQLawKGtKaZs2\nXtcKl3OpgSdIHM2WR00WSDr/U1SNV0HulWG29wAGLobN6aJW4KjQ49zCbGz2pfOm\nf0X2P2wEaxnoZ7rkKfciO8wKfw9CTlbpYm1ihzko51IRZ3iFo9yPHjfO5Q1Zas7j\nuzG6VRcXqdV20r5QCsVrym0CAwEAAQ==\n-----END PUBLIC KEY-----\n",
+  "keySha256": "76ac7e85de2d98277f63795480dcd29e7c8447f306bdf5ea15eb431392454815",
+  "bundleSha256": "cf7c239c8538e5e81242d57536a5a9d9479a294444bf8eb4eb9e6d880ab925a4",
+  "roster": [
+    {
+      "key": "rul03",
+      "id": "rul03",
+      "runId": "43098721850",
+      "jobId": 130784495100
+    },
+    {
+      "key": "rul04",
+      "id": "rul04",
+      "runId": "43091902972",
+      "jobId": 130770887385
+    },
+    {
+      "key": "rul05",
+      "id": "rul05",
+      "runId": "43091902972",
+      "jobId": 130770887544
+    },
+    {
+      "key": "rul07",
+      "id": "rul07",
+      "runId": "43098721850",
+      "jobId": 130784495022
+    },
+    {
+      "key": "rul08",
+      "id": "rul08",
+      "runId": "43091902972",
+      "jobId": 130770887515
+    },
+    {
+      "key": "rul09",
+      "id": "rul09",
+      "runId": "43091902972",
+      "jobId": 130770887513
+    },
+    {
+      "key": "rul10",
+      "id": "rul10",
+      "runId": "43091902972",
+      "jobId": 130770887392
+    }
+  ],
+  "fixture": {
+    "fixture": "examclips-review-bridge",
+    "bytes": [
+      0,
+      1,
+      127,
+      128,
+      255
+    ],
+    "version": 1
+  }
+}
