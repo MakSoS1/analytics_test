@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "algorithm": "AES-256-GCM+RSA-OAEP-SHA256",
+  "context": {
+    "purpose": "credentials",
+    "repository": "MakSoS1/analytics_test",
+    "branch": "qa/examclips-audit-2026-11-11",
+    "runId": "43091902972",
+    "runAttempt": "1",
+    "caseId": "enl03"
+  },
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAzPICGC2+KvfDT2ztlzfd\nodxViyg6LgrR8CAWbyZil3Zp2ONoCCozUvn3b0um1198fg7tXPKcQRG5BOimeHpW\n+Czy0AX9ilOXqjrB+PR73tO3rdoauazMZgdXNmlL0JbwmXmkYffedsU4lc/TWLin\nUgqKnap0Pf1YKMW6Ke90Vg1ki2UdQJqjk1VE+mwFOzaCHzD8iLcQ5yIkb/J6ewOv\nHuHlWUg7FnRwsCkYHdmtvtxxJiW/lP3HNeY98ZRTikxacDnqoYHqwxRIeVj7lp7H\nIyMdbefhqNdhpDzzKtgpb4VUioWRMqHm1v+5UnODgKcd04NPoeAleLcUrXwtoagk\nTpEuxv7Ir/y0e9LfNMr9NAB/A8Ine198w2uBHc3FmXWImJBcPhUipku4S4CORrYP\nnn9SuaHhOp2SPPbBqLjsXa2PdKgNygbSaPYY/ijWdFB0Ff9V3pnGPGJHOj5m2i80\n4UMK9EuwTCYWx1xwDfZMCwYElvb74/l/O/7xx2fxDu+mnln6zA0DzRbA59nrOOs8\nI8oNJEBSd1ekoZp2QTCQEBI8WI22UmEqu3l9VkbKc7fhrUD6ohQubPNqUhHtaMk1\nFgNbkNehOEMRIPvyVPiVBayPr32WKkz1d1W5lCk70xBwj6f0Cw8k0gB3znudc+Bg\nASWulRI6eDlag6obhjZiACcCAwEAAQ==\n-----END PUBLIC KEY-----\n",
+  "keySha256": "ea7c9bc660b3438e689b5bec4d0547aac27f9a874b17344ba5671268ade37bec",
+  "createdAt": "2026-11-11T19:57:22.297Z",
+  "expiresAt": "2026-11-11T20:11:22.297Z"
+}
