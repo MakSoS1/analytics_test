@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 const pair = generateKeyPairSync('rsa', {modulusLength: 2048, publicKeyEncoding: {type:'spki',format:'pem'}, privateKeyEncoding: {type:'pkcs8',format:'pem'}});
-const context = {purpose:'credentials',repository:'MakSoS1/analytics_test',branch:'qa/examclips-audit-2026-11-11',runId:'123456',runAttempt:'1'};
+const context = {purpose:'credentials',repository:'MakSoS1/analytics_test',branch:'qa/examclips-audit-2026-11-11',runId:'123456',runAttempt:'1',caseId:'en07'};
 async function api() {
   const mod = await import('./crypto.mjs').catch(() => null);
   assert.ok(mod, 'Run-bound hybrid encryption must be implemented');
@@ -21,11 +21,12 @@ test('credential envelope round-trips a long payload without exposing its plaint
   assert.deepEqual(JSON.parse(open(envelope,pair.privateKey,context).toString()),value);
 });
 
-test('a credential envelope from another run or attempt is rejected', async () => {
+test('a credential envelope from another run, attempt or case is rejected', async () => {
   const {seal,open} = await api();
   const envelope = seal(Buffer.from('test-only'),pair.publicKey,context);
   assert.throws(()=>open(envelope,pair.privateKey,{...context,runId:'123457'}),/context/i);
   assert.throws(()=>open(envelope,pair.privateKey,{...context,runAttempt:'2'}),/context/i);
+  assert.throws(()=>open(envelope,pair.privateKey,{...context,caseId:'ru01'}),/context/i);
 });
 
 test('ciphertext tampering is rejected by authenticated decryption', async () => {
@@ -45,6 +46,8 @@ test('streamed encrypted evidence restores exact ZIP bytes and removes failed pl
     const bytes=Buffer.concat([Buffer.from('PK\x03\x04'),Buffer.alloc(250000,7)]);
     await writeFile(source,bytes);
     const metadata=await sealFile(source,encrypted,pair.publicKey,{...context,purpose:'evidence'});
+    await assert.rejects(openFile(encrypted,restored,metadata,pair.privateKey,{...context,purpose:'evidence',caseId:'ru01'}),/context/i);
+    await assert.rejects(readFile(restored),/ENOENT/);
     await openFile(encrypted,restored,metadata,pair.privateKey,{...context,purpose:'evidence'});
     assert.deepEqual(await readFile(restored),bytes);
     metadata.tag=Buffer.alloc(16).toString('base64');

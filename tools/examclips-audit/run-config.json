@@ -2,14 +2,10 @@
   "version": 1,
   "production_url": "https://examclips.dpdns.org/app/",
   "expected_commit": "5f14760735796fc58e330b3819944da1ab1865a3",
-  "case_ids": [
-    "ru01"
-  ],
-  "case_budget_seconds": 2700,
   "background_wait_seconds": 480,
   "export_policy": "all",
   "minimum_remaining_export_seconds": 60,
   "disable_native_save_pickers": true,
   "evidence_recipient_pubkey": "tools/examclips-audit/evidence-recipient.pub.pem",
-  "artifact_retention_days": 3
+  "artifact_retention_days": 30
 }

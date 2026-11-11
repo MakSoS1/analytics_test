@@ -6,26 +6,51 @@ name: ExamClips authorized live audit
       - qa/examclips-audit-2026-11-11
     paths:
       - .github/workflows/examclips-live-audit.yml
-      - tools/examclips-audit/**
+      - tools/examclips-audit/run-request.json
 
 permissions:
   contents: write
 
 jobs:
-  live-audit:
+  prepare:
     if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
     runs-on: ubuntu-24.04
-    timeout-minutes: 330
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      case_ids: ${{ steps.selection.outputs.case_ids }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: selection
+        name: Validate the explicit source selection
+        run: node tools/examclips-audit/prepare.mjs
+  live-audit:
+    needs: prepare
+    name: Lecture ${{ matrix.case_id }}
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        case_id: ${{ fromJSON(needs.prepare.outputs.case_ids) }}
+    env:
+      AUDIT_CASE_ID: ${{ matrix.case_id }}
     steps:
       - name: Initialize runner-private audit paths
         run: |
           python3 - <<'PY'
           import os, pathlib
           base = pathlib.Path(os.environ["RUNNER_TEMP"])
+          case_id = os.environ["AUDIT_CASE_ID"]
           paths = {
-              "AUDIT_ROOT": base / "examclips-live-audit",
-              "AUDIT_OUT": base / "examclips-live-evidence",
-              "AUDIT_ARTIFACT": base / "examclips-encrypted-artifact",
+              "AUDIT_ROOT": base / ("examclips-live-audit-" + case_id),
+              "AUDIT_OUT": base / ("examclips-live-evidence-" + case_id),
+              "AUDIT_ARTIFACT": base / ("examclips-encrypted-artifact-" + case_id),
           }
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
               for name, path in paths.items():
@@ -39,7 +64,7 @@ jobs:
           node-version: '24'
       - name: Validate encryption and required public key
         run: |
-          node --test tools/examclips-audit/crypto.test.mjs
+          node --test tools/examclips-audit/crypto.test.mjs tools/examclips-audit/audit-context.test.mjs
           openssl pkey -pubin -in tools/examclips-audit/evidence-recipient.pub.pem -noout
       - name: Install Playwright and prepare verified browser and media tools
         run: |
@@ -112,7 +137,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node tools/examclips-audit/handoff.mjs
-      - name: Run sequential full-source live browser audit
+      - name: Run one full-source live browser audit
         env:
           AUDIT_CREDENTIALS_FILE: ${{ steps.handoff.outputs.credentials_path }}
         run: node tools/examclips-audit/run.mjs
@@ -123,10 +148,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: examclips-live-encrypted-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/examclips-encrypted-artifact/
+          name: examclips-live-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}
+          path: ${{ env.AUDIT_ARTIFACT }}/
           if-no-files-found: warn
-          retention-days: 3
+          retention-days: 30
+          compression-level: 0
       - name: Remove runner-private authentication and original media
         if: always()
         env:

@@ -3,6 +3,7 @@ import {spawn} from 'node:child_process';
 import {resolve,join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {sealFile} from './crypto.mjs';
+import {identityFromEnv,contextFor} from './audit-context.mjs';
 const HERE=dirname(fileURLToPath(import.meta.url));
 const config=JSON.parse(await readFile(join(HERE,'run-config.json'),'utf8'));
 const output=resolve(process.env.AUDIT_OUT||'audit-evidence');
@@ -27,11 +28,9 @@ await new Promise((resolvePromise,reject)=>{
   const child=spawn('python3',['-c',script,output,zip],{stdio:['ignore','ignore','pipe']});
   child.on('error',reject);child.on('close',code=>code===0?resolvePromise():reject(Error('Evidence ZIP creation failed')));
 });
-const context={purpose:'evidence',repository:process.env.GITHUB_REPOSITORY||'MakSoS1/analytics_test',
-  branch:process.env.GITHUB_REF_NAME||'qa/examclips-audit-2026-11-11',runId:String(process.env.GITHUB_RUN_ID||'local-verification'),
-  runAttempt:String(process.env.GITHUB_RUN_ATTEMPT||'1')};
+const context=contextFor('evidence',identityFromEnv());
 try{
   const metadata=await sealFile(zip,join(artifact,'evidence.enc'),key,context);
   await writeFile(join(artifact,'encryption.json'),JSON.stringify(metadata,null,2)+'\n');
-  console.log('ENCRYPTED_EVIDENCE_READY '+JSON.stringify({runId:context.runId,bytes:(await stat(join(artifact,'evidence.enc'))).size}));
+  console.log('ENCRYPTED_EVIDENCE_READY '+JSON.stringify({runId:context.runId,caseId:context.caseId,bytes:(await stat(join(artifact,'evidence.enc'))).size}));
 }finally{await rm(zip,{force:true})}

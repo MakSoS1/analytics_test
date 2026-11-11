@@ -1,11 +1,12 @@
 import {chromium} from 'playwright';
-import {mkdir,readFile,writeFile,appendFile,rm,stat} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,appendFile,rm,stat,copyFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {resolve,join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {arch,availableParallelism,cpus,platform,release,totalmem,version as osVersion} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
+import {identityFromEnv,selectCase,caseBudgetSeconds} from './audit-context.mjs';
 
 const HERE=dirname(fileURLToPath(import.meta.url));
 const require=createRequire(import.meta.url);
@@ -15,17 +16,9 @@ const root=resolve(process.env.AUDIT_ROOT||'audit-private');
 const output=resolve(process.env.AUDIT_OUT||'audit-evidence');
 if(config.production_url!=='https://examclips.dpdns.org/app/')throw Error('Audit target must remain the authorized production site');
 if(config.export_policy!=='all')throw Error('This audit requires all default clips, without shortening them');
-if(!Array.isArray(config.case_ids)||!config.case_ids.length||config.case_ids.length>6)throw Error('Select one to six sequential cases per runner');
-if(new Set(config.case_ids).size!==config.case_ids.length)throw Error('Duplicate selected case ID');
-const cases=config.case_ids.map(id=>{
-  if(!/^[a-z0-9_-]+$/i.test(id))throw Error('Unsafe case ID');
-  const item=manifest.cases.find(item=>item.id===id);
-  if(!item)throw Error('Selected case is absent from manifest: '+id);
-  if(!['ru','en','auto'].includes(item.language||'auto'))throw Error('Unsupported language selection');
-  return item;
-});
-if(!(config.case_budget_seconds>0&&config.case_budget_seconds<=5400))throw Error('Case budget must be positive and at most 90 minutes');
-if(config.case_budget_seconds*cases.length>270*60)throw Error('Selected sequential cases exceed the 270-minute runner processing budget');
+const identity=identityFromEnv();
+const cases=[selectCase(manifest,identity.caseId)];
+const budgetSeconds=caseBudgetSeconds(cases[0]);
 await mkdir(root,{recursive:true,mode:0o700});await mkdir(output,{recursive:true,mode:0o700});
 const json=(path,value)=>writeFile(path,JSON.stringify(value,null,2)+'\n',{mode:0o600});
 const now=()=>new Date().toISOString();
@@ -64,7 +57,7 @@ const commitOf=build=>build?.data?.commit||build?.data?.sourceCommit||build?.dat
 const runnerCpus=cpus();
 const run={schema:1,startedAt:now(),repository:process.env.GITHUB_REPOSITORY,runId:process.env.GITHUB_RUN_ID,
   runAttempt:process.env.GITHUB_RUN_ATTEMPT,sourceCommit:process.env.GITHUB_SHA,
-  target:config.production_url,selectedCases:config.case_ids,exportPolicy:'all',
+  target:config.production_url,caseId:identity.caseId,selectedCases:[identity.caseId],caseBudgetSeconds:budgetSeconds,exportPolicy:'all',
   accommodation:config.disable_native_save_pickers?
     'Only showSaveFilePicker and showDirectoryPicker are unavailable in this CI browser. The unchanged app uses its existing full-MP4 memory/download fallback. The source input, real authentication, quota checks, ASR, models, topic planner and renderer are unchanged.':
     'No file-picker accommodation',
@@ -115,9 +108,10 @@ function clipRows(project) {
 async function runCase(item) {
   const dir=join(output,item.id),mediaPath=join(root,'media',item.id+'.mp4'),caseFile=join(root,item.id+'.source-request.json');
   await mkdir(dir,{recursive:true});
-  const started=Date.now(),deadline=started+config.case_budget_seconds*1000;
+  const started=Date.now(),deadline=started+budgetSeconds*1000;
   const result={id:item.id,title:item.title,source_url:item.source_url,startedAt:now(),status:'running',
-    timings:{},errors:[],warnings:[],clips:[],accommodation:run.accommodation};
+    timings:{},errors:[],warnings:[],clips:[],accommodation:run.accommodation,
+    testStage:'source_acquisition',siteProcessingStarted:false,failureDomain:null};
   run.cases.push(result);
   await json(join(dir,'result.json'),result);
   console.log('CASE_START '+JSON.stringify({id:item.id,at:now()}));
@@ -145,7 +139,7 @@ async function runCase(item) {
     if(match){asrSeconds=Math.max(asrSeconds,Number(match[1]));asrTotal=Math.max(asrTotal,Number(match[2]));}
     if(/Все запрошенные аудиоокна уже распознаны/.test(message))cachedAsr=true;
     if(/Виртуальная камера готова:|Камера готова:/.test(message))cameraReady=true;
-    if(state.phase==='processing')processingSeen=true;
+    if(state.phase==='processing'){processingSeen=true;result.siteProcessingStarted=true;}
     if(/Распознано \d+ реплик/.test(message))finishedAsr=true;
     if(state.status!==lastStatus||state.phase!==lastPhase){
       const row={at:now(),elapsedSeconds:Math.round((Date.now()-started)/1000),...state,status:safe(state.status),detail:safe(state.detail)};
@@ -166,6 +160,7 @@ async function runCase(item) {
     result.timings.downloadSeconds=(Date.now()-downloadAt)/1000;
     const source=JSON.parse(await readFile(join(dir,'source.json'),'utf8'));
     result.source=source;
+    result.testStage='browser_upload';
     page=await context.newPage();page.setDefaultTimeout(15000);
     page.on('pageerror',error=>events.push({at:now(),type:'pageerror',message:safe(error.message)}));
     page.on('console',message=>{if(['warning','error'].includes(message.type()))events.push({at:now(),type:message.type(),message:safe(message.text())})});
@@ -196,6 +191,7 @@ async function runCase(item) {
     await page.locator('#wizard-next').click();
     await cleanScreenshot(page,join(dir,'01-confirmation.png'));
     const analysisAt=Date.now();
+    result.testStage='site_analysis';
     await page.locator('#workflow-start').click();
     polling=(async()=>{while(!stopPolling){await recordSnapshot().catch(()=>{});await delay(2000);}})();
     while(remaining(deadline)>0) {
@@ -206,9 +202,10 @@ async function runCase(item) {
         throw Error('Processing did not start: '+safe(state.status));
       await delay(2000);
     }
-    if(!remaining(deadline))throw Error('Source exceeded its '+config.case_budget_seconds/60+'-minute budget during analysis');
+    if(!remaining(deadline))throw Error('Source exceeded its '+budgetSeconds/60+'-minute budget during analysis');
     result.timings.analysisSeconds=(Date.now()-analysisAt)/1000;
     result.asr={processingSeen,maxSourceSecondsObserved:asrSeconds,totalSourceSecondsObserved:asrTotal,cachedAsr,completionMessageObserved:finishedAsr};
+    result.testStage='site_background';
     const bgAt=Date.now(),bgEnd=Math.min(deadline-60000,Date.now()+config.background_wait_seconds*1000);
     while(Date.now()<bgEnd&&!cameraReady) {
       const state=await recordSnapshot();
@@ -216,6 +213,7 @@ async function runCase(item) {
       await delay(2000);
     }
     result.timings.backgroundWaitSeconds=(Date.now()-bgAt)/1000;
+    result.testStage='evidence_exports';
     project=await saveProject(page,dir);
     if(!Array.isArray(project.chunks)||!Array.isArray(project.clips)||!project.chunks.length)throw Error('Downloaded project has no actual transcript');
     if(Math.abs(project.duration-source.duration_sec)>2)throw Error('Project duration does not match the full source');
@@ -237,6 +235,7 @@ async function runCase(item) {
     await persist();
 
     const exportAt=Date.now();
+    result.testStage='clip_exports';
     for(const clip of result.clips) {
       if(clip.candidate||(clip.editorialStatus==='needs-more-context'&&clip.status!=='approved')){
         clip.exportReason='App requires human review/acceptance before export';continue;
@@ -295,12 +294,15 @@ async function runCase(item) {
     await json(join(dir,'microtopics.json'),result.clips);
     result.exportCounts={proposed:result.clips.length,downloaded:result.clips.filter(c=>c.exportStatus==='downloaded').length,
       failed:result.clips.filter(c=>c.exportStatus==='failed').length,notRun:result.clips.filter(c=>c.exportStatus==='not_run').length};
-    result.status=result.clips.length>0&&result.exportCounts.downloaded===result.clips.length&&result.asr.reachedLastWindow&&
-      result.transcript.nearSourceEnd&&result.srtDownloaded&&result.errors.length===0?'complete':'incomplete';
+    result.completionChecks={hasClips:result.clips.length>0,allClipsDownloaded:result.exportCounts.downloaded===result.clips.length,
+      asrReachedFinalWindow:!!result.asr.reachedLastWindow,transcriptNearSourceEnd:!!result.transcript.nearSourceEnd,
+      srtDownloaded:!!result.srtDownloaded,noRecordedErrors:result.errors.length===0};
+    result.status=Object.values(result.completionChecks).every(Boolean)?'complete':'incomplete';
     await saveProject(page,dir,'project-final.json').catch(error=>result.warnings.push('Final project download: '+safe(error.message)));
   } catch(error) {
-    result.status=remaining(deadline)>0?'failed':'timeout';
-    result.errors.push({stage:'case',message:safe(error.message)});
+    result.failureDomain=result.testStage==='source_acquisition'?'audit_environment':'site_or_browser';
+    result.status=result.failureDomain==='audit_environment'?'environment_failed':remaining(deadline)>0?'failed':'timeout';
+    result.errors.push({stage:result.testStage,domain:result.failureDomain,message:safe(error.message)});
     if(page&&!page.isClosed()){
       if(await page.locator('#cancel').isEnabled().catch(()=>false))await page.locator('#cancel').click({timeout:5000}).catch(()=>{});
       await delay(1500);
@@ -309,6 +311,18 @@ async function runCase(item) {
     }
   } finally {
     stopPolling=true;await polling?.catch(()=>{});
+    if(item.platform==='rutube'&&result.source){
+      const originalPath=join(dir,'original-source.mp4'),copyAt=Date.now();
+      try{
+        await copyFile(mediaPath,originalPath);
+        result.originalSourceEvidence={status:'retained',file:'original-source.mp4',sha256:result.source.sha256,encryptedArtifactOnly:true};
+      }catch(error){
+        await rm(originalPath,{force:true}).catch(()=>{});
+        result.originalSourceEvidence={status:'failed',reason:safe(error.message)};
+        result.warnings.push('Validated RUTUBE original could not be retained for offline comparison: '+safe(error.message));
+      }
+      result.timings.originalSourceCopySeconds=(Date.now()-copyAt)/1000;
+    }
     result.finishedAt=now();result.timings.totalSeconds=(Date.now()-started)/1000;
     result.browserEvents=events;
     result.buildAfter=await buildMetadata();
@@ -316,7 +330,8 @@ async function runCase(item) {
     await persist();
     await page?.close().catch(()=>{});
     await rm(mediaPath,{force:true});
-    console.log('CASE_END '+JSON.stringify({id:item.id,status:result.status,totalSeconds:result.timings.totalSeconds,exports:result.exportCounts||null}));
+    console.log('CASE_END '+JSON.stringify({id:item.id,status:result.status,totalSeconds:result.timings.totalSeconds,exports:result.exportCounts||null,
+      failureDomain:result.failureDomain,siteProcessingStarted:result.siteProcessingStarted,completionChecks:result.completionChecks||null}));
   }
 }
 
@@ -354,6 +369,8 @@ finally{
   run.buildChanged=!!commitOf(run.buildBefore)&&!!commitOf(run.buildAfter)&&commitOf(run.buildBefore)!==commitOf(run.buildAfter);
   run.unexpectedBuild=!!config.expected_commit&&commitOf(run.buildBefore)!==config.expected_commit;
   run.summary={selected:cases.length,attempted:run.cases.length,complete:run.cases.filter(c=>c.status==='complete').length,
+    siteProcessingStarted:run.cases.filter(c=>c.siteProcessingStarted).length,
+    environmentFailed:run.cases.filter(c=>c.failureDomain==='audit_environment').length,
     downloadedClips:run.cases.reduce((sum,c)=>sum+c.clips.filter(clip=>clip.exportStatus==='downloaded').length,0)};
   await json(join(output,'run.json'),run);
   console.log('AUDIT_SUMMARY '+JSON.stringify({...run.summary,buildChanged:run.buildChanged,unexpectedBuild:run.unexpectedBuild,fatal:!!fatal}));

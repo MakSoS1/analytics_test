@@ -3,18 +3,17 @@ import {mkdir,readFile,writeFile,appendFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {algorithm,keyHash,open} from './crypto.mjs';
+import {identityFromEnv,handoffLayout,contextFor} from './audit-context.mjs';
 
-const repository=process.env.GITHUB_REPOSITORY,branch=process.env.GITHUB_REF_NAME;
-const runId=process.env.GITHUB_RUN_ID,runAttempt=process.env.GITHUB_RUN_ATTEMPT;
-if(repository!=='MakSoS1/analytics_test'||branch!=='qa/examclips-audit-2026-11-11'||!/^\d+$/.test(runId||'')||!/^\d+$/.test(runAttempt||''))
-  throw Error('Credential handoff is restricted to the authorized repository, isolated branch and Actions run');
+const identity=identityFromEnv();
+const {repository,branch,runId,runAttempt,caseId}=identity;
+const {prefix,privateName}=handoffLayout(identity);
 const token=process.env.GITHUB_TOKEN;
 if(!token||!process.env.RUNNER_TEMP)throw Error('Actions runtime is required');
-const directory=join(process.env.RUNNER_TEMP,'examclips-private-'+runId+'-'+runAttempt);
+const directory=join(process.env.RUNNER_TEMP,privateName);
 await mkdir(directory,{mode:0o700,recursive:true});
 const privatePath=join(directory,'handoff-private.pem'),credentialPath=join(directory,'credentials.json');
-const prefix='.audit-handoff/'+runId;
-const context={purpose:'credentials',repository,branch,runId,runAttempt};
+const context=contextFor('credentials',identity);
 async function api(path,method='GET',body) {
   const response=await fetch('https://api.github.com/repos/'+repository+'/contents/'+path+(method==='GET'?'?ref='+encodeURIComponent(branch):''),{
     method,headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28',
@@ -29,16 +28,16 @@ await writeFile(privatePath,privateKey,{mode:0o600});
 const descriptor={version:1,algorithm,context,publicKeyPem:publicKey,keySha256:keyHash(publicKey),
   createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+14*60*1000).toISOString()};
 try {
-  for(let attempt=0;attempt<2;attempt++){
+  for(let attempt=0;attempt<8;attempt++){
     const existing=await api(prefix+'/public.json');
     try{
-      await api(prefix+'/public.json','PUT',{message:'Publish ephemeral audit handoff public key for run '+runId,branch,
+      await api(prefix+'/public.json','PUT',{message:'Publish ephemeral audit handoff public key for run '+runId+' case '+caseId,branch,
         content:Buffer.from(JSON.stringify(descriptor,null,2)+'\n').toString('base64'),...(existing?{sha:existing.sha}:{})});
       break;
-    }catch(error){if(error.status!==409||attempt)throw error;await delay(1500);}
+    }catch(error){if(error.status!==409||attempt===7)throw error;await delay(Math.min(15000,1000*2**attempt)+Math.floor(Math.random()*1500));}
   }
   await writeFile(join(directory,'public.json'),JSON.stringify(descriptor,null,2));
-  console.log('HANDOFF_READY '+JSON.stringify({runId,runAttempt,path:prefix+'/public.json',keySha256:descriptor.keySha256,expiresAt:descriptor.expiresAt}));
+  console.log('HANDOFF_READY '+JSON.stringify({runId,runAttempt,caseId,path:prefix+'/public.json',keySha256:descriptor.keySha256,expiresAt:descriptor.expiresAt}));
   let received=false;
   while(Date.now()<Date.parse(descriptor.expiresAt)) {
     const file=await api(prefix+'/encrypted.json');
@@ -55,7 +54,7 @@ try {
       for(const value of [credentials.email,credentials.password])console.log('::add-mask::'+value.replaceAll('%','%25'));
       await writeFile(credentialPath,JSON.stringify(credentials),{mode:0o600});plain.fill(0);
       await appendFile(process.env.GITHUB_OUTPUT,'credentials_path='+credentialPath+'\nprivate_dir='+directory+'\n');
-      received=true;console.log('HANDOFF_ACCEPTED '+JSON.stringify({runId,runAttempt}));break;
+      received=true;console.log('HANDOFF_ACCEPTED '+JSON.stringify({runId,runAttempt,caseId}));break;
     }
     await delay(15000);
   }
