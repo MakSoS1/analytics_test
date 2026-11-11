@@ -98,9 +98,29 @@ class DiagnosticFailureTests(unittest.TestCase):
         self.assertEqual(result['status'], 'diagnostic_initialization_failed')
         self.assertIsNone(result['ok'])
 
+    def test_sampler_encoder_failure_is_not_a_media_decode_verdict(self):
+        log = '[mjpeg @ 0x123] Invalid pts (1024) <= last (1024)\n[vost#1:0/mjpeg] Error submitting video frame to the encoder\n'
+        result = decode_outcome(255, False, log)
+        self.assertEqual(result['status'], 'diagnostic_output_failed')
+        self.assertIsNone(result['ok'])
+
 
 @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg tools required')
 class DecodeTimestampTest(unittest.TestCase):
+    def test_adjacent_vfr_frames_preserve_precise_input_timestamps(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            video = root/'adjacent-vfr.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=160x90:r=15:d=1.2',
+                            '-vf', "settb=1/3000,setpts='if(gte(N,2),N*200-160,N*200)'",
+                            '-fps_mode', 'passthrough', '-enc_time_base:v', 'filter', '-c:v', 'libx264',
+                            '-bf', '0', '-pix_fmt', 'yuv420p', '-y', str(video)], check=True)
+            report = decode_and_sample(video, root/'samples', [q('.067'), q('.08')])
+            self.assertTrue(report['full_decode']['ok'], report['full_decode']['failure_tail'])
+            self.assertEqual(report['scene_screening']['frame_count'], 18)
+            self.assertEqual([q(r['actual_output_time_exact']) for r in report['requests']], [q('.067'),q('.08')])
+            self.assertEqual(len(report['frames']), 2)
+
     def test_exact_eight_tenths_frame_is_not_skipped(self):
         with tempfile.TemporaryDirectory() as name:
             root = Path(name)

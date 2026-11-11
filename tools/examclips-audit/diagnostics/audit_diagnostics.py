@@ -73,6 +73,8 @@ def decode_outcome(returncode, timed_out, log):
     setup_markers = ('Error initializing filters', 'Error parsing global options', 'Error while parsing expression')
     if 'Output #0' not in log and any(marker in log for marker in setup_markers):
         return {'ok': None, 'status': 'diagnostic_initialization_failed'}
+    if re.search(r'\[mjpeg[^\]]*\].*(?:Invalid pts|Error)', log) or 'Error submitting video frame to the encoder' in log:
+        return {'ok': None, 'status': 'diagnostic_output_failed'}
     return {'ok': False, 'status': 'decode_failed'}
 
 
@@ -411,8 +413,10 @@ def decode_and_sample(path, outdir, requested_times, data=None, thumbnail_width=
     command = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'info', '-xerror', '-err_detect', 'explode',
                '-threads', '1', '-copyts', '-protocol_whitelist', 'file,pipe', '-i', str(path),
                '-filter_complex_script', str(filter_script), '-map', '0:v?', '-map', '0:a?', '-map', '[screen]',
+               '-fps_mode:v', 'passthrough', '-enc_time_base:v', 'filter',
                '-c:v', 'wrapped_avframe', '-c:a', 'pcm_s16le', '-f', 'null', '-',
-               '-map', '[samples]', '-fps_mode', 'passthrough', '-c:v', 'mjpeg', '-threads:v', '1', '-q:v', '3', '-y', pattern]
+               '-map', '[samples]', '-fps_mode', 'passthrough', '-enc_time_base:v', 'filter',
+               '-c:v', 'mjpeg', '-threads:v', '1', '-q:v', '3', '-y', pattern]
     timed_out = False
     with log_path.open('w') as stream:
         try:
@@ -666,12 +670,13 @@ def project_clip(project, row, filename):
     return None, 'not_bound_to_project'
 
 
-def inspect_case(case_dir, source_path=None, interval=12.5, audio_check=False, outdir=None):
+def inspect_case(case_dir, source_path=None, interval=12.5, audio_check=False, outdir=None, reuse_completed=False):
     case_dir = Path(case_dir).resolve()
     if not case_dir.is_dir():
         raise ValueError('Case directory does not exist: ' + str(case_dir))
     outdir = Path(outdir).resolve() if outdir else case_dir/'diagnostics'
     outdir.mkdir(parents=True, exist_ok=True)
+    previous_summary = read_json(outdir/'diagnostics.json') if reuse_completed and (outdir/'diagnostics.json').is_file() else {}
     result_path = case_dir/'result.json'
     result = read_json(result_path) if result_path.is_file() else {}
     projects = []
@@ -719,6 +724,10 @@ def inspect_case(case_dir, source_path=None, interval=12.5, audio_check=False, o
                'source': source_record, 'sampling_interval_sec': interval,
                'missing_claimed_downloads': missing, 'not_exported_rows': unexported,
                'limitations': LIMITATIONS, 'clips': [], 'quality_score': None}
+    reusable_context = (reuse_completed and previous_summary.get('source', {}).get('sha256') == source_record.get('sha256')
+                        and previous_summary.get('project_files') == summary['project_files']
+                        and previous_summary.get('sampling_interval_sec') == interval)
+    previous_entries = {item['file']: item for item in previous_summary.get('clips', [])}
     for path in files:
         clipdir = outdir/path.stem
         clipdir.mkdir(parents=True, exist_ok=True)
@@ -733,7 +742,8 @@ def inspect_case(case_dir, source_path=None, interval=12.5, audio_check=False, o
             if other is not None:
                 alternatives.append({'project_file': p['file'], 'binding': how, 'edl': edl_json(build_edl(other)),
                                      'matches_selected_edl': build_edl(other) == primary_edl})
-        report = {'schema_version': 2, 'file': str(path), 'bytes': path.stat().st_size, 'sha256': digest(path),
+        report = {'schema_version': 2, 'helper_sha256': summary['helper_sha256'],
+                  'file': str(path), 'bytes': path.stat().st_size, 'sha256': digest(path),
                   'title': row.get('title') or (clip or {}).get('title'), 'result_row': row or None,
                   'binding': {'result_rows_with_same_filename': len(bound_rows), 'project_binding': binding},
                   'selected_edl_provenance': primary_origin, 'edl': edl_json(primary_edl),
@@ -743,6 +753,19 @@ def inspect_case(case_dir, source_path=None, interval=12.5, audio_check=False, o
                                    'project_file': projects[0]['file'] if projects else None,
                                    'version': track.get('version') if isinstance(track, dict) else None,
                                    'confirmed_renderer_track': False}, 'limitations': LIMITATIONS, 'samples': []}
+        previous_report_path = clipdir/'diagnostics.json'
+        if reusable_context and path.name in previous_entries and previous_report_path.is_file():
+            previous_report = read_json(previous_report_path)
+            if (previous_report.get('full_decode', {}).get('ok') is True and not previous_report.get('diagnostic_error')
+                    and previous_report.get('sha256') == report['sha256']
+                    and previous_report.get('result_row') == report['result_row']
+                    and previous_report.get('edl') == report['edl']
+                    and (not audio_check or previous_report.get('audio_comparison', {}).get('status') not in ('not_requested', 'source_not_supplied', None))):
+                entry = {**previous_entries[path.name], 'reused_completed_evidence': True,
+                         'evidence_helper_sha256': previous_report.get('helper_sha256', previous_summary.get('helper_sha256'))}
+                summary['clips'].append(entry)
+                print(json.dumps({'file':path.name, 'reused_completed_evidence':True, 'decoded':True}), flush=True)
+                continue
         try:
             data = probe(path)
             video, _, _ = video_clock(data)
@@ -759,6 +782,8 @@ def inspect_case(case_dir, source_path=None, interval=12.5, audio_check=False, o
             report['full_decode']['log_file'] = 'frames/' + report['full_decode']['log_file']
             if report['full_decode']['status'] == 'diagnostic_initialization_failed':
                 report['diagnostic_error'] = 'FFmpeg diagnostic filter initialization failed before decoding; no media-corruption verdict is established.'
+            elif report['full_decode']['status'] == 'diagnostic_output_failed':
+                report['diagnostic_error'] = 'FFmpeg diagnostic output encoding failed; the full input decode is inconclusive and no media-corruption verdict is established.'
             for field in ('all_frame_scores_file', 'raw_metadata_file'):
                 report['scene_screening'][field] = 'frames/' + report['scene_screening'][field]
             for candidate in report['scene_screening']['candidates']:
@@ -816,6 +841,7 @@ def inspect_case(case_dir, source_path=None, interval=12.5, audio_check=False, o
             report['diagnostic_error'] = repr(exc)
         save_json(clipdir/'diagnostics.json', report)
         summary['clips'].append({'file': path.name, 'diagnostics_file': path.stem+'/diagnostics.json',
+                                 'evidence_helper_sha256': report['helper_sha256'],
                                  'full_decode_ok': report.get('full_decode', {}).get('ok'),
                                  'diagnostic_error': report.get('diagnostic_error'),
                                  'sample_requests': len(report['samples']),
@@ -837,11 +863,12 @@ def main():
     parser.add_argument('--interval', type=float, default=12.5, help='Uniform output sample spacing in seconds; allowed range 10–15, default 12.5.')
     parser.add_argument('--audio-check', action='store_true', help='Compare bounded early/middle/late audio windows with exact EDL source positions.')
     parser.add_argument('--outdir', type=Path, help='Evidence output directory; default CASE/diagnostics.')
+    parser.add_argument('--reuse-completed', action='store_true', help='Retain successful prior clip evidence only when source/project/sample settings, clip SHA256, row and EDL match; rerun incomplete clips.')
     args = parser.parse_args()
     if not 10 <= args.interval <= 15:
         parser.error('--interval must be between 10 and 15 seconds')
     try:
-        summary = inspect_case(args.case_dir, args.source, args.interval, args.audio_check, args.outdir)
+        summary = inspect_case(args.case_dir, args.source, args.interval, args.audio_check, args.outdir, args.reuse_completed)
     except Exception as exc:
         print('Diagnostic input failure: ' + repr(exc), file=sys.stderr)
         return 2

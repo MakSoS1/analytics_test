@@ -1,0 +1,92 @@
+{
+  "scope": "Validation separates constructed technical fixtures from explicitly identified real export verification; no editorial-quality verdict is implied.",
+  "unit_tests": {
+    "count": 18,
+    "passed": 18,
+    "command": [
+      "python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "/workspace/shared/examclips-audit",
+      "-p",
+      "test_audit_diagnostics.py"
+    ]
+  },
+  "paired_source_fixture": {
+    "case": "/workspace/shared/examclips-audit/helper_validation_fixture",
+    "full_decode": true,
+    "source_timestamps_checked": true,
+    "contact_sheet_visually_checked": true,
+    "audio_raw_offsets_sec": [
+      0,
+      0
+    ],
+    "audio_interpretation": "Only confirms this constructed waveform fixture; not an A/V sync assertion for application exports.",
+    "diagnostics_directory": "/workspace/shared/examclips-audit/helper_validation_fixture/diagnostics-v2",
+    "scene_frames_recorded": 31,
+    "native_resolution_images": true
+  },
+  "corrupted_fixture": {
+    "case": "/workspace/shared/examclips-audit/helper_corruption_fixture",
+    "probe_advertised_duration_sec": 2.066667,
+    "full_decode_ok": false,
+    "helper_exit_code": 1,
+    "diagnostics_directory": "/workspace/shared/examclips-audit/helper_corruption_fixture/diagnostics-v2"
+  },
+  "current_helper_sha256": "6a5d0c1f3bf78bfe3ca488b06592aa2e53df3057d0e53434e99d65fb1ade0a49",
+  "scene_screening_fixture": {
+    "scope": "Synthetic color transition only, not a site export",
+    "known_transition_sec": 0.6,
+    "detected_candidate_sec": 0.6,
+    "all_frames_recorded": 12,
+    "jpeg_requests": 1,
+    "full_decode_pass_count": 1,
+    "quality_verdict": null
+  },
+  "large_sample_plan_regression": {
+    "request_counts": [
+      212,
+      600
+    ],
+    "frames_per_fixture": 12,
+    "known_exact_sample_sec": 0.8,
+    "full_decode_and_pts_checks": "passed",
+    "fix": "Balanced select-expression tree; explicit boolean result avoids linear expression depth."
+  },
+  "first_real_export_verification": {
+    "case_id": "en07",
+    "case_directory": "/workspace/shared/examclips-audit/runs/43072118904/en07/evidence/en07",
+    "full_decode_status": "completed",
+    "full_decode_ok": true,
+    "sample_requests": 212,
+    "scene_frames": 6820,
+    "helper_initialization_failure_preserved": "/workspace/shared/examclips-audit/runs/43072118904/en07/evidence/en07/diagnostics/helper-issues/large-select-expression",
+    "initial_failure_is_application_defect": false,
+    "quality_verdict": null
+  },
+  "vfr_encoder_timebase_regression": {
+    "fixture": "18-frame H264 nominal15fps Matroska; adjacent decoded frames at0.067s and0.080s",
+    "before_fix": "MJPEG Invalid pts(1)<=last(1), helper exitfailed",
+    "after_fix": "All18frames decoded and both sourcePTS preserved, explicit filter encoder timebase and passthrough in null/JPEG outputs",
+    "numeric_threshold_quality_verdict": null
+  },
+  "real_en04_repair": {
+    "case_directory": "/workspace/shared/examclips-audit/runs/43072118904/en04/evidence/en04",
+    "clips_reprocessed": [
+      "clip-004.mp4",
+      "clip-005.mp4"
+    ],
+    "prior_successful_clips_reused": [
+      "clip-001.mp4",
+      "clip-002.mp4",
+      "clip-003.mp4"
+    ],
+    "all5_full_decode_ok": true,
+    "sampler_issue_was_application_corruption": false,
+    "failure_evidence": "diagnostics/helper-issues/jpeg-timebase-quantization",
+    "independent_minimal_decode_evidence": "independent-decode/result.json"
+  },
+  "updated_utc": "2026-11-11T18:27:05.281681+00:00"
+}
