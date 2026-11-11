@@ -1,1 +1,1 @@
-{"sequence":1,"operation":"ingest","key":"enl02"}
+{"sequence":2,"operation":"files","key":"enl02","paths":["enl02/result.json","enl02/microtopics.json","enl02/transcript.srt","run.json"]}
