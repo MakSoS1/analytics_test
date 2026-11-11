@@ -1,0 +1,328 @@
+name: ExamClips supplementary native export probe
+
+'on':
+  push:
+    branches:
+      - qa/examclips-audit-2026-11-11
+    paths:
+      - .github/workflows/examclips-native-stream.yml
+      - tools/examclips-native/run-request.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: examclips-native-export-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      enabled: ${{ steps.selection.outputs.enabled }}
+      case_ids: ${{ steps.selection.outputs.case_ids }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - id: selection
+        name: Select only the explicitly enabled supplementary projects
+        run: node tools/examclips-native/prepare.mjs
+  native-export:
+    needs: prepare
+    if: needs.prepare.outputs.enabled == 'true' && github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
+    name: Native save probe ${{ matrix.case_id }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 185
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case_id: ${{ fromJSON(needs.prepare.outputs.case_ids) }}
+    env:
+      AUDIT_CASE_ID: ${{ matrix.case_id }}
+      NATIVE_DESKTOP_SIZE: 1920x1200
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      DEBUG: ''
+      PWDEBUG: '0'
+    steps:
+      - name: Initialize isolated runner-private native evidence paths
+        run: |
+          python3 - <<'PYINIT'
+          import json, os, pathlib
+          base = pathlib.Path(os.environ['RUNNER_TEMP'])
+          case = os.environ['AUDIT_CASE_ID']
+          paths = {
+              'AUDIT_ROOT': base / ('examclips-native-private-work-' + case),
+              'AUDIT_OUT': base / ('examclips-native-evidence-' + case),
+              'AUDIT_ARTIFACT': base / ('examclips-native-encrypted-' + case),
+          }
+          for path in paths.values():
+              path.mkdir(mode=0o700, parents=True, exist_ok=True)
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              for name, path in paths.items():
+                  env.write(f'{name}={path}\n')
+          common = {'auditKind': 'native_export_probe', 'supplementary': True, 'corpusCountIncrement': 0, 'status': 'not_started'}
+          run = dict(common, repository=os.environ['GITHUB_REPOSITORY'], runId=os.environ['GITHUB_RUN_ID'], runAttempt=os.environ['GITHUB_RUN_ATTEMPT'], caseId=case)
+          (paths['AUDIT_OUT'] / 'run.json').write_text(json.dumps(run, indent=2) + '\n')
+          case_dir = paths['AUDIT_OUT'] / case
+          case_dir.mkdir(mode=0o700)
+          (case_dir / 'result.json').write_text(json.dumps(dict(common, id=case), indent=2) + '\n')
+          PYINIT
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - id: tools
+        name: Prepare normal headed Chrome, X11 input, and media tools
+        timeout-minutes: 12
+        run: |
+          command -v google-chrome || command -v google-chrome-stable
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends xvfb xauth xdotool openbox x11-utils dbus-x11 ffmpeg
+          npm --prefix tools/examclips-native ci --ignore-scripts --no-audit --no-fund
+          npm --prefix tools/examclips-native test
+          openssl pkey -pubin -in tools/examclips-native/evidence-recipient.pub.pem -noout
+          google-chrome --version
+          ffmpeg -version | head -1
+      - id: picker-preflight
+        name: Verify the real native picker with a synthetic short MP4 before login
+        timeout-minutes: 4
+        run: bash tools/examclips-native/headed.sh node tools/examclips-native/preflight.mjs
+      - id: handoff
+        name: Receive encrypted login and authenticated saved project
+        timeout-minutes: 16
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/examclips-native/receive-handoff.mjs
+      - id: source
+        name: Reacquire exact source bytes and restore name and timestamp
+        timeout-minutes: 16
+        env:
+          NATIVE_INPUT_FILE: ${{ steps.handoff.outputs.input_path }}
+        run: node tools/examclips-native/prepare-source.mjs
+      - id: browser
+        name: Import the saved project and use the real native save dialog
+        timeout-minutes: 125
+        env:
+          NATIVE_INPUT_FILE: ${{ steps.handoff.outputs.input_path }}
+          NATIVE_CREDENTIALS_FILE: ${{ steps.handoff.outputs.credentials_path }}
+          NATIVE_SOURCE_FILE: ${{ steps.source.outputs.source_path }}
+        run: bash tools/examclips-native/headed.sh node tools/examclips-native/run.mjs
+      - id: package
+        name: Encrypt supplementary success or failure evidence
+        if: always()
+        timeout-minutes: 12
+        env:
+          NATIVE_TOOLS_OUTCOME: ${{ steps.tools.outcome }}
+          NATIVE_PREFLIGHT_OUTCOME: ${{ steps.picker-preflight.outcome }}
+          NATIVE_HANDOFF_OUTCOME: ${{ steps.handoff.outcome }}
+          NATIVE_SOURCE_OUTCOME: ${{ steps.source.outcome }}
+          NATIVE_BROWSER_OUTCOME: ${{ steps.browser.outcome }}
+        run: node tools/examclips-native/package-evidence.mjs
+      - name: Upload encrypted native evidence part 0001
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 1 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0001
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0001/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0002
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 2 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0002
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0002/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0003
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 3 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0003
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0003/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0004
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 4 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0004
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0004/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0005
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 5 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0005
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0005/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0006
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 6 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0006
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0006/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0007
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 7 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0007
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0007/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0008
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 8 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0008
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0008/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0009
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 9 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0009
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0009/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0010
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 10 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0010
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0010/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0011
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 11 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0011
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0011/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0012
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 12 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0012
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0012/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0013
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 13 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0013
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0013/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0014
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 14 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0014
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0014/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0015
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 15 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0015
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0015/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0016
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 16 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0016
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0016/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0017
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 17 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0017
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0017/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0018
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 18 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0018
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0018/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0019
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 19 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0019
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0019/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted native evidence part 0020
+        if: ${{ always() && fromJSON(steps.package.outputs.parts || '0') >= 20 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0020
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0020/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Remove runner-private input and browser material
+        if: always()
+        run: |
+          python3 - <<'PYCLEAN'
+          import os, pathlib, shutil
+          base = pathlib.Path(os.environ['RUNNER_TEMP']).resolve()
+          case = os.environ['AUDIT_CASE_ID']
+          handoff = base / ('examclips-native-private-' + os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT'] + '-' + case)
+          candidates = [handoff] + [pathlib.Path(os.environ[key]) for key in ('AUDIT_ROOT', 'AUDIT_OUT')]
+          for path in candidates:
+              resolved = path.resolve()
+              if resolved.parent != base or not resolved.name.startswith('examclips-native-'):
+                  raise SystemExit('Refusing cleanup outside native runner-private paths')
+              shutil.rmtree(resolved, ignore_errors=True)
+          PYCLEAN

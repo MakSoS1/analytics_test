@@ -1,0 +1,11 @@
+{
+  "name": "examclips-supplementary-native-export-probe",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test *.test.mjs && python3 -m unittest discover -s . -p 'test_*.py'"
+  },
+  "dependencies": {
+    "playwright": "1.65.0"
+  }
+}

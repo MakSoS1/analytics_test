@@ -1,0 +1,27 @@
+[
+  {
+    "file": "crypto.mjs",
+    "copied_from": "/workspace/scratch/fbf4561cfc7e/ci_long/tools/examclips-audit/crypto.mjs",
+    "sha256": "e2a07492dd8d3481cbb987ac525137fd4ace50b5a6232367dd93bf35058cd23d"
+  },
+  {
+    "file": "crypto.test.mjs",
+    "copied_from": "/workspace/scratch/fbf4561cfc7e/ci_long/tools/examclips-audit/crypto.test.mjs",
+    "sha256": "bd8192d0cc51a526326f102fca55a30f8d3d21bdebd17f337931ca5aa5e0299d"
+  },
+  {
+    "file": "split_evidence.py",
+    "copied_from": "/workspace/scratch/fbf4561cfc7e/ci_long/tools/examclips-audit/split_evidence.py",
+    "sha256": "a5cdfcaf5ed3396e2981628554e452eb886056c30ca38cfac78b21efb5d7359b"
+  },
+  {
+    "file": "test_split_evidence.py",
+    "copied_from": "/workspace/scratch/fbf4561cfc7e/ci_long/tools/examclips-audit/test_split_evidence.py",
+    "sha256": "0bd7f880e8e75947e1dd31b7e0c8350720dc404aede4767084776504e5f3c81f"
+  },
+  {
+    "file": "evidence-recipient.pub.pem",
+    "copied_from": "/workspace/scratch/fbf4561cfc7e/ci_long/tools/examclips-audit/evidence-recipient.pub.pem",
+    "sha256": "f811cfbb1944543b10e16a4680d5db55b2650cded766a9ef6f67619550430c43"
+  }
+]
