@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "ru01",
+      "platform": "rutube",
+      "video_id": "355c2e92217e3c798a706ecc4ccaf585",
+      "source_url": "https://rutube.ru/video/355c2e92217e3c798a706ecc4ccaf585/",
+      "title": "СИЛЬНЫЙ И СЛАБЫЙ ЭЛЕКТРОЛИТ",
+      "language": "ru",
+      "duration_sec": 929.0,
+      "max_height": 480
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "examclips-authorized-live-audit",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test crypto.test.mjs"},
+  "dependencies": {"playwright": "latest"}
+}

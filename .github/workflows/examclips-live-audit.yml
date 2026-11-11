@@ -1,0 +1,76 @@
+name: ExamClips authorized live audit
+
+'on':
+  push:
+    branches:
+      - qa/examclips-audit-2026-11-11
+    paths:
+      - .github/workflows/examclips-live-audit.yml
+      - tools/examclips-audit/**
+
+permissions:
+  contents: write
+
+jobs:
+  live-audit:
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      AUDIT_ROOT: ${{ runner.temp }}/examclips-live-audit
+      AUDIT_OUT: ${{ runner.temp }}/examclips-live-evidence
+      AUDIT_ARTIFACT: ${{ runner.temp }}/examclips-encrypted-artifact
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate encryption and required public key
+        run: |
+          node --test tools/examclips-audit/crypto.test.mjs
+          openssl pkey -pubin -in tools/examclips-audit/evidence-recipient.pub.pem -noout
+      - name: Install official Playwright Chrome and public media tools
+        run: |
+          npm --prefix tools/examclips-audit install --ignore-scripts --no-audit --no-fund
+          cd tools/examclips-audit
+          npx playwright install --with-deps chrome
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+      - id: handoff
+        name: Publish ephemeral key and wait for encrypted real-site login
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/examclips-audit/handoff.mjs
+      - name: Run sequential full-source live browser audit
+        env:
+          AUDIT_CREDENTIALS_FILE: ${{ steps.handoff.outputs.credentials_path }}
+        run: node tools/examclips-audit/run.mjs
+      - name: Encrypt audit evidence with the recipient public key
+        if: always()
+        run: node tools/examclips-audit/package-evidence.mjs
+      - name: Upload encrypted evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-live-encrypted-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/examclips-encrypted-artifact/
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Remove runner-private authentication and original media
+        if: always()
+        env:
+          PRIVATE_DIR: ${{ steps.handoff.outputs.private_dir }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, shutil
+          base = pathlib.Path(os.environ["RUNNER_TEMP"]).resolve()
+          paths = [os.environ.get("PRIVATE_DIR"), os.environ.get("AUDIT_ROOT"), os.environ.get("AUDIT_OUT")]
+          for value in paths:
+              if not value:
+                  continue
+              path = pathlib.Path(value).resolve()
+              if path != base and base in path.parents:
+                  shutil.rmtree(path, ignore_errors=True)
+          PY
