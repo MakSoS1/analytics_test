@@ -39,3 +39,5 @@ console.log(JSON.stringify({
   ...result,
   scope: 'Public known-answer and failure tests in an isolated VM; no real keys or grants.'
 }));
+
+await import('./test-client-session.mjs');
