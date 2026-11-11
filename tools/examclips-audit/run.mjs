@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {resolve,join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
+import {arch,availableParallelism,cpus,platform,release,totalmem,version as osVersion} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 
 const HERE=dirname(fileURLToPath(import.meta.url));
@@ -60,13 +61,18 @@ async function buildMetadata() {
   }catch(error){return {checkedAt:now(),error:safe(error.message)}}
 }
 const commitOf=build=>build?.data?.commit||build?.data?.sourceCommit||build?.data?.source_commit||null;
+const runnerCpus=cpus();
 const run={schema:1,startedAt:now(),repository:process.env.GITHUB_REPOSITORY,runId:process.env.GITHUB_RUN_ID,
   runAttempt:process.env.GITHUB_RUN_ATTEMPT,sourceCommit:process.env.GITHUB_SHA,
   target:config.production_url,selectedCases:config.case_ids,exportPolicy:'all',
   accommodation:config.disable_native_save_pickers?
     'Only showSaveFilePicker and showDirectoryPicker are unavailable in this CI browser. The unchanged app uses its existing full-MP4 memory/download fallback. The source input, real authentication, quota checks, ASR, models, topic planner and renderer are unchanged.':
     'No file-picker accommodation',
-  playwrightVersion:require('playwright/package.json').version,node:process.version,cases:[]};
+  playwrightVersion:require('playwright/package.json').version,node:process.version,
+  runner:{platform:platform(),kernelRelease:release(),osVersion:osVersion(),architecture:arch(),
+    imageOS:process.env.ImageOS||null,imageVersion:process.env.ImageVersion||null,
+    cpuModel:runnerCpus[0]?.model||null,logicalCpuCount:runnerCpus.length,
+    availableParallelism:availableParallelism(),totalMemoryBytes:totalmem()},cases:[]};
 run.buildBefore=await buildMetadata();
 await json(join(output,'run.json'),run);
 await json(join(output,'selected-manifest.json'),{version:manifest.version,cases});
@@ -328,6 +334,9 @@ try {
   });
   run.browserVersion=context.browser()?.version()||'persistent Chrome';
   const login=await context.newPage();
+  run.viewport=login.viewportSize();
+  run.browserUserAgent=await login.evaluate(()=>navigator.userAgent);
+  if(run.browserVersion==='persistent Chrome')run.browserVersion=run.browserUserAgent.match(/Chrome\/([0-9.]+)/)?.[1]||null;
   await login.goto(config.production_url,{waitUntil:'domcontentloaded',timeout:60000});
   await login.locator('#auth-email').fill(credentials.email);
   await login.locator('#auth-password').fill(credentials.password);

@@ -45,7 +45,7 @@ jobs:
         run: |
           npm --prefix tools/examclips-audit install --ignore-scripts --no-audit --no-fund
           python3 - <<'PY'
-          import json, os, pathlib, shutil, subprocess
+          import hashlib, os, pathlib, shutil, subprocess, tarfile, urllib.request
           binaries = {
               "Chrome": shutil.which("google-chrome") or shutil.which("google-chrome-stable"),
               "FFmpeg": shutil.which("ffmpeg"),
@@ -53,35 +53,55 @@ jobs:
           }
           if not binaries["Chrome"]:
               raise SystemExit("The runner's preinstalled official Chrome is missing. No apt or browser installation was attempted.")
-          packages = {
-              "FFmpeg": ("@ffmpeg-installer/linux-x64", "4.1.0", "ffmpeg", "sha512-Y5BWhGLU/WpQjOArNIgXD3z5mxxdV8c41C+U15nsE5yF8tVcdCGet5zPs5Zy3Ta6bU7haGpIzryutqCGQA/W8A=="),
-              "FFprobe": ("@ffprobe-installer/linux-x64", "5.2.0", "ffprobe", "sha512-D3UeqTLYPNs7pBWPLUYGehPdRVqU8eACox4OZy3pZUZatxye2YKlvBwEfaLdL1v2Z4FOAlLUhms0kY8m8kqSRA=="),
-          }
-          missing = [name for name in packages if not binaries[name]]
+          executable_names = {"FFmpeg": "ffmpeg", "FFprobe": "ffprobe"}
+          missing = [name for name in executable_names if not binaries[name]]
           if missing:
               media_dir = pathlib.Path(os.environ["AUDIT_ROOT"]) / "media-tools"
               media_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
-              dependencies = {packages[name][0]: packages[name][1] for name in missing}
-              (media_dir / "package.json").write_text(json.dumps({"name": "examclips-audit-media-tools", "version": "1.0.0", "private": True, "dependencies": dependencies}), encoding="utf-8")
-              subprocess.run(["npm", "--prefix", str(media_dir), "install", "--ignore-scripts", "--no-audit", "--no-fund", "--package-lock=true", "--registry=https://registry.npmjs.org"], check=True, timeout=180)
-              lock = json.loads((media_dir / "package-lock.json").read_text(encoding="utf-8"))
+              url = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-11-12-39/ffmpeg-n9.0.2-49-gc179411bbb-linux64-gpl-9.0.tar.xz"
+              expected_bytes = 152720464
+              expected_sha256 = "ca1107e3a14a9de4c4712f9405bb720a47dac41426cf2a1da09acb4811805758"
+              archive = media_dir / "verified-ffmpeg.tar.xz"
+              digest, received = hashlib.sha256(), 0
+              request = urllib.request.Request(url, headers={"User-Agent": "ExamClips-authorized-audit"})
+              with urllib.request.urlopen(request, timeout=60) as response, archive.open("wb") as destination:
+                  while block := response.read(1024 * 1024):
+                      received += len(block)
+                      if received > expected_bytes:
+                          raise SystemExit("FFmpeg archive exceeds the verified release size")
+                      digest.update(block)
+                      destination.write(block)
+              if received != expected_bytes or digest.hexdigest() != expected_sha256:
+                  raise SystemExit("Pinned FFmpeg release archive integrity mismatch")
               bin_dir = media_dir / "bin"
               bin_dir.mkdir(mode=0o700, exist_ok=True)
-              for name in missing:
-                  package, version, executable, integrity = packages[name]
-                  metadata = lock.get("packages", {}).get("node_modules/" + package, {})
-                  if metadata.get("version") != version or metadata.get("integrity") != integrity:
-                      raise SystemExit("Pinned package integrity mismatch for " + package)
-                  target = media_dir / "node_modules" / package / executable
-                  if not target.is_file():
-                      raise SystemExit("Verified package has no expected executable: " + package)
-                  target.chmod(target.stat().st_mode | 0o111)
-                  link = bin_dir / executable
-                  link.symlink_to(target)
-                  binaries[name] = str(link)
+              found = set()
+              with tarfile.open(archive, "r|xz") as bundle:
+                  for member in bundle:
+                      if not member.isfile():
+                          continue
+                      parts = pathlib.PurePosixPath(member.name).parts
+                      for name in missing:
+                          executable = executable_names[name]
+                          if tuple(parts[-2:]) != ("bin", executable):
+                              continue
+                          if name in found or member.size > 1024 * 1024 * 1024:
+                              raise SystemExit("Unexpected executable entry in verified FFmpeg archive")
+                          target = bin_dir / executable
+                          with bundle.extractfile(member) as source, target.open("wb") as destination:
+                              shutil.copyfileobj(source, destination, 1024 * 1024)
+                          target.chmod(0o755)
+                          binaries[name] = str(target)
+                          found.add(name)
+                      if parts and parts[-1].lower() in {"license.txt", "readme.txt", "readme.md", "copying.gplv3"} and member.size <= 1024 * 1024:
+                          with bundle.extractfile(member) as source, (media_dir / parts[-1]).open("wb") as destination:
+                              shutil.copyfileobj(source, destination)
+              archive.unlink()
+              if found != set(missing):
+                  raise SystemExit("Verified FFmpeg archive is missing a required executable")
               with open(os.environ["GITHUB_PATH"], "a", encoding="utf-8") as path_file:
                   path_file.write(str(bin_dir) + "\n")
-              print("Provisioned missing media tools from pinned npm packages with verified integrity; install scripts were disabled.")
+              print("Provisioned missing media tools from FFmpeg-Builds autobuild-2026-11-11-12-39; archive SHA-256 and size verified before extraction.")
           for name, path in binaries.items():
               flag = "--version" if name == "Chrome" else "-version"
               result = subprocess.run([path, flag], check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=15)
