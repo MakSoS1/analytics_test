@@ -28,6 +28,19 @@ const expectCode = (code, expected) => {
     '; return null; } catch (e) { return e.code || e.message; } })()');
   assert.equal(actual, expected);
 };
+for (const [hex, encoded] of [
+  ['', ''], ['66', 'Zg=='], ['666f', 'Zm8='], ['666f6f', 'Zm9v'],
+  ['666f6f62', 'Zm9vYg=='], ['666f6f6261', 'Zm9vYmE='], ['666f6f626172', 'Zm9vYmFy']
+]) {
+  assert.equal(evaluate('S.toBase64(AuditCrypto.fromHex(' + JSON.stringify(hex) + '))'), encoded);
+  assert.equal(evaluate('AuditCrypto.toHex(S.fromBase64(' + JSON.stringify(encoded) + '))'), hex);
+}
+const allOctets = Buffer.from(Array.from({length:256}, (_, i) => i));
+put('allOctetsHex', allOctets.toString('hex'));
+assert.equal(evaluate('S.toBase64(AuditCrypto.fromHex(allOctetsHex))'), allOctets.toString('base64'));
+for (const invalid of ['Zh==', 'Zm9=', 'Zg', 'Zg=', 'Zg====', '====', 'Zg==Zg==', 'Zg==\n']) {
+  expectCode('S.fromBase64(' + JSON.stringify(invalid) + ')', 'INVALID_BASE64');
+}
 const now = Date.now();
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 4096, publicExponent: 65537,
@@ -95,10 +108,10 @@ function nodeReply(value, context = replyContext, extra = {}, raw = null) {
 }
 evaluate('globalThis.replyKey = new Uint8Array(32).fill(0x13);');
 put('expectedContext', replyContext);
-const textBytes = Buffer.from('Пример: α + β = 2.\n');
+const textBytes = Buffer.from('Пример: α + β = 2. 🧪\n');
 const record = { path: 'enl02/reference.txt', bytes: textBytes.length, sha256: sha(textBytes),
   mime: 'application/octet-stream', base64: textBytes.toString('base64') };
-const value = { status: 'ready', key: 'enl02', files: [record] };
+const value = { status: 'ready', key: 'enl02', title: 'Квантовая теория 🧪', files: [record] };
 put('reply', nodeReply(value));
 assert.deepEqual(result('S.decryptReply(AuditCrypto, reply, replyKey, expectedContext)'), value);
 put('record', record);
@@ -198,6 +211,7 @@ console.log(JSON.stringify({
   checks: ['Node RSA-OAEP and AES-GCM interoperability', 'Node HKDF agreement and lane separation',
     'descriptor expiry and fingerprint', 'strict context and authenticated reply size/hash',
     'unchanged nested context AAD', 'file hash before text/image', 'strict UTF8',
-    'bounded chunk assembly and corruption/path rejection', 'private grant fail-closed guards'],
+    'bounded chunk assembly and corruption/path rejection', 'private grant fail-closed guards',
+    'portable RFC4648 vectors, all octets and malformed padding', 'Cyrillic/Greek/astral UTF8 round trip'],
   scope: 'Public generated fixture keypair and synthetic grants only; no recovery key or real grants.'
 }));

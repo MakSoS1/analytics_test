@@ -41,24 +41,53 @@ function canonical(value) {
     Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
   ));
 }
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const BASE64VALUES = new Uint8Array(128).fill(255);
+for (let i = 0; i < BASE64.length; i++) BASE64VALUES[BASE64.charCodeAt(i)] = i;
 function toBase64(value) {
   bytes(value);
-  if (typeof value.toBase64 !== 'function') fail('BASE64_RUNTIME_UNAVAILABLE');
-  return value.toBase64();
+  if (value.length > MAXREPLY) fail('BASE64_SIZE_LIMIT');
+  const chunks = [];
+  for (let start = 0; start < value.length; start += 12288) {
+    const end = Math.min(start + 12288, value.length);
+    let part = '';
+    for (let i = start; i < end; i += 3) {
+      const a = value[i], b = i + 1 < end ? value[i + 1] : 0;
+      const c = i + 2 < end ? value[i + 2] : 0;
+      part += BASE64[a >>> 2] + BASE64[((a & 3) << 4) | (b >>> 4)] +
+        (i + 1 < end ? BASE64[((b & 15) << 2) | (c >>> 6)] : '=') +
+        (i + 2 < end ? BASE64[c & 63] : '=');
+    }
+    chunks.push(part);
+  }
+  return chunks.join('');
 }
 function fromBase64(value, maximum = MAXREPLY) {
   integer(maximum, 0, MAXREPLY, 'BASE64_SIZE_LIMIT');
   if (typeof value !== 'string' || value.length > 4 * Math.ceil(maximum / 3) ||
       value.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(value)) fail('INVALID_BASE64');
-  const padding = value.indexOf('=');
-  if (padding !== -1 && (padding < value.length - 2 ||
-      !/^={1,2}$/.test(value.slice(padding)))) fail('INVALID_BASE64');
-  if (typeof Uint8Array.fromBase64 !== 'function') fail('BASE64_RUNTIME_UNAVAILABLE');
-  let result;
-  try { result = Uint8Array.fromBase64(value, { lastChunkHandling: 'strict' }); }
-  catch { fail('INVALID_BASE64'); }
-  if (result.length > maximum || toBase64(result) !== value) fail('INVALID_BASE64');
-  return result;
+  const paddingAt = value.indexOf('=');
+  if (paddingAt !== -1 && (paddingAt < value.length - 2 ||
+      !/^={1,2}$/.test(value.slice(paddingAt)))) fail('INVALID_BASE64');
+  const padding = paddingAt === -1 ? 0 : value.length - paddingAt;
+  const length = value.length / 4 * 3 - padding;
+  if (length > maximum || length < 0) fail('INVALID_BASE64');
+  if ((padding === 2 && (BASE64VALUES[value.charCodeAt(value.length - 3)] & 15) !== 0) ||
+      (padding === 1 && (BASE64VALUES[value.charCodeAt(value.length - 2)] & 3) !== 0)) {
+    fail('INVALID_BASE64');
+  }
+  const output = new Uint8Array(length);
+  let position = 0;
+  for (let i = 0; i < value.length; i += 4) {
+    const a = BASE64VALUES[value.charCodeAt(i)], b = BASE64VALUES[value.charCodeAt(i + 1)];
+    const c = value[i + 2] === '=' ? 0 : BASE64VALUES[value.charCodeAt(i + 2)];
+    const d = value[i + 3] === '=' ? 0 : BASE64VALUES[value.charCodeAt(i + 3)];
+    const word = (a << 18) | (b << 12) | (c << 6) | d;
+    if (position < length) output[position++] = word >>> 16;
+    if (position < length) output[position++] = (word >>> 8) & 255;
+    if (position < length) output[position++] = word & 255;
+  }
+  return output;
 }
 function utf8Text(C, value) {
   bytes(value);
