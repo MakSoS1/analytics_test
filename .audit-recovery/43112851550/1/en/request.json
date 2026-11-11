@@ -1,1 +1,1 @@
-{"sequence":10,"operation":"ingest","key":"enl03"}
+{"sequence":11,"operation":"files","key":"enl03","paths":["enl03/result.json","enl03/microtopics.json","enl03/transcript.srt","run.json","enl03/clip-001-frame-2.png","enl03/clip-005-frame-2.png","enl03/clip-009-frame-2.png","enl03/clip-013-frame-2.png","enl03/clip-017-frame-2.png","enl03/clip-021-frame-2.png","enl03/clip-025-frame-2.png","enl03/clip-027-frame-2.png"]}
