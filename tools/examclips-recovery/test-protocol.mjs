@@ -1,4 +1,4 @@
-import {requireIdentity,safeRelative,targetFor,validateRequest,ROSTERS} from './protocol.mjs';
+import {requireIdentity,safeRelative,targetFor,validateRequest,ROSTERS,acceptableSequence,allowedReference} from './protocol.mjs';
 const assert=(v,m)=>{if(!v)throw Error(m);};
 const rejects=(f,m)=>{let failed=false;try{f();}catch{failed=true;}assert(failed,m);};
 assert(requireIdentity({GITHUB_REPOSITORY:'MakSoS1/analytics_test',GITHUB_REF_NAME:'qa/examclips-audit-2026-11-11',GITHUB_RUN_ID:'123',GITHUB_RUN_ATTEMPT:'1',RECOVERY_LANE:'root'}).caseId==='root','identity');
@@ -15,4 +15,8 @@ rejects(()=>validateRequest({sequence:1,operation:'frame',key:'rul01',path:'orig
 assert(validateRequest({sequence:1,operation:'files',key:'rul01',paths:['rul01/result.json']},'root',1).key==='rul01','valid request rejected');
 const primary=Object.values(ROSTERS).flat().filter(x=>!x.native);
 assert(primary.length===20&&new Set(primary.map(x=>x.key)).size===20,'corpus identity drift');
+let sequenceState=0;const processed=[];for(const incoming of [10001,'1',1]){if(!acceptableSequence(sequenceState,incoming))continue;processed.push(incoming);sequenceState=incoming;}
+assert(sequenceState===1&&JSON.stringify(processed)==='[1]','invalid request poisoned sequence');
+for(const url of ['http://av.tib.eu/a','https://av.tib.eu@evil.example/a','https://127.0.0.1/a','https://eviltib.eu/a'])assert(!allowedReference(url),'unapproved reference host');
+assert(allowedReference('https://av.tib.eu/media/15038')&&allowedReference('https://cdn.cs50.net/a.vtt'),'public reference rejected');
 console.log(JSON.stringify({protocolTests:'passed',uniquePrimaryCases:20,supplementaryCases:1}));

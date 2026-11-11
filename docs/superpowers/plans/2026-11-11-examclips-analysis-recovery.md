@@ -66,3 +66,6 @@ Ruling: the local executor is unavailable, so existing isolated QA branch/API le
 - Pure protocol regression checks: baseline failed with missing requireIdentity, implementation passed in V8; the same public test file will run in Node on Actions.
 - Review finding: primary evidence includes selected-manifest.json at archive root. A real-layout regression has been added before the extraction allowance; the first public-only Actions test run is expected to expose this failure. No private handoff is permitted before correction.
 - Review finding: mapped diagnostics must use each exact pre-export project. The initial existing-helper wrapper is not approved for mapped quality claims; it will be replaced before private inspection.
+
+- Actual GHA baseline run43109882073: all3 lanes passed crypto VM/known-answer tests and protocol checks; each ZIP suite failed only the new real-layout test. Controller steps skipped; no private data supplied. ZIP root allowance and selected case-manifest binding implemented after this observed RED.
+- Sequence poisoning was independently reproduced on the baseline by the reviewer. The exact-next guard and loop/state regression now reject10001 and string values without advancing, then accept1.

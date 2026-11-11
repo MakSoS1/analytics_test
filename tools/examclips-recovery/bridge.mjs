@@ -6,8 +6,8 @@ import {generateKeyPairSync,createPublicKey,createHash,createCipheriv,randomByte
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {spawn} from 'node:child_process';
-import {open,keyHash} from '../examclips-audit/crypto.mjs';
-import {REPO,BRANCH,ROSTERS,requireIdentity,validateRequest,targetFor,canonical,safeRelative} from './protocol.mjs';
+import {open,seal,keyHash} from '../examclips-audit/crypto.mjs';
+import {REPO,BRANCH,ROSTERS,requireIdentity,validateRequest,targetFor,canonical,safeRelative,acceptableSequence,allowedReference} from './protocol.mjs';
 import {ingestCase} from './ingest.mjs';
 const HERE=dirname(fileURLToPath(import.meta.url)),identity=requireIdentity(process.env);
 const prefix='.audit-recovery/'+identity.runId+'/'+identity.runAttempt+'/'+identity.caseId;
@@ -33,10 +33,12 @@ async function readPublic(path){
 }
 async function publish(entries,message){
  for(const entry of entries)if(!entry.path.startsWith(prefix+'/'))throw Error('PUBLIC_OUTPUT_PATH_ESCAPE');
+ const prepared=[];
+ for(const entry of entries){if(entry.content.length>200000){const blob=await gh('/repos/'+REPO+'/git/blobs',{method:'POST',body:{content:entry.content,encoding:'utf-8'}});prepared.push({path:entry.path,mode:'100644',type:'blob',sha:blob.sha});}else prepared.push({path:entry.path,mode:'100644',type:'blob',content:entry.content});}
  for(let trial=0;trial<12;trial++){
   const ref=await gh('/repos/'+REPO+'/git/ref/heads/'+BRANCH);
   const parent=ref.object.sha,commit=await gh('/repos/'+REPO+'/git/commits/'+parent);
-  const tree=await gh('/repos/'+REPO+'/git/trees',{method:'POST',body:{base_tree:commit.tree.sha,tree:entries.map(e=>({path:e.path,mode:'100644',type:'blob',content:e.content}))}});
+  const tree=await gh('/repos/'+REPO+'/git/trees',{method:'POST',body:{base_tree:commit.tree.sha,tree:prepared}});
   const next=await gh('/repos/'+REPO+'/git/commits',{method:'POST',body:{message,tree:tree.sha,parents:[parent]}});
   try{await gh('/repos/'+REPO+'/git/refs/heads/'+BRANCH,{method:'PATCH',body:{sha:next.sha,force:false}});return next.sha;}
   catch(error){if(![409,422].includes(error.status)||trial===11)throw error;await pause(1500);}
@@ -53,8 +55,19 @@ function replyEnvelope(value,replyContext,key=replyKey){
 async function reply(seq,value){
  const replyContext={...context('review-reply'),sequence:seq,key:value.key??null};
  const envelope=replyEnvelope(value,replyContext);
- await publish([{path:prefix+'/responses/'+String(seq).padStart(5,'0')+'.json',content:JSON.stringify(envelope)}],'Publish encrypted review response '+identity.runId+' '+identity.caseId+' '+seq);
- console.log('REVIEW_RESPONSE '+JSON.stringify({lane:identity.caseId,sequence:seq,status:value.status,key:value.key??null,encryptedBytes:envelope.ciphertext.length}));
+ const responsePath=prefix+'/responses/'+String(seq).padStart(5,'0'),entries=[],characters=envelope.ciphertext.length;
+ if(characters>600000){
+  envelope.ciphertextParts=[];
+  for(let start=0,index=1;start<characters;start+=600000,index++){
+   const piece=envelope.ciphertext.slice(start,start+600000),path=responsePath+'-p'+String(index).padStart(4,'0')+'.json';
+   envelope.ciphertextParts.push({path,index,characters:piece.length,sha256:sha(piece)});
+   entries.push({path,content:JSON.stringify({index,ciphertext:piece})});
+  }
+  delete envelope.ciphertext;
+ }
+ entries.push({path:responsePath+'.json',content:JSON.stringify(envelope)});
+ await publish(entries,'Publish encrypted review response '+identity.runId+' '+identity.caseId+' '+seq);
+ console.log('REVIEW_RESPONSE '+JSON.stringify({lane:identity.caseId,sequence:seq,status:value.status,key:value.key??null,encryptedCharacters:characters,parts:envelope.ciphertextParts?.length??1}));
 }
 async function waitInput(filename,expectedContext,privateKey,timeoutMs){
  const expires=Date.now()+timeoutMs;
@@ -132,6 +145,19 @@ async function operation(request){
  }
  if(!current||current.receipt.target.key!==target.key)throw Error('CASE_NOT_CURRENT');
  if(request.operation==='inventory')return {status:'ready',key:target.key,inventory:await inventory(),diagnostics:diagnosticStatus()};
+ if(request.operation==='reference'){
+  let url=request.url,response=null;
+  for(let redirects=0;redirects<5;redirects++){
+   if(!allowedReference(url))throw Error('UNAPPROVED_REFERENCE_REDIRECT');
+   response=await fetch(url,{redirect:'manual',signal:AbortSignal.timeout(60000)});
+   if([301,302,303,307,308].includes(response.status)){url=new URL(response.headers.get('location'),url).href;continue;}break;
+  }
+  if(!response?.ok||!response.body)throw Error('PUBLIC_REFERENCE_FAILED');
+  const chunks=[];let bytes=0;for await(const chunk of response.body){bytes+=chunk.length;if(bytes>8*1024**2)throw Error('REFERENCE_SIZE_LIMIT');chunks.push(Buffer.from(chunk));}
+  const data=Buffer.concat(chunks),file=join(current.caseDir,'reference-'+sha(request.url).slice(0,16)+'.txt');
+  await writeFile(file,data,{mode:0o600});
+  return {status:'ready',key:target.key,reference:{requestedUrl:request.url,finalUrl:url,contentType:response.headers.get('content-type'),sha256:sha(data),bytes},files:await readSelected([relative(current.evidence,file)])};
+ }
  if(request.operation==='files')return {status:'ready',key:target.key,files:await readSelected(request.paths)};
  if(request.operation==='frame'){
   const result=await executePrivate('python3',[join(HERE,'media.py'),'frame',current.caseDir,request.path,String(request.seconds)],null,'frame-'+request.sequence,{timeout:120000});
@@ -182,12 +208,14 @@ async function main(){
  if(keyHash(pub)!==keyHash(expected))throw Error('RECOVERY_KEY_FINGERPRINT_MISMATCH');
  payload.transfer=null;payload.helpers=null;payload.replyKey=null;
  await rm(join(privateRoot,'ephemeral.pem'),{force:true});
+ const backup=seal(Buffer.from(JSON.stringify({version:1,identity,replyKey:replyKey.toString('base64'),createdAt:new Date().toISOString()})),expected,context('review-reply-key-backup'));
+ await publish([{path:prefix+'/reply-key-backup.json',content:JSON.stringify(backup)}],'Preserve encrypted review reply key '+identity.runId+' '+identity.caseId);
  await reply(0,{status:'controller_ready',lane:identity.caseId,materialized:true,recoveryFingerprint:keyHash(pub),roster:ROSTERS[identity.caseId]});
  const deadline=Date.now()+260*60000;
  while(Date.now()<deadline){
   const request=await readPublic(prefix+'/request.json');
   if(!request||request.sequence<=sequence){await pause(5000);continue;}
-  if(!Number.isSafeInteger(request.sequence)||request.sequence!==sequence+1){await pause(5000);continue;}
+  if(!acceptableSequence(sequence,request.sequence)){await pause(5000);continue;}
   try{
    validateRequest(request,identity.caseId,sequence+1);
    const result=await operation(request);sequence=request.sequence;

@@ -50,6 +50,7 @@ export async function ingestCase({target,root,privateKey,gh,downloadArtifact}){
  await rm(plainZip);await rm(transport,{recursive:true});
  const run=JSON.parse(await readFile(join(evidence,'run.json'),'utf8'));
  const result=JSON.parse(await readFile(join(evidence,target.id,'result.json'),'utf8'));
+ if(!target.native){const manifest=JSON.parse(await readFile(join(evidence,'selected-manifest.json'),'utf8'));if(!Array.isArray(manifest.cases)||manifest.cases.length!==1||manifest.cases[0]?.id!==target.id)throw Error('SELECTED_MANIFEST_MISMATCH');}
  if(result.id!==target.id)throw Error('RESULT_CASE_MISMATCH');
  for(const [k,v]of Object.entries({repository:REPO,runId:target.runId,runAttempt:'1',caseId:target.id})){
   if(run[k]!==undefined&&String(run[k])!==v)throw Error('RUN_RECORD_MISMATCH');

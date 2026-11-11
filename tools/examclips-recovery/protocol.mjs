@@ -40,14 +40,17 @@ export function safeRelative(path){
  return path;
 }
 export function targetFor(lane,key){const t=ROSTERS[lane]?.find(x=>x.key===key);if(!t)throw Error('UNSELECTED_CASE');return {...t,runAttempt:'1'};}
+export function acceptableSequence(current,incoming){return Number.isSafeInteger(incoming)&&incoming===current+1&&incoming>=1&&incoming<=10000;}
+export function allowedReference(url){return typeof url==='string'&&url.length<2048&&/^https:\/\/(?:[a-z0-9-]+\.)*(?:tib\.eu|cs50\.harvard\.edu|cdn\.cs50\.net|teach-in\.ru|rutube\.ru)(?:\/|$)/i.test(url);}
 export function validateRequest(value,lane,expected){
  if(!value||value.sequence!==expected||!Number.isSafeInteger(expected)||expected<1||expected>10000)throw Error('REQUEST_SEQUENCE_MISMATCH');
- if(!['ingest','files','frame','diagnostics-start','diagnostics-status','inventory','finish'].includes(value.operation))throw Error('UNSUPPORTED_REQUEST');
+ if(!['ingest','files','frame','diagnostics-start','diagnostics-status','inventory','reference','finish'].includes(value.operation))throw Error('UNSUPPORTED_REQUEST');
  if(value.operation!=='finish')targetFor(lane,value.key);
  if(value.operation==='files'){
   if(!Array.isArray(value.paths)||!value.paths.length||value.paths.length>12)throw Error('INVALID_FILE_SELECTION');
   for(const p of value.paths){safeRelative(p);if(!/\.(json|jsonl|txt|srt|png|jpg|jpeg|csv)$/i.test(p))throw Error('FILE_TYPE_NOT_REVIEWABLE');}
  }
+ if(value.operation==='reference'&&!allowedReference(value.url))throw Error('UNAPPROVED_REFERENCE_URL');
  if(value.operation==='frame'){
   safeRelative(value.path);
   if(!/^(?:original-source|clip-\d+)\.mp4$/.test(value.path))throw Error('INVALID_MEDIA_NAME');

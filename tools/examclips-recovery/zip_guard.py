@@ -16,7 +16,7 @@ def checked_members(z,case=None,outer=False):
         if i.flag_bits&1:raise ValueError('ENCRYPTED_ZIP_MEMBER')
         if i.is_dir():continue
         if outer and n not in {'encryption.json','parts.json','evidence.enc.part'}:raise ValueError('UNEXPECTED_OUTER_MEMBER')
-        if not outer and n!='run.json' and (not case or p.parts[0]!=case):raise ValueError('WRONG_CASE_MEMBER')
+        if not outer and n not in {'run.json','selected-manifest.json'} and (not case or p.parts[0]!=case):raise ValueError('WRONG_CASE_MEMBER')
         if i.file_size<0 or i.file_size>5*1024**3:raise ValueError('MEMBER_SIZE_LIMIT')
         total+=i.file_size
         if total>6*1024**3:raise ValueError('ARCHIVE_SIZE_LIMIT')
