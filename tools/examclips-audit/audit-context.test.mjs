@@ -10,11 +10,11 @@ async function api(){
   return module;
 }
 
-test('all 25 cases have separate handoff and private paths in one workflow run',async()=>{
+test('all manifest cases have separate handoff and private paths in one workflow run',async()=>{
   const {handoffLayout,contextFor}=await api();
   const layouts=manifest.cases.map(item=>handoffLayout({...base,caseId:item.id}));
-  assert.equal(new Set(layouts.map(item=>item.prefix)).size,25);
-  assert.equal(new Set(layouts.map(item=>item.privateName)).size,25);
+  assert.equal(new Set(layouts.map(item=>item.prefix)).size,manifest.cases.length);
+  assert.equal(new Set(layouts.map(item=>item.privateName)).size,manifest.cases.length);
   assert.equal(handoffLayout(base).prefix,'.audit-handoff/123456/en07');
   assert.notEqual(handoffLayout(base).privateName,handoffLayout({...base,runAttempt:'2'}).privateName);
   assert.equal(contextFor('credentials',base).caseId,'en07');
@@ -45,4 +45,12 @@ test('the full-source duration determines the bounded 45 or 90 minute budget',as
   assert.equal(caseBudgetSeconds({duration_sec:1800.01}),5400);
   assert.equal(caseBudgetSeconds({duration_sec:3806.293}),5400);
   assert.throws(()=>caseBudgetSeconds({duration_sec:0}),/duration/i);
+});
+
+test('two-to-three-hour lectures receive five hours for full analysis and exports',async()=>{
+ const {caseBudgetSeconds}=await api();
+ assert.equal(caseBudgetSeconds({duration_sec:7200}),18000);
+ assert.equal(caseBudgetSeconds({duration_sec:10800}),18000);
+ assert.equal(caseBudgetSeconds({duration_sec:7199.9}),5400);
+ assert.throws(()=>caseBudgetSeconds({duration_sec:10800.1}),/duration/i);
 });

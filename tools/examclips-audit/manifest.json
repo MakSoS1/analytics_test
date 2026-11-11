@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "cases": [
     {
       "id": "ru01",
@@ -237,6 +237,69 @@
       "duration_sec": 1135.668209,
       "platform": "direct",
       "download_url": "https://py.tedcdn.com/consus/projects/00/37/01/007/products/2014s-hans-and-ola-rosling-007-fallback-4716ed7bb26ee18505b739ca2c3f5768-1200k.mp4"
+    },
+    {
+      "id": "rul01",
+      "title": "Лекция 1. Нелинейные уравнения",
+      "source_url": "https://teach-in.ru/lecture/2021-06-01-Lukyanenko-1",
+      "download_url": "https://storage.teach-in.ru/video/f/d/fdiztn3bcj/sd.mp4",
+      "language": "ru",
+      "platform": "direct",
+      "source_platform": "Teach-in",
+      "max_height": 480,
+      "duration_sec": 7350.762,
+      "duration_evidence": "ffprobe of full direct source plus official JSON-LD",
+      "presenter": "Лукьяненко Дмитрий Витальевич",
+      "subject": "Численные методы: нелинейные уравнения",
+      "source_citation_ref": "turn738954976view0",
+      "status": "media_probe_verified",
+      "reference": {
+        "outline_url": "https://teach-in.ru/lecture/2021-06-01-Lukyanenko-1",
+        "transcript": "Not located; timed official section outline available"
+      },
+      "complete_lecture_evidence": "Single numbered lecture with one source VideoObject and chapter outline; no concatenation performed",
+      "listed_duration_sec": 7350,
+      "probe_file": "/workspace/shared/examclips-long-audit/ru_reference_sources/rul01.ffprobe.json",
+      "bytes": 463460432,
+      "streams": [
+        {
+          "codec_type": "video",
+          "codec_name": "h264",
+          "width": 852,
+          "height": 480,
+          "sample_rate": null,
+          "channels": null
+        },
+        {
+          "codec_type": "audio",
+          "codec_name": "aac",
+          "width": null,
+          "height": null,
+          "sample_rate": "48000",
+          "channels": 2
+        }
+      ],
+      "min_duration_sec": 7200
+    },
+    {
+      "id": "enl01",
+      "title": "CS50 Web — Lecture 0: HTML and CSS",
+      "source_url": "https://cs50.harvard.edu/web/weeks/0/",
+      "download_url": "https://cdn.cs50.net/web/2020/spring/lectures/0/lecture0-720p.mp4.download",
+      "language": "en",
+      "platform": "direct",
+      "source_platform": "Harvard CS50 official CDN",
+      "presenter": "Brian Yu",
+      "subject": "Web design and development",
+      "layout": "Lecturer, slides, code editor, browser demonstrations",
+      "duration_sec": 7411.625,
+      "bytes": 1977268240,
+      "max_height": 720,
+      "transcript_url": "https://cdn.cs50.net/web/2020/spring/lectures/0/lang/en/lecture0.txt",
+      "outline_url": "https://cs50.harvard.edu/web/notes/0/",
+      "verification": "Remote ffprobe of full 360p confirms duration and H264/AAC. 720p official download HEAD HTTP200 confirms size; native720p stream to be finally probed on full download.",
+      "status": "ready",
+      "min_duration_sec": 7200
     }
   ]
 }

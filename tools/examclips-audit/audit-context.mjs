@@ -38,5 +38,5 @@ export function selectCase(manifest,caseId){
 export function caseBudgetSeconds(item){
   const duration=Number(item.duration_sec);
   if(!Number.isFinite(duration)||duration<=0||duration>10800)throw Error('Source duration must be positive and at most three hours');
-  return duration>1800?5400:2700;
+  return duration>=7200?18000:duration>1800?5400:2700;
 }

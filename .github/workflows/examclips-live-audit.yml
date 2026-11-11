@@ -32,7 +32,7 @@ jobs:
     name: Lecture ${{ matrix.case_id }}
     if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
     runs-on: ubuntu-24.04
-    timeout-minutes: 110
+    timeout-minutes: 340
     strategy:
       fail-fast: false
       max-parallel: 10
@@ -65,6 +65,7 @@ jobs:
       - name: Validate encryption and required public key
         run: |
           node --test tools/examclips-audit/crypto.test.mjs tools/examclips-audit/audit-context.test.mjs
+          python3 -m unittest discover -s tools/examclips-audit -p 'test_*.py'
           openssl pkey -pubin -in tools/examclips-audit/evidence-recipient.pub.pem -noout
       - name: Install Playwright and prepare verified browser and media tools
         run: |
@@ -138,19 +139,192 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node tools/examclips-audit/handoff.mjs
       - name: Run one full-source live browser audit
+        timeout-minutes: 305
         env:
           AUDIT_CREDENTIALS_FILE: ${{ steps.handoff.outputs.credentials_path }}
         run: node tools/examclips-audit/run.mjs
-      - name: Encrypt audit evidence with the recipient public key
+      - id: package
+        name: Encrypt audit evidence with the recipient public key
         if: always()
         run: node tools/examclips-audit/package-evidence.mjs
-      - name: Upload encrypted evidence only
-        if: always()
+      - name: Upload encrypted evidence part 0001
+        if: always() && steps.package.outputs.parts >= 1
         uses: actions/upload-artifact@v4
         with:
-          name: examclips-live-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}
-          path: ${{ env.AUDIT_ARTIFACT }}/
-          if-no-files-found: warn
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0001
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0001/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0002
+        if: always() && steps.package.outputs.parts >= 2
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0002
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0002/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0003
+        if: always() && steps.package.outputs.parts >= 3
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0003
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0003/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0004
+        if: always() && steps.package.outputs.parts >= 4
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0004
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0004/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0005
+        if: always() && steps.package.outputs.parts >= 5
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0005
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0005/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0006
+        if: always() && steps.package.outputs.parts >= 6
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0006
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0006/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0007
+        if: always() && steps.package.outputs.parts >= 7
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0007
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0007/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0008
+        if: always() && steps.package.outputs.parts >= 8
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0008
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0008/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0009
+        if: always() && steps.package.outputs.parts >= 9
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0009
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0009/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0010
+        if: always() && steps.package.outputs.parts >= 10
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0010
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0010/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0011
+        if: always() && steps.package.outputs.parts >= 11
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0011
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0011/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0012
+        if: always() && steps.package.outputs.parts >= 12
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0012
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0012/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0013
+        if: always() && steps.package.outputs.parts >= 13
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0013
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0013/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0014
+        if: always() && steps.package.outputs.parts >= 14
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0014
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0014/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0015
+        if: always() && steps.package.outputs.parts >= 15
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0015
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0015/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0016
+        if: always() && steps.package.outputs.parts >= 16
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0016
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0016/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0017
+        if: always() && steps.package.outputs.parts >= 17
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0017
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0017/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0018
+        if: always() && steps.package.outputs.parts >= 18
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0018
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0018/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0019
+        if: always() && steps.package.outputs.parts >= 19
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0019
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0019/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload encrypted evidence part 0020
+        if: always() && steps.package.outputs.parts >= 20
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-long-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0020
+          path: ${{ env.AUDIT_ARTIFACT }}/part-0020/
+          if-no-files-found: error
           retention-days: 30
           compression-level: 0
       - name: Remove runner-private authentication and original media

@@ -1,4 +1,4 @@
-import {mkdir,readFile,writeFile,readdir,stat,rm} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,readdir,stat,rm,appendFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {resolve,join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -32,5 +32,14 @@ const context=contextFor('evidence',identityFromEnv());
 try{
   const metadata=await sealFile(zip,join(artifact,'evidence.enc'),key,context);
   await writeFile(join(artifact,'encryption.json'),JSON.stringify(metadata,null,2)+'\n');
-  console.log('ENCRYPTED_EVIDENCE_READY '+JSON.stringify({runId:context.runId,caseId:context.caseId,bytes:(await stat(join(artifact,'evidence.enc'))).size}));
+  await rm(zip,{force:true});
+  await new Promise((resolvePromise,reject)=>{
+    const child=spawn('python3',[join(HERE,'split_evidence.py'),'split',join(artifact,'evidence.enc'),join(artifact,'encryption.json'),artifact],{stdio:['ignore','inherit','pipe']});
+    child.on('error',reject);child.on('close',code=>code===0?resolvePromise():reject(Error('Encrypted evidence partitioning failed')));
+  });
+  const manifest=JSON.parse(await readFile(join(artifact,'parts.json'),'utf8'));
+  if(process.env.GITHUB_OUTPUT)await appendFile(process.env.GITHUB_OUTPUT,'parts='+manifest.parts.length+'\n');
+  console.log('ENCRYPTED_EVIDENCE_READY '+JSON.stringify({runId:context.runId,caseId:context.caseId,bytes:manifest.bytes,parts:manifest.parts.length}));
+  await rm(join(artifact,'evidence.enc'),{force:true});
+  await rm(join(artifact,'encryption.json'),{force:true});
 }finally{await rm(zip,{force:true})}

@@ -1,10 +1,10 @@
 import {chromium} from 'playwright';
-import {mkdir,readFile,writeFile,appendFile,rm,stat,copyFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,appendFile,rm,stat,copyFile,link,rename} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {resolve,join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
-import {arch,availableParallelism,cpus,platform,release,totalmem,version as osVersion} from 'node:os';
+import {arch,availableParallelism,cpus,platform,release,totalmem,freemem,version as osVersion} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import {identityFromEnv,selectCase,caseBudgetSeconds} from './audit-context.mjs';
 
@@ -29,6 +29,10 @@ const safe=value=>String(value??'')
   .replace(/https?:\/\/[^\s"'<>]+/g,text=>{try{const u=new URL(text);return u.origin+u.pathname}catch{return '[url]'}})
   .slice(0,5000);
 const remaining=deadline=>Math.max(0,deadline-Date.now());
+const bounded=(operation,milliseconds,label)=>new Promise((resolvePromise,reject)=>{
+  const timer=setTimeout(()=>reject(Error(label+' timed out')),milliseconds);
+  Promise.resolve(operation).then(value=>{clearTimeout(timer);resolvePromise(value)},error=>{clearTimeout(timer);reject(error)});
+});
 
 async function command(executable,args,timeout=60000) {
   return new Promise((resolvePromise,reject)=>{
@@ -88,6 +92,7 @@ async function uiDownload(page,selector,path,timeout) {
   const failure=await download.failure();
   if(failure)throw Error('Browser download failed: '+safe(failure));
   await download.saveAs(path);
+  await download.delete();
 }
 async function saveProject(page,dir,name='project.json') {
   await closeDetail(page);
@@ -119,18 +124,27 @@ async function runCase(item) {
   let stopPolling=false;
   let polling;
   const events=[];
-  const persist=()=>json(join(dir,'result.json'),result);
+  let pendingPersist=Promise.resolve();
+  const persist=()=>{
+    pendingPersist=pendingPersist.catch(()=>{}).then(async()=>{
+      const staged=join(root,item.id+'.result-stage.json');
+      await json(staged,result);
+      await rename(staged,join(dir,'result.json'));
+    });
+    return pendingPersist;
+  };
   async function snapshot() {
     if(!page||page.isClosed())return null;
-    return page.evaluate(()=>({
+    return bounded(page.evaluate(()=>({
       phase:document.querySelector('#app')?.dataset.phase||null,
       status:document.querySelector('#progress')?.textContent||'',
       detail:document.querySelector('#processing-detail')?.textContent||'',
       stage:document.querySelector('#processing-title')?.textContent||'',
       cancelEnabled:!!document.querySelector('#cancel')&&!document.querySelector('#cancel').disabled,
       saveEnabled:!!document.querySelector('#save-project')&&!document.querySelector('#save-project').disabled,
-      topicCount:document.querySelectorAll('.microtopic-card').length
-    }));
+      topicCount:document.querySelectorAll('.microtopic-card').length,
+      jsHeapUsedBytes:performance.memory?.usedJSHeapSize||null
+    })),30000,'Browser snapshot');
   }
   async function recordSnapshot() {
     const state=await snapshot();if(!state)return state;
@@ -141,11 +155,14 @@ async function runCase(item) {
     if(/Виртуальная камера готова:|Камера готова:/.test(message))cameraReady=true;
     if(state.phase==='processing'){processingSeen=true;result.siteProcessingStarted=true;}
     if(/Распознано \d+ реплик/.test(message))finishedAsr=true;
-    if(state.status!==lastStatus||state.phase!==lastPhase){
+    if(state.status!==lastStatus||state.phase!==lastPhase||Date.now()-lastLog>30000){
       const row={at:now(),elapsedSeconds:Math.round((Date.now()-started)/1000),...state,status:safe(state.status),detail:safe(state.detail)};
       await appendFile(join(dir,'progress.jsonl'),JSON.stringify(row)+'\n');
       if(/^Ошибка:|^Остановлено:/.test(state.status))result.errors.push({phase:state.phase,message:safe(state.status)});
       lastStatus=state.status;lastPhase=state.phase;
+      result.asr={...result.asr,processingSeen,maxSourceSecondsObserved:asrSeconds,totalSourceSecondsObserved:asrTotal,cachedAsr,completionMessageObserved:finishedAsr};
+      result.lastObservation={at:now(),elapsedSeconds:row.elapsedSeconds,phase:state.phase,status:safe(state.status),detail:safe(state.detail),stage:safe(state.stage),topicCount:state.topicCount,jsHeapUsedBytes:state.jsHeapUsedBytes,systemFreeMemoryBytes:freemem()};
+      await persist();
     }
     if(Date.now()-lastLog>30000){
       console.log('CASE_PROGRESS '+JSON.stringify({id:item.id,elapsedSeconds:Math.round((Date.now()-started)/1000),phase:state.phase,asrSeconds,asrTotal,topicCount:state.topicCount}));
@@ -156,21 +173,28 @@ async function runCase(item) {
   try {
     await json(caseFile,item);
     const downloadAt=Date.now();
-    await command('python3',[join(HERE,'download-source.py'),caseFile,mediaPath,join(dir,'source.json')],Math.min(15*60*1000,remaining(deadline)));
+    await command('python3',[join(HERE,'download-source.py'),caseFile,mediaPath,join(dir,'source.json')],Math.min((config.source_download_seconds||900)*1000,remaining(deadline)));
     result.timings.downloadSeconds=(Date.now()-downloadAt)/1000;
     const source=JSON.parse(await readFile(join(dir,'source.json'),'utf8'));
     result.source=source;
+    if(config.retain_all_originals||item.platform==='rutube'){
+      const originalPath=join(dir,'original-source.mp4');
+      try{await link(mediaPath,originalPath)}catch{await copyFile(mediaPath,originalPath)}
+      result.originalSourceEvidence={status:'retained',file:'original-source.mp4',sha256:source.sha256,encryptedArtifactOnly:true};
+    }
+    await persist();
     result.testStage='browser_upload';
     page=await context.newPage();page.setDefaultTimeout(15000);
-    page.on('pageerror',error=>events.push({at:now(),type:'pageerror',message:safe(error.message)}));
-    page.on('console',message=>{if(['warning','error'].includes(message.type()))events.push({at:now(),type:message.type(),message:safe(message.text())})});
+    const recordEvent=entry=>{events.push(entry);appendFile(join(dir,'browser-events.jsonl'),JSON.stringify(entry)+'\n').catch(()=>{})};
+    page.on('pageerror',error=>recordEvent({at:now(),type:'pageerror',message:safe(error.message)}));
+    page.on('console',message=>{if(['warning','error'].includes(message.type()))recordEvent({at:now(),type:message.type(),message:safe(message.text())})});
     page.on('requestfailed',request=>{
       if(/\/auth\/|\/billing-api\//.test(request.url()))return;
-      events.push({at:now(),type:'requestfailed',url:safe(request.url()),error:safe(request.failure()?.errorText)});
+      recordEvent({at:now(),type:'requestfailed',url:safe(request.url()),error:safe(request.failure()?.errorText)});
     });
     page.on('response',response=>{
       if(response.status()<400||/\/auth\/|\/billing-api\//.test(response.url()))return;
-      events.push({at:now(),type:'http',url:safe(response.url()),status:response.status(),
+      recordEvent({at:now(),type:'http',url:safe(response.url()),status:response.status(),
         expected:/\/api\/local-(ocr|review)/.test(response.url())&&response.status()===404});
     });
     await page.goto(config.production_url,{waitUntil:'domcontentloaded',timeout:60000});
@@ -204,7 +228,7 @@ async function runCase(item) {
     }
     if(!remaining(deadline))throw Error('Source exceeded its '+budgetSeconds/60+'-minute budget during analysis');
     result.timings.analysisSeconds=(Date.now()-analysisAt)/1000;
-    result.asr={processingSeen,maxSourceSecondsObserved:asrSeconds,totalSourceSecondsObserved:asrTotal,cachedAsr,completionMessageObserved:finishedAsr};
+    result.asr={...result.asr,processingSeen,maxSourceSecondsObserved:asrSeconds,totalSourceSecondsObserved:asrTotal,cachedAsr,completionMessageObserved:finishedAsr};
     result.testStage='site_background';
     const bgAt=Date.now(),bgEnd=Math.min(deadline-60000,Date.now()+config.background_wait_seconds*1000);
     while(Date.now()<bgEnd&&!cameraReady) {
@@ -245,6 +269,11 @@ async function runCase(item) {
       }
       const clipAt=Date.now(),stem='clip-'+String(clip.index+1).padStart(3,'0'),mp4Path=join(dir,stem+'.mp4');
       try {
+        const immediatelyBefore=await saveProject(page,dir,stem+'-project-before-export.json');
+        const currentClip=immediatelyBefore.clips.find(row=>String(row.id)===clip.id);
+        clip.initialAnalysisTitle=clip.title;
+        clip.titleImmediatelyBeforeExport=currentClip?.title||null;
+        clip.preExportSnapshotAt=now();
         await closeDetail(page);
         await page.locator('.top-navigation [data-editor-tab="clip"]').click();
         await page.locator('.microtopic-card[data-topic-index="'+clip.index+'"] .microtopic-card-title').click();
@@ -267,6 +296,7 @@ async function runCase(item) {
         }finally{page.off('download',onDownload)}
         const failure=await download.failure();if(failure)throw Error('MP4 download failed: '+safe(failure));
         await download.saveAs(mp4Path);
+        await download.delete();
         const probe=JSON.parse((await command('ffprobe',['-v','error','-show_format','-show_streams','-of','json',mp4Path],Math.min(30000,remaining(deadline)))).stdout);
         await json(join(dir,stem+'-ffprobe.json'),probe);
         const video=probe.streams.find(stream=>stream.codec_type==='video'),audio=probe.streams.find(stream=>stream.codec_type==='audio');
@@ -310,25 +340,13 @@ async function runCase(item) {
       await cleanScreenshot(page,join(dir,'failure.png')).catch(()=>{});
     }
   } finally {
-    stopPolling=true;await polling?.catch(()=>{});
-    if(item.platform==='rutube'&&result.source){
-      const originalPath=join(dir,'original-source.mp4'),copyAt=Date.now();
-      try{
-        await copyFile(mediaPath,originalPath);
-        result.originalSourceEvidence={status:'retained',file:'original-source.mp4',sha256:result.source.sha256,encryptedArtifactOnly:true};
-      }catch(error){
-        await rm(originalPath,{force:true}).catch(()=>{});
-        result.originalSourceEvidence={status:'failed',reason:safe(error.message)};
-        result.warnings.push('Validated RUTUBE original could not be retained for offline comparison: '+safe(error.message));
-      }
-      result.timings.originalSourceCopySeconds=(Date.now()-copyAt)/1000;
-    }
+    stopPolling=true;if(polling)await bounded(polling,35000,'Progress shutdown').catch(()=>{});
     result.finishedAt=now();result.timings.totalSeconds=(Date.now()-started)/1000;
     result.browserEvents=events;
     result.buildAfter=await buildMetadata();
     await json(join(dir,'browser-events.json'),events);
     await persist();
-    await page?.close().catch(()=>{});
+    if(page)await bounded(page.close(),15000,'Page close').catch(()=>{});
     await rm(mediaPath,{force:true});
     console.log('CASE_END '+JSON.stringify({id:item.id,status:result.status,totalSeconds:result.timings.totalSeconds,exports:result.exportCounts||null,
       failureDomain:result.failureDomain,siteProcessingStarted:result.siteProcessingStarted,completionChecks:result.completionChecks||null}));
@@ -364,7 +382,7 @@ try {
   for(const item of cases){await runCase(item);await json(join(output,'run.json'),run)}
 }catch(error){fatal=safe(error.message);run.fatalError=fatal}
 finally{
-  await context?.close().catch(()=>{});
+  if(context)await bounded(context.close(),30000,'Browser close').catch(()=>{});
   run.finishedAt=now();run.buildAfter=await buildMetadata();
   run.buildChanged=!!commitOf(run.buildBefore)&&!!commitOf(run.buildAfter)&&commitOf(run.buildBefore)!==commitOf(run.buildAfter);
   run.unexpectedBuild=!!config.expected_commit&&commitOf(run.buildBefore)!==config.expected_commit;

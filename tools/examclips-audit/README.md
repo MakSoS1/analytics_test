@@ -1,3 +1,9 @@
+# Two-hour-plus audit extension
+
+The new corpus uses min_duration_sec=7200 validated against actual complete media. Long sources receive a five-hour case budget and a 340-minute job; the audit step has a 305-minute watchdog. Source acquisition is bounded at 30 minutes. Runtime source retention uses an immutable same-filesystem hardlink (copy fallback); all originals remain inside encrypted evidence only. Browser download temporary copies are deleted after saveAs. Progress/result checkpoints include ASR counters, stage, JS heap and system free memory. JS heap and free memory are sampled observations, not a calibrated process memory peak. A project snapshot immediately before each render records mutable-title provenance; rendered text must still be checked from the actual MP4.
+
+Evidence ZIP bytes are authenticated-encrypted first, then ciphertext is divided into at most20 parts of <=240MiB. Each part is a separate Actions artifact, includes identical encryption/part metadata, and has its own SHA-256. Reconstruction verifies all parts and the whole ciphertext; AES-GCM authentication is still mandatory before any plaintext is extracted. Public artifacts contain no plaintext transcripts, originals or credentials. Existing short-corpus behavior is retained for reproducibility. Original historical documentation below describes the initial audit where it differs.
+
 # Authorized live ExamClips audit
 
 This harness exercises the real production application at https://examclips.dpdns.org/app/ through official Playwright Chrome on a GitHub Actions Ubuntu VM. Authentication, entitlement checks, complete-source ASR, model downloads, topic planning, camera analysis and MP4 encoding all use the unchanged live site. The harness does not install a modified production build, seed authentication, supply a transcript, approve candidate topics, alter topic durations or replace a renderer.

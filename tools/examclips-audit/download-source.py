@@ -8,6 +8,7 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
+from source_validation import validate_duration
 
 case_file, destination, report_file = map(pathlib.Path, sys.argv[1:4])
 case = json.loads(case_file.read_text(encoding="utf-8"))
@@ -82,10 +83,7 @@ duration = float(probe["format"]["duration"])
 kinds = {stream["codec_type"] for stream in probe["streams"]}
 if not {"video", "audio"}.issubset(kinds):
     raise RuntimeError("Lecture must contain real video and audio tracks")
-if duration > 10800:
-    raise RuntimeError("Source exceeds the app's 180-minute limit")
-if expected and abs(duration - expected) > max(2, expected * .005):
-    raise RuntimeError("Downloaded duration does not match the complete public source")
+validate_duration(duration, expected, minimum=float(case.get("min_duration_sec", 0)))
 digest = hashlib.sha256()
 with destination.open("rb") as source:
     while chunk := source.read(1024 * 1024):

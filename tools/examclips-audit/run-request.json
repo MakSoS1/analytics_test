@@ -1,9 +1,8 @@
 {
   "version": 1,
-  "request_id": "2026-11-11-full25-recovered",
+  "request_id": "2026-11-11-long20-pilot",
   "case_ids": [
-    "en07", "ru12", "ru01", "en03", "en06", "ru05", "en04", "en01", "ru07", "en02",
-    "ru04", "ru03", "ru08", "en13", "en12", "ru02", "ru11", "en05", "en08", "ru09",
-    "en11", "en09", "ru06", "ru10", "en10"
+    "rul01",
+    "enl01"
   ]
 }
