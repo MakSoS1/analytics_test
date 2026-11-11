@@ -1,0 +1,90 @@
+name: ExamClips encrypted RU05 artifact parts
+
+'on':
+  push:
+    branches:
+      - qa/examclips-audit-2026-11-11
+    paths:
+      - .github/workflows/examclips-artifact-parts.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  split-authorized-encrypted-artifact:
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download and verify the existing encrypted evidence archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, shutil, urllib.error, urllib.parse, urllib.request
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+          api = 'https://api.github.com/repos/MakSoS1/analytics_test/actions/artifacts/13885275384/zip'
+          request = urllib.request.Request(api, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'})
+          try:
+              response = urllib.request.build_opener(NoRedirect).open(request, timeout=90)
+          except urllib.error.HTTPError as error:
+              if error.code != 302:
+                  raise
+              signed_url = error.headers['Location']
+              if urllib.parse.urlparse(signed_url).scheme != 'https':
+                  raise RuntimeError('Artifact redirect must use HTTPS')
+              response = urllib.request.urlopen(signed_url, timeout=90)
+          archive = pathlib.Path('encrypted-original.zip')
+          with response, archive.open('wb') as output:
+              shutil.copyfileobj(response, output, length=8*1024*1024)
+          with archive.open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          expected = '63d5931a8ad4754a9137dc6c3c72461e52ab0d89f5f6eac2bc4aefc743fd279b'
+          if digest != expected or archive.stat().st_size != 654912857:
+              raise RuntimeError('Original artifact integrity check failed')
+          folder = pathlib.Path('parts')
+          folder.mkdir()
+          manifest = {'repository': 'MakSoS1/analytics_test', 'run_id': '43072118904', 'case_id': 'ru05', 'original_artifact_id': 13885275384, 'original_sha256': digest, 'original_bytes': archive.stat().st_size, 'encrypted_only': True, 'parts': []}
+          with archive.open('rb') as stream:
+              index = 0
+              while block := stream.read(256*1024*1024):
+                  name = 'part-' + str(index).zfill(3)
+                  (folder/name).write_bytes(block)
+                  manifest['parts'].append({'name': name, 'bytes': len(block), 'sha256': hashlib.sha256(block).hexdigest()})
+                  index += 1
+          if index != 3:
+              raise RuntimeError('Unexpected part count')
+          (folder/'manifest.json').write_text(json.dumps(manifest, indent=2))
+          print('Verified encrypted archive; produced three integrity-bound parts.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: examclips-ru05-encrypted-part-0
+          path: |
+            parts/part-000
+            parts/manifest.json
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: examclips-ru05-encrypted-part-1
+          path: |
+            parts/part-001
+            parts/manifest.json
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: examclips-ru05-encrypted-part-2
+          path: |
+            parts/part-002
+            parts/manifest.json
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
