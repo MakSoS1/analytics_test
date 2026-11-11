@@ -34,6 +34,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Build and test the public cryptographic client and evidence guards
         timeout-minutes: 10
         working-directory: tools/examclips-recovery
@@ -45,8 +48,9 @@ jobs:
           python3 test_zip_guard.py
           node --check bridge.mjs
           node --check ingest.mjs
-          python3 -m py_compile media.py zip_guard.py
-          python3 -m pip install --quiet Pillow numpy
+          python3 -m py_compile media.py media_core.py zip_guard.py
+          python3 -m pip install --quiet Pillow numpy httpx requests
+          python3 test_media.py -v
           ffmpeg -version | head -1
       - name: Authenticate prior artifacts and serve encrypted bounded review assets
         timeout-minutes: 325

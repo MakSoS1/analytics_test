@@ -69,3 +69,6 @@ Ruling: the local executor is unavailable, so existing isolated QA branch/API le
 
 - Actual GHA baseline run43109882073: all3 lanes passed crypto VM/known-answer tests and protocol checks; each ZIP suite failed only the new real-layout test. Controller steps skipped; no private data supplied. ZIP root allowance and selected case-manifest binding implemented after this observed RED.
 - Sequence poisoning was independently reproduced on the baseline by the reviewer. The exact-next guard and loop/state regression now reject10001 and string values without advancing, then accept1.
+
+- Media provenance repair committed at174fa28c088cfe4114cfee5143df24276998f56b: exact per-export snapshot/unique ID, failed saved files kept distinct, output-only decode when mapping is unresolved; source complement includes sub3-second gaps.14 meaningful Python/media regressions await the corrected public Actions gate.
+- Client session interoperability and resource-scoped SAS parser tests are included. An actual Library proxy-host compatibility issue was reproduced using synthetic grants and corrected atc4d3470c425eb150fed2a6e7a4579adc86dcfcf3; no private inputs used in tests.
