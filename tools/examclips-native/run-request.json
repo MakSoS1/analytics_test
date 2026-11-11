@@ -1,6 +1,8 @@
 {
   "version": 1,
-  "request_id": "native-stream-prepared-disabled",
-  "enabled": false,
-  "case_ids": []
+  "request_id": "2026-11-11-long20-native-rul01",
+  "enabled": true,
+  "case_ids": [
+    "rul01"
+  ]
 }
