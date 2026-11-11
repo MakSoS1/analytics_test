@@ -6,7 +6,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createHash} from 'node:crypto';
 import {openFile,keyHash} from '../examclips-audit/crypto.mjs';
-import {REPO,BRANCH,canonical} from './protocol.mjs';
+import {REPO,BRANCH,canonical,assertArtifactPins} from './protocol.mjs';
 const HERE=dirname(fileURLToPath(import.meta.url)),execute=promisify(execFile);
 async function hash(path){const h=createHash('sha256');for await(const chunk of createReadStream(path))h.update(chunk);return h.digest('hex');}
 async function python(args){return (await execute('python3',args,{timeout:900000,maxBuffer:16*1024**2})).stdout;}
@@ -24,6 +24,7 @@ export async function ingestCase({target,root,privateKey,gh,downloadArtifact}){
  artifacts.sort((a,b)=>a.name.localeCompare(b.name));
  if(!artifacts.length||artifacts.length>20||uploadSteps.length!==artifacts.length)throw Error('INCOMPLETE_ARTIFACT_SET');
  artifacts.forEach((a,i)=>{if(a.name!==expectedPrefix+String(i+1).padStart(4,'0')||a.expired||!/^sha256:[0-9a-f]{64}$/.test(a.digest||''))throw Error('INVALID_ARTIFACT_METADATA');});
+ assertArtifactPins(target,artifacts);
  const total=artifacts.reduce((n,a)=>n+a.size_in_bytes,0);
  await mkdir(root,{recursive:true,mode:0o700});
  const fs=await statfs(root);if(fs.bavail*fs.bsize<total*2.1+2*1024**3)throw Error('INSUFFICIENT_RECOVERY_DISK');

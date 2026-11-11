@@ -177,9 +177,33 @@ def source_complement(duration, spans):
             'gap_seconds_exact': str(sum((b-a for a, b in gaps), core.q(0)))}
 
 
+def require_native_frame_context(case):
+    # The encrypted ingest already binds this case to the selected native job.
+    # Recheck its unchanged authenticated metadata before opening a new filename.
+    metadata = {}
+    for name, path in (('run', case.parent / 'run.json'), ('result', case / 'result.json')):
+        if not path.is_file() or path.is_symlink():
+            raise ValueError('NATIVE_FRAME_METADATA_NOT_REGULAR')
+        metadata[name] = core.read_json(path)
+    run, result = metadata['run'], metadata['result']
+    expected = {'repository': 'MakSoS1/analytics_test', 'branch': 'qa/examclips-audit-2026-11-11',
+                'runId': '43116421328', 'runAttempt': '1', 'caseId': 'rul01'}
+    if any(str(run.get(key, '')) != value for key, value in expected.items()):
+        raise ValueError('NATIVE_FRAME_CONTEXT_MISMATCH')
+    if result.get('id') != 'rul01':
+        raise ValueError('NATIVE_FRAME_CONTEXT_MISMATCH')
+    for record in (run, result):
+        if (record.get('auditKind') != 'native_export_probe'
+                or record.get('supplementary') is not True
+                or record.get('corpusCountIncrement') != 0):
+            raise ValueError('NATIVE_FRAME_CONTEXT_MISMATCH')
+
+
 def extract_frame(case, name, seconds):
     case = pathlib.Path(case).resolve()
-    if not re.fullmatch(r'(?:original-source|clip-\d+)\.mp4', name):
+    if name == 'native-clip.mp4':
+        require_native_frame_context(case)
+    elif not re.fullmatch(r'(?:original-source|clip-\d+)\.mp4', name):
         raise ValueError('INVALID_MEDIA_NAME')
     seconds = core.q(seconds)
     if not 0 <= seconds <= 10800:
@@ -194,6 +218,9 @@ def extract_frame(case, name, seconds):
         raise ValueError('NO_FRAME_AT_REQUESTED_TIME')
     result['image_file'] = str((out / result['image_file']).relative_to(case))
     result['media_file'] = name
+    if name == 'native-clip.mp4':
+        result['media_kind'] = 'supplementary_native_export'
+        result['corpusCountIncrement'] = 0
     return result
 
 

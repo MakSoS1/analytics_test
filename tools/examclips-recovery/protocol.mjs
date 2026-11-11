@@ -1,6 +1,6 @@
 export const REPO='MakSoS1/analytics_test';
 export const BRANCH='qa/examclips-audit-2026-11-11';
-export const ROSTERS={
+const PRIMARY_ROSTERS={
  root:[
   {key:'native-rul01',id:'rul01',runId:'43105345959',jobId:130807173816,native:true},
   {key:'rul01',id:'rul01',runId:'43090979122',jobId:130767713526},
@@ -29,6 +29,22 @@ export const ROSTERS={
   {key:'enl10',id:'enl10',runId:'43098721850',jobId:130784495042}
  ]
 };
+const profile=process.env.RECOVERY_PROFILE||'primary';
+if(!['primary','native-rul01-r4'].includes(profile))throw Error('UNSUPPORTED_RECOVERY_PROFILE');
+const NATIVE_R4={key:'native-rul01',id:'rul01',runId:'43116421328',jobId:130845540911,native:true,
+ artifactPins:[{id:13898898668,bytes:148916917,digest:'sha256:4e20c0a2e1db2b36636b51c8aca84ade52b35caf857c4efdef86c77d4e01f5a5'}]};
+export const ROSTERS=profile==='native-rul01-r4'?{root:[NATIVE_R4]}:PRIMARY_ROSTERS;
+export function nativeFrameTarget(target){
+ return target?.native===true&&target.key==='native-rul01'&&target.id==='rul01'&&target.runId==='43116421328'&&target.jobId===130845540911;
+}
+export function assertArtifactPins(target,artifacts){
+ if(!target.artifactPins)return;
+ if(!nativeFrameTarget(target)||artifacts.length!==target.artifactPins.length)throw Error('PINNED_NATIVE_ARTIFACT_MISMATCH');
+ for(let i=0;i<artifacts.length;i++){
+  const actual=artifacts[i],expected=target.artifactPins[i];
+  if(actual.id!==expected.id||actual.size_in_bytes!==expected.bytes||actual.digest!==expected.digest)throw Error('PINNED_NATIVE_ARTIFACT_MISMATCH');
+ }
+}
 export function requireIdentity(env){
  const lane=env.RECOVERY_LANE;
  if(env.GITHUB_REPOSITORY!==REPO||env.GITHUB_REF_NAME!==BRANCH||!Object.hasOwn(ROSTERS,lane))throw Error('UNAUTHORIZED_RECOVERY_IDENTITY');
@@ -53,7 +69,7 @@ export function validateRequest(value,lane,expected){
  if(value.operation==='reference'&&!allowedReference(value.url))throw Error('UNAPPROVED_REFERENCE_URL');
  if(value.operation==='frame'){
   safeRelative(value.path);
-  if(!/^(?:original-source|clip-\d+)\.mp4$/.test(value.path))throw Error('INVALID_MEDIA_NAME');
+  if(!/^(?:original-source|clip-\d+)\.mp4$/.test(value.path)&&!(value.path==='native-clip.mp4'&&nativeFrameTarget(targetFor(lane,value.key))))throw Error('INVALID_MEDIA_NAME');
   if(!Number.isFinite(value.seconds)||value.seconds<0||value.seconds>10800)throw Error('INVALID_MEDIA_TIME');
  }
  return value;

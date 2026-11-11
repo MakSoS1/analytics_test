@@ -1,0 +1,66 @@
+name: ExamClips supplementary native evidence review
+'on':
+  push:
+    branches: [qa/examclips-audit-2026-11-11]
+    paths:
+      - .github/workflows/examclips-native-review.yml
+      - tools/examclips-recovery/native-review-request.json
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: examclips-native-evidence-review-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  review:
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
+    name: Review supplementary native RUL01
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      RECOVERY_LANE: root
+      DEBUG: ''
+      NODE_OPTIONS: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the media decoders required by the actual-frame gate
+        timeout-minutes: 8
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends ffmpeg
+          command -v ffmpeg
+          command -v ffprobe
+      - name: Build and test the public cryptographic client and evidence guards
+        timeout-minutes: 10
+        working-directory: tools/examclips-recovery
+        run: |
+          npm install --ignore-scripts --include=optional --no-audit --no-fund
+          node build-client.mjs
+          node test-client.mjs
+          node test-protocol.mjs
+          RECOVERY_PROFILE=native-rul01-r4 node test-native-profile.mjs
+          node --test test-public-input.mjs
+          node --check public-input.mjs
+          python3 test_zip_guard.py
+          node --check bridge.mjs
+          node --check ingest.mjs
+          python3 -m py_compile media.py media_core.py zip_guard.py
+          python3 -m pip install --quiet Pillow numpy httpx requests
+          python3 test_media.py -v
+          python3 test_native_frames.py -v
+          ffmpeg -version | head -1
+      - name: Authenticate prior artifacts and serve encrypted bounded review assets
+        timeout-minutes: 105
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RECOVERY_PROFILE: native-rul01-r4
+        run: node tools/examclips-recovery/bridge.mjs
