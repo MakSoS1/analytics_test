@@ -1,8 +1,8 @@
-name: ExamClips isolated current-code full 45-source audit
+name: ExamClips isolated current-code failed-source retry
 'on':
   push:
     branches:
-    - qa/examclips-stand45-2026-11-15
+    - qa/examclips-stand45-retry-2026-11-15
     paths:
     - .github/workflows/examclips-stand45.yml
     - tools/examclips-audit/run-request.json
@@ -11,7 +11,7 @@ permissions:
   actions: read
 jobs:
   prepare:
-    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-2026-11-15'
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-retry-2026-11-15'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -42,7 +42,7 @@ jobs:
       with:
         node-version: '24'
     - id: selection
-      name: Validate the original 45-case selection
+      name: Validate the explicit full-source retry subset
       run: node tools/examclips-audit/prepare.mjs
     - name: Validate encryption, isolation, server and bundle boundaries
       run: |
@@ -187,12 +187,12 @@ jobs:
     concurrency:
       group: examclips-stand45-${{ github.ref }}-${{ matrix.case_id }}
       cancel-in-progress: false
-    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-2026-11-15'
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-retry-2026-11-15'
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
       fail-fast: false
-      max-parallel: 20
+      max-parallel: 7
       matrix:
         case_id: ${{ fromJSON(needs.prepare.outputs.case_ids) }}
     env:

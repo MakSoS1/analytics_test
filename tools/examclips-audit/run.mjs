@@ -4,10 +4,12 @@ import {spawn} from 'node:child_process';
 import {resolve,join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
-import {arch,availableParallelism,cpus,platform,release,totalmem,freemem,version as osVersion} from 'node:os';
+import {arch,availableParallelism,cpus,platform,release,totalmem,freemem,tmpdir,version as osVersion} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import {identityFromEnv,selectCase,caseBudgetSeconds} from './audit-context.mjs';
 import {assertLocalTarget,installNetworkPolicy,ORIGIN} from './stand-policy.mjs';
+import {createResourceObserver,isMaterialBlobFailure} from './resource-observation.mjs';
+import {launchAuditBrowser,browserLaunchSettings} from './browser-launch.mjs';
 
 const HERE=dirname(fileURLToPath(import.meta.url));
 const require=createRequire(import.meta.url);
@@ -79,6 +81,10 @@ await json(join(output,'selected-manifest.json'),{version:manifest.version,cases
 let context;
 let fatal=null;
 const deniedRequests=[],modelRequests=new Set();
+const profilePath=join(root,'browser-profile');
+const resources=createResourceObserver({file:join(output,'resource-observations.jsonl'),maxSamples:20,
+  paths:[{role:'persistent_browser_profile',path:profilePath},{role:'os_tmpdir',path:tmpdir()},
+    {role:'source_parent',path:join(root,'media')},{role:'evidence_parent',path:output}]});
 function enforceNetworkBoundary(){if(deniedRequests.length)throw Error('Test instance attempted a request outside the approved origin policy')}
 
 async function cleanScreenshot(page,path) {
@@ -129,6 +135,7 @@ async function runCase(item) {
   let page,project,lastStatus='',lastLog=0,lastPhase='',asrSeconds=0,asrTotal=0,cachedAsr=false,cameraReady=false,soundFinished=false,soundReady=false,processingSeen=false,finishedAsr=false;
   let stopPolling=false;
   let polling;
+  let preparationSamples=0,lastPreparationSample=0,modelInfoEvents=0,failureSamples=0,blobFailureSamples=0,blobOomSampled=false;
   const events=[];
   let pendingPersist=Promise.resolve();
   const persist=()=>{
@@ -168,6 +175,14 @@ async function runCase(item) {
     if(/Звуковые события найдены:/.test(message)){soundFinished=true;soundReady=true;}
     if(/Звуковые события не найдены:/.test(message))soundFinished=true;
     if(state.phase==='processing'){processingSeen=true;result.siteProcessingStarted=true;}
+    if(state.phase==='processing'&&asrSeconds===0&&preparationSamples<6&&Date.now()-lastPreparationSample>=10000){
+      preparationSamples++;lastPreparationSample=Date.now();
+      void resources.observe('model_preparation',{page,metadata:{phase:state.phase,asrSourceSeconds:asrSeconds}});
+    }
+    if(/^Ошибка:/.test(state.status)&&failureSamples<3){
+      failureSamples++;
+      void resources.observe('app_error_observed',{page,metadata:{phase:state.phase,errorText:safe(state.status)}});
+    }
     if(/Распознано \d+ реплик/.test(message))finishedAsr=true;
     if(state.status!==lastStatus||state.phase!==lastPhase||Date.now()-lastLog>30000){
       const row={at:now(),elapsedSeconds:Math.round((Date.now()-started)/1000),...state,status:safe(state.status),detail:safe(state.detail)};
@@ -200,11 +215,25 @@ async function runCase(item) {
     result.testStage='browser_upload';
     page=await context.newPage();page.setDefaultTimeout(15000);
     const recordEvent=entry=>{events.push(entry);appendFile(join(dir,'browser-events.jsonl'),JSON.stringify(entry)+'\n').catch(()=>{})};
-    page.on('pageerror',error=>recordEvent({at:now(),type:'pageerror',message:safe(error.message)}));
-    page.on('console',message=>{if(['warning','error'].includes(message.type()))recordEvent({at:now(),type:message.type(),message:safe(message.text())})});
+    page.on('pageerror',error=>{
+      recordEvent({at:now(),type:'pageerror',message:safe(error.message)});
+      if(failureSamples<3){failureSamples++;void resources.observe('page_error',{page,metadata:{eventType:'pageerror',errorText:safe(error.message)}})}
+    });
+    page.on('console',message=>{
+      if(['warning','error'].includes(message.type()))recordEvent({at:now(),type:message.type(),message:safe(message.text())});
+      else if(/\bHub\b|\bParakeet\b/i.test(message.text())&&modelInfoEvents<80){
+        modelInfoEvents++;recordEvent({at:now(),type:message.type(),scope:'model_info',message:safe(message.text())});
+      }
+    });
     page.on('requestfailed',request=>{
       if(/\/auth\/|\/billing-api\//.test(request.url()))return;
       recordEvent({at:now(),type:'requestfailed',url:safe(request.url()),error:safe(request.failure()?.errorText)});
+      const errorText=request.failure()?.errorText,isBlobOom=/ERR_BLOB_OUT_OF_MEMORY/.test(errorText||'');
+      if(isMaterialBlobFailure(request.url(),errorText)&&((isBlobOom&&!blobOomSampled)||blobFailureSamples<2)){
+        blobFailureSamples++;if(isBlobOom)blobOomSampled=true;
+        void resources.observe('blob_request_failed',{page,metadata:{eventType:'requestfailed',
+          blobUrl:safe(request.url()),errorText:safe(request.failure()?.errorText)}});
+      }
     });
     page.on('response',response=>{
       if(response.status()<400||/\/auth\/|\/billing-api\//.test(response.url()))return;
@@ -231,6 +260,8 @@ async function runCase(item) {
     if(await page.locator('#asr-limit').inputValue()!=='all')throw Error('The site did not default to full ASR');
     await page.locator('#wizard-next').click();
     await cleanScreenshot(page,join(dir,'01-confirmation.png'));
+    await resources.observe('source_uploaded_before_asr',{page,metadata:{sourceBytes:source.bytes,sourceSha256:source.sha256,
+      sourceDurationSeconds:source.duration_sec}});
     const analysisAt=Date.now();
     enforceNetworkBoundary();
     result.testStage='site_analysis';
@@ -356,6 +387,8 @@ async function runCase(item) {
     result.status=Object.values(result.completionChecks).every(Boolean)?'complete':'incomplete';
     await saveProject(page,dir,'project-final.json').catch(error=>result.warnings.push('Final project download: '+safe(error.message)));
   } catch(error) {
+    await resources.observe('case_failure_before_cleanup',{page:page&&!page.isClosed()?page:undefined,
+      metadata:{phase:result.testStage,errorText:safe(error.message)}});
     result.failureDomain=result.testStage==='source_acquisition'||deniedRequests.length?'audit_environment':'test_instance_or_browser';
     result.status=result.failureDomain==='audit_environment'?'environment_failed':remaining(deadline)>0?'failed':'timeout';
     result.errors.push({stage:result.testStage,domain:result.failureDomain,message:safe(error.message)});
@@ -367,6 +400,9 @@ async function runCase(item) {
     }
   } finally {
     stopPolling=true;if(polling)await bounded(polling,35000,'Progress shutdown').catch(()=>{});
+    await resources.observe('case_finished_before_cleanup',{page:page&&!page.isClosed()?page:undefined,metadata:{phase:result.testStage}});
+    await resources.flush();
+    result.resourceObservations={...resources.summary(),file:'../resource-observations.jsonl',modelInfoEvents,modelInfoEventCap:80};
     result.finishedAt=now();result.timings.totalSeconds=(Date.now()-started)/1000;
     result.browserEvents=events;
     result.networkBoundary={status:deniedRequests.length?'blocked_request_detected':'no_blocked_requests',deniedRequests,publicModelAssets:[...modelRequests]};
@@ -383,10 +419,9 @@ async function runCase(item) {
 
 try {
   if(run.buildBefore?.data?.targetKind!=='test_instance'||commitOf(run.buildBefore)!==stand.source_commit||run.buildBefore?.data?.artifactSha256!==stand.artifact_sha256)throw Error('The local server did not attest the pinned test instance build');
-  context=await chromium.launchPersistentContext(join(root,'browser-profile'),{
-    channel:'chrome',headless:true,acceptDownloads:true,serviceWorkers:'block',viewport:{width:1440,height:1000},
-    args:['--no-sandbox','--disable-dev-shm-usage','--disable-background-timer-throttling','--disable-renderer-backgrounding']
-  });
+  run.browserLaunch={mode:'persistent',profileExistedBeforeLaunch:await stat(profilePath).then(()=>true,error=>error.code==='ENOENT'?false:null),options:browserLaunchSettings()};
+  await resources.observe('before_browser_launch');
+  context=await launchAuditBrowser(chromium,profilePath);
   await installNetworkPolicy(context,{denied:deniedRequests,models:modelRequests});
   if(config.disable_native_save_pickers)await context.addInitScript(()=>{
     Object.defineProperty(window,'showSaveFilePicker',{value:undefined,configurable:true});
@@ -404,10 +439,12 @@ try {
   run.sharedArrayBufferAvailable=await startup.evaluate(()=>typeof SharedArrayBuffer!=='undefined');
   if(run.crossOriginIsolated||run.sharedArrayBufferAvailable)throw Error('The test instance differs from the observed hosted single-thread WASM exposure');
   enforceNetworkBoundary();run.testInstanceReadyAt=now();
+  await resources.observe('browser_ready',{page:startup});
   await startup.close();
   for(const item of cases){await runCase(item);await json(join(output,'run.json'),run)}
 }catch(error){fatal=safe(error.message);run.fatalError=fatal}
 finally{
+  await resources.flush();run.resourceObservations=resources.summary();
   if(context)await bounded(context.close(),30000,'Browser close').catch(()=>{});
   run.finishedAt=now();run.buildAfter=await buildMetadata();
   run.networkBoundary={status:deniedRequests.length?'blocked_request_detected':'no_blocked_requests',deniedRequests,publicModelAssets:[...modelRequests]};

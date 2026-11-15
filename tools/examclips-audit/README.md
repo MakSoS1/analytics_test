@@ -1,6 +1,6 @@
 # Isolated current-code ExamClips audit
 
-This harness runs the original 45 full lecture sources through the app's documented local static configuration. Every result is labelled `test_instance`. It does not establish a live-site authentication, billing, quota, or hosting pass.
+This retry branch selects seven reviewed terminal technical failures from the original 45 full lecture sources. The complete manifest is unchanged; `run-request.json` is the explicit seven-case subset. The active original workflow is not cancelled. See `RETRY_SCOPE.md` at the repository root for the exact delta and limitations. Every result is labelled `test_instance`. It does not establish a live-site authentication, billing, quota, or hosting pass.
 
 The pinned private CI artifact is `examclips-dist` (14177000950), from app CI run 43751698466 at commit c8358a6df86ca0f77d859ebe8481a876b3e1abd5 / v1.3.20. `stand-config.json` records the archive size/SHA256, every served application asset's size/SHA256, and processing-source provenance. No private compiled app, source, artifact capability URL, or private key is included in this harness.
 
@@ -12,7 +12,7 @@ The only app target is `http://127.0.0.1:5173/app/`. The server verifies the pin
 
 ## Bundle handoff contract
 
-The workflow is restricted to `MakSoS1/analytics_test`, branch `qa/examclips-stand45-2026-11-15`. Root publishes encrypted payloads after validating each fresh descriptor. The existing `crypto.mjs` primitive and envelope format are unchanged.
+The workflow is restricted to `MakSoS1/analytics_test`, branch `qa/examclips-stand45-retry-2026-11-15`. Root publishes encrypted payloads after validating each fresh descriptor. The existing `crypto.mjs` primitive and envelope format are unchanged.
 
 | Role | Runner command | Descriptor case and purpose | Exact plaintext payload fields |
 |---|---|---|---|
@@ -29,7 +29,7 @@ A rerun attempt cannot decrypt a previous attempt's bundle. Retries require a fr
 
 ## Preparation fixture and diagnostics
 
-Before the 45-case matrix starts, the preparation job downloads the ordinary full public RU03 source through the existing source downloader and checks its SHA-256 against the verified successful live source (`f7628bb149c68d1563664067b213c7653993aa76ef1739fe8a91890c0525d422`). It extracts seconds 20–45 solely for this diagnostic gate. In a fresh official Chrome context, the normal UI imports that 25-second excerpt, retains auto/full/standard defaults and starts real ASR. Passing requires an observed processing phase, a completed results phase with idle controls, and nonempty generated SRT with valid source times. Model-download completion or UI startup alone cannot pass. No transcript/project is imported and no ASR or entitlement state is injected.
+Before the selected retry matrix starts, the preparation job downloads the ordinary full public RU03 source through the existing source downloader and checks its SHA-256 against the verified successful live source (`f7628bb149c68d1563664067b213c7653993aa76ef1739fe8a91890c0525d422`). It extracts seconds 20–45 solely for this diagnostic gate. A fresh official Chrome persistent context uses the same launch helper and normal options as the full case. The normal UI imports that 25-second excerpt, retains auto/full/standard defaults and starts real ASR. Passing requires an observed processing phase, a completed results phase with idle controls, and nonempty generated SRT with valid source times. Model-download completion or UI startup alone cannot pass. No transcript/project is imported and no ASR or entitlement state is injected.
 
 ASR has a ten-minute deadline; the entire gate step has 18 minutes, and preparation has 45 minutes to include the 14-minute handoff, tool installation, source acquisition and final encrypted diagnostics. Failure prevents the full source matrix from starting. The excerpt, its provenance and hashes, actual generated SRT, bounded progress/console events, and a screenshot are encrypted preparation diagnostics only. The complete downloaded smoke source stays private and is removed. All 45 quality cases still use their complete original sources; the smoke is explicitly excluded from case totals.
 

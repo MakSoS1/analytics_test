@@ -1,5 +1,5 @@
 const REPOSITORY='MakSoS1/analytics_test';
-const BRANCH='qa/examclips-stand45-2026-11-15';
+const BRANCH='qa/examclips-stand45-retry-2026-11-15';
 const safeCase=id=>typeof id==='string'&&/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id);
 
 function identity(value){

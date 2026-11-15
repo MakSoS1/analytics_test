@@ -1,5 +1,7 @@
 # Isolated Stand45 Implementation Plan
 
+Retry overlay: use `RETRY_SCOPE.md` for the approved seven-case continuation. The implementation plan below records the original full-45 architecture; the retry keeps its frozen app and full sources, adds only reviewed transport/diagnostic changes, and runs on a separate branch with fresh handoff contexts.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Run the original 45 real lectures through the documented local current-build app without contacting production authentication or billing.

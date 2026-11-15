@@ -6,6 +6,9 @@ import pathlib
 import re
 import subprocess
 import sys
+import shutil
+import tempfile
+from hls_mirror import mirror_vod_hls
 import urllib.parse
 import urllib.request
 from source_validation import validate_duration
@@ -57,7 +60,17 @@ if platform == "rutube":
 elif platform not in ("direct", "hls"):
     raise ValueError("Supported platforms: rutube, direct, hls")
 
-if platform == "direct":
+transport=None
+if platform == "hls" and urllib.parse.urlsplit(media_url).hostname == "av.tib.eu":
+    # Preserve the complete public source; only its HTTPS transport changes.
+    with tempfile.TemporaryDirectory(prefix="public-hls-",dir=destination.parent) as temporary:
+        local_playlist=mirror_vod_hls(media_url,pathlib.Path(temporary))
+        subprocess.run(["ffmpeg","-nostdin","-hide_banner","-loglevel","warning",
+                        "-protocol_whitelist","file,crypto,data","-i",str(local_playlist),
+                        "-c","copy","-movflags","+faststart","-y",str(destination)],check=True)
+        transport=json.loads((pathlib.Path(temporary)/"transport-receipt.json").read_text())
+        shutil.copyfile(pathlib.Path(temporary)/"transport-receipt.json",report_file.with_name("source-transport.json"))
+elif platform == "direct":
     with fetch(media_url, referer) as response, destination.open("wb") as output:
         total = 0
         while chunk := response.read(1024 * 1024):
@@ -95,6 +108,8 @@ record = {
     "method": "Complete public source, no trimming or authentication",
     "streams": [{key: stream.get(key) for key in ("codec_type", "codec_name", "width", "height", "sample_rate", "channels", "avg_frame_rate")} for stream in probe["streams"]],
 }
+if transport is not None:
+    record["transport"]={"method":transport["method"],"full_media_bytes":transport["full_media_bytes"],"selected_variant":transport["selected_variant"],"receipt":"source-transport.json"}
 report_file.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print(json.dumps({"id": case["id"], "duration_sec": duration, "bytes": record["bytes"]}), flush=True)
 

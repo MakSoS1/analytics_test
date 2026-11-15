@@ -11,6 +11,7 @@ import {startServer} from './stand-server.mjs';
 import {installNetworkPolicy,TARGET,ORIGIN} from './stand-policy.mjs';
 import {digest} from './stand-bundle.mjs';
 import {validateAsrSmoke} from './stand-smoke-checks.mjs';
+import {launchAuditBrowser,browserLaunchSettings} from './browser-launch.mjs';
 
 const HERE=dirname(fileURLToPath(import.meta.url));
 const config=JSON.parse(await readFile(join(HERE,'stand-config.json'),'utf8'));
@@ -41,7 +42,7 @@ async function command(executable,args,timeout){
   const timer=setTimeout(()=>{try{process.kill(-child.pid,'SIGKILL')}catch{}finish(Error(executable+' exceeded its diagnostic time budget'))},timeout);
  });
 }
-let stage='download_public_diagnostic_source',server,browser,page,processingSeen=false;
+let stage='download_public_diagnostic_source',server,context,page,processingSeen=false;
 const denied=[],models=new Set(),events=[],progress=[],started=Date.now();
 const report={targetKind:'test_instance',scope:'preparation_real_asr_excerpt_only',sourceCommit:config.source_commit,
  artifactId:config.artifact_id,artifactSha256:config.artifact_sha256,qualityCase:false};
@@ -68,8 +69,9 @@ try{
   bytes:(await stat(fixture)).size,sha256:await digest(fixture),evidenceFile:'asr-smoke-source.mp4',encryptedDiagnosticOnly:true};
  await copyFile(fixture,join(evidence,report.excerpt.evidenceFile));
  stage='start_verified_server';server=await startServer(join(root,'site'),config);
- stage='launch_official_chrome';browser=await chromium.launch({channel:'chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
- const context=await browser.newContext({serviceWorkers:'block',viewport:{width:1440,height:1000}});
+ stage='launch_official_chrome';const profile=join(root,'smoke-browser-profile');
+ report.browserLaunch={mode:'persistent',profileExistedBeforeLaunch:await stat(profile).then(()=>true,error=>error.code==='ENOENT'?false:null),options:browserLaunchSettings()};
+ context=await launchAuditBrowser(chromium,profile);
  await installNetworkPolicy(context,{denied,models});page=await context.newPage();page.setDefaultTimeout(20000);
  const event=entry=>{if(events.length<100)events.push({at:new Date().toISOString(),...entry})};
  page.on('pageerror',error=>event({type:'pageerror',message:diagnostic(error.message)}));
@@ -77,7 +79,8 @@ try{
  page.on('requestfailed',request=>event({type:'requestfailed',url:diagnostic(request.url()),message:diagnostic(request.failure()?.errorText)}));
  stage='open_app';const navigation=await page.goto(TARGET,{waitUntil:'domcontentloaded',timeout:45000});await page.locator('#atlas-new-lecture').waitFor();
  const headers=await navigation.allHeaders();report.responseHeaders={csp:headers['content-security-policy']||null,coop:headers['cross-origin-opener-policy']||null,coep:headers['cross-origin-embedder-policy']||null};
- report.browser={version:browser.version(),...await page.evaluate(()=>({userAgent:navigator.userAgent,hardwareConcurrency:navigator.hardwareConcurrency}))};
+ report.browser={version:context.browser()?.version()||null,...await page.evaluate(()=>({userAgent:navigator.userAgent,hardwareConcurrency:navigator.hardwareConcurrency}))};
+ if(!report.browser.version)report.browser.version=report.browser.userAgent.match(/Chrome\/([0-9.]+)/)?.[1]||null;
  report.crossOriginIsolated=await page.evaluate(()=>crossOriginIsolated);assert.equal(report.crossOriginIsolated,false);
  report.sharedArrayBufferAvailable=await page.evaluate(()=>typeof SharedArrayBuffer!=='undefined');assert.equal(report.sharedArrayBufferAvailable,false);
  assert.equal(await page.locator('#auth-gate').isVisible().catch(()=>false),false);
@@ -134,7 +137,7 @@ try{
  await save('ui-smoke-report.json',report).catch(()=>{});
  console.error('STAND_UI_SMOKE_FAILED '+JSON.stringify({stage,errorType:error.name,errorMessage:report.errorMessage,deniedRequests:denied}));process.exitCode=1;
 }finally{
- if(browser)await bounded(browser.close(),15000,'Browser close').catch(()=>{});
+ if(context)await bounded(context.close(),15000,'Browser close').catch(()=>{});
  if(server){server.closeAllConnections();await bounded(new Promise(done=>server.close(done)),5000,'Server close').catch(()=>{})}
  await Promise.allSettled([fixture,original,caseFile].map(path=>rm(path,{force:true})));
 }
