@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "algorithm": "AES-256-GCM+RSA-OAEP-SHA256",
+  "context": {
+    "purpose": "stand-bundle-unlock",
+    "repository": "MakSoS1/analytics_test",
+    "branch": "qa/examclips-stand45-2026-11-15",
+    "runId": "43765971939",
+    "runAttempt": "1",
+    "caseId": "rul01"
+  },
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr5dSPnz+AL5tnHiiJwow\nJanzhVwLGje8V/TxpwnM7URoE6gShQ6miJgQ6ldFIlE3GVW+YxwoAa3hiT8XSwTc\ntHFwYD3eEyuJYkiCUdNYOUOdZb/s3nvjcCjhPuze0TAF7zWFEpycTmo7a+AVrjwL\nquTvdqORdXdAhTqvtNzJzu/CsWkfJDRw9mKFQMqru6tb4C+RLHNp65VFgzITfsI7\nP6/V/hfYMOAT+iA3jsFWYJA3FUdf1t9CKAsmUWlbjjzEVFhDx+DNVyGDZCkPoqIu\nQSUqUn2yqFX52BtliMjXWE67hcR4EnYPajMUO1MEAmqbhjoxb7u1C2X5aQj1Mb5i\nwtpedvVpvljSb4qFAAsZollECAVdw4EY0WmElqBmsIU8iLsrtJVkgq2i22LWUp+R\nRA2pkj58dyO+9vMeVl6ImRW9oFRa74lpICnZSLQSqc/53bM/QPmbaDTFULLzNTsL\nGfGkfGYsP/c66fa/L/3aFT6kfpHFmMdfNFMeU/D6csKt2D06p5YwvfDGgF6W28cT\nMUQwJYvF+lKWeupbvY1R3lUsvXI6rlKZqF2H4Foxj3g9gqPUE8SH3kNvNisSKqQp\nydf/eh1dXVp5wk+C0dB5wfJeeFs0nxC2MPae5U1518AF3VehSfiopX7hK9NRXnAt\nW3+KfXw5BBWqb2D/INeHXE0CAwEAAQ==\n-----END PUBLIC KEY-----\n",
+  "keySha256": "f79f9254b7b3408504a6fc95324151816461d9b29e8396434f3477276f2c3c23",
+  "createdAt": "2026-11-15T21:56:29.531Z",
+  "expiresAt": "2026-11-15T22:10:29.531Z"
+}
