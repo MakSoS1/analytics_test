@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "algorithm": "AES-256-GCM+RSA-OAEP-SHA256",
+  "context": {
+    "purpose": "credentials",
+    "repository": "MakSoS1/analytics_test",
+    "branch": "qa/examclips-retest45-2026-11-15",
+    "runId": "43751148461",
+    "runAttempt": "1",
+    "caseId": "en04"
+  },
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAksIZZBqbr2P9XqF5j2Uj\nAwsjanwdjq0EJMOeY+3CrRppfvrQSgQYXHKFV+DoFhH0HjPNcaeJaH/rwi992CPn\nAXrlUolYywN7OK1Bt9u2+sQqYM7Ot1LyIYvWXqizaov6JOBXAj0Bf1jdevCoiMYb\n5W8bjBYqEQBpBCLTwxwkHPfgZ0Pq7sjaTGzuGyI5EFU8ca5FRRessjyr/jXXu2El\nuUeFKtwHjNB+Al/JKnm8rsPL52v0tOh7vPtcR0xieTsFoC7AJDi0MfbmUAABFvua\nD4RDTbJLJF9CQSOPlFyb8EaEKg8w7mCPEodphI3NlQaIGUiNZnaSWBE5OEHbIDSD\nAQb3RvYeA6iIXQz/FRlYQNUUXJ0ogivvDYxKyLLDpXEuVOJbczi8zM/bVQImE033\n62oyGLNxZO4CCkjklr6Tbiald6jolgDtLvr23mY+PzGLHJPTq2VyJnljJ2RqAufV\nrmsEBJmSMDZJLEx6iMZVGEaX62M0gQXCnsn+WXVJlgAwc8KFjpembxPVOltZjYoz\nLHocACVAXwoAWas5z3iMD0BPXDikoIlV89dYo6fhPmhI3udu5Hs1emSjGOoyS0dx\n8VZfhCY9LQno3iVmWqoGqAwKPQ2On0B61DBelivJopjGoVrNn0a4aZ0zSQL51tv5\nJUlrHb3yBVYadZWALP43e50CAwEAAQ==\n-----END PUBLIC KEY-----\n",
+  "keySha256": "0cb7d0c3f7d4225b0ee67eda38323aa7b8835fd510de3eac86cf6333e84eab7b",
+  "createdAt": "2026-11-15T19:18:16.667Z",
+  "expiresAt": "2026-11-15T19:32:16.667Z"
+}
