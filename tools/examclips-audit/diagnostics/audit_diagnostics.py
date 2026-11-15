@@ -70,7 +70,8 @@ def decode_outcome(returncode, timed_out, log):
         return {'ok': None, 'status': 'incomplete_timeout'}
     if returncode is not None and returncode < 0:
         return {'ok': None, 'status': 'incomplete_process_terminated'}
-    setup_markers = ('Error initializing filters', 'Error parsing global options', 'Error while parsing expression')
+    setup_markers = ('Error initializing filters', 'Error parsing global options', 'Error while parsing expression',
+                     'Unrecognized option', 'Error splitting the argument list')
     if 'Output #0' not in log and any(marker in log for marker in setup_markers):
         return {'ok': None, 'status': 'diagnostic_initialization_failed'}
     if re.search(r'\[mjpeg[^\]]*\].*(?:Invalid pts|Error)', log) or 'Error submitting video frame to the encoder' in log:
@@ -412,7 +413,7 @@ def decode_and_sample(path, outdir, requested_times, data=None, thumbnail_width=
     pattern = str(outdir / 'sample-%06d.jpg')
     command = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'info', '-xerror', '-err_detect', 'explode',
                '-threads', '1', '-copyts', '-protocol_whitelist', 'file,pipe', '-i', str(path),
-               '-filter_complex_script', str(filter_script), '-map', '0:v?', '-map', '0:a?', '-map', '[screen]',
+               '-/filter_complex', str(filter_script), '-map', '0:v?', '-map', '0:a?', '-map', '[screen]',
                '-fps_mode:v', 'passthrough', '-enc_time_base:v', 'filter',
                '-c:v', 'wrapped_avframe', '-c:a', 'pcm_s16le', '-f', 'null', '-',
                '-map', '[samples]', '-fps_mode', 'passthrough', '-enc_time_base:v', 'filter',

@@ -90,6 +90,17 @@ class RetestReviewTests(unittest.TestCase):
             self.assertEqual(summary['clips'], [{'file':'clip-001.mp4','status':'not_reviewed_deadline','full_decode_completed':False}])
             self.assertFalse((case/'retest-review'/'source-context.json').exists())
 
+    def test_unrecognized_ffmpeg_option_is_a_diagnostic_setup_failure(self):
+        log = "Unrecognized option 'filter_complex_script'.\nError splitting the argument list: Option not found\n"
+        outcome = self.review.diag.decode_outcome(8, False, log)
+        self.assertEqual(outcome['status'], 'diagnostic_initialization_failed')
+        self.assertIsNone(outcome['ok'])
+
+    def test_actual_decode_error_retains_media_failure_classification(self):
+        outcome = self.review.diag.decode_outcome(1, False, 'Output #0, null\n[h264] Invalid NAL unit size\n')
+        self.assertEqual(outcome['status'], 'decode_failed')
+        self.assertFalse(outcome['ok'])
+
     @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'Real FFmpeg is required')
     def test_real_mp4_fully_decodes_and_pairs_actual_pts_with_the_mapped_original(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -104,7 +115,7 @@ class RetestReviewTests(unittest.TestCase):
             put(root/'clip-001-project-before-export.json', {'clips': [row]})
             target = {'id': 'fixture-case', 'visual_points': [{'id': 'present', 'source_seconds': 0.4}, {'id': 'missing', 'source_seconds': 8}], 'semantic_ranges': []}
             report = self.review.review_clip(root, root/'clip-001.mp4', root/'review', target, max_source_pairs=4)
-            self.assertEqual(report['full_decode']['status'], 'completed')
+            self.assertEqual(report['full_decode']['status'], 'completed', report['full_decode'].get('failure_tail'))
             self.assertEqual(report['full_av_decode_passes'], 1)
             self.assertEqual(report['source']['sha256'], report['clip_sha256'])
             self.assertEqual(report['visual_targets'][1]['status'], 'absent_from_edl')
