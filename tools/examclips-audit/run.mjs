@@ -120,7 +120,7 @@ async function runCase(item) {
   run.cases.push(result);
   await json(join(dir,'result.json'),result);
   console.log('CASE_START '+JSON.stringify({id:item.id,at:now()}));
-  let page,project,lastStatus='',lastLog=0,lastPhase='',asrSeconds=0,asrTotal=0,cachedAsr=false,cameraReady=false,processingSeen=false,finishedAsr=false;
+  let page,project,lastStatus='',lastLog=0,lastPhase='',asrSeconds=0,asrTotal=0,cachedAsr=false,cameraReady=false,soundFinished=false,soundReady=false,processingSeen=false,finishedAsr=false;
   let stopPolling=false;
   let polling;
   const events=[];
@@ -151,8 +151,16 @@ async function runCase(item) {
     const message=state.status+' '+state.detail;
     const match=message.match(/Распознавание:\s*(\d+)\s*\/\s*(\d+)\s*с/);
     if(match){asrSeconds=Math.max(asrSeconds,Number(match[1]));asrTotal=Math.max(asrTotal,Number(match[2]));}
+    const clockMatch=message.match(/Распознано\s+((?:\d+:)?\d+:\d{2})\s+из\s+((?:\d+:)?\d+:\d{2})/);
+    if(clockMatch){
+      const seconds=value=>value.split(':').reduce((total,piece)=>total*60+Number(piece),0);
+      asrSeconds=Math.max(asrSeconds,seconds(clockMatch[1]));
+      asrTotal=Math.max(asrTotal,seconds(clockMatch[2]));
+    }
     if(/Все запрошенные аудиоокна уже распознаны/.test(message))cachedAsr=true;
     if(/Виртуальная камера готова:|Камера готова:/.test(message))cameraReady=true;
+    if(/Звуковые события найдены:/.test(message)){soundFinished=true;soundReady=true;}
+    if(/Звуковые события не найдены:/.test(message))soundFinished=true;
     if(state.phase==='processing'){processingSeen=true;result.siteProcessingStarted=true;}
     if(/Распознано \d+ реплик/.test(message))finishedAsr=true;
     if(state.status!==lastStatus||state.phase!==lastPhase||Date.now()-lastLog>30000){
@@ -231,12 +239,13 @@ async function runCase(item) {
     result.asr={...result.asr,processingSeen,maxSourceSecondsObserved:asrSeconds,totalSourceSecondsObserved:asrTotal,cachedAsr,completionMessageObserved:finishedAsr};
     result.testStage='site_background';
     const bgAt=Date.now(),bgEnd=Math.min(deadline-60000,Date.now()+config.background_wait_seconds*1000);
-    while(Date.now()<bgEnd&&!cameraReady) {
+    while(Date.now()<bgEnd&&!(cameraReady&&soundFinished)) {
       const state=await recordSnapshot();
       if(/Камера не построена:/.test(state.status))break;
       await delay(2000);
     }
     result.timings.backgroundWaitSeconds=(Date.now()-bgAt)/1000;
+    result.backgroundChecks={cameraReadyObserved:cameraReady,soundFinishedObserved:soundFinished,soundReadyObserved:soundReady};
     result.testStage='evidence_exports';
     project=await saveProject(page,dir);
     if(!Array.isArray(project.chunks)||!Array.isArray(project.clips)||!project.chunks.length)throw Error('Downloaded project has no actual transcript');
@@ -249,6 +258,9 @@ async function runCase(item) {
     if(!result.transcript.nearSourceEnd)result.warnings.push('Transcript ends before the final 10% of the source; inspect trailing silence or missing speech');
     result.camera={present:!!project.lectureCamera,version:project.lectureCamera?.version,keys:project.lectureCamera?.keys?.length||0};
     if(!project.lectureCamera)result.warnings.push('The exported project does not contain a finished lecture camera track');
+    result.soundEvents={present:!!project.soundEvents,version:project.soundEvents?.version||null,duration:project.soundEvents?.duration||null,events:project.soundEvents?.events?.length||0};
+    result.slides={chapters:project.lectureChapters?.length||0,slideLines:project.slideText?.lines?.length||0};
+    if(!project.soundEvents)result.warnings.push('The exported project does not contain the current app sound-event analysis; inspect background progress and final project');
     result.clips=clipRows(project);
     await json(join(dir,'microtopics.json'),result.clips);
     await page.locator('.top-navigation [data-editor-tab="captions"]').click();
@@ -394,3 +406,4 @@ finally{
   console.log('AUDIT_SUMMARY '+JSON.stringify({...run.summary,buildChanged:run.buildChanged,unexpectedBuild:run.unexpectedBuild,fatal:!!fatal}));
 }
 if(fatal||run.buildChanged||run.unexpectedBuild||run.summary.complete!==cases.length)process.exitCode=1;
+

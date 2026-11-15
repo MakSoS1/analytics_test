@@ -1,5 +1,5 @@
 const REPOSITORY='MakSoS1/analytics_test';
-const BRANCH='qa/examclips-audit-2026-11-11';
+const BRANCH='qa/examclips-retest45-2026-11-15';
 const safeCase=id=>typeof id==='string'&&/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id);
 
 function identity(value){
@@ -26,7 +26,7 @@ export function selectCaseIds(manifest,requested){
   if(!Array.isArray(manifest?.cases))throw Error('A source manifest is required');
   const known=manifest.cases.map(item=>item.id);
   if(known.some(id=>!safeCase(id))||new Set(known).size!==known.length)throw Error('Source manifest contains unsafe or duplicate case IDs');
-  if(!Array.isArray(requested)||!requested.length||requested.length>25)throw Error('Select one to 25 source cases');
+  if(!Array.isArray(requested)||!requested.length||requested.length>45)throw Error('Select one to 45 source cases');
   if(new Set(requested).size!==requested.length)throw Error('Duplicate requested case ID');
   for(const id of requested)if(!safeCase(id)||!known.includes(id))throw Error('Selected case is absent from manifest: '+id);
   return [...requested];
@@ -40,3 +40,4 @@ export function caseBudgetSeconds(item){
   if(!Number.isFinite(duration)||duration<=0||duration>10800)throw Error('Source duration must be positive and at most three hours');
   return duration>=7200?18000:duration>1800?5400:2700;
 }
+

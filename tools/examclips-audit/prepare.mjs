@@ -7,3 +7,4 @@ const ids=selectCaseIds(manifest,request.case_ids);
 for(const id of ids)caseBudgetSeconds(selectCase(manifest,id));
 if(process.env.GITHUB_OUTPUT)await appendFile(process.env.GITHUB_OUTPUT,'case_ids='+JSON.stringify(ids)+'\n');
 console.log('MATRIX_READY '+JSON.stringify({requestId:request.request_id||null,count:ids.length,caseIds:ids}));
+

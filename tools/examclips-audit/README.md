@@ -8,7 +8,7 @@ Evidence ZIP bytes are authenticated-encrypted first, then ciphertext is divided
 
 This harness exercises the real production application at https://examclips.dpdns.org/app/ through official Playwright Chrome on a GitHub Actions Ubuntu VM. Authentication, entitlement checks, complete-source ASR, model downloads, topic planning, camera analysis and MP4 encoding all use the unchanged live site. The harness does not install a modified production build, seed authentication, supply a transcript, approve candidate topics, alter topic durations or replace a renderer.
 
-The only authorized repository is MakSoS1/analytics_test and the only workflow branch is qa/examclips-audit-2026-11-11. The workflow triggers only when its workflow file or tools/examclips-audit/run-request.json changes on that branch. Helper edits and handoff commits do not trigger another run. A preparation job validates the requested IDs against the complete manifest, then launches one isolated matrix job per case, with at most ten running concurrently and fail-fast disabled.
+The only authorized repository is MakSoS1/analytics_test and the only workflow branch is qa/examclips-retest45-2026-11-15. The workflow triggers only when its workflow file or tools/examclips-audit/run-request.json changes on that branch. Helper edits and handoff commits do not trigger another run. A preparation job validates the requested IDs against the complete manifest, then launches one isolated matrix job per case, with at most ten running concurrently and fail-fast disabled.
 
 ## Selecting sources and budgets
 
@@ -69,3 +69,4 @@ The crypto tests exercise long credential payloads, run/attempt binding, tamper 
 The workflow additionally verifies that the configured recipient file parses as a public key. Tests cover distinct paths for all 25 cases, invalid run requests, case-bound credentials and evidence, and full-source budget selection. These checks establish the transport contract; they do not establish that production ASR or MP4 export succeeds. The completed TED pilot supplies initial model and render timing evidence. Each VM analyzes one complete source and exports its proposed clips sequentially; no representative-only result is treated as a full pass.
 
 The workflow's GitHub token is supplied only to the public-key handoff step. Checkout does not persist credentials. The token has repository contents write permission so that the handoff can publish on the isolated audit branch; the script enforces the exact authorized repository and branch. The harness does not modify the application's source or deploy a production build.
+

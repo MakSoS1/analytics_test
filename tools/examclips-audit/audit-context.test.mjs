@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 const manifest=JSON.parse(await readFile(new URL('./manifest.json',import.meta.url),'utf8'));
-const base={repository:'MakSoS1/analytics_test',branch:'qa/examclips-audit-2026-11-11',runId:'123456',runAttempt:'1',caseId:'en07'};
+const base={repository:'MakSoS1/analytics_test',branch:'qa/examclips-retest45-2026-11-15',runId:'123456',runAttempt:'1',caseId:'en07'};
 async function api(){
   const module=await import('./audit-context.mjs').catch(()=>null);
   assert.ok(module,'Case-isolated audit identity must be implemented');
@@ -53,4 +53,12 @@ test('two-to-three-hour lectures receive five hours for full analysis and export
  assert.equal(caseBudgetSeconds({duration_sec:10800}),18000);
  assert.equal(caseBudgetSeconds({duration_sec:7199.9}),5400);
  assert.throws(()=>caseBudgetSeconds({duration_sec:10800.1}),/duration/i);
+});
+
+test('the repeat request accepts all 45 original distinct cases',async()=>{
+ const {selectCaseIds}=await api();
+ const ids=manifest.cases.map(item=>item.id);
+ assert.equal(ids.length,45);
+ assert.deepEqual(selectCaseIds(manifest,ids),ids);
+ assert.throws(()=>selectCaseIds(manifest,[...ids,ids[0]]),/select|duplicate/i);
 });

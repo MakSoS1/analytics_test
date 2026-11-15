@@ -97,3 +97,4 @@ record = {
 }
 report_file.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print(json.dumps({"id": case["id"], "duration_sec": duration, "bytes": record["bytes"]}), flush=True)
+

@@ -1,7 +1,8 @@
 {
   "version": 1,
-  "request_id": "2026-11-11-long20-rul06-runner-recovery",
+  "request_id": "2026-11-15-v1.3.19-smoke2",
   "case_ids": [
-    "rul06"
+    "ru03",
+    "rul01"
   ]
 }

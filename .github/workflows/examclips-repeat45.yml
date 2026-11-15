@@ -1,11 +1,11 @@
-name: ExamClips authorized live audit
+name: ExamClips current-build repeat of the original 45 lectures
 
 'on':
   push:
     branches:
-      - qa/examclips-audit-2026-11-11
+      - qa/examclips-retest45-2026-11-15
     paths:
-      - .github/workflows/examclips-live-audit.yml
+      - .github/workflows/examclips-repeat45.yml
       - tools/examclips-audit/run-request.json
 
 permissions:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   prepare:
-    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-retest45-2026-11-15'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -29,13 +29,16 @@ jobs:
         run: node tools/examclips-audit/prepare.mjs
   live-audit:
     needs: prepare
-    name: Lecture ${{ matrix.case_id }}
-    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-audit-2026-11-11'
+    name: Repeat lecture ${{ matrix.case_id }}
+    concurrency:
+      group: examclips-repeat45-${{ github.ref }}-${{ matrix.case_id }}
+      cancel-in-progress: false
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-retest45-2026-11-15'
     runs-on: ubuntu-24.04
     timeout-minutes: 340
     strategy:
       fail-fast: false
-      max-parallel: 10
+      max-parallel: 20
       matrix:
         case_id: ${{ fromJSON(needs.prepare.outputs.case_ids) }}
     env:
@@ -343,3 +346,4 @@ jobs:
               if path != base and base in path.parents:
                   shutil.rmtree(path, ignore_errors=True)
           PY
+

@@ -43,3 +43,4 @@ try{
   await rm(join(artifact,'evidence.enc'),{force:true});
   await rm(join(artifact,'encryption.json'),{force:true});
 }finally{await rm(zip,{force:true})}
+

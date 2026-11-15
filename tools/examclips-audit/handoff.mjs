@@ -60,3 +60,4 @@ try {
   }
   if(!received)throw Error('Encrypted credential handoff timed out');
 } finally {await rm(privatePath,{force:true});}
+
