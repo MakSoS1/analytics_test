@@ -22,7 +22,7 @@ test('static instance serves only verified declared assets and truthfully identi
  try{
   server=await startServer(directory,config,{port:0});const port=server.address().port;
   const index=await get(port,'/app/');assert.equal(index.status,200);assert.match(index.body,/Local test fixture/);
-  assert.equal(index.headers['cross-origin-opener-policy'],'same-origin');assert.equal(index.headers['cross-origin-embedder-policy'],'require-corp');
+  assert.equal(index.headers['cross-origin-opener-policy'],'same-origin');assert.equal(index.headers['cross-origin-embedder-policy'],undefined);
   assert.match(index.headers['content-security-policy'],/connect-src 'self'/);assert.doesNotMatch(index.headers['content-security-policy'],/examclips\.dpdns/);
   const build=JSON.parse((await get(port,'/site-build.json')).body);assert.equal(build.targetKind,'test_instance');assert.equal(build.commit,config.source_commit);assert.equal(build.artifactSha256,config.artifact_sha256);
   for(const path of ['/auth/v1/token','/billing-api/account','/api/local-review-capabilities','/app/secret.pem','/app/%2e%2e/secret','/../secret'])assert.notEqual((await get(port,path)).status,200);

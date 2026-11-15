@@ -401,7 +401,8 @@ try {
   await startup.locator('#atlas-new-lecture').waitFor({timeout:45000});
   if(await startup.locator('#auth-gate').isVisible().catch(()=>false))throw Error('The pinned default local build unexpectedly requires authentication');
   run.crossOriginIsolated=await startup.evaluate(()=>crossOriginIsolated);
-  if(!run.crossOriginIsolated)throw Error('The isolated app lacks cross-origin isolation required by its processing engine');
+  run.sharedArrayBufferAvailable=await startup.evaluate(()=>typeof SharedArrayBuffer!=='undefined');
+  if(run.crossOriginIsolated||run.sharedArrayBufferAvailable)throw Error('The test instance differs from the observed hosted single-thread WASM exposure');
   enforceNetworkBoundary();run.testInstanceReadyAt=now();
   await startup.close();
   for(const item of cases){await runCase(item);await json(join(output,'run.json'),run)}

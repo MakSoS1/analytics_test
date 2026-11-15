@@ -32,7 +32,9 @@ export async function startServer(directory,config,{port=5173}={}){
    'The localhost manual OCR selector defaults to auto instead of hosted tesseract. Manual scene analysis is not invoked. Automatic slide OCR defaults to auto in both builds and falls back to browser Tesseract after the unavailable local capability probe.',
    'Public model downloads use their configured runtime locations; unpinned upstream models can change.']};
  const server=http.createServer((request,response)=>{
-  response.setHeader('Cross-Origin-Opener-Policy','same-origin');response.setHeader('Cross-Origin-Embedder-Policy','require-corp');
+  // The hosted static app exposes no COEP. Match that runtime so ORT selects
+  // the same single-thread WASM path; the pinned app assets remain untouched.
+  response.setHeader('Cross-Origin-Opener-Policy','same-origin');
   response.setHeader('Content-Security-Policy',CSP);response.setHeader('X-Content-Type-Options','nosniff');response.setHeader('Cache-Control','no-store');
   const send=(status,body,type='application/json; charset=utf-8')=>{response.writeHead(status,{'Content-Type':type,'Content-Length':Buffer.byteLength(body)});response.end(request.method==='HEAD'?undefined:body)};
   if(request.headers.host!=='127.0.0.1:'+server.address().port)return send(421,'{"error":"Unexpected host"}');

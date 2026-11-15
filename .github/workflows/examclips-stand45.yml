@@ -13,7 +13,7 @@ jobs:
   prepare:
     if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-2026-11-15'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       AUDIT_CASE_ID: bundle-prepare
     outputs:
@@ -130,8 +130,8 @@ jobs:
       env:
         AUDIT_HANDOFF_PAYLOAD: ${{ steps.handoff.outputs.payload_path }}
       run: node tools/examclips-audit/stand-bundle.mjs prepare
-    - name: Validate normal UI startup and a short source fixture before releasing the matrix
-      timeout-minutes: 4
+    - name: Require real full-ASR completion on a diagnostic source excerpt before releasing the matrix
+      timeout-minutes: 18
       run: node tools/examclips-audit/stand-ui-smoke.mjs
     - name: Upload the encrypted shared private application bundle
       uses: actions/upload-artifact@v4
