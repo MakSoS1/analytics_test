@@ -1,0 +1,2351 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "id": "ru01",
+      "expected_source_sha256": "05c901d74b6de67e784c4f4b21685989aa1242778dcadf08564dca39ddc8fdef",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 118.48,
+          "reason": "Обе колбы, необходимые для сравнения, находятся вне центрального портретного кадра."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 448.8,
+          "reason": "За один выходной кадр полный экран прибора заменяется увеличенным фрагментом меню, исчезает нужный нижний пункт. [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 448.84,
+          "reason": "За один выходной кадр полный экран прибора заменяется увеличенным фрагментом меню, исчезает нужный нижний пункт. [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 383.68,
+          "reason": "Обрезаны колонка классификации электролитов и правая часть формулы"
+        },
+        {
+          "id": "v03",
+          "source_seconds": 643.84,
+          "reason": "Полностью исчезла ось удельной электропроводности и ее шкала"
+        },
+        {
+          "id": "v04",
+          "source_seconds": 806.4,
+          "reason": "Исчез столбец номеров колб"
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 8.28,
+          "end": 11.4,
+          "reason": "Из вступления удалено прямое объявление цели сравнения сильных и слабых электролитов; оно есть в обеих транскрипциях."
+        },
+        {
+          "id": "s02",
+          "start": 860.08,
+          "end": 862.16,
+          "reason": "Check the law of Kohlrausch terminology against the original slide and speech."
+        }
+      ]
+    },
+    {
+      "id": "ru02",
+      "expected_source_sha256": "6a3d026ec5db655e59dde034e3b2e2f12a81ebd296350ddff553a131a726c351",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 819.2,
+          "reason": "Обрезаны обозначение числа переноса и последние цифры результата 0,2575. В исходнике строка расчёта полнее."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 54.72,
+          "reason": "Обрезанный крупный план резко заменяется полным широким за один выходной кадр. [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 54.76,
+          "reason": "Обрезанный крупный план резко заменяется полным широким за один выходной кадр. [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 54.12,
+          "reason": "Почти все лицо лектора вне левого края, внизу дублируется отдельная полоса тела"
+        },
+        {
+          "id": "v03",
+          "source_seconds": 806.76,
+          "reason": "Обрезаны начало и большая часть вывода формулы общего заряда"
+        },
+        {
+          "id": "v04",
+          "source_seconds": 754.6,
+          "reason": "Check nitrate-ion caption notation against the visible source formula."
+        }
+      ],
+      "semantic_ranges": []
+    },
+    {
+      "id": "ru03",
+      "expected_source_sha256": "f7628bb149c68d1563664067b213c7653993aa76ef1739fe8a91890c0525d422",
+      "visual_points": [
+        {
+          "id": "first",
+          "source_seconds": 0.1001,
+          "reason": "Historical first video timestamp; frame 0 export failure occurred before any MP4."
+        },
+        {
+          "id": "early5",
+          "source_seconds": 5.0,
+          "reason": "Explicit retest render target at the end of the opening 5 seconds."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "render5",
+          "start": 0.0,
+          "end": 5.0,
+          "reason": "Render the first 5 seconds of the exact RU03 source to retest the historical first-frame failure."
+        }
+      ]
+    },
+    {
+      "id": "ru04",
+      "expected_source_sha256": "143808cb84328d1937c8444f719a0d99ca07da55703d8e1d025c1d0905425fc5",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 2750.08,
+          "reason": "Вместо программы Python Tutor и схемы переменных верхняя панель показывает почти пустую серую область. Лектор остаётся внизу."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 573.12,
+          "reason": "The original compares five separate variables h1 through h5 with one five-element list h."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 606.04,
+          "reason": "The source shows the indexing statement print(h[1]) and its explanatory sentence."
+        },
+        {
+          "id": "v04",
+          "source_seconds": 863.12,
+          "reason": "The export retains enlarged intermediate list values but removes the while-loop code and the i=0/i=1/i=2 labels at the left."
+        },
+        {
+          "id": "v05",
+          "source_seconds": 1350.04,
+          "reason": "The two sides of the while-versus-for comparison are not jointly preserved in the sampled exports."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 1985.2,
+          "end": 1985.28,
+          "reason": "The range(3,20,16) exercise is divided at 1985.2/1985.28 s."
+        },
+        {
+          "id": "s02",
+          "start": 728.52,
+          "end": 780.84,
+          "reason": "The 52.32 s omission at source 728.52–780.84 includes a chat answer about square-bracket indexing versus a separate variable name."
+        }
+      ]
+    },
+    {
+      "id": "ru05",
+      "expected_source_sha256": "d6ce6d675685df5d054d489fd68b229be740cb120c08999face754058366cd20",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 1615.32,
+          "reason": "Верхняя панель показывает почти одну красную стену вместо видимых в исходнике заголовка, текста и ультразвукового изображения."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 964.32,
+          "reason": "The export removes the complete nuclide-name column and part of the half-life column from the sensitivity/activity table."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 1307.4,
+          "reason": "The top crop retains a right-hand slide fragment and wall while removing the conclusion that radionuclide diagnosis is functional diagnosis."
+        },
+        {
+          "id": "v04",
+          "source_seconds": 9.84,
+          "reason": "The actual opening card spells the course word as «Предавство» while the source title slide reads «производство изотопов и ядерная медицина»."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 869.84,
+          "end": 870.48,
+          "reason": "The 869.84/870.48 s boundary separates the condition introducing use of short-lived nuclides from its continuation and resulting high specific activity."
+        },
+        {
+          "id": "s02",
+          "start": 3134.56,
+          "end": 3137.84,
+          "reason": "Clip 6 ends by asking what limits PET localization; clip 7 begins with the dependent answer about positron range in matter."
+        }
+      ]
+    },
+    {
+      "id": "ru06",
+      "expected_source_sha256": "c37c862baa2f45d27dd7a47787bb29679e47147bb975a0c847c9f43e2d315bf5",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 475.04,
+          "reason": "Из шести раскрасок узла четыре сохраняются полностью, но почти весь левый столбец и часть заголовка теряются. Тонкие остатки края не сохраняют пригодные для сравнения примеры."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 45.04,
+          "reason": "The close crop excludes the right hand and part of the closed-rope demonstration while the source shows both hands and the complete rope loop."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 3.52,
+          "end": 15.52,
+          "reason": "Recheck the original topic announcement that preceded the old exported start; original review flags this as reduced opening context, not loss of the whole knot definition."
+        }
+      ]
+    },
+    {
+      "id": "ru07",
+      "expected_source_sha256": "b4edb2e1eff012da1b7cf3955b1e4ce98b404a06dc1d7a3179bd968c604c4f3e",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 280.8,
+          "reason": "У схемы обоняния исчезают левые анатомические подписи, а правые обрываются. Субтитр проходит через центральную схему."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 359.96,
+          "reason": "The export changes abruptly from a complete lecturer view to a crop of bookshelf and hand with her head and torso excluded. [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 360.04,
+          "reason": "The export changes abruptly from a complete lecturer view to a crop of bookshelf and hand with her head and torso excluded. [after]"
+        },
+        {
+          "id": "j02a",
+          "source_seconds": 362.84,
+          "reason": "The export changes abruptly from a complete lecturer view to a crop of bookshelf and hand with her head and torso excluded. [before]"
+        },
+        {
+          "id": "j02b",
+          "source_seconds": 362.96,
+          "reason": "The export changes abruptly from a complete lecturer view to a crop of bookshelf and hand with her head and torso excluded. [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 790.0,
+          "reason": "At output100s the crop leaves most of the lecturer face and body beyond the right edge while the source keeps her fully visible."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 586.28,
+          "reason": "Additional wide slides lose lateral visual content: clip003 taste-map figures at275/300/375s and clip004 signal-processing diagram at300s."
+        },
+        {
+          "id": "v04",
+          "source_seconds": 611.28,
+          "reason": "Additional wide slides lose lateral visual content: clip003 taste-map figures at275/300/375s and clip004 signal-processing diagram at300s."
+        },
+        {
+          "id": "v05",
+          "source_seconds": 686.28,
+          "reason": "Additional wide slides lose lateral visual content: clip003 taste-map figures at275/300/375s and clip004 signal-processing diagram at300s."
+        },
+        {
+          "id": "v06",
+          "source_seconds": 990.0,
+          "reason": "Additional wide slides lose lateral visual content: clip003 taste-map figures at275/300/375s and clip004 signal-processing diagram at300s."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 665,
+          "end": 715,
+          "reason": "The app SRT ends clip003 after listing tastes with the incomplete phrase referring to umami, and clip004 starts with its definition as protein-food taste."
+        }
+      ]
+    },
+    {
+      "id": "ru08",
+      "expected_source_sha256": "b8b8a297eb44cc7e31c481f02b6227d198f910e7026fa99758fe5333c9802a02",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 253.6,
+          "reason": "Потеряны вертикальная ось графика минерализации, часть заголовка и последние десятилетия с высокими столбцами справа."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 1215.28,
+          "reason": "At output54.000s the export is almost entirely black with narrow image slivers, although the source already shows a complete portrait-format statue photograph. [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 1215.36,
+          "reason": "At output54.000s the export is almost entirely black with narrow image slivers, although the source already shows a complete portrait-format statue photograph. [after]"
+        },
+        {
+          "id": "j02a",
+          "source_seconds": 594.04,
+          "reason": "The export jumps between a large cropped view and a smaller contained view in adjacent output frames while the paired source remains on the same image. [before]"
+        },
+        {
+          "id": "j02b",
+          "source_seconds": 594.08,
+          "reason": "The export jumps between a large cropped view and a smaller contained view in adjacent output frames while the paired source remains on the same image. [after]"
+        },
+        {
+          "id": "j03a",
+          "source_seconds": 610.88,
+          "reason": "The export jumps between a large cropped view and a smaller contained view in adjacent output frames while the paired source remains on the same image. [before]"
+        },
+        {
+          "id": "j03b",
+          "source_seconds": 610.96,
+          "reason": "The export jumps between a large cropped view and a smaller contained view in adjacent output frames while the paired source remains on the same image. [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 66.16,
+          "reason": "While the export subtitle names Bogachev, the crop retains the portrait visibly labeled Lev Semyonovich Berg."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 1186.28,
+          "reason": "Only a narrow left portion of the source relief map remains."
+        },
+        {
+          "id": "v04",
+          "source_seconds": 3.6,
+          "reason": "The actual title card reads «Озеро Мандж Гудила»."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 670,
+          "end": 712,
+          "reason": "The explanation of why the lake is named Gudilo is split at690/690.08s."
+        },
+        {
+          "id": "s02",
+          "start": 315,
+          "end": 345,
+          "reason": "The329.92/330.08s cut separates the water-balance situation from its effect on salinity and lake level."
+        }
+      ]
+    },
+    {
+      "id": "ru09",
+      "expected_source_sha256": "c7ea4d1006f1c2c22113a03d25155631e59e4ae647fb7b6c775ad300bea5c249",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 320.96,
+          "reason": "У исторической иллюстрации обрезаны головы жонглёра и музыканта, часть левой фигуры и предметы сверху."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 78.68,
+          "reason": "Actual adjacent exported frames show abrupt crop/layout changes while paired originals retain the same shot. [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 78.76,
+          "reason": "Actual adjacent exported frames show abrupt crop/layout changes while paired originals retain the same shot. [after]"
+        },
+        {
+          "id": "j02a",
+          "source_seconds": 458.88,
+          "reason": "Actual adjacent exported frames show abrupt crop/layout changes while paired originals retain the same shot. [before]"
+        },
+        {
+          "id": "j02b",
+          "source_seconds": 458.92,
+          "reason": "Actual adjacent exported frames show abrupt crop/layout changes while paired originals retain the same shot. [after]"
+        },
+        {
+          "id": "j03a",
+          "source_seconds": 619.12,
+          "reason": "Actual adjacent exported frames show abrupt crop/layout changes while paired originals retain the same shot. [before]"
+        },
+        {
+          "id": "j03b",
+          "source_seconds": 619.2,
+          "reason": "Actual adjacent exported frames show abrupt crop/layout changes while paired originals retain the same shot. [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 54.48,
+          "reason": "At output 50 s the enlarged crop places most of the speaker face beyond the left edge."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 398,
+          "end": 440,
+          "reason": "The source introduces another fencing master, Ringeck, around 414.32 s and describes him as a follower of a teaching."
+        }
+      ]
+    },
+    {
+      "id": "ru10",
+      "expected_source_sha256": "fe8f78f72f53080931299d1e85154449350a474d56395385e4d02ab6b47c1cf7",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 288.44,
+          "reason": "Положительный пример: таблица нейтрона и антинейтрона, формулы и лектор сохранены вместе. Пространственная потеря в этой паре не установлена."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 15.84,
+          "end": 27.92,
+          "reason": "Recheck the antiparticle introduction excluded before the old export start; the later definition was preserved."
+        }
+      ]
+    },
+    {
+      "id": "ru11",
+      "expected_source_sha256": "2778840d1288ab7739ed08404efc0123290821c59f358be7e378824b769bfd35",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 146.24,
+          "reason": "Экспорт удерживает статическую левую схему, но исключает преподавателя и запись суммы барионного числа на правой доске."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 198.68,
+          "reason": "The output changes layout in adjacent frames while the original remains an uninterrupted board lecture. [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 198.76,
+          "reason": "The output changes layout in adjacent frames while the original remains an uninterrupted board lecture. [after]"
+        },
+        {
+          "id": "j02a",
+          "source_seconds": 636.0,
+          "reason": "The output changes layout in adjacent frames while the original remains an uninterrupted board lecture. [before]"
+        },
+        {
+          "id": "j02b",
+          "source_seconds": 636.04,
+          "reason": "The output changes layout in adjacent frames while the original remains an uninterrupted board lecture. [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 193.16,
+          "reason": "The crop keeps the static left diagram while excluding the lecturer and the live right-hand board."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 425.4,
+          "reason": "At87.546667s the output caption refers to obtaining a sum while the live antibaryon calculation and most of the lecturer are beyond the right crop edge."
+        },
+        {
+          "id": "v04",
+          "source_seconds": 627.72,
+          "reason": "At87.546667s the output caption refers to obtaining a sum while the live antibaryon calculation and most of the lecturer are beyond the right crop edge."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 15,
+          "end": 60,
+          "reason": "The source explicitly introduces hadrons around15.92–22.72s."
+        },
+        {
+          "id": "s02",
+          "start": 310,
+          "end": 355,
+          "reason": "The330/330.24s cut divides the lecturer recap: clip001 ends with «в процессе…» and clip002 continues «вот этого изложения…», referring to what was just written and the upper-left illustration."
+        }
+      ]
+    },
+    {
+      "id": "ru12",
+      "expected_source_sha256": "a7340e1f83d2b7dd9e9a777a6a8feb874146fbae98675ab249b9208e96dc1c2e",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 1586.52,
+          "reason": "Приближение к нижней подписи исключает почти всю карту мелового периода и начала строк."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 787.28,
+          "reason": "Портрет скачком заменяется слайдом; исходник непрерывен [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 787.36,
+          "reason": "Портрет скачком заменяется слайдом; исходник непрерывен [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 661.64,
+          "reason": "Обсуждаемая карта целиком исключена, субтитры на рту"
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 926.4,
+          "end": 929.84,
+          "reason": "Служебная просьба вырезать паузу сохранена в MP4"
+        },
+        {
+          "id": "s02",
+          "start": 3210.0,
+          "end": 3210.32,
+          "reason": "Вопрос и ответ об отсутствии отложений разнесены по роликам9/10"
+        }
+      ]
+    },
+    {
+      "id": "en01",
+      "expected_source_sha256": "a3fa5bb22fa65d96f95452ae8ef80cd0a743f24ff6d47b7a24332598fa316a31",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 611.4441666666667,
+          "reason": "Из векторного уравнения исчезают второй вектор и правая часть. В исходнике показана полная линейная комбинация столбцов."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 295.6954,
+          "reason": "The equations and matrix notation are readable, but the right-side Row picture coordinate axes and labels are outside the crop."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 763.5628,
+          "reason": "The crop cuts off the rightward column-vector arrows and their labels while the lecturer points toward that side of the diagram."
+        },
+        {
+          "id": "v04",
+          "source_seconds": 1470.2020666666667,
+          "reason": "The crop excludes the right-hand-side vector of the lower equation and the right-side 3D column/plane diagrams."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 550.12,
+          "end": 566.12,
+          "reason": "Removes the second column and target construction while introducing the column form."
+        },
+        {
+          "id": "s02",
+          "start": 823.24,
+          "end": 840.76,
+          "reason": "After asking how the sum produces the target, the clip drops both component calculations and resumes a general picture statement."
+        },
+        {
+          "id": "s03",
+          "start": 1357.8,
+          "end": 1374.44,
+          "reason": "Deletes the explicit 3D target-vector task before its solution."
+        },
+        {
+          "id": "s04",
+          "start": 1631.16,
+          "end": 1638.68,
+          "reason": "Changing the right-hand side is still demonstrated, but the explicit contrast—new row planes versus unchanged columns—is removed in two cuts."
+        },
+        {
+          "id": "s05",
+          "start": 1643.8,
+          "end": 1650.6,
+          "reason": "Changing the right-hand side is still demonstrated, but the explicit contrast—new row planes versus unchanged columns—is removed in two cuts."
+        },
+        {
+          "id": "s06",
+          "start": 39.04,
+          "end": 40.96,
+          "reason": "Incorrect course website domain."
+        },
+        {
+          "id": "s07",
+          "start": 2241.12,
+          "end": 2241.44,
+          "reason": "The explanation of the first product component becomes 2 plus 1 yielding 12, whereas the reference and matrix values require 2 plus 10."
+        },
+        {
+          "id": "s08",
+          "start": 2251.36,
+          "end": 2253.44,
+          "reason": "The vector’s two spoken components are concatenated into a scalar-looking number."
+        },
+        {
+          "id": "s09",
+          "start": 2344.8,
+          "end": 2345.6,
+          "reason": "The vector’s two spoken components are concatenated into a scalar-looking number."
+        }
+      ]
+    },
+    {
+      "id": "en02",
+      "expected_source_sha256": "06236664b370ca2309aa5e74918a36a39512fad690ad9938d50b776217c02dcf",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 2010.7193333333332,
+          "reason": "Вместо программы 3+2 и предыдущего примера консоли 2+4 с результатом 6 увеличена почти пустая область редактора."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 2460.0682333333334,
+          "reason": "The CHANGING BINDINGS slide retains the code and variable-name boxes but cuts off the right-hand value boxes."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 382.426,
+          "reason": "At a sampled frame just before an original cut to the topics slide, the export cuts the presenter above the eyes at the top edge of its panel."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 2426.72,
+          "end": 2427.92,
+          "reason": "The last worked memory-binding example is split after creation of pi=3.14."
+        },
+        {
+          "id": "s02",
+          "start": 1731.24,
+          "end": 1742.84,
+          "reason": "A pause and the spoken use-case explanation for simple shell test commands are removed; this joins the editor-run explanation to the later editor-use statement."
+        },
+        {
+          "id": "s03",
+          "start": 2287.24,
+          "end": 2290.84,
+          "reason": "The spoken introduction of the variable area is cut, so the next phrase refers to another variable without saying its name at this join."
+        },
+        {
+          "id": "s04",
+          "start": 1245.84,
+          "end": 1246.56,
+          "reason": "Changes a primitive action from writing data to a direction; the native caption joins it to the preceding reading action."
+        },
+        {
+          "id": "s05",
+          "start": 1871.36,
+          "end": 1872.08,
+          "reason": "Misspells the Python type name."
+        },
+        {
+          "id": "s06",
+          "start": 1440.16,
+          "end": 1441.36,
+          "reason": "Drops the subject and corrected verb that demonstrate the contrast between syntax and static semantics."
+        }
+      ]
+    },
+    {
+      "id": "en03",
+      "expected_source_sha256": "6a84c0f341e020071885092173190d68f8706d8090d8bff1698181eb68a7aee2",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 459.99286666666666,
+          "reason": "Центральная схема пружины остаётся, но подписи времени и условия задачи по краям исчезают."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 596.7628333333333,
+          "reason": "The lecturer's head and body are almost entirely outside the left edge in the sampled clip 2 frame, leaving a hand and paper."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 3340.0700666666667,
+          "reason": "During the retained closing friction sequence, the portrait crop is centered on the lecturer and excludes most of the air track to the left at output 257.013 s/source 3340.070 s."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 1071.8,
+          "end": 1088.04,
+          "reason": "The explanation that the carefully released mass has zero initial velocity is cut immediately before solving for coefficients."
+        },
+        {
+          "id": "s02",
+          "start": 1887.6,
+          "end": 1905.36,
+          "reason": "Clip ends after the broad statement about all possible systems, before the immediately following well-behaved-potential/minimum/small-amplitude qualification."
+        },
+        {
+          "id": "s03",
+          "start": 2052.68,
+          "end": 2068.36,
+          "reason": "The first part of chain-rule calculation for time translation is cut, joining the rule reference to later derivative symbols."
+        },
+        {
+          "id": "s04",
+          "start": 2203.96,
+          "end": 2220.04,
+          "reason": "The initial two-pendulum small-amplitude comparison is shortened by 16.08 s."
+        },
+        {
+          "id": "s05",
+          "start": 2457.64,
+          "end": 2486.52,
+          "reason": "The third complex-exponential solution and imaginary-unit definition are removed from spoken exposition, leaving the reaction to a supposedly strange formula."
+        },
+        {
+          "id": "s06",
+          "start": 3029.88,
+          "end": 3038.44,
+          "reason": "The end of the claim that differentiation does not eliminate the exponential is absent in ASR and cut; the retained phrase ends with cannot."
+        },
+        {
+          "id": "s07",
+          "start": 1287.04,
+          "end": 1287.52,
+          "reason": "Vertical-orientation announcement closes clip 5, while vertical-spring demonstration begins clip 6 with a referential setup."
+        },
+        {
+          "id": "s08",
+          "start": 1781.04,
+          "end": 1782.32,
+          "reason": "Substitutes a sign claim for a smallness approximation and changes the mathematical meaning."
+        },
+        {
+          "id": "s09",
+          "start": 1602.32,
+          "end": 1603.04,
+          "reason": "Check caption terminology: expected parabola; previously rendered popular."
+        },
+        {
+          "id": "s10",
+          "start": 1615.52,
+          "end": 1624.56,
+          "reason": "Check caption terminology: expected Taylor expansion; previously rendered Tyler expansion."
+        }
+      ]
+    },
+    {
+      "id": "en04",
+      "expected_source_sha256": "b72366305f726b710b6c418c0c2e546c0d016ebfe706ac6605d1078b1cf65c79",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 1500.0667334000668,
+          "reason": "Голова лектора полностью находится за левым краем; остаются часть корпуса и рука. В исходнике голова видна целиком."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 1050.7507507507507,
+          "reason": "The output abruptly changes between adjacent 15 fps frames from a tall empty-stage crop, with the speaker outside the frame, to a small wide landscape panel that restores the speaker. [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 1050.8174841508176,
+          "reason": "The output abruptly changes between adjacent 15 fps frames from a tall empty-stage crop, with the speaker outside the frame, to a small wide landscape panel that restores the speaker. [after]"
+        },
+        {
+          "id": "j02a",
+          "source_seconds": 1427.9612946279613,
+          "reason": "The output abruptly changes between adjacent 15 fps frames from a small wide landscape panel to an enlarged portrait crop. [before]"
+        },
+        {
+          "id": "j02b",
+          "source_seconds": 1428.028028028028,
+          "reason": "The output abruptly changes between adjacent 15 fps frames from a small wide landscape panel to an enlarged portrait crop. [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 1050.0834167500834,
+          "reason": "The vertical crop excludes most of the speaker’s face at the left edge, retaining only the rear/side of the head and part of the torso."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 1700.0667334000668,
+          "reason": "The speaker’s face remains visible but the left edge clips part of the head and body."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 1328.36,
+          "end": 1359.96,
+          "reason": "Removes the distinction between inability to form new memories and forgetting the past, along with the transition from common to rarer disorders."
+        },
+        {
+          "id": "s02",
+          "start": 1461,
+          "end": 1478.2,
+          "reason": "Removes the definition of multiple-personality cases and the lecture’s stated debate about whether the cases are genuine."
+        },
+        {
+          "id": "s03",
+          "start": 755.64,
+          "end": 762.12,
+          "reason": "Removes the statement that studying the mind requires more than the discipline of psychology alone."
+        }
+      ]
+    },
+    {
+      "id": "en05",
+      "expected_source_sha256": "095beb522c6a03b2b0f599482f5396833ef71533c05858c0a51768b0b41261be",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 423.0289222222222,
+          "reason": "Потеряны самый светлый образец и подпись goluboy; тёмные образцы и siniy остаются. Исчезает одна сторона сравнения цветовых категорий."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 285.05775555555556,
+          "reason": "The five-photo age sequence is reduced to the first two photographs in the actual export; the older three portraits are outside the crop."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 342.4067111111111,
+          "reason": "At the first inspected penguin slide frame after an original cut, the export shows only the left subset of the group; the central adult and right-side birds are largely or entirely outside the crop."
+        },
+        {
+          "id": "v04",
+          "source_seconds": 342.2815888888889,
+          "reason": "The presenter is almost entirely outside the right edge: the output is mainly empty backdrop with a sleeve/edge of hair visible, while the paired source keeps the full face and upper body."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 274.28,
+          "end": 283.72,
+          "reason": "Removes identification of photographs as the speaker grandfather at different ages and the English left-to-right timeline."
+        },
+        {
+          "id": "s02",
+          "start": 423.028922,
+          "end": 426.0,
+          "reason": "The color comparison loses its leftmost light-blue swatch and goluboy label, while the added captions misrecognize both Russian category names."
+        },
+        {
+          "id": "s03",
+          "start": 423.52,
+          "end": 423.92,
+          "reason": "Target-language term lost"
+        },
+        {
+          "id": "s04",
+          "start": 424.96,
+          "end": 426,
+          "reason": "Target-language term lost"
+        },
+        {
+          "id": "s05",
+          "start": 148.16,
+          "end": 149.6,
+          "reason": "Proper-name spelling error; topic explanation remains."
+        }
+      ]
+    },
+    {
+      "id": "en06",
+      "expected_source_sha256": "2402115bf27c2b79433e30da32a4cfa19021f3fb9cf9f14cb26924b97abbc31f",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 700.0563666666667,
+          "reason": "Обрезаны правая часть графика, отметка $50,000 и цветовая легенда. Исходник содержит их целиком."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 932.6222666666666,
+          "reason": "Between adjacent 15 fps frames, the output jumps from a tall cropped stage view with an extra bottom image strip to a compact slide panel. [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 932.689,
+          "reason": "Between adjacent 15 fps frames, the output jumps from a tall cropped stage view with an extra bottom image strip to a compact slide panel. [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 150.07305555555556,
+          "reason": "The fertility chart is cropped on the right."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 600.0563666666667,
+          "reason": "The right portion of the child-survival/GDP chart is excluded, including the $50,000 tick and part of the high-income upper-right bubble."
+        },
+        {
+          "id": "v04",
+          "source_seconds": 1150.0396888888888,
+          "reason": "The right side of the Internet users/GDP chart is cropped, losing the 20,000 and 40,000 GDP ticks and high-GDP points visible in the original; the x-axis label is cut off at the right."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 88.2,
+          "end": 97.64,
+          "reason": "Removes the stated discovery and joins its preceding setup to an explanation without its stated conclusion."
+        },
+        {
+          "id": "s02",
+          "start": 531.72,
+          "end": 535.64,
+          "reason": "Weakens setup for subsequent regional/country comparisons."
+        },
+        {
+          "id": "s03",
+          "start": 119.88,
+          "end": 124.2,
+          "reason": "Professor study setup remains, but its comparison result is absent from ASR and export, leaving an incomplete spoken sentence."
+        },
+        {
+          "id": "s04",
+          "start": 1017.32,
+          "end": 1030.92,
+          "reason": "Optional joke setup is removed, but its reaction remains, referring to an unnamed person."
+        },
+        {
+          "id": "s05",
+          "start": 9.04,
+          "end": 9.52,
+          "reason": "Changes the stated duration of the lecturer’s African-institution experience by a factor of ten; reference is explicit."
+        },
+        {
+          "id": "s06",
+          "start": 115.2,
+          "end": 116.16,
+          "reason": "Institution-name misspelling."
+        },
+        {
+          "id": "s07",
+          "start": 576.32,
+          "end": 576.96,
+          "reason": "Country label in the African health–income comparison."
+        }
+      ]
+    },
+    {
+      "id": "en07",
+      "expected_source_sha256": "975705f811dc5ab44afb0b7ce1ed4e21a65cd416fdd4c9c95da9d2b4c92dff40",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 9.699333333333334,
+          "reason": "Большая часть головы говорящего обрезана справа, хотя в исходнике видны вся голова и верхняя часть тела."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 11.968266666666667,
+          "reason": "Between adjacent 15 fps export frames, the tall enlarged crop with a lower strip switches to a smaller upper landscape panel and blurred fill. [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 12.035,
+          "reason": "Between adjacent 15 fps export frames, the tall enlarged crop with a lower strip switches to a smaller upper landscape panel and blurred fill. [after]"
+        },
+        {
+          "id": "j02a",
+          "source_seconds": 14.904533333333333,
+          "reason": "Between adjacent 15 fps export frames, the presenter jumps from the center of the upper panel to its left edge and the panel geometry changes. [before]"
+        },
+        {
+          "id": "j02b",
+          "source_seconds": 14.971266666666667,
+          "reason": "Between adjacent 15 fps export frames, the presenter jumps from the center of the upper panel to its left edge and the panel geometry changes. [after]"
+        },
+        {
+          "id": "j03a",
+          "source_seconds": 27.283566666666665,
+          "reason": "Between adjacent 15 fps export frames, the upper landscape panel switches to a tall enlarged presenter crop; caption position also changes. [before]"
+        },
+        {
+          "id": "j03b",
+          "source_seconds": 27.3503,
+          "reason": "Between adjacent 15 fps export frames, the upper landscape panel switches to a tall enlarged presenter crop; caption position also changes. [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 267.35673333333335,
+          "reason": "At output262.453333 seconds the actual vertical export omits the presenter entirely, while the paired original shows the presenter on the left of the stage."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 267.4902,
+          "reason": "Immediately after the original camera cut, the tall output crop clips the left and right ends of the arithmetic sequence below the Costas-array slide; the original includes those ends."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 104.25,
+          "end": 105.9,
+          "reason": "Descending chirp"
+        },
+        {
+          "id": "s02",
+          "start": 462.4,
+          "end": 566.5,
+          "reason": "Constructed piano performance"
+        },
+        {
+          "id": "s03",
+          "start": 568.1,
+          "end": 574.309478,
+          "reason": "Thanks/applause"
+        }
+      ]
+    },
+    {
+      "id": "en08",
+      "expected_source_sha256": "c61cf64f2aa11dff4516ec5dd3b96f7d506e2aecae95b16fbd0528e476b2f620",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 26.143,
+          "reason": "Основная область показывает пустой фон вместо головы и корпуса лектора. Ноги и маленькое изображение робота остаются в отдельной нижней полосе."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 477.623,
+          "reason": "At the first inspected frame after the source cuts to the spinal-circuit slide, the export shows an enlarged middle/right fragment: the left salamander schematic, much of the coupled-oscillator diagram, most of the robot photo, and ends of the title/explanation are outside the crop."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 169.383,
+          "reason": "The Biorobotics slide retains the Robotics/Biology labels, arrow, and application text, but nearly all BigDog and Asimo example photos and names on the left are outside the crop."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 73.92,
+          "end": 74.16,
+          "reason": "Four components are announced at 62.48–66.08, but clip 1 ends after body/biomechanics."
+        },
+        {
+          "id": "s02",
+          "start": 359.76,
+          "end": 360.08,
+          "reason": "X-ray instrument introduction closes clip 2; its provider/location phrase opens clip 3 without its antecedent."
+        },
+        {
+          "id": "s03",
+          "start": 482.76,
+          "end": 489.96,
+          "reason": "A 7.2-second robot-pool demonstration interval is cut despite no caption text."
+        },
+        {
+          "id": "s04",
+          "start": 766.04,
+          "end": 780.04,
+          "reason": "Post-talk Q&A begins with the tail of a pollution sentence because the host opening is absent from ASR and excluded with applause."
+        },
+        {
+          "id": "s05",
+          "start": 820.12,
+          "end": 824.28,
+          "reason": "The host appearance joke/question is omitted but its answer remains."
+        },
+        {
+          "id": "s06",
+          "start": 750.8,
+          "end": 751.6,
+          "reason": "Check caption terminology: expected spinal cord; previously rendered spell/small/smile cord."
+        },
+        {
+          "id": "s07",
+          "start": 516.88,
+          "end": 517.68,
+          "reason": "Check caption terminology: expected gait; previously rendered gate."
+        },
+        {
+          "id": "s08",
+          "start": 6.72,
+          "end": 15.92,
+          "reason": "Check caption terminology: expected Pleurodeles waltl; previously rendered Plurodel’s Weld."
+        }
+      ]
+    },
+    {
+      "id": "en09",
+      "expected_source_sha256": "495de4fdef8a7d5eedf07371d66b5854b5b3df35ac9be366063c3e00329ba715",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 350.063,
+          "reason": "Кадр занят спиной демонстратора: проецируемая карта и обе руки с цветными метками исчезают. В оригинале видны действие и его результат."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 608.383,
+          "reason": "The original shows a colored fingertip touching the projection on a sheet of paper, with the clipped sensor and desk to the right."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 453.583,
+          "reason": "The newspaper/video sample is tightly enlarged: the projected face remains, but the right hand and much of the page boundary/headline are outside the crop."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 96.12,
+          "end": 102.44,
+          "reason": "Explicit acquisition of another mouse and resulting four-roller count is recognized by ASR but cut."
+        },
+        {
+          "id": "s02",
+          "start": 617.72,
+          "end": 622.36,
+          "reason": "Document modification, print-out confirmation and workflow synthesis are recognized in ASR but excluded."
+        },
+        {
+          "id": "s03",
+          "start": 627.16,
+          "end": 638.36,
+          "reason": "Document modification, print-out confirmation and workflow synthesis are recognized in ASR but excluded."
+        },
+        {
+          "id": "s04",
+          "start": 559.4,
+          "end": 566.2,
+          "reason": "Most embedded movie playback and a game-action interval are excluded."
+        },
+        {
+          "id": "s05",
+          "start": 567.88,
+          "end": 570.76,
+          "reason": "Most embedded movie playback and a game-action interval are excluded."
+        },
+        {
+          "id": "s06",
+          "start": 693.4,
+          "end": 700.12,
+          "reason": "Host company-versus-research question is absent from ASR and excluded; company answer follows retained praise."
+        },
+        {
+          "id": "s07",
+          "start": 314.56,
+          "end": 314.96,
+          "reason": "Check caption terminology: expected SixthSense; previously rendered six-cent."
+        },
+        {
+          "id": "s08",
+          "start": 362.16,
+          "end": 362.96,
+          "reason": "Check caption terminology: expected edge recognition; previously rendered age recognition."
+        },
+        {
+          "id": "s09",
+          "start": 712.32,
+          "end": 713.92,
+          "reason": "Check caption terminology: expected Sixth Sense / Fifth Sense; previously rendered six cents / fifth chance."
+        }
+      ]
+    },
+    {
+      "id": "en10",
+      "expected_source_sha256": "0e74dbe57e4673ba3b45c51028a9c0742b0b7b0b33263eda866df7405f083693",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 280.023,
+          "reason": "При увеличении обрезан правый край головы и ухо; рот остаётся видимым. В исходнике показана вся голова."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 426.703,
+          "reason": "The source audience reaction shows a laughing man prominently at the right."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 520.92,
+          "end": 526.04,
+          "reason": "The 5.12-second omitted interval contains the main siren warm-up performance."
+        },
+        {
+          "id": "s02",
+          "start": 481.16,
+          "end": 482.36,
+          "reason": "Second sigh and rolled-R exercise lose1.2 seconds each."
+        },
+        {
+          "id": "s03",
+          "start": 507.88,
+          "end": 509.08,
+          "reason": "Second sigh and rolled-R exercise lose1.2 seconds each."
+        },
+        {
+          "id": "s04",
+          "start": 5.28,
+          "end": 40.56,
+          "reason": "No exported clip includes the listening problem, seven-item introduction or explicit not-exhaustive qualifier, although all are in app ASR."
+        },
+        {
+          "id": "s05",
+          "start": 307.92,
+          "end": 308.72,
+          "reason": "Check caption terminology: expected timbre; previously rendered tamber."
+        },
+        {
+          "id": "s06",
+          "start": 480.08,
+          "end": 481.04,
+          "reason": "Check caption terminology: expected ah/sigh vocalization; previously rendered Shhh."
+        },
+        {
+          "id": "s07",
+          "start": 528.56,
+          "end": 528.96,
+          "reason": "Check caption terminology: expected seat; previously rendered see."
+        }
+      ]
+    },
+    {
+      "id": "en11",
+      "expected_source_sha256": "b5dcfae01ba5ee5841f00c02e8a488e25a1417d9098c1a81b107418db1d8d1ea",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 302.2835888888889,
+          "reason": "Исчезают вертикальная шкала расстояний и крайние узлы карты колоний. Название и центральные связи остаются."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 290.84,
+          "end": 300.12,
+          "reason": "Study-site/map introduction, 28-year tracking duration and relation to colony lifespan are recognized by ASR but excluded."
+        },
+        {
+          "id": "s02",
+          "start": 263.76,
+          "end": 264.08,
+          "reason": "Ant/neuronal threshold mechanism ends clip2; clip3 starts by referring to an analogous question about brains."
+        },
+        {
+          "id": "s03",
+          "start": 359.92,
+          "end": 360.08,
+          "reason": "Clip3 ends mid lead-in to the comparative-success question; clip4 opens with the question verb."
+        },
+        {
+          "id": "s04",
+          "start": 431.52,
+          "end": 431.76,
+          "reason": "Check caption terminology: expected Anternet; previously rendered internet."
+        },
+        {
+          "id": "s05",
+          "start": 395.84,
+          "end": 397.12,
+          "reason": "Check caption terminology: expected colony154; previously rendered Colin154."
+        },
+        {
+          "id": "s06",
+          "start": 295.52,
+          "end": 297.12,
+          "reason": "Check caption terminology: expected harvester ant colonies; previously rendered harvester and colonies."
+        }
+      ]
+    },
+    {
+      "id": "en12",
+      "expected_source_sha256": "e1e9df2e1614cd12e6180802f2ee8bc6936525b7bf4ebdf9534b5b34a90bdcda",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 258.9485888888889,
+          "reason": "На слайде хронологии видна только часть даты 13: дробная часть .7, единицы и большая часть шкалы вне кадра."
+        },
+        {
+          "id": "v02",
+          "source_seconds": 300.07304444444446,
+          "reason": "The atom-formation slide’s explanatory text is enlarged and readable, including the 380,000-year date and stable-atom explanation, but the complete atom illustration to its left is outside the crop."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 400.08973333333336,
+          "reason": "The export retains the central bright star but excludes the two peripheral bright stars visible in the original animation frame."
+        },
+        {
+          "id": "v04",
+          "source_seconds": 20.04301111111111,
+          "reason": "A separate horizontal image strip remains below the enlarged egg/whisk picture."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 605.28,
+          "end": 625.44,
+          "reason": "The molecular-stability question and announcement of a new mechanism end clip 2; stabilizing/copying the information template begins clip 3."
+        },
+        {
+          "id": "s02",
+          "start": 689.28,
+          "end": 689.92,
+          "reason": "A geological interval is rendered with an unrelated percentage unit; confirmed in native export frame."
+        },
+        {
+          "id": "s03",
+          "start": 883.2,
+          "end": 884.0,
+          "reason": "A factor-of-1000 error is visible next to a slide that states the correct billion magnitude."
+        },
+        {
+          "id": "s04",
+          "start": 29.04,
+          "end": 29.68,
+          "reason": "Breaks the key word describing reversal; following yolk/white explanation and retained demonstration mitigate the ambiguity."
+        },
+        {
+          "id": "s05",
+          "start": 145.12,
+          "end": 145.68,
+          "reason": "Proper-name spelling differs from the publisher reference."
+        },
+        {
+          "id": "s06",
+          "start": 569.84,
+          "end": 569.92,
+          "reason": "Adds an unrelated object to the question about locating suitable chemistry conditions."
+        }
+      ]
+    },
+    {
+      "id": "en13",
+      "expected_source_sha256": "fd0d8810d3632acdd48b1f23ac58810d0bb37170f6136ec6237bdb39f407a2d2",
+      "visual_points": [
+        {
+          "id": "v01",
+          "source_seconds": 1008.283,
+          "reason": "Остаются лишь правый хвост распределения доходов и отметка $100. Заголовок, дата 1975, пики распределения и нижние значения дохода потеряны."
+        },
+        {
+          "id": "j01a",
+          "source_seconds": 957.003,
+          "reason": "Between adjacent actual output frames 21.400 and 21.466667 s, the four-rule icon panel abruptly enlarges and the background switches from blurred fill to plain dark fill. [before]"
+        },
+        {
+          "id": "j01b",
+          "source_seconds": 957.083,
+          "reason": "Between adjacent actual output frames 21.400 and 21.466667 s, the four-rule icon panel abruptly enlarges and the background switches from blurred fill to plain dark fill. [after]"
+        },
+        {
+          "id": "v02",
+          "source_seconds": 380.063,
+          "reason": "The right edge clips the right side of the presenter’s head/face, whereas the original retains the whole head at that moment."
+        },
+        {
+          "id": "v03",
+          "source_seconds": 284.963,
+          "reason": "A dark horizontal band runs across the quiz slide near the results header/poll overlay."
+        },
+        {
+          "id": "v04",
+          "source_seconds": 285.043,
+          "reason": "A dark horizontal band runs across the quiz slide near the results header/poll overlay."
+        },
+        {
+          "id": "v05",
+          "source_seconds": 285.163,
+          "reason": "A dark horizontal band runs across the quiz slide near the results header/poll overlay."
+        },
+        {
+          "id": "v06",
+          "source_seconds": 765.383,
+          "reason": "A small duplicate torso/hand image strip appears below the enlarged presenter, producing an obvious mismatch in scale."
+        },
+        {
+          "id": "v07",
+          "source_seconds": 765.443,
+          "reason": "A small duplicate torso/hand image strip appears below the enlarged presenter, producing an obvious mismatch in scale."
+        },
+        {
+          "id": "v08",
+          "source_seconds": 765.583,
+          "reason": "A small duplicate torso/hand image strip appears below the enlarged presenter, producing an obvious mismatch in scale."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "s01",
+          "start": 912.36,
+          "end": 916.28,
+          "reason": "The first three heuristic examples lose the explicit statement that these are non-universal rules."
+        },
+        {
+          "id": "s02",
+          "start": 419.92,
+          "end": 420.16,
+          "reason": "Clip 1 ends with the percentage/one-year-old-children stem; clip 2 begins with the vaccination predicate/options."
+        },
+        {
+          "id": "s03",
+          "start": 1109.32,
+          "end": 1114.84,
+          "reason": "The final percentage/geographic sentence is absent from ASR and exported speech, but the retained chart clearly supplies REST 73%, the date 2035 and the income axis before and after the cut."
+        },
+        {
+          "id": "s04",
+          "start": 25.12,
+          "end": 25.52,
+          "reason": "Reverses the direction in option C while the visible quiz says decreased."
+        },
+        {
+          "id": "s05",
+          "start": 89.76,
+          "end": 89.92,
+          "reason": "Inserts an erroneous daily unit in the annual disaster-death statistic."
+        },
+        {
+          "id": "s06",
+          "start": 359.52,
+          "end": 359.92,
+          "reason": "The introductory dollar-income unit contradicts the readable $/day axis."
+        }
+      ]
+    },
+    {
+      "id": "rul01",
+      "visual_points": [
+        {
+          "id": "RUL01-V01-P1",
+          "source_seconds": 431.96,
+          "reason": "Добавленный скачок убирает график и обрезает голову на неизменном оригинале."
+        },
+        {
+          "id": "RUL01-V01-P2",
+          "source_seconds": 432.0,
+          "reason": "Добавленный скачок убирает график и обрезает голову на неизменном оригинале."
+        }
+      ],
+      "semantic_ranges": []
+    },
+    {
+      "id": "rul02",
+      "visual_points": [
+        {
+          "id": "RUL02-V01-P1",
+          "source_seconds": 2425.72,
+          "reason": "Обрезаны заголовок, орбитальная схема, пункты и сравнительные графики."
+        },
+        {
+          "id": "RUL02-V02-P1",
+          "source_seconds": 5701.84,
+          "reason": "Общий план резко сменяется двухчастным кропом с обрезкой заголовка и головы."
+        },
+        {
+          "id": "RUL02-V02-P2",
+          "source_seconds": 5701.96,
+          "reason": "Общий план резко сменяется двухчастным кропом с обрезкой заголовка и головы."
+        },
+        {
+          "id": "RUL02-V03-P1",
+          "source_seconds": 5744.56,
+          "reason": "Нижняя панель показывает пустой угол слайда после ухода преподавателя."
+        },
+        {
+          "id": "RUL02-V04-P1",
+          "source_seconds": 3038.12,
+          "reason": "Добавленный непрозрачный серый прямоугольник закрывает таблицу."
+        },
+        {
+          "id": "RUL02-V05-P1",
+          "source_seconds": 8033.64,
+          "reason": "После двух часов серая маска закрывает часть статьи."
+        },
+        {
+          "id": "RUL02-V06-P1",
+          "source_seconds": 8279.08,
+          "reason": "Обрезаны правые окончания итогового слайда, нижняя панель почти пуста."
+        }
+      ],
+      "semantic_ranges": []
+    },
+    {
+      "id": "rul03",
+      "visual_points": [
+        {
+          "id": "RUL03-V01-P1",
+          "source_seconds": 3639.68,
+          "reason": "Исчезают/обрезаны правые сравнительные графики фильтрации и реабсорбции."
+        },
+        {
+          "id": "RUL03-V02-P1",
+          "source_seconds": 3482.44,
+          "reason": "При неизменном слайде полный кадр заменён левым фрагментом."
+        },
+        {
+          "id": "RUL03-V02-P2",
+          "source_seconds": 3483.44,
+          "reason": "При неизменном слайде полный кадр заменён левым фрагментом."
+        },
+        {
+          "id": "RUL03-V03-P1",
+          "source_seconds": 6549.92,
+          "reason": "Тёплый/холодный режимы кожного кровотока и правые управляющие связи не помещаются."
+        },
+        {
+          "id": "RUL03-V04-P1",
+          "source_seconds": 6352.4,
+          "reason": "Неизменная схема кожного кровотока скачком увеличивается."
+        },
+        {
+          "id": "RUL03-V04-P2",
+          "source_seconds": 6353.4,
+          "reason": "Неизменная схема кожного кровотока скачком увеличивается."
+        },
+        {
+          "id": "RUL03-C01-P1",
+          "source_seconds": 491.84,
+          "reason": "Формула Пуазейля и параметры целиком помещались."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "RUL03-S01-R1",
+          "start": 34.96,
+          "end": 63.44,
+          "reason": "Удалён ввод замкнутого кровообращения и большого/малого кругов; ролик начинается зависимым «Вот здесь»."
+        },
+        {
+          "id": "RUL03-B02-R2",
+          "start": 6367.68,
+          "end": 6375.44,
+          "reason": "Пояснение кожных сосудов разрезано внутри реплики."
+        }
+      ]
+    },
+    {
+      "id": "rul04",
+      "visual_points": [
+        {
+          "id": "RUL04-V01-P1",
+          "source_seconds": 74.2,
+          "reason": "Правая часть лица обрезана при центрированном оригинале."
+        },
+        {
+          "id": "RUL04-V02-P1",
+          "source_seconds": 2561.84,
+          "reason": "Обе стороны слайда об истории системного ПО срезаны."
+        },
+        {
+          "id": "RUL04-V03-P1",
+          "source_seconds": 4114.92,
+          "reason": "Обрезаны определение мультипрограммирования и пункты изоляции."
+        },
+        {
+          "id": "RUL04-V04-P1",
+          "source_seconds": 8982.56,
+          "reason": "В финале обрезаны строки о системных вызовах."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "RUL04-C01-R1",
+          "start": 8596,
+          "end": 9017.52,
+          "reason": "Финальные системные вызовы после двух часов присутствовали."
+        }
+      ]
+    },
+    {
+      "id": "rul05",
+      "visual_points": [
+        {
+          "id": "RUL05-V01-P1",
+          "source_seconds": 920.56,
+          "reason": "Слева исчезают узлы/связи сетевой схемы."
+        },
+        {
+          "id": "RUL05-V02-P1",
+          "source_seconds": 1678.92,
+          "reason": "Определения CIA обрезаны с обеих сторон."
+        },
+        {
+          "id": "RUL05-V03-P1",
+          "source_seconds": 4609.56,
+          "reason": "Исчезают Create(...)→Sm и схема порождения субъектов."
+        },
+        {
+          "id": "RUL05-V04-P1",
+          "source_seconds": 1644,
+          "reason": "На соседних выходных кадрах меняются масштаб преподавателя и положение субтитра."
+        },
+        {
+          "id": "RUL05-V04-P2",
+          "source_seconds": 1644.08,
+          "reason": "На соседних выходных кадрах меняются масштаб преподавателя и положение субтитра."
+        },
+        {
+          "id": "RUL05-C01-P1",
+          "source_seconds": 9162.32,
+          "reason": "Полная схема электронной подписи сохранена; низкий контраст исходный."
+        }
+      ],
+      "semantic_ranges": []
+    },
+    {
+      "id": "rul06",
+      "visual_points": [
+        {
+          "id": "RUL06-V01-P1",
+          "source_seconds": 422.68,
+          "reason": "Тесный кроп обрезает начало H=… и правое окончание Hψ=Eψ."
+        },
+        {
+          "id": "RUL06-C01-P1",
+          "source_seconds": 1817.08,
+          "reason": "Широкий кадр сохраняет полную доску."
+        },
+        {
+          "id": "RUL06-C02-P1",
+          "source_seconds": 2437.12,
+          "reason": "Не приписывать приложению исходный обрез доски и исходную зелёную заставку."
+        },
+        {
+          "id": "RUL06-C02-P2",
+          "source_seconds": 8106.88,
+          "reason": "Не приписывать приложению исходный обрез доски и исходную зелёную заставку."
+        },
+        {
+          "id": "RUL06-V02-P1",
+          "source_seconds": 8058.52,
+          "reason": "Основной вывод поляризуемости виден, справа частично обрезан отдельный список задач."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "RUL06-B01-R1",
+          "start": 1749,
+          "end": 1777,
+          "reason": "Промежуточная ошибка отделена от замечания студента и исправления преподавателя."
+        }
+      ],
+      "expected_source_sha256": "a7fc8973bcc8c2ab17b04f00c5440ceb13c8c5f93e31395a8498cf3a5206fcc8"
+    },
+    {
+      "id": "rul07",
+      "visual_points": [
+        {
+          "id": "RUL07-V01-P1",
+          "source_seconds": 279.08,
+          "reason": "В модели нейрона потеряны правая часть/выход и связи."
+        },
+        {
+          "id": "RUL07-C02-P1",
+          "source_seconds": 1830.48,
+          "reason": "Полный слайд переобучения с графиками был сохранён."
+        },
+        {
+          "id": "RUL07-C03-P1",
+          "source_seconds": 2831.96,
+          "reason": "Формулы и код дифференцирования сложной функции сохранялись целиком."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "RUL07-S01-R1",
+          "start": 52.84,
+          "end": 59.88,
+          "reason": "Из плана занятия вырезана связка «Сегодня на лекции мы поговорим»."
+        },
+        {
+          "id": "RUL07-B03-R1",
+          "start": 2966.24,
+          "end": 2969.76,
+          "reason": "Граница проходит внутри объясняющей реплики."
+        },
+        {
+          "id": "RUL07-C01-R1",
+          "start": 7303.04,
+          "end": 7361.36,
+          "reason": "ResNet и остаточные связи присутствовали в тексте/первоначальном плане, но поздний MP4 повторно не подтверждён."
+        }
+      ]
+    },
+    {
+      "id": "rul08",
+      "visual_points": [
+        {
+          "id": "RUL08-V01-P1",
+          "source_seconds": 145.4,
+          "reason": "Титульный слайд слева полностью исключён; контекст в основном организационный."
+        },
+        {
+          "id": "RUL08-V02-P1",
+          "source_seconds": 6951.3,
+          "reason": "Лицо и большая часть лектора обрезаны справа."
+        },
+        {
+          "id": "RUL08-V03-P1",
+          "source_seconds": 8181.067,
+          "reason": "Нижняя панель увеличивает человека/камеру среди аудитории."
+        },
+        {
+          "id": "RUL08-V04-P1",
+          "source_seconds": 8264.433,
+          "reason": "Верхняя панель показывает стену/арку вместо выступающих, нижняя обрезает человека."
+        },
+        {
+          "id": "RUL08-C03-P1",
+          "source_seconds": 1028.2,
+          "reason": "Многопанельные графики мутационных профилей и позднее экран/указывающий лектор сохранялись."
+        },
+        {
+          "id": "RUL08-V05-P1",
+          "source_seconds": 8406.5,
+          "reason": "Финальная исходная многопанельная заставка дополнительно фрагментирована."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "RUL08-C01-R1",
+          "start": 4220.6,
+          "end": 4303.8,
+          "reason": "Поправка о Shigella/E. coli сохранена; не объявлять гипотезу превращённой в безусловный факт."
+        },
+        {
+          "id": "RUL08-C02-R1",
+          "start": 7310,
+          "end": 7370,
+          "reason": "После двух часов сохранялся ответ об эндосимбиозе и происхождении ядра/митохондрий."
+        }
+      ]
+    },
+    {
+      "id": "rul09",
+      "visual_points": [
+        {
+          "id": "RUL09-V01-P1",
+          "source_seconds": 1421.3,
+          "reason": "Отрезаны восток карты, Красное море/Синай, вставки и масштаб."
+        },
+        {
+          "id": "RUL09-V02-P1",
+          "source_seconds": 3174.7,
+          "reason": "За один выходной кадр общий гребень/артефакты сменяются зубьями, силуэт и правый предмет исчезают."
+        },
+        {
+          "id": "RUL09-V02-P2",
+          "source_seconds": 3174.8,
+          "reason": "За один выходной кадр общий гребень/артефакты сменяются зубьями, силуэт и правый предмет исчезают."
+        },
+        {
+          "id": "RUL09-V03-P1",
+          "source_seconds": 5970,
+          "reason": "Верх обрезает схему Джосера, большая нижняя панель показывает размытый водяной знак/масштаб."
+        },
+        {
+          "id": "RUL09-V04-P1",
+          "source_seconds": 8843.6,
+          "reason": "Нижняя панель расходуется на водяной знак в финале."
+        },
+        {
+          "id": "RUL09-V04-P2",
+          "source_seconds": 9023.6,
+          "reason": "Нижняя панель расходуется на водяной знак в финале."
+        }
+      ],
+      "semantic_ranges": [],
+      "expected_source_sha256": "bb51b6e59a036324f3d70b5f342632877d85902ef325b4f2483e883f914c4b5a"
+    },
+    {
+      "id": "rul10",
+      "visual_points": [
+        {
+          "id": "RUL10-V01-P1",
+          "source_seconds": 1463.96,
+          "reason": "Прямоугольная схема поля внимания почти полностью исчезает справа."
+        },
+        {
+          "id": "RUL10-C01-P1",
+          "source_seconds": 806.16,
+          "reason": "Мгновенная смена позы соответствует удалению исходного времени, не доказывает самостоятельный скачок камеры."
+        },
+        {
+          "id": "RUL10-C01-P2",
+          "source_seconds": 812.28,
+          "reason": "Мгновенная смена позы соответствует удалению исходного времени, не доказывает самостоятельный скачок камеры."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "RUL10-S01-R1",
+          "start": 4348.76,
+          "end": 4391.64,
+          "reason": "Монтаж удаляет содержательный переход от гештальта к мышлению/личности шире исходного серого перерыва."
+        },
+        {
+          "id": "RUL10-S01-R2",
+          "start": 4350.32,
+          "end": 4379.44,
+          "reason": "Монтаж удаляет содержательный переход от гештальта к мышлению/личности шире исходного серого перерыва."
+        },
+        {
+          "id": "RUL10-C02-R1",
+          "start": 9036.24,
+          "end": 9042.4,
+          "reason": "Научение/когнитивные карты лектор переносит на следующую встречу; не приписывать их отсутствие нарезке."
+        }
+      ]
+    },
+    {
+      "id": "enl01",
+      "visual_points": [
+        {
+          "id": "ENL01-V01-P1",
+          "source_seconds": 4548.333333,
+          "reason": "У слайда о специфичности отрезаны заголовок/правый край и значения HTML/CSS; нижняя панель пуста."
+        },
+        {
+          "id": "ENL01-V01-P2",
+          "source_seconds": 4548.36,
+          "reason": "У слайда о специфичности отрезаны заголовок/правый край и значения HTML/CSS; нижняя панель пуста."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "ENL01-S01-R1",
+          "start": 750.04,
+          "end": 763.4,
+          "reason": "Удалены уровни h3–h6 и демонстрация самого маленького заголовка."
+        },
+        {
+          "id": "ENL01-S02-R1",
+          "start": 991.56,
+          "end": 1011.56,
+          "reason": "Удалено сравнение ordered/unordered lists в браузере."
+        },
+        {
+          "id": "ENL01-S03-R1",
+          "start": 2086.2,
+          "end": 2095.96,
+          "reason": "Удалена связь datalist с вариантами стран."
+        },
+        {
+          "id": "ENL01-S04-R1",
+          "start": 2147.08,
+          "end": 2160.36,
+          "reason": "Удалён показ фильтрации стран по вводу букв."
+        },
+        {
+          "id": "ENL01-S05-R1",
+          "start": 4409.88,
+          "end": 4428.28,
+          "reason": "Удалена постановка вопроса о конфликтующих CSS-селекторах."
+        },
+        {
+          "id": "ENL01-S06-R1",
+          "start": 6101.96,
+          "end": 6120.28,
+          "reason": "Удалён шаг container/row/12 units Bootstrap."
+        },
+        {
+          "id": "ENL01-S07-R1",
+          "start": 6958.36,
+          "end": 6969.16,
+          "reason": "Удалена исходная вложенность HTML для Sass."
+        }
+      ]
+    },
+    {
+      "id": "enl02",
+      "visual_points": [
+        {
+          "id": "ENL02-V01-P1",
+          "source_seconds": 6060.4442667,
+          "reason": "Увеличены голова/торс, исчезла диаграмма световых лучей справа."
+        },
+        {
+          "id": "ENL02-V02-P1",
+          "source_seconds": 1607.0953667,
+          "reason": "На склейке компоновка скачком отрезает начало Action, пока лектор заканчивает dτ."
+        },
+        {
+          "id": "ENL02-V02-P2",
+          "source_seconds": 1608.7637,
+          "reason": "На склейке компоновка скачком отрезает начало Action, пока лектор заканчивает dτ."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "ENL02-E01-R2",
+          "start": 7119.6,
+          "end": 7462.16,
+          "reason": "Клип не пытались экспортировать: candidate=false, needs-more-context, требуется принятие/проверка человеком."
+        },
+        {
+          "id": "ENL02-S01-R2",
+          "start": 4149.88,
+          "end": 4159.64,
+          "reason": "Вырезано введение X/T и полезное нанесение X на диаграмму."
+        }
+      ]
+    },
+    {
+      "id": "enl03",
+      "visual_points": [
+        {
+          "id": "ENL03-R01-P1",
+          "source_seconds": 1560.16,
+          "reason": "Подготовка векторного GeoDataFrame pol вынесена в растровую тему более чем через час; следующий векторный клип остаётся без подготовки."
+        },
+        {
+          "id": "ENL03-R01-P2",
+          "source_seconds": 5393.36,
+          "reason": "Подготовка векторного GeoDataFrame pol вынесена в растровую тему более чем через час; следующий векторный клип остаётся без подготовки."
+        },
+        {
+          "id": "ENL03-C01-P1",
+          "source_seconds": 2281.100133,
+          "reason": "Reprojection, пункты CRS и poi.crs были сохранены при двухпанельной компоновке."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "ENL03-R01-R3",
+          "start": 1504.56,
+          "end": 1559.92,
+          "reason": "Подготовка векторного GeoDataFrame pol вынесена в растровую тему более чем через час; следующий векторный клип остаётся без подготовки."
+        },
+        {
+          "id": "ENL03-S01-R1",
+          "start": 9556.02,
+          "end": 9581.36,
+          "reason": "После добавленного позднего int16/rioxarray ответа пропущены контрпример и признание возможной неправоты."
+        },
+        {
+          "id": "ENL03-S02-R1",
+          "start": 9449.54,
+          "end": 9471.08,
+          "reason": "Ни один выбранный интервал не включает задание NDVI."
+        },
+        {
+          "id": "ENL03-S03-R1",
+          "start": 1181.8,
+          "end": 1205,
+          "reason": "Удалены мотивация CRS WGS84/EPSG и предупреждение: Shapely-геометрия сама не содержит CRS."
+        }
+      ],
+      "expected_source_sha256": "d585eee79b191e748a423a1e9ac89ca31a4956f9a36c964c34ba26fb6949cc21"
+    },
+    {
+      "id": "enl04",
+      "visual_points": [
+        {
+          "id": "ENL04-V01-P1",
+          "source_seconds": 6600.066733,
+          "reason": "Правая ветвь кредитной схемы/надпись обрезана, хотя в оригинале она есть."
+        },
+        {
+          "id": "ENL04-V02-P1",
+          "source_seconds": 6900.066733,
+          "reason": "Правая ветвь кредитной схемы/надпись обрезана, хотя в оригинале она есть."
+        },
+        {
+          "id": "ENL04-C01-P1",
+          "source_seconds": 4728.128128,
+          "reason": "Книжные выдержки сохранялись по полной ширине; чёрные поля принадлежат оригиналу."
+        },
+        {
+          "id": "ENL04-C01-P2",
+          "source_seconds": 7104.170838,
+          "reason": "Книжные выдержки сохранялись по полной ширине; чёрные поля принадлежат оригиналу."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "ENL04-B06-R1",
+          "start": 1993,
+          "end": 2008,
+          "reason": "Вопрос о нематериальном производстве и короткое отрицание в #5, развёрнутое объяснение в #6."
+        },
+        {
+          "id": "ENL04-B06-R2",
+          "start": 2011,
+          "end": 2014,
+          "reason": "Вопрос о нематериальном производстве и короткое отрицание в #5, развёрнутое объяснение в #6."
+        },
+        {
+          "id": "ENL04-B07-R1",
+          "start": 5565,
+          "end": 5587,
+          "reason": "Вопрос о трёх терминах отделён от ответа."
+        }
+      ],
+      "expected_source_sha256": "f01ba07300f4c0be85f5682de77558ad29586d99f2b755ba95ff5065ca93e7c7"
+    },
+    {
+      "id": "enl05",
+      "visual_points": [
+        {
+          "id": "ENL05-V01-P1",
+          "source_seconds": 1169.623203,
+          "reason": "Кроп слайда Pan Human DIA удаляет ось Y, начало/конец X, заголовок и численные пояснения."
+        },
+        {
+          "id": "ENL05-V02-P1",
+          "source_seconds": 7598.143203,
+          "reason": "Большая нижняя панель увеличивает кнопки окна, полезный MultiAnalysis.bat остаётся мелким сверху."
+        },
+        {
+          "id": "ENL05-C01-P1",
+          "source_seconds": 4124.063203,
+          "reason": "Все четыре хроматограммы и сравнительные столбцы сохранялись."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "ENL05-S01-R1",
+          "start": 2345.72,
+          "end": 2376.2,
+          "reason": "Удалена оговорка об исправленной manual validation, ошибках ручной интеграции и праве слушателя не согласиться."
+        },
+        {
+          "id": "ENL05-S01-R2",
+          "start": 2348.8,
+          "end": 2358.96,
+          "reason": "Удалена оговорка об исправленной manual validation, ошибках ручной интеграции и праве слушателя не согласиться."
+        },
+        {
+          "id": "ENL05-S02-R1",
+          "start": 5689.56,
+          "end": 5700.36,
+          "reason": "Удалено конкретное указание на лишнюю строку заголовка и Delete; короткое напоминание сохранено."
+        },
+        {
+          "id": "ENL05-S02-R2",
+          "start": 5692.56,
+          "end": 5699.36,
+          "reason": "Удалено конкретное указание на лишнюю строку заголовка и Delete; короткое напоминание сохранено."
+        },
+        {
+          "id": "ENL05-C02-R1",
+          "start": 3674,
+          "end": 3676.56,
+          "reason": "Поправка 1%→10% FDR и рабочий путь после неудачного FASTA были сохранены."
+        },
+        {
+          "id": "ENL05-C02-R2",
+          "start": 5552.64,
+          "end": 5561.12,
+          "reason": "Поправка 1%→10% FDR и рабочий путь после неудачного FASTA были сохранены."
+        }
+      ],
+      "expected_source_sha256": "98095a83803c35076291b93e4ddf86ff85f985a1227fbe1b12e6974115b297c6"
+    },
+    {
+      "id": "enl06",
+      "visual_points": [
+        {
+          "id": "ENL06-V01-P1",
+          "source_seconds": 771.223203,
+          "reason": "Обрезаны условия внутренних/внешних рёбер, импульсная переменная и начала подписей."
+        },
+        {
+          "id": "ENL06-V02-P1",
+          "source_seconds": 1856.983203,
+          "reason": "В выделении полного квадрата обрезаны начальные множители и правые слагаемые."
+        },
+        {
+          "id": "ENL06-C01-P1",
+          "source_seconds": 1246.343203,
+          "reason": "Широкая интегральная формула с условием применимости сохранялась целиком."
+        },
+        {
+          "id": "ENL06-C02-P1",
+          "source_seconds": 7402.903203,
+          "reason": "Поздний ответ с двумя участниками сохранён после двух часов."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "ENL06-B01-R1",
+          "start": 3371,
+          "end": 3383,
+          "reason": "Промежуточный знак гамма-функции отделён от вопроса и исправления."
+        },
+        {
+          "id": "ENL06-B01-R2",
+          "start": 3549,
+          "end": 3559,
+          "reason": "Промежуточный знак гамма-функции отделён от вопроса и исправления."
+        },
+        {
+          "id": "ENL06-S01-R1",
+          "start": 7268.04,
+          "end": 7294.2,
+          "reason": "Удалена просьба привести пример, ответ остаётся."
+        },
+        {
+          "id": "ENL06-S02-R1",
+          "start": 7370.84,
+          "end": 7386.92,
+          "reason": "Удалён вопрос о расходящемся непримитивном графе, ответ остаётся."
+        }
+      ]
+    },
+    {
+      "id": "enl07",
+      "visual_points": [
+        {
+          "id": "ENL07-V01-P1",
+          "source_seconds": 5328.110767,
+          "reason": "В Case Study 1: Landslide Susceptibility исчезает правая область с картами исследования/дорог."
+        },
+        {
+          "id": "ENL07-V02-P1",
+          "source_seconds": 57.5121,
+          "reason": "За 0.133333 с тесный кроп сменяется полным планом при неизменном слайде."
+        },
+        {
+          "id": "ENL07-V02-P2",
+          "source_seconds": 57.645567,
+          "reason": "За 0.133333 с тесный кроп сменяется полным планом при неизменном слайде."
+        },
+        {
+          "id": "ENL07-C01-P1",
+          "source_seconds": 10717.795067,
+          "reason": "Поздняя схема k-fold train/test сохранена, но край заголовка подрезан."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "ENL07-S01-R1",
+          "start": 7243.72,
+          "end": 7254.76,
+          "reason": "Из первого объяснения k-fold удалена ротация тестового блока."
+        },
+        {
+          "id": "ENL07-S02-R1",
+          "start": 7281.24,
+          "end": 7290.44,
+          "reason": "Удалена связка о последовательном тестировании подмножеств."
+        },
+        {
+          "id": "ENL07-S03-R1",
+          "start": 5068.84,
+          "end": 5075.16,
+          "reason": "В примере зонтиков удалена смена горизонта с завтра на следующий год."
+        },
+        {
+          "id": "ENL07-S04-R1",
+          "start": 7889,
+          "end": 7905.8,
+          "reason": "Удалено пояснение независимости запусков и лёгкой параллелизации после фиксации folds."
+        }
+      ],
+      "expected_source_sha256": "b19298fb99969b4c1618aaebef7b254a7e8de1a5896dd20878d282b9bd466405"
+    },
+    {
+      "id": "enl08",
+      "visual_points": [
+        {
+          "id": "ENL08-V01-P1",
+          "source_seconds": 853.378,
+          "reason": "Отрезаны крайние индексы/множители математического ожидания и правая волновая функция."
+        },
+        {
+          "id": "ENL08-V02-P1",
+          "source_seconds": 1518.253,
+          "reason": "Правая функция Bob в произведении состояний выходит за кадр."
+        },
+        {
+          "id": "ENL08-V03-P1",
+          "source_seconds": 1860.86,
+          "reason": "Множитель, на который указывает лектор справа, не помещается."
+        },
+        {
+          "id": "ENL08-V04-P1",
+          "source_seconds": 4331.575,
+          "reason": "Отрезаны правые формулы о матрице плотности."
+        },
+        {
+          "id": "ENL08-V05-P1",
+          "source_seconds": 7350,
+          "reason": "Поздняя дискуссия Белла/симуляции сохраняет лицо, но теряет боковую доску."
+        },
+        {
+          "id": "ENL08-V06-P1",
+          "source_seconds": 7500,
+          "reason": "Кроп убирает часть схемы и правый жест в поздней дискуссии."
+        },
+        {
+          "id": "ENL08-V07-P1",
+          "source_seconds": 2582.577,
+          "reason": "Граница вертикального экспорта проходит через голову/лицо, целое в оригинале."
+        },
+        {
+          "id": "ENL08-V08-P1",
+          "source_seconds": 4629.495,
+          "reason": "Граница вертикального экспорта проходит через голову/лицо, целое в оригинале."
+        },
+        {
+          "id": "ENL08-V09-P1",
+          "source_seconds": 6663.497,
+          "reason": "Граница вертикального экспорта проходит через голову/лицо, целое в оригинале."
+        },
+        {
+          "id": "ENL08-C01-P1",
+          "source_seconds": 3972.454,
+          "reason": "Широкая доска сохранялась."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "ENL08-S01-R1",
+          "start": 127.48,
+          "end": 139.72,
+          "reason": "Вырезан ключевой критерий запутанности: состояние не раскладывается в произведение состояний частей."
+        },
+        {
+          "id": "ENL08-S02-R1",
+          "start": 179.24,
+          "end": 187.48,
+          "reason": "Удалена оговорка, что волновая функция применима к любой квантовой системе."
+        }
+      ],
+      "expected_source_sha256": "c1c8e455807a8a41a57158b68d8e8d5bb208a14dfcac9ded2fb7d150314412da"
+    },
+    {
+      "id": "enl09",
+      "visual_points": [
+        {
+          "id": "ENL09-V01-P1",
+          "source_seconds": 5487.672067,
+          "reason": "Ни одна панель не показывает целиком dF и равенство смешанных производных."
+        },
+        {
+          "id": "ENL09-V02-P1",
+          "source_seconds": 442.031467,
+          "reason": "За 0.133333 с участок кривой заменяется полной доской при стабильном оригинале."
+        },
+        {
+          "id": "ENL09-V02-P2",
+          "source_seconds": 442.164933,
+          "reason": "За 0.133333 с участок кривой заменяется полной доской при стабильном оригинале."
+        },
+        {
+          "id": "ENL09-C02-P1",
+          "source_seconds": 7370.853367,
+          "reason": "Поздний широкий план нескольких досок сохранён."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "ENL09-S01-R1",
+          "start": 749.48,
+          "end": 764.12,
+          "reason": "Удалены конец вопроса о нарушении идеального газа и уточнение математического обоснования."
+        },
+        {
+          "id": "ENL09-S02-R1",
+          "start": 2780.04,
+          "end": 2790.04,
+          "reason": "Удалён вопрос о единице в разложении, возражение преподавателя остаётся."
+        },
+        {
+          "id": "ENL09-C01-R1",
+          "start": 4385.4,
+          "end": 4398.12,
+          "reason": "Оговорка о неуверенности в следующем члене разложения сохранена."
+        }
+      ],
+      "expected_source_sha256": "0bd06860a30161243b26647a703f975468c44996f3ab93485b31cc19f1c42de5"
+    },
+    {
+      "id": "enl10",
+      "visual_points": [
+        {
+          "id": "ENL10-V01-P1",
+          "source_seconds": 1100.063203125,
+          "reason": "В двух точных состояниях стыка обрезаны оба края notebook/кода."
+        },
+        {
+          "id": "ENL10-V01-P2",
+          "source_seconds": 3641.623203125,
+          "reason": "В двух точных состояниях стыка обрезаны оба края notebook/кода."
+        },
+        {
+          "id": "ENL10-V02-P1",
+          "source_seconds": 3414.223203125,
+          "reason": "На склейке общий notebook заменён увеличенными строками."
+        },
+        {
+          "id": "ENL10-V02-P2",
+          "source_seconds": 3463.023203125,
+          "reason": "На склейке общий notebook заменён увеличенными строками."
+        },
+        {
+          "id": "ENL10-C01-P1",
+          "source_seconds": 7560.943203125,
+          "reason": "Проверенная поздняя граница стабильна, белая Control Panel уже присутствует в оригинале."
+        },
+        {
+          "id": "ENL10-C01-P2",
+          "source_seconds": 7561.143203125,
+          "reason": "Проверенная поздняя граница стабильна, белая Control Panel уже присутствует в оригинале."
+        }
+      ],
+      "semantic_ranges": [
+        {
+          "id": "ENL10-S01-R1",
+          "start": 449.8,
+          "end": 489.16,
+          "reason": "Даже план первого клипа исключает установку/импорт и вызов аутентификации."
+        },
+        {
+          "id": "ENL10-S02-R1",
+          "start": 3414.28,
+          "end": 3463,
+          "reason": "Удалена словесная связка перед аномалией, включая направление вычитания 2020−2019."
+        },
+        {
+          "id": "ENL10-R01-R1",
+          "start": 1059.6,
+          "end": 1100.08,
+          "reason": "Ранний вопрос Earth Engine перемещён к widgets, его ответ остаётся в другом клипе."
+        },
+        {
+          "id": "ENL10-R01-R2",
+          "start": 3641.6,
+          "end": 3776.4,
+          "reason": "Ранний вопрос Earth Engine перемещён к widgets, его ответ остаётся в другом клипе."
+        }
+      ]
+    }
+  ]
+}

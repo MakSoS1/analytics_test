@@ -35,7 +35,7 @@ jobs:
       cancel-in-progress: false
     if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-retest45-2026-11-15'
     runs-on: ubuntu-24.04
-    timeout-minutes: 340
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -47,7 +47,7 @@ jobs:
       - name: Initialize runner-private audit paths
         run: |
           python3 - <<'PY'
-          import os, pathlib
+          import os, pathlib, time
           base = pathlib.Path(os.environ["RUNNER_TEMP"])
           case_id = os.environ["AUDIT_CASE_ID"]
           paths = {
@@ -56,6 +56,7 @@ jobs:
               "AUDIT_ARTIFACT": base / ("examclips-encrypted-artifact-" + case_id),
           }
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              env_file.write(f"AUDIT_JOB_STARTED_UNIX={time.time()}\n")
               for name, path in paths.items():
                   env_file.write(f"{name}={path}\n")
           PY
@@ -67,8 +68,7 @@ jobs:
           node-version: '24'
       - name: Validate encryption and required public key
         run: |
-          node --test tools/examclips-audit/crypto.test.mjs tools/examclips-audit/audit-context.test.mjs
-          python3 -m unittest discover -s tools/examclips-audit -p 'test_*.py'
+          node --test tools/examclips-audit/*.test.mjs
           openssl pkey -pubin -in tools/examclips-audit/evidence-recipient.pub.pem -noout
       - name: Install Playwright and prepare verified browser and media tools
         run: |
@@ -136,6 +136,12 @@ jobs:
               result = subprocess.run([path, flag], check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=15)
               print(name + ": " + result.stdout.splitlines()[0])
           PY
+      - name: Validate source and review helpers with the prepared media tools
+        timeout-minutes: 5
+        run: |
+          command -v ffmpeg
+          command -v ffprobe
+          python3 -S -m unittest discover -s tools/examclips-audit -p 'test_*.py'
       - id: handoff
         name: Publish ephemeral key and wait for encrypted real-site login
         env:
@@ -146,6 +152,27 @@ jobs:
         env:
           AUDIT_CREDENTIALS_FILE: ${{ steps.handoff.outputs.credentials_path }}
         run: node tools/examclips-audit/run.mjs
+      - id: review
+        name: Decode each actual MP4 and capture bounded source-matched regression frames
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 35
+        run: python3 tools/examclips-audit/retest-review.py --deadline-seconds 1980
+      - id: review-package
+        name: Encrypt compact review frames, metadata, projects and transcripts
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 8
+        run: node tools/examclips-audit/package-review.mjs
+      - name: Upload encrypted compact review evidence
+        if: ${{ always() && steps.review-package.outputs.available == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: examclips-repeat45-review-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}
+          path: ${{ env.AUDIT_ARTIFACT }}/review/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
       - id: package
         name: Encrypt audit evidence with the recipient public key
         if: always()

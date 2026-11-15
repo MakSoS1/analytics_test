@@ -18,7 +18,7 @@ async function verify(directory) {
     if(/credential|password|cookie|storage.?state|profile|trace|\.har$/i.test(entry.name))throw Error('Authentication material must not be archived');
     const path=join(directory,entry.name);
     if(entry.isDirectory())await verify(path);
-    else if(!/\.(json|jsonl|srt|png|mp4|txt)$/i.test(entry.name))throw Error('Unexpected evidence file type');
+    else if(!/\.(json|jsonl|srt|png|jpg|jpeg|mp4|txt|log|ffscript)$/i.test(entry.name))throw Error('Unexpected evidence file type');
   }
 }
 await verify(output);
