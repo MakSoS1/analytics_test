@@ -22,7 +22,7 @@ test('compact review encryption retains evidence and excludes every MP4 and per-
    'case/retest-review/clip-001/frames/scene-metadata.log':'huge dump'};
   for(const [name,data] of Object.entries(files))await writeFile(join(evidence,name),data);
   const keys=generateKeyPairSync('rsa',{modulusLength:2048,publicKeyEncoding:{type:'spki',format:'pem'},privateKeyEncoding:{type:'pkcs8',format:'pem'}});
-  const context={purpose:'evidence',repository:'MakSoS1/analytics_test',branch:'qa/examclips-stand45-retry-observed-2026-11-15',runId:'123',runAttempt:'1',caseId:'case',artifactKind:'compact-review'};
+  const context={purpose:'evidence',repository:'MakSoS1/analytics_test',branch:'qa/examclips-stand45-retry-small-2026-11-15',runId:'123',runAttempt:'1',caseId:'case',artifactKind:'compact-review'};
   await mod.packageReview({evidence,artifact,privateRoot,publicKey:keys.publicKey,context});
   const meta=JSON.parse(await readFile(join(artifact,'review','review-encryption.json'),'utf8'));
   const zip=join(dir,'decrypted.zip');

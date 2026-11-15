@@ -1,8 +1,8 @@
 # Isolated current-code ExamClips audit
 
-This observed retry adds preparation resource evidence and a conditional diagnostic control; see `OBSERVED_GATE_SCOPE.md` at the repository root. Only the required persistent ASR attempt can release the seven-case matrix. A successful nonpersistent control never changes a failed required gate.
+This RU11 and EN10 retry preserves preparation resource evidence and a conditional diagnostic control; see `OBSERVED_GATE_SCOPE.md` at the repository root. Only the required persistent ASR attempt can release the two-case matrix. A successful nonpersistent control never changes a failed required gate.
 
-This retry branch selects seven reviewed terminal technical failures from the original 45 full lecture sources. The complete manifest is unchanged; `run-request.json` is the explicit seven-case subset. The active original workflow is not cancelled. See `RETRY_SCOPE.md` at the repository root for the exact delta and limitations. Every result is labelled `test_instance`. It does not establish a live-site authentication, billing, quota, or hosting pass.
+This retry branch selects the reviewed terminal RU11 and EN10 technical failures from the original 45 full lecture sources. The complete manifest is unchanged; `run-request.json` selects only `ru11` and `en10`. Both the active original workflow and the active seven-case observed retry are preserved. See `RETRY_SCOPE.md` at the repository root for the exact delta and limitations. Every result is labelled `test_instance`. It does not establish a live-site authentication, billing, quota, or hosting pass.
 
 The pinned private CI artifact is `examclips-dist` (14177000950), from app CI run 43751698466 at commit c8358a6df86ca0f77d859ebe8481a876b3e1abd5 / v1.3.20. `stand-config.json` records the archive size/SHA256, every served application asset's size/SHA256, and processing-source provenance. No private compiled app, source, artifact capability URL, or private key is included in this harness.
 
@@ -14,7 +14,7 @@ The only app target is `http://127.0.0.1:5173/app/`. The server verifies the pin
 
 ## Bundle handoff contract
 
-The workflow is restricted to `MakSoS1/analytics_test`, branch `qa/examclips-stand45-retry-observed-2026-11-15`. Root publishes encrypted payloads after validating each fresh descriptor. The existing `crypto.mjs` primitive and envelope format are unchanged.
+The workflow is restricted to `MakSoS1/analytics_test`, branch `qa/examclips-stand45-retry-small-2026-11-15`. Root publishes encrypted payloads after validating each fresh descriptor. The existing `crypto.mjs` primitive and envelope format are unchanged.
 
 | Role | Runner command | Descriptor case and purpose | Exact plaintext payload fields |
 |---|---|---|---|

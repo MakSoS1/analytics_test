@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 const manifest=JSON.parse(await readFile(new URL('./manifest.json',import.meta.url),'utf8'));
-const base={repository:'MakSoS1/analytics_test',branch:'qa/examclips-stand45-retry-observed-2026-11-15',runId:'123456',runAttempt:'1',caseId:'en07'};
+const base={repository:'MakSoS1/analytics_test',branch:'qa/examclips-stand45-retry-small-2026-11-15',runId:'123456',runAttempt:'1',caseId:'en07'};
 async function api(){
   const module=await import('./audit-context.mjs').catch(()=>null);
   assert.ok(module,'Case-isolated audit identity must be implemented');
@@ -28,6 +28,7 @@ test('unsafe or incomplete identities cannot publish a credential handoff',async
   assert.throws(()=>handoffLayout({...base,repository:'another/repo'}),/authorized/i);
   assert.throws(()=>handoffLayout({...base,branch:'qa/examclips-stand45-2026-11-15'}),/authorized/i);
   assert.throws(()=>handoffLayout({...base,branch:'qa/examclips-stand45-retry-2026-11-15'}),/authorized/i);
+  assert.throws(()=>handoffLayout({...base,branch:'qa/examclips-stand45-retry-observed-2026-11-15'}),/authorized/i);
   assert.throws(()=>identityFromEnv({}),/authorized|run|case/i);
 });
 
@@ -65,8 +66,8 @@ test('the repeat request accepts all 45 original distinct cases',async()=>{
  assert.throws(()=>selectCaseIds(manifest,[...ids,ids[0]]),/select|duplicate/i);
 });
 
-test('the retry request contains only the seven reviewed terminal technical failures',async()=>{
+test('the isolated retry selects only reviewed RU11 and EN10 technical failures',async()=>{
  const {selectCaseIds}=await api();
  const request=JSON.parse(await readFile(new URL('./run-request.json',import.meta.url),'utf8'));
- assert.deepEqual(selectCaseIds(manifest,request.case_ids),['en03','enl07','enl03','enl08','enl05','enl02','enl06']);
+ assert.deepEqual(selectCaseIds(manifest,request.case_ids),['ru11','en10']);
 });
