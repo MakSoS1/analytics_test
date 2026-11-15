@@ -6,3 +6,12 @@ export const browserLaunchSettings=()=>({
 });
 
 export const launchAuditBrowser=(chromium,profile)=>chromium.launchPersistentContext(profile,browserLaunchSettings());
+
+export async function launchDiagnosticBrowser(chromium){
+ const {channel,headless,args,acceptDownloads,serviceWorkers,viewport}=browserLaunchSettings();
+ const browser=await chromium.launch({channel,headless,args});
+ try{
+  const context=await browser.newContext({acceptDownloads,serviceWorkers,viewport});
+  return {context,browser,close:()=>browser.close()};
+ }catch(error){await browser.close().catch(()=>{});throw error}
+}

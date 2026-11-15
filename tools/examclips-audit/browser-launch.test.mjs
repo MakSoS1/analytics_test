@@ -14,3 +14,15 @@ test('the gate and full audit use the same persistent-context entry point and no
  const mutable=browserLaunchSettings();mutable.args.push('--unwanted-override');mutable.viewport.width=1;
  assert.deepEqual(browserLaunchSettings(),calls[0].options);
 });
+
+test('the diagnostic control keeps the same four launch flags and context options in a fresh nonpersistent browser',async()=>{
+ const {launchDiagnosticBrowser,browserLaunchSettings}=await import('./browser-launch.mjs');
+ const calls=[],context={id:'control'};
+ const browser={newContext:async options=>{calls.push({kind:'context',options});return context},close:async()=>calls.push({kind:'close'})};
+ const chromium={launch:async options=>{calls.push({kind:'launch',options});return browser}};
+ const control=await launchDiagnosticBrowser(chromium);assert.equal(control.context,context);await control.close();
+ const settings=browserLaunchSettings();
+ assert.deepEqual(calls,[{kind:'launch',options:{channel:settings.channel,headless:settings.headless,args:settings.args}},
+  {kind:'context',options:{acceptDownloads:settings.acceptDownloads,serviceWorkers:settings.serviceWorkers,viewport:settings.viewport}},
+  {kind:'close'}]);
+});

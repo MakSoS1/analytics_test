@@ -16,7 +16,7 @@ Only declared `dist/app/` entries are extracted after archive SHA verification, 
 
 The browser permits only the localhost application and the documented public model/CDN hosts. Production app/auth/billing requests, local auth/billing requests, unexpected external origins, and unsafe redirects are blocked and fail the audit. No route fabricates a successful entitlement response. Each fresh browser uses language auto, full ASR, the ordinary OCR default, standard 720×1280/15 FPS exports, and the existing file-picker accommodation. Original sources and all actual outputs retain the existing encrypted evidence path.
 
-Preparation and case handoffs have distinct purposes, exact repository/branch/run/attempt/case bindings, a 14-minute expiry and fresh RSA keys. The selected branch is `qa/examclips-stand45-retry-2026-11-15`. Root owns URL/key creation and envelope publication, review, branch creation and dispatch. This directory contains only the local reviewable public harness overlay.
+Preparation and case handoffs have distinct purposes, exact repository/branch/run/attempt/case bindings, a 14-minute expiry and fresh RSA keys. The selected branch is `qa/examclips-stand45-retry-observed-2026-11-15`. Root owns URL/key creation and envelope publication, review, branch creation and dispatch. This directory contains only the local reviewable public harness overlay.
 
 ## Main differences from deployed-site testing
 

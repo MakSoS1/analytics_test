@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 const pair=generateKeyPairSync('rsa',{modulusLength:4096,publicKeyEncoding:{type:'spki',format:'pem'},privateKeyEncoding:{type:'pkcs8',format:'pem'}});
-const identity={repository:'MakSoS1/analytics_test',branch:'qa/examclips-stand45-retry-2026-11-15',runId:'123456',runAttempt:'1',caseId:'ru03'};
+const identity={repository:'MakSoS1/analytics_test',branch:'qa/examclips-stand45-retry-observed-2026-11-15',runId:'123456',runAttempt:'1',caseId:'ru03'};
 async function policy(){const x=await import('./stand-policy.mjs').catch(()=>null);assert.ok(x,'Stand isolation policy must exist');return x;}
 async function bundle(){const x=await import('./stand-bundle.mjs').catch(()=>null);assert.ok(x,'Stand bundle transport must exist');return x;}
 

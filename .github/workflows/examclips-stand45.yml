@@ -1,8 +1,8 @@
-name: ExamClips isolated current-code failed-source retry
+name: ExamClips isolated retry with observed ASR preparation
 'on':
   push:
     branches:
-    - qa/examclips-stand45-retry-2026-11-15
+    - qa/examclips-stand45-retry-observed-2026-11-15
     paths:
     - .github/workflows/examclips-stand45.yml
     - tools/examclips-audit/run-request.json
@@ -11,7 +11,7 @@ permissions:
   actions: read
 jobs:
   prepare:
-    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-retry-2026-11-15'
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-retry-observed-2026-11-15'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -187,7 +187,7 @@ jobs:
     concurrency:
       group: examclips-stand45-${{ github.ref }}-${{ matrix.case_id }}
       cancel-in-progress: false
-    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-retry-2026-11-15'
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-retry-observed-2026-11-15'
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:

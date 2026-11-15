@@ -33,6 +33,8 @@ test('read-only host observation records real filesystem capacity without collec
   assert.equal(row.filesystems[1].ancestorLevels,2);
   assert.equal(row.filesystems[1].requestedPathExists,false);
   assert.equal(row.hostMemory.totalBytes>0,true);
+  assert.ok(row.hostCpu.logicalCpuCount>0);assert.equal(row.hostCpu.loadAverage.length,3);
+  assert.ok(row.hostCpu.cumulativeTimesMs.idle>=0);
   assert.equal(row.page.status,'not_requested');
   assert.equal(raw.includes(root),false);assert.equal(raw.includes('private-cookie'),false);assert.equal(raw.includes('private-content'),false);
   assert.deepEqual(await readdir(profile),['private-cookie']);
