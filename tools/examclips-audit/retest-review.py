@@ -91,7 +91,7 @@ def evenly_selected(items, limit):
 def sample_priority(reasons):
     if any(reason.startswith('target:') for reason in reasons):
         return 0
-    if any(reason in ('first', 'middle', 'last') for reason in reasons):
+    if any(reason in ('first', 'title_card', 'after_title', 'middle', 'last') for reason in reasons):
         return 1
     if any(reason.startswith('scene_peak:') for reason in reasons):
         return 2
@@ -111,6 +111,8 @@ def plan_samples(duration, edl, visual_points, max_boundaries=30, frame_interval
         if 0 <= at < duration:
             requests.setdefault(at, set()).add(reason)
     add(0, 'first')
+    add(1, 'title_card')
+    add(2, 'after_title')
     add(duration/2, 'middle')
     add(last, 'last')
     for second in range(60, math.ceil(float(duration)), 60):
@@ -326,11 +328,11 @@ def review_clip(case_dir, path, outdir, targets, max_source_pairs=50, prepared_s
             sample['source_frame_status'] = 'capture_failed'
             sample['source_frame_error'] = str(error)[:2000]
         report['source_pair_selection'] = {'maximum':max_source_pairs,'attempted':attempted,'eligible_distinct_output_frames':len(eligible),
-                                           'omitted_sample_requests':omitted,'priority':'regression targets; first/middle/last; scene peaks; EDL cuts; uniform samples'}
+                                           'omitted_sample_requests':omitted,'priority':'regression targets; first/title/after-title/middle/last; scene peaks; EDL cuts; uniform samples'}
         if attempted % 5 == 0:
             save()
     report['source_pair_selection'] = {'maximum':max_source_pairs,'attempted':attempted,'eligible_distinct_output_frames':len(eligible),
-                                       'omitted_sample_requests':omitted,'priority':'regression targets; first/middle/last; scene peaks; EDL cuts; uniform samples'}
+                                       'omitted_sample_requests':omitted,'priority':'regression targets; first/title/after-title/middle/last; scene peaks; EDL cuts; uniform samples'}
     for field in ('all_frame_scores_file','raw_metadata_file'):
         report['scene_screening'][field] = 'frames/'+report['scene_screening'][field]
     report['stage'] = 'completed'
