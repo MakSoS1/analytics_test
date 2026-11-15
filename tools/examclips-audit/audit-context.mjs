@@ -1,5 +1,5 @@
 const REPOSITORY='MakSoS1/analytics_test';
-const BRANCH='qa/examclips-retest45-2026-11-15';
+const BRANCH='qa/examclips-stand45-2026-11-15';
 const safeCase=id=>typeof id==='string'&&/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id);
 
 function identity(value){
@@ -19,7 +19,7 @@ export function handoffLayout(value){
   return {prefix:'.audit-handoff/'+runId+'/'+caseId,privateName:'examclips-private-'+runId+'-'+runAttempt+'-'+caseId};
 }
 export function contextFor(purpose,value){
-  if(!['credentials','evidence'].includes(purpose))throw Error('Unsupported audit encryption purpose');
+  if(!['evidence','stand-bundle-prepare','stand-bundle-unlock','stand-bundle'].includes(purpose))throw Error('Unsupported audit encryption purpose');
   return {purpose,...identity(value)};
 }
 export function selectCaseIds(manifest,requested){

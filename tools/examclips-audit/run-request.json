@@ -1,7 +1,6 @@
 {
-  "version": 1,
-  "request_id": "2026-11-15-repeat45-remaining43-ffmpeg9-current-v1.3.19",
   "case_ids": [
+    "ru03",
     "enl07",
     "enl03",
     "rul05",
@@ -20,6 +19,7 @@
     "enl01",
     "enl09",
     "rul03",
+    "rul01",
     "enl04",
     "ru12",
     "ru05",

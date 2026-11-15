@@ -1,8 +1,8 @@
 {
-  "name": "examclips-authorized-live-audit",
+  "name": "examclips-isolated-test-instance-audit",
   "private": true,
   "type": "module",
   "scripts": {"test": "node --test crypto.test.mjs"},
-  "dependencies": {"playwright": "latest"}
+  "dependencies": {"playwright": "1.62.1"}
 }
 

@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 const pair = generateKeyPairSync('rsa', {modulusLength: 2048, publicKeyEncoding: {type:'spki',format:'pem'}, privateKeyEncoding: {type:'pkcs8',format:'pem'}});
-const context = {purpose:'credentials',repository:'MakSoS1/analytics_test',branch:'qa/examclips-retest45-2026-11-15',runId:'123456',runAttempt:'1',caseId:'en07'};
+const context = {purpose:'credentials',repository:'MakSoS1/analytics_test',branch:'qa/examclips-stand45-2026-11-15',runId:'123456',runAttempt:'1',caseId:'en07'};
 async function api() {
   const mod = await import('./crypto.mjs').catch(() => null);
   assert.ok(mod, 'Run-bound hybrid encryption must be implemented');

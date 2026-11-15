@@ -7,14 +7,17 @@ import {createRequire} from 'node:module';
 import {arch,availableParallelism,cpus,platform,release,totalmem,freemem,version as osVersion} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import {identityFromEnv,selectCase,caseBudgetSeconds} from './audit-context.mjs';
+import {assertLocalTarget,installNetworkPolicy,ORIGIN} from './stand-policy.mjs';
 
 const HERE=dirname(fileURLToPath(import.meta.url));
 const require=createRequire(import.meta.url);
 const config=JSON.parse(await readFile(join(HERE,'run-config.json'),'utf8'));
+const stand=JSON.parse(await readFile(join(HERE,'stand-config.json'),'utf8'));
 const manifest=JSON.parse(await readFile(join(HERE,'manifest.json'),'utf8'));
 const root=resolve(process.env.AUDIT_ROOT||'audit-private');
 const output=resolve(process.env.AUDIT_OUT||'audit-evidence');
-if(config.production_url!=='https://examclips.dpdns.org/app/')throw Error('Audit target must remain the authorized production site');
+assertLocalTarget(config.target_url);
+if(config.target_kind!=='test_instance'||stand.target_kind!=='test_instance'||config.expected_commit!==stand.source_commit)throw Error('Pinned test instance provenance is required');
 if(config.export_policy!=='all')throw Error('This audit requires all default clips, without shortening them');
 const identity=identityFromEnv();
 const cases=[selectCase(manifest,identity.caseId)];
@@ -52,7 +55,7 @@ async function command(executable,args,timeout=60000) {
 }
 async function buildMetadata() {
   try{
-    const response=await fetch('https://examclips.dpdns.org/site-build.json',{cache:'no-store',signal:AbortSignal.timeout(15000)});
+    const response=await fetch(ORIGIN+'/site-build.json',{cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)});
     if(!response.ok)throw Error('HTTP '+response.status);
     return {checkedAt:now(),data:await response.json()};
   }catch(error){return {checkedAt:now(),error:safe(error.message)}}
@@ -61,9 +64,9 @@ const commitOf=build=>build?.data?.commit||build?.data?.sourceCommit||build?.dat
 const runnerCpus=cpus();
 const run={schema:1,startedAt:now(),repository:process.env.GITHUB_REPOSITORY,runId:process.env.GITHUB_RUN_ID,
   runAttempt:process.env.GITHUB_RUN_ATTEMPT,sourceCommit:process.env.GITHUB_SHA,
-  target:config.production_url,caseId:identity.caseId,selectedCases:[identity.caseId],caseBudgetSeconds:budgetSeconds,exportPolicy:'all',
+  targetKind:'test_instance',target:config.target_url,caseId:identity.caseId,selectedCases:[identity.caseId],caseBudgetSeconds:budgetSeconds,exportPolicy:'all',
   accommodation:config.disable_native_save_pickers?
-    'Only showSaveFilePicker and showDirectoryPicker are unavailable in this CI browser. The unchanged app uses its existing full-MP4 memory/download fallback. The source input, real authentication, quota checks, ASR, models, topic planner and renderer are unchanged.':
+    'This is the pinned private CI static build in its documented local mode; authentication and billing are not configured. The ordinary localhost OCR selector default is retained; automatic slide OCR probes the unavailable local capability and falls back to browser Tesseract, as on the hosted static app. The optional manual scene-analysis path is not invoked. Only showSaveFilePicker and showDirectoryPicker are unavailable in this CI browser, so the existing full-MP4 download fallback is used. Full-source ASR, topic planning, camera analysis and exports run through the normal UI.':
     'No file-picker accommodation',
   playwrightVersion:require('playwright/package.json').version,node:process.version,
   runner:{platform:platform(),kernelRelease:release(),osVersion:osVersion(),architecture:arch(),
@@ -75,6 +78,8 @@ await json(join(output,'run.json'),run);
 await json(join(output,'selected-manifest.json'),{version:manifest.version,cases});
 let context;
 let fatal=null;
+const deniedRequests=[],modelRequests=new Set();
+function enforceNetworkBoundary(){if(deniedRequests.length)throw Error('Test instance attempted a request outside the approved origin policy')}
 
 async function cleanScreenshot(page,path) {
   await page.screenshot({path,fullPage:true,mask:[
@@ -114,12 +119,13 @@ async function runCase(item) {
   const dir=join(output,item.id),mediaPath=join(root,'media',item.id+'.mp4'),caseFile=join(root,item.id+'.source-request.json');
   await mkdir(dir,{recursive:true});
   const started=Date.now(),deadline=started+budgetSeconds*1000;
-  const result={id:item.id,title:item.title,source_url:item.source_url,startedAt:now(),status:'running',
+  const result={id:item.id,targetKind:'test_instance',title:item.title,source_url:item.source_url,startedAt:now(),status:'running',
     timings:{},errors:[],warnings:[],clips:[],accommodation:run.accommodation,
     testStage:'source_acquisition',siteProcessingStarted:false,failureDomain:null};
   run.cases.push(result);
   await json(join(dir,'result.json'),result);
-  console.log('CASE_START '+JSON.stringify({id:item.id,at:now()}));
+  await json(join(dir,'test-instance-provenance.json'),{targetKind:'test_instance',config:stand,build:run.buildBefore,limitations:run.buildBefore?.data?.limitations||[]});
+  console.log('CASE_START '+JSON.stringify({id:item.id,targetKind:'test_instance',at:now()}));
   let page,project,lastStatus='',lastLog=0,lastPhase='',asrSeconds=0,asrTotal=0,cachedAsr=false,cameraReady=false,soundFinished=false,soundReady=false,processingSeen=false,finishedAsr=false;
   let stopPolling=false;
   let polling;
@@ -205,7 +211,7 @@ async function runCase(item) {
       recordEvent({at:now(),type:'http',url:safe(response.url()),status:response.status(),
         expected:/\/api\/local-(ocr|review)/.test(response.url())&&response.status()===404});
     });
-    await page.goto(config.production_url,{waitUntil:'domcontentloaded',timeout:60000});
+    await page.goto(config.target_url,{waitUntil:'domcontentloaded',timeout:60000});
     await page.locator('#app').waitFor({timeout:30000});
     if(!await page.locator('#atlas-new-lecture').isVisible())
       await page.getByRole('button',{name:'ExamClips — мои лекции',exact:true}).click({timeout:15000});
@@ -217,16 +223,21 @@ async function runCase(item) {
     result.observedSettings={language:await page.locator('#language').inputValue(),
       asrLimit:await page.locator('#asr-limit').inputValue(),
       outputQuality:await page.locator('#output-quality').inputValue(),
+      ocrEngineBeforeAnalysis:await page.locator('#ocr-engine').inputValue(),
       sourceReferenceLanguage:item.language||'auto'};
+    result.observedSettings.ocrFidelity='Local UI default auto; hosted UI default tesseract. Automatic slide OCR uses its own auto default and unavailable-capability fallback in both builds. Manual scene analysis is not invoked.';
+    if(result.observedSettings.outputQuality!=='standard')throw Error('The app did not retain standard 720p/15 FPS export quality');
     if(result.observedSettings.language!=='auto')throw Error('The site did not retain its automatic language default');
     if(await page.locator('#asr-limit').inputValue()!=='all')throw Error('The site did not default to full ASR');
     await page.locator('#wizard-next').click();
     await cleanScreenshot(page,join(dir,'01-confirmation.png'));
     const analysisAt=Date.now();
+    enforceNetworkBoundary();
     result.testStage='site_analysis';
     await page.locator('#workflow-start').click();
     polling=(async()=>{while(!stopPolling){await recordSnapshot().catch(()=>{});await delay(2000);}})();
     while(remaining(deadline)>0) {
+      enforceNetworkBoundary();
       const state=await recordSnapshot();
       if(state.phase==='results'&&state.saveEnabled&&!state.cancelEnabled)break;
       if(/^Ошибка:/.test(state.status)&&!state.cancelEnabled)throw Error(safe(state.status));
@@ -240,6 +251,7 @@ async function runCase(item) {
     result.testStage='site_background';
     const bgAt=Date.now(),bgEnd=Math.min(deadline-60000,Date.now()+config.background_wait_seconds*1000);
     while(Date.now()<bgEnd&&!(cameraReady&&soundFinished)) {
+      enforceNetworkBoundary();
       const state=await recordSnapshot();
       if(/Камера не построена:/.test(state.status))break;
       await delay(2000);
@@ -273,6 +285,7 @@ async function runCase(item) {
     const exportAt=Date.now();
     result.testStage='clip_exports';
     for(const clip of result.clips) {
+      enforceNetworkBoundary();
       if(clip.candidate||(clip.editorialStatus==='needs-more-context'&&clip.status!=='approved')){
         clip.exportReason='App requires human review/acceptance before export';continue;
       }
@@ -298,6 +311,7 @@ async function runCase(item) {
         try{
           await page.locator('#atlas-export-clip').click();
           while(!download&&remaining(deadline)>0){
+            enforceNetworkBoundary();
             const state=await recordSnapshot();
             if(!state.cancelEnabled&&/^Ошибка:/.test(state.status))throw Error(safe(state.status));
             if(!state.cancelEnabled&&Date.now()-clipAt>10000&&!/Экспорт завершён/.test(state.status))
@@ -342,7 +356,7 @@ async function runCase(item) {
     result.status=Object.values(result.completionChecks).every(Boolean)?'complete':'incomplete';
     await saveProject(page,dir,'project-final.json').catch(error=>result.warnings.push('Final project download: '+safe(error.message)));
   } catch(error) {
-    result.failureDomain=result.testStage==='source_acquisition'?'audit_environment':'site_or_browser';
+    result.failureDomain=result.testStage==='source_acquisition'||deniedRequests.length?'audit_environment':'test_instance_or_browser';
     result.status=result.failureDomain==='audit_environment'?'environment_failed':remaining(deadline)>0?'failed':'timeout';
     result.errors.push({stage:result.testStage,domain:result.failureDomain,message:safe(error.message)});
     if(page&&!page.isClosed()){
@@ -355,47 +369,47 @@ async function runCase(item) {
     stopPolling=true;if(polling)await bounded(polling,35000,'Progress shutdown').catch(()=>{});
     result.finishedAt=now();result.timings.totalSeconds=(Date.now()-started)/1000;
     result.browserEvents=events;
+    result.networkBoundary={status:deniedRequests.length?'blocked_request_detected':'no_blocked_requests',deniedRequests,publicModelAssets:[...modelRequests]};
+    if(deniedRequests.length&&result.status==='complete'){result.status='environment_failed';result.failureDomain='audit_environment';result.errors.push({stage:'network_boundary',domain:'audit_environment',message:'A request outside the approved origin policy was blocked'})}
     result.buildAfter=await buildMetadata();
     await json(join(dir,'browser-events.json'),events);
     await persist();
     if(page)await bounded(page.close(),15000,'Page close').catch(()=>{});
     await rm(mediaPath,{force:true});
-    console.log('CASE_END '+JSON.stringify({id:item.id,status:result.status,totalSeconds:result.timings.totalSeconds,exports:result.exportCounts||null,
+    console.log('CASE_END '+JSON.stringify({id:item.id,targetKind:'test_instance',status:result.status,totalSeconds:result.timings.totalSeconds,exports:result.exportCounts||null,
       failureDomain:result.failureDomain,siteProcessingStarted:result.siteProcessingStarted,completionChecks:result.completionChecks||null}));
   }
 }
 
 try {
-  if(!process.env.AUDIT_CREDENTIALS_FILE)throw Error('An encrypted, authorized login handoff is required');
-  let credentials=JSON.parse(await readFile(process.env.AUDIT_CREDENTIALS_FILE,'utf8'));
-  await rm(process.env.AUDIT_CREDENTIALS_FILE,{force:true});
+  if(run.buildBefore?.data?.targetKind!=='test_instance'||commitOf(run.buildBefore)!==stand.source_commit||run.buildBefore?.data?.artifactSha256!==stand.artifact_sha256)throw Error('The local server did not attest the pinned test instance build');
   context=await chromium.launchPersistentContext(join(root,'browser-profile'),{
-    channel:'chrome',headless:true,acceptDownloads:true,viewport:{width:1440,height:1000},
+    channel:'chrome',headless:true,acceptDownloads:true,serviceWorkers:'block',viewport:{width:1440,height:1000},
     args:['--no-sandbox','--disable-dev-shm-usage','--disable-background-timer-throttling','--disable-renderer-backgrounding']
   });
+  await installNetworkPolicy(context,{denied:deniedRequests,models:modelRequests});
   if(config.disable_native_save_pickers)await context.addInitScript(()=>{
     Object.defineProperty(window,'showSaveFilePicker',{value:undefined,configurable:true});
     Object.defineProperty(window,'showDirectoryPicker',{value:undefined,configurable:true});
   });
   run.browserVersion=context.browser()?.version()||'persistent Chrome';
-  const login=await context.newPage();
-  run.viewport=login.viewportSize();
-  run.browserUserAgent=await login.evaluate(()=>navigator.userAgent);
+  const startup=await context.newPage();
+  run.viewport=startup.viewportSize();
+  run.browserUserAgent=await startup.evaluate(()=>navigator.userAgent);
   if(run.browserVersion==='persistent Chrome')run.browserVersion=run.browserUserAgent.match(/Chrome\/([0-9.]+)/)?.[1]||null;
-  await login.goto(config.production_url,{waitUntil:'domcontentloaded',timeout:60000});
-  await login.locator('#auth-email').fill(credentials.email);
-  await login.locator('#auth-password').fill(credentials.password);
-  await login.locator('#auth-submit').click();
-  credentials=null;
-  await login.locator('#atlas-new-lecture').waitFor({timeout:45000});
-  run.authenticatedAt=now();
-  // Login page screenshots, response bodies, storage state, profiles, traces and HAR are never artifacts.
-  await login.close();
+  await startup.goto(config.target_url,{waitUntil:'domcontentloaded',timeout:60000});
+  await startup.locator('#atlas-new-lecture').waitFor({timeout:45000});
+  if(await startup.locator('#auth-gate').isVisible().catch(()=>false))throw Error('The pinned default local build unexpectedly requires authentication');
+  run.crossOriginIsolated=await startup.evaluate(()=>crossOriginIsolated);
+  if(!run.crossOriginIsolated)throw Error('The isolated app lacks cross-origin isolation required by its processing engine');
+  enforceNetworkBoundary();run.testInstanceReadyAt=now();
+  await startup.close();
   for(const item of cases){await runCase(item);await json(join(output,'run.json'),run)}
 }catch(error){fatal=safe(error.message);run.fatalError=fatal}
 finally{
   if(context)await bounded(context.close(),30000,'Browser close').catch(()=>{});
   run.finishedAt=now();run.buildAfter=await buildMetadata();
+  run.networkBoundary={status:deniedRequests.length?'blocked_request_detected':'no_blocked_requests',deniedRequests,publicModelAssets:[...modelRequests]};
   run.buildChanged=!!commitOf(run.buildBefore)&&!!commitOf(run.buildAfter)&&commitOf(run.buildBefore)!==commitOf(run.buildAfter);
   run.unexpectedBuild=!!config.expected_commit&&commitOf(run.buildBefore)!==config.expected_commit;
   run.summary={selected:cases.length,attempted:run.cases.length,complete:run.cases.filter(c=>c.status==='complete').length,
@@ -403,7 +417,7 @@ finally{
     environmentFailed:run.cases.filter(c=>c.failureDomain==='audit_environment').length,
     downloadedClips:run.cases.reduce((sum,c)=>sum+c.clips.filter(clip=>clip.exportStatus==='downloaded').length,0)};
   await json(join(output,'run.json'),run);
-  console.log('AUDIT_SUMMARY '+JSON.stringify({...run.summary,buildChanged:run.buildChanged,unexpectedBuild:run.unexpectedBuild,fatal:!!fatal}));
+  console.log('AUDIT_SUMMARY '+JSON.stringify({...run.summary,targetKind:'test_instance',buildChanged:run.buildChanged,unexpectedBuild:run.unexpectedBuild,fatal:!!fatal,blockedRequests:deniedRequests.length}));
 }
-if(fatal||run.buildChanged||run.unexpectedBuild||run.summary.complete!==cases.length)process.exitCode=1;
+if(fatal||deniedRequests.length||run.buildChanged||run.unexpectedBuild||run.summary.complete!==cases.length)process.exitCode=1;
 

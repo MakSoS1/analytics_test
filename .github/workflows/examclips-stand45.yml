@@ -1,0 +1,566 @@
+name: ExamClips isolated current-code full 45-source audit
+'on':
+  push:
+    branches:
+    - qa/examclips-stand45-2026-11-15
+    paths:
+    - .github/workflows/examclips-stand45.yml
+    - tools/examclips-audit/run-request.json
+permissions:
+  contents: write
+  actions: read
+jobs:
+  prepare:
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-2026-11-15'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      AUDIT_CASE_ID: bundle-prepare
+    outputs:
+      case_ids: ${{ steps.selection.outputs.case_ids }}
+    steps:
+    - name: Initialize runner-private test-instance paths
+      run: |
+        python3 - <<'PY'
+        import os, pathlib, time
+        base = pathlib.Path(os.environ["RUNNER_TEMP"])
+        case_id = os.environ["AUDIT_CASE_ID"]
+        paths = {
+            "AUDIT_ROOT": base / ("examclips-stand-audit-" + case_id),
+            "AUDIT_OUT": base / ("examclips-stand-evidence-" + case_id),
+            "AUDIT_ARTIFACT": base / ("examclips-encrypted-artifact-" + case_id),
+        }
+        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+            env_file.write(f"AUDIT_JOB_STARTED_UNIX={time.time()}\n")
+            for name, path in paths.items():
+                env_file.write(f"{name}={path}\n")
+        PY
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+    - id: selection
+      name: Validate the original 45-case selection
+      run: node tools/examclips-audit/prepare.mjs
+    - name: Validate encryption, isolation, server and bundle boundaries
+      run: |
+        node --test tools/examclips-audit/*.test.mjs
+        openssl pkey -pubin -in tools/examclips-audit/evidence-recipient.pub.pem -noout
+    - name: Install Playwright and prepare verified browser and media tools
+      run: |
+        npm --prefix tools/examclips-audit install --ignore-scripts --no-audit --no-fund --package-lock=false
+        python3 - <<'PY'
+        import hashlib, os, pathlib, shutil, subprocess, tarfile, urllib.request
+        binaries = {
+            "Chrome": shutil.which("google-chrome") or shutil.which("google-chrome-stable"),
+            "FFmpeg": shutil.which("ffmpeg"),
+            "FFprobe": shutil.which("ffprobe"),
+        }
+        if not binaries["Chrome"]:
+            raise SystemExit("The runner's preinstalled official Chrome is missing. No apt or browser installation was attempted.")
+        executable_names = {"FFmpeg": "ffmpeg", "FFprobe": "ffprobe"}
+        missing = [name for name in executable_names if not binaries[name]]
+        if missing:
+            media_dir = pathlib.Path(os.environ["AUDIT_ROOT"]) / "media-tools"
+            media_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
+            url = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-11-12-39/ffmpeg-n9.0.2-49-gc179411bbb-linux64-gpl-9.0.tar.xz"
+            expected_bytes = 152720464
+            expected_sha256 = "ca1107e3a14a9de4c4712f9405bb720a47dac41426cf2a1da09acb4811805758"
+            archive = media_dir / "verified-ffmpeg.tar.xz"
+            digest, received = hashlib.sha256(), 0
+            request = urllib.request.Request(url, headers={"User-Agent": "ExamClips-authorized-audit"})
+            with urllib.request.urlopen(request, timeout=60) as response, archive.open("wb") as destination:
+                while block := response.read(1024 * 1024):
+                    received += len(block)
+                    if received > expected_bytes:
+                        raise SystemExit("FFmpeg archive exceeds the verified release size")
+                    digest.update(block)
+                    destination.write(block)
+            if received != expected_bytes or digest.hexdigest() != expected_sha256:
+                raise SystemExit("Pinned FFmpeg release archive integrity mismatch")
+            bin_dir = media_dir / "bin"
+            bin_dir.mkdir(mode=0o700, exist_ok=True)
+            found = set()
+            with tarfile.open(archive, "r|xz") as bundle:
+                for member in bundle:
+                    if not member.isfile():
+                        continue
+                    parts = pathlib.PurePosixPath(member.name).parts
+                    for name in missing:
+                        executable = executable_names[name]
+                        if tuple(parts[-2:]) != ("bin", executable):
+                            continue
+                        if name in found or member.size > 1024 * 1024 * 1024:
+                            raise SystemExit("Unexpected executable entry in verified FFmpeg archive")
+                        target = bin_dir / executable
+                        with bundle.extractfile(member) as source, target.open("wb") as destination:
+                            shutil.copyfileobj(source, destination, 1024 * 1024)
+                        target.chmod(0o755)
+                        binaries[name] = str(target)
+                        found.add(name)
+                    if parts and parts[-1].lower() in {"license.txt", "readme.txt", "readme.md", "copying.gplv3"} and member.size <= 1024 * 1024:
+                        with bundle.extractfile(member) as source, (media_dir / parts[-1]).open("wb") as destination:
+                            shutil.copyfileobj(source, destination)
+            archive.unlink()
+            if found != set(missing):
+                raise SystemExit("Verified FFmpeg archive is missing a required executable")
+            with open(os.environ["GITHUB_PATH"], "a", encoding="utf-8") as path_file:
+                path_file.write(str(bin_dir) + "\n")
+            print("Provisioned missing media tools from FFmpeg-Builds autobuild-2026-11-11-12-39; archive SHA-256 and size verified before extraction.")
+        for name, path in binaries.items():
+            flag = "--version" if name == "Chrome" else "-version"
+            result = subprocess.run([path, flag], check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=15)
+            print(name + ": " + result.stdout.splitlines()[0])
+        PY
+    - name: Validate source and review helpers with the prepared media tools
+      timeout-minutes: 5
+      run: |
+        command -v ffmpeg
+        command -v ffprobe
+        python3 -S -m unittest discover -s tools/examclips-audit -p 'test_*.py'
+    - id: handoff
+      name: Publish preparation key and wait for the encrypted private-artifact capability
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: node tools/examclips-audit/stand-handoff.mjs prepare
+    - name: Verify and encrypt the pinned private CI bundle
+      timeout-minutes: 4
+      env:
+        AUDIT_HANDOFF_PAYLOAD: ${{ steps.handoff.outputs.payload_path }}
+      run: node tools/examclips-audit/stand-bundle.mjs prepare
+    - name: Validate normal UI startup and a short source fixture before releasing the matrix
+      timeout-minutes: 4
+      run: node tools/examclips-audit/stand-ui-smoke.mjs
+    - name: Upload the encrypted shared private application bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: stand45-encrypted-app
+        path: ${{ env.AUDIT_ROOT }}/shared-encrypted-app/
+        if-no-files-found: error
+        retention-days: 7
+        compression-level: 0
+    - id: preparation-evidence
+      name: Encrypt bounded preparation UI diagnostics
+      if: always()
+      continue-on-error: true
+      timeout-minutes: 3
+      run: node tools/examclips-audit/package-evidence.mjs
+    - name: Upload encrypted preparation diagnostics
+      if: always() && steps.preparation-evidence.outputs.parts >= 1
+      continue-on-error: true
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-preparation-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0001/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Remove private app, bundle payload, browser profile and source media
+      if: always()
+      env:
+        PRIVATE_DIR: ${{ steps.handoff.outputs.private_dir }}
+      run: |
+        python3 - <<'PY'
+        import os, pathlib, shutil, signal
+        base = pathlib.Path(os.environ["RUNNER_TEMP"]).resolve()
+        root = os.environ.get("AUDIT_ROOT")
+        if root:
+            pid = pathlib.Path(root) / "server.pid"
+            if pid.is_file():
+                try:
+                    os.kill(int(pid.read_text().strip()), signal.SIGTERM)
+                except (ProcessLookupError, ValueError):
+                    pass
+        paths = [os.environ.get("PRIVATE_DIR"), root, os.environ.get("AUDIT_OUT")]
+        for value in paths:
+            if not value:
+                continue
+            path = pathlib.Path(value).resolve()
+            if path != base and base in path.parents:
+                shutil.rmtree(path, ignore_errors=True)
+        PY
+  test-instance-audit:
+    needs: prepare
+    name: Test instance lecture ${{ matrix.case_id }}
+    concurrency:
+      group: examclips-stand45-${{ github.ref }}-${{ matrix.case_id }}
+      cancel-in-progress: false
+    if: github.repository == 'MakSoS1/analytics_test' && github.ref == 'refs/heads/qa/examclips-stand45-2026-11-15'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case_id: ${{ fromJSON(needs.prepare.outputs.case_ids) }}
+    env:
+      AUDIT_CASE_ID: ${{ matrix.case_id }}
+    steps:
+    - name: Initialize runner-private test-instance paths
+      run: |
+        python3 - <<'PY'
+        import os, pathlib, time
+        base = pathlib.Path(os.environ["RUNNER_TEMP"])
+        case_id = os.environ["AUDIT_CASE_ID"]
+        paths = {
+            "AUDIT_ROOT": base / ("examclips-stand-audit-" + case_id),
+            "AUDIT_OUT": base / ("examclips-stand-evidence-" + case_id),
+            "AUDIT_ARTIFACT": base / ("examclips-encrypted-artifact-" + case_id),
+        }
+        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+            env_file.write(f"AUDIT_JOB_STARTED_UNIX={time.time()}\n")
+            for name, path in paths.items():
+                env_file.write(f"{name}={path}\n")
+        PY
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+    - name: Validate encryption, isolation, server and bundle boundaries
+      run: |
+        node --test tools/examclips-audit/*.test.mjs
+        openssl pkey -pubin -in tools/examclips-audit/evidence-recipient.pub.pem -noout
+    - name: Install Playwright and prepare verified browser and media tools
+      run: |
+        npm --prefix tools/examclips-audit install --ignore-scripts --no-audit --no-fund --package-lock=false
+        python3 - <<'PY'
+        import hashlib, os, pathlib, shutil, subprocess, tarfile, urllib.request
+        binaries = {
+            "Chrome": shutil.which("google-chrome") or shutil.which("google-chrome-stable"),
+            "FFmpeg": shutil.which("ffmpeg"),
+            "FFprobe": shutil.which("ffprobe"),
+        }
+        if not binaries["Chrome"]:
+            raise SystemExit("The runner's preinstalled official Chrome is missing. No apt or browser installation was attempted.")
+        executable_names = {"FFmpeg": "ffmpeg", "FFprobe": "ffprobe"}
+        missing = [name for name in executable_names if not binaries[name]]
+        if missing:
+            media_dir = pathlib.Path(os.environ["AUDIT_ROOT"]) / "media-tools"
+            media_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
+            url = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-11-12-39/ffmpeg-n9.0.2-49-gc179411bbb-linux64-gpl-9.0.tar.xz"
+            expected_bytes = 152720464
+            expected_sha256 = "ca1107e3a14a9de4c4712f9405bb720a47dac41426cf2a1da09acb4811805758"
+            archive = media_dir / "verified-ffmpeg.tar.xz"
+            digest, received = hashlib.sha256(), 0
+            request = urllib.request.Request(url, headers={"User-Agent": "ExamClips-authorized-audit"})
+            with urllib.request.urlopen(request, timeout=60) as response, archive.open("wb") as destination:
+                while block := response.read(1024 * 1024):
+                    received += len(block)
+                    if received > expected_bytes:
+                        raise SystemExit("FFmpeg archive exceeds the verified release size")
+                    digest.update(block)
+                    destination.write(block)
+            if received != expected_bytes or digest.hexdigest() != expected_sha256:
+                raise SystemExit("Pinned FFmpeg release archive integrity mismatch")
+            bin_dir = media_dir / "bin"
+            bin_dir.mkdir(mode=0o700, exist_ok=True)
+            found = set()
+            with tarfile.open(archive, "r|xz") as bundle:
+                for member in bundle:
+                    if not member.isfile():
+                        continue
+                    parts = pathlib.PurePosixPath(member.name).parts
+                    for name in missing:
+                        executable = executable_names[name]
+                        if tuple(parts[-2:]) != ("bin", executable):
+                            continue
+                        if name in found or member.size > 1024 * 1024 * 1024:
+                            raise SystemExit("Unexpected executable entry in verified FFmpeg archive")
+                        target = bin_dir / executable
+                        with bundle.extractfile(member) as source, target.open("wb") as destination:
+                            shutil.copyfileobj(source, destination, 1024 * 1024)
+                        target.chmod(0o755)
+                        binaries[name] = str(target)
+                        found.add(name)
+                    if parts and parts[-1].lower() in {"license.txt", "readme.txt", "readme.md", "copying.gplv3"} and member.size <= 1024 * 1024:
+                        with bundle.extractfile(member) as source, (media_dir / parts[-1]).open("wb") as destination:
+                            shutil.copyfileobj(source, destination)
+            archive.unlink()
+            if found != set(missing):
+                raise SystemExit("Verified FFmpeg archive is missing a required executable")
+            with open(os.environ["GITHUB_PATH"], "a", encoding="utf-8") as path_file:
+                path_file.write(str(bin_dir) + "\n")
+            print("Provisioned missing media tools from FFmpeg-Builds autobuild-2026-11-11-12-39; archive SHA-256 and size verified before extraction.")
+        for name, path in binaries.items():
+            flag = "--version" if name == "Chrome" else "-version"
+            result = subprocess.run([path, flag], check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=15)
+            print(name + ": " + result.stdout.splitlines()[0])
+        PY
+    - name: Validate source and review helpers with the prepared media tools
+      timeout-minutes: 5
+      run: |
+        command -v ffmpeg
+        command -v ffprobe
+        python3 -S -m unittest discover -s tools/examclips-audit -p 'test_*.py'
+    - name: Download the encrypted shared application bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: stand45-encrypted-app
+        path: ${{ env.AUDIT_ROOT }}/encrypted-app
+    - id: handoff
+      name: Publish case key and wait for the encrypted bundle unlock payload
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: node tools/examclips-audit/stand-handoff.mjs unlock
+    - name: Decrypt and verify the isolated application assets
+      timeout-minutes: 4
+      env:
+        AUDIT_HANDOFF_PAYLOAD: ${{ steps.handoff.outputs.payload_path }}
+        STAND_ENCRYPTED_APP: ${{ env.AUDIT_ROOT }}/encrypted-app
+      run: node tools/examclips-audit/stand-bundle.mjs unlock
+    - name: Start the verified loopback-only static application
+      timeout-minutes: 2
+      run: |
+        node tools/examclips-audit/stand-server.mjs > "$AUDIT_ROOT/server.log" 2>&1 &
+        echo $! > "$AUDIT_ROOT/server.pid"
+        python3 - <<'PYREADY'
+        import json, time, urllib.request
+        for attempt in range(120):
+            try:
+                with urllib.request.urlopen("http://127.0.0.1:5173/healthz", timeout=1) as response:
+                    state = json.load(response)
+                if state.get("targetKind") == "test_instance" and state.get("ready") is True:
+                    print("Verified test instance is listening on loopback")
+                    break
+            except (OSError, ValueError):
+                pass
+            time.sleep(.25)
+        else:
+            raise SystemExit("Verified test instance did not become ready")
+        PYREADY
+    - name: Run one full original source through the isolated app UI
+      timeout-minutes: 305
+      run: node tools/examclips-audit/run.mjs
+    - id: review
+      name: Decode each actual MP4 and capture bounded source-matched regression frames
+      if: always()
+      continue-on-error: true
+      timeout-minutes: 35
+      run: python3 tools/examclips-audit/retest-review.py --deadline-seconds 1980
+    - id: review-package
+      name: Encrypt compact review frames, metadata, projects and transcripts
+      if: always()
+      continue-on-error: true
+      timeout-minutes: 8
+      run: node tools/examclips-audit/package-review.mjs
+    - name: Upload encrypted compact review evidence
+      if: ${{ always() && steps.review-package.outputs.available == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-review-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}
+        path: ${{ env.AUDIT_ARTIFACT }}/review/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - id: package
+      name: Encrypt audit evidence with the recipient public key
+      if: always()
+      run: node tools/examclips-audit/package-evidence.mjs
+    - name: Upload encrypted evidence part 0001
+      if: always() && steps.package.outputs.parts >= 1
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0001
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0001/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0002
+      if: always() && steps.package.outputs.parts >= 2
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0002
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0002/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0003
+      if: always() && steps.package.outputs.parts >= 3
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0003
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0003/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0004
+      if: always() && steps.package.outputs.parts >= 4
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0004
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0004/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0005
+      if: always() && steps.package.outputs.parts >= 5
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0005
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0005/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0006
+      if: always() && steps.package.outputs.parts >= 6
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0006
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0006/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0007
+      if: always() && steps.package.outputs.parts >= 7
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0007
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0007/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0008
+      if: always() && steps.package.outputs.parts >= 8
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0008
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0008/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0009
+      if: always() && steps.package.outputs.parts >= 9
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0009
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0009/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0010
+      if: always() && steps.package.outputs.parts >= 10
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0010
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0010/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0011
+      if: always() && steps.package.outputs.parts >= 11
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0011
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0011/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0012
+      if: always() && steps.package.outputs.parts >= 12
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0012
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0012/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0013
+      if: always() && steps.package.outputs.parts >= 13
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0013
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0013/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0014
+      if: always() && steps.package.outputs.parts >= 14
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0014
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0014/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0015
+      if: always() && steps.package.outputs.parts >= 15
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0015
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0015/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0016
+      if: always() && steps.package.outputs.parts >= 16
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0016
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0016/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0017
+      if: always() && steps.package.outputs.parts >= 17
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0017
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0017/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0018
+      if: always() && steps.package.outputs.parts >= 18
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0018
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0018/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0019
+      if: always() && steps.package.outputs.parts >= 19
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0019
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0019/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Upload encrypted evidence part 0020
+      if: always() && steps.package.outputs.parts >= 20
+      uses: actions/upload-artifact@v4
+      with:
+        name: examclips-stand45-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case_id }}-part-0020
+        path: ${{ env.AUDIT_ARTIFACT }}/part-0020/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+    - name: Remove private app, bundle payload, browser profile and source media
+      if: always()
+      env:
+        PRIVATE_DIR: ${{ steps.handoff.outputs.private_dir }}
+      run: |
+        python3 - <<'PY'
+        import os, pathlib, shutil, signal
+        base = pathlib.Path(os.environ["RUNNER_TEMP"]).resolve()
+        root = os.environ.get("AUDIT_ROOT")
+        if root:
+            pid = pathlib.Path(root) / "server.pid"
+            if pid.is_file():
+                try:
+                    os.kill(int(pid.read_text().strip()), signal.SIGTERM)
+                except (ProcessLookupError, ValueError):
+                    pass
+        paths = [os.environ.get("PRIVATE_DIR"), root, os.environ.get("AUDIT_OUT")]
+        for value in paths:
+            if not value:
+                continue
+            path = pathlib.Path(value).resolve()
+            if path != base and base in path.parents:
+                shutil.rmtree(path, ignore_errors=True)
+        PY

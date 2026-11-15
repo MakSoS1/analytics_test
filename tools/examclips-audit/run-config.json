@@ -1,7 +1,8 @@
 {
   "version": 1,
-  "production_url": "https://examclips.dpdns.org/app/",
-  "expected_commit": "059bf36e42bb78f5bfc82e8777edc0ba894386d5",
+  "target_kind": "test_instance",
+  "target_url": "http://127.0.0.1:5173/app/",
+  "expected_commit": "c8358a6df86ca0f77d859ebe8481a876b3e1abd5",
   "background_wait_seconds": 900,
   "export_policy": "all",
   "minimum_remaining_export_seconds": 60,

@@ -1,0 +1,223 @@
+{
+  "schema": 1,
+  "target_kind": "test_instance",
+  "target_url": "http://127.0.0.1:5173/app/",
+  "source_repository": "MakSoS1/examclips-app",
+  "source_commit": "c8358a6df86ca0f77d859ebe8481a876b3e1abd5",
+  "source_parent": "059bf36e42bb78f5bfc82e8777edc0ba894386d5",
+  "source_tag": "v1.3.20",
+  "ci_run_id": 43751698466,
+  "artifact_id": 14177000950,
+  "artifact_bytes": 12964869,
+  "artifact_sha256": "4463e4e2b9a3f57ce215610f974f2162189a4c421bab6947191dd61c1c726940",
+  "shared_artifact_name": "stand45-encrypted-app",
+  "authentication": "documented default local build without Supabase settings",
+  "billing": "not configured in local build",
+  "assets": [
+    {
+      "archive_path": "dist/app/assets/__vite-browser-external-BwpP9LFt.js",
+      "path": "app/assets/__vite-browser-external-BwpP9LFt.js",
+      "bytes": 94,
+      "sha256": "750a777c118361b3591b511e5f987332aefd374efb3c2b64a182b6ce45ed6ff9"
+    },
+    {
+      "archive_path": "dist/app/assets/__vite-browser-external-ChFrIcvn.js",
+      "path": "app/assets/__vite-browser-external-ChFrIcvn.js",
+      "bytes": 77,
+      "sha256": "b29b3664ca503aa406417ea78786ea9094aeeab0a94b60ce1cffe7b0f7c8031a"
+    },
+    {
+      "archive_path": "dist/app/assets/asr-worker-BtUT29ix.js",
+      "path": "app/assets/asr-worker-BtUT29ix.js",
+      "bytes": 444708,
+      "sha256": "bf667f5260e2aeaae7fad777b20a4fbcab29852e400e1bf35f3f9240b40d98ba"
+    },
+    {
+      "archive_path": "dist/app/assets/dist-ChuxpoEz.js",
+      "path": "app/assets/dist-ChuxpoEz.js",
+      "bytes": 184439,
+      "sha256": "c3e4051b545c2ed9b1ceb43986348067b0a6d70e21506e9026d97747b11085bd"
+    },
+    {
+      "archive_path": "dist/app/assets/embedding-worker-DaFKjWW6.js",
+      "path": "app/assets/embedding-worker-DaFKjWW6.js",
+      "bytes": 436040,
+      "sha256": "503190c30fc605ffac328f916d437138dadf387d422c63135d9abce1d4688e20"
+    },
+    {
+      "archive_path": "dist/app/assets/face-detector-worker-Cq_Q0pq7.js",
+      "path": "app/assets/face-detector-worker-Cq_Q0pq7.js",
+      "bytes": 401841,
+      "sha256": "5a4554dc0a84f2c6d46e36441676334b4a6ec412afff3ba039404a455a8c57f7"
+    },
+    {
+      "archive_path": "dist/app/assets/frame-objects-FpvfIsiu.js",
+      "path": "app/assets/frame-objects-FpvfIsiu.js",
+      "bytes": 2770,
+      "sha256": "7a5a0425ef1a7c2d4d955dddeca81ea1fc42b9fe6dd2eafabc3a676eb0e9bcf8"
+    },
+    {
+      "archive_path": "dist/app/assets/index-CdZHNGC7.js",
+      "path": "app/assets/index-CdZHNGC7.js",
+      "bytes": 760160,
+      "sha256": "017cb86d4b5c2f2471ffad0ee2f8a2647f9ce0ca730cd85798d426905fe57653"
+    },
+    {
+      "archive_path": "dist/app/assets/index-CwFhKCSX.css",
+      "path": "app/assets/index-CwFhKCSX.css",
+      "bytes": 89349,
+      "sha256": "665463be23f20d755014dd753ccb43cb2b1dfb85fdba0ad953a4855e8061ad0b"
+    },
+    {
+      "archive_path": "dist/app/assets/mediabunny-aac-encoder-0204kGnd.js",
+      "path": "app/assets/mediabunny-aac-encoder-0204kGnd.js",
+      "bytes": 992493,
+      "sha256": "998e0156c55ebcf3df4d4d88862abab368f51c24ed67c77cde95e8c60a7f1926"
+    },
+    {
+      "archive_path": "dist/app/assets/ort-wasm-simd-threaded.jsep-6MnTkKum.wasm",
+      "path": "app/assets/ort-wasm-simd-threaded.jsep-6MnTkKum.wasm",
+      "bytes": 24911187,
+      "sha256": "5febcf74919ee7ba3c7e838290c9ef2c03d6da297f06a8facfd7d22f623d7cd9"
+    },
+    {
+      "archive_path": "dist/app/assets/preload-helper-DHPGmXu4.js",
+      "path": "app/assets/preload-helper-DHPGmXu4.js",
+      "bytes": 134219,
+      "sha256": "ab02d361b5e0213ed4b1a79246046a8fbd662af25470d077083471ad7ba88982"
+    },
+    {
+      "archive_path": "dist/app/assets/rolldown-runtime-BCiCTKAo.js",
+      "path": "app/assets/rolldown-runtime-BCiCTKAo.js",
+      "bytes": 1301,
+      "sha256": "f85e715d54a11fa37b7774ad77b536896ed01bfdfc98f485b678c81859fc8e2e"
+    },
+    {
+      "archive_path": "dist/app/assets/sound-events-worker--NgBBEJ1.js",
+      "path": "app/assets/sound-events-worker--NgBBEJ1.js",
+      "bytes": 400471,
+      "sha256": "fa91782a4d1cda8c19cbae2832d6f02835b5b7f979a21de972268f4de754920c"
+    },
+    {
+      "archive_path": "dist/app/assets/src-B1X1KSza.js",
+      "path": "app/assets/src-B1X1KSza.js",
+      "bytes": 17253,
+      "sha256": "08bda44d29b8bfbf61d4860a121e3db2df9dff69cdf0397383b4057642846e42"
+    },
+    {
+      "archive_path": "dist/app/assets/visual-camera-Bicy_-fB.js",
+      "path": "app/assets/visual-camera-Bicy_-fB.js",
+      "bytes": 66345,
+      "sha256": "86ac0ccb9cd3932e8b61a968a1f5c86b2e60e926fcf0a4f5a7cf4f5aefcea8f3"
+    },
+    {
+      "archive_path": "dist/app/favicon.svg",
+      "path": "app/favicon.svg",
+      "bytes": 363,
+      "sha256": "d9a3fc40df7f2fcd44f555ba1581d072b131f6cca960dbcb41c6b6f068e19a59"
+    },
+    {
+      "archive_path": "dist/app/index.html",
+      "path": "app/index.html",
+      "bytes": 1132,
+      "sha256": "533c5c6c705732268f7af14c019acf8b99f3379986c623c2da3abe9e64124e44"
+    }
+  ],
+  "engine_blobs": [
+    {
+      "path": "src/main.js",
+      "git_blob_sha": "0256b5843f8ea97dd18e2e8fe652958ac6c9d168",
+      "bytes": 146343
+    },
+    {
+      "path": "src/asr.js",
+      "git_blob_sha": "d99043e5e14319adacb14718840d4d5337dab142",
+      "bytes": 5060
+    },
+    {
+      "path": "src/asr-worker.js",
+      "git_blob_sha": "91ad3f1baa026f69c7cba2de1e51c3e3401ab23b",
+      "bytes": 1283
+    },
+    {
+      "path": "src/semantic.js",
+      "git_blob_sha": "93dd7fd469b48cbfbcd0a51c8ae9f893ec7b508c",
+      "bytes": 1600
+    },
+    {
+      "path": "src/embedding-worker.js",
+      "git_blob_sha": "26dcb7776d69ab00ed74e3976486611920d70459",
+      "bytes": 2327
+    },
+    {
+      "path": "src/sound-events-worker.js",
+      "git_blob_sha": "eac3e25db7a54e48fdd05b16231f0642c750a5ea",
+      "bytes": 1490
+    },
+    {
+      "path": "src/general-topics.js",
+      "git_blob_sha": "5138dfcd2c1ff99a68c3340b548136903684947a",
+      "bytes": 56948
+    },
+    {
+      "path": "src/discourse-cues.js",
+      "git_blob_sha": "3d2cee3a5081f1afd498726493c52cec1dcde4b3",
+      "bytes": 15233
+    },
+    {
+      "path": "src/segments.js",
+      "git_blob_sha": "c7d0cb9094f043508d0ea8fa2cc2b604bff7c21d",
+      "bytes": 4848
+    },
+    {
+      "path": "src/speech-boundaries.js",
+      "git_blob_sha": "2a1bb2ee7b40693911fbd2ab7abbf84ae4542991",
+      "bytes": 1954
+    },
+    {
+      "path": "src/lecture-camera.js",
+      "git_blob_sha": "2cc7c91af225a4286e5133164fea6a9dff580152",
+      "bytes": 14052
+    },
+    {
+      "path": "src/visual-camera.js",
+      "git_blob_sha": "8190081b86464725c8c72c891bfe72e927a0f4d0",
+      "bytes": 98832
+    },
+    {
+      "path": "src/camera-director.js",
+      "git_blob_sha": "a3dfde8c4d6689cf53603a8b45b21ea084b52cc2",
+      "bytes": 10736
+    },
+    {
+      "path": "src/composition.js",
+      "git_blob_sha": "d7275fd4ebd1c4b476fe50a80ef964e8c00b5c8e",
+      "bytes": 22843
+    },
+    {
+      "path": "src/render.js",
+      "git_blob_sha": "467fee5c2c4e74dfa1a987224f489594402f9b8d",
+      "bytes": 5834
+    },
+    {
+      "path": "src/media.js",
+      "git_blob_sha": "98c9f54a5d46c6f09ea4f7c1ef90b3520dd6ebd9",
+      "bytes": 2465
+    },
+    {
+      "path": "src/audio-compat.js",
+      "git_blob_sha": "9277b0d59803f43a78fde2ecda6b8100982a8436",
+      "bytes": 4091
+    },
+    {
+      "path": "src/face-detector.js",
+      "git_blob_sha": "ea2fd0a06f3e58a3903f9e9672ae3e6acb1df3f0",
+      "bytes": 1587
+    },
+    {
+      "path": "package-lock.json",
+      "git_blob_sha": "b4a1364dafa26542f90f23568ca1f6070eb533cc",
+      "bytes": 44227
+    }
+  ]
+}
